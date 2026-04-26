@@ -52,18 +52,29 @@ case 'no_test_simplification':
 - cli/commands/（CLI 命令）
 - monitoring/（监控系统）
 
-### 4. Gate 未完全实现（🟡 重要）→ ❌ 信息过时（2026-04-27 更正）
+### Gate 实现状态（2026-04-27 更正）
 
-> **更正**：Gate 已完整实现，gap-analysis.md 信息过时
+> **更正**：gap-analysis.md 原信息过时，Gate 已完整实现
 
-| Gate | 文件 | 实现状态 | 测试状态 |
-|------|------|:-------:|:--------:|
-| **PassesGate** | validators/passes-gate.ts | ✅ 完整 | ⚠️ 只有 extension 测试 |
-| **ReviewGate** | gates/review.ts | ✅ 完整 | ❌ 无测试 |
-| **SecurityGate** | gates/security.ts | ✅ 完整 | ❌ 无测试 |
-| **CheckpointValidator** | validators/checkpoint.ts | ✅ 完整（13种检查）| ❌ 无测试 |
+| Gate | 实现文件 | 实现状态 | 测试状态 | 说明 |
+|------|---------|:-------:|:--------:|------|
+| **PassesGate** | `validators/passes-gate.ts` | ✅ 完整 | ✅ 9 tests | setPasses + 扩展点支持 |
+| **ReviewGate** | `gates/review.ts` | ✅ 完整 | ✅ 6 tests | gh pr status 检查 |
+| **SecurityGate** | `gates/security.ts` | ✅ 完整 | ✅ 6 tests | npm audit + severity threshold |
+| **CheckpointValidator** | `validators/checkpoint.ts` | ✅ 完整 | ✅ 15 tests | 13 种检查类型 |
 
-**HZ-003 新任务**：创建 Gate 测试
+**CheckpointValidator 支持的检查类型**：
+- file_exists / file_not_empty / file_contains / file_not_contains
+- command_success / command_output
+- output_contains / output_not_contains / output_matches
+- json_path
+- http_status / http_body
+- custom（自定义处理器）
+
+**PassesGate 扩展点支持**：
+- `registerExtension(name, extension)` — 注册扩展测试类型
+- `runAllTests(workDir, task)` — 运行所有测试（单元 + 扩展）
+- 用于 Long-Running Agents（如 Puppeteer E2E）
 
 ---
 

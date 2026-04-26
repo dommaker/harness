@@ -199,6 +199,12 @@ export interface ConstraintContext {
     reuseRecommendation: string;
   };
   
+  /** 是否只处理单个任务（用于 incremental_progress） */
+  hasSingleTask?: boolean;
+  
+  /** 是否已验证外部能力（用于 verify_external_capability） */
+  hasExternalCapabilityVerification?: boolean;
+  
   // ========================================
   // 例外条件（用于 Guidelines）
   // ========================================

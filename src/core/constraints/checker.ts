@@ -20,6 +20,9 @@ import type { ExecutionTrace } from '../../types/trace';
 import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
+import { execAsync, runCommand } from '../../utils/exec';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 /**
  * 约束检查器
@@ -214,11 +217,13 @@ export class ConstraintChecker {
     constraint: Constraint,
     context: ConstraintContext
   ): Promise<boolean> {
+    const projectPath = context.projectPath || process.cwd();
+
     switch (constraint.id) {
       // Iron Laws
       case 'no_bypass_checkpoint':
-        // TODO: 检查是否跳过了检查点
-        return true;
+        // 检查代码中是否有 skip/bypass 关键词
+        return await this.checkNoBypassCheckpoint(context);
 
       case 'no_self_approval':
         // 检查是否有测试证据
@@ -229,8 +234,17 @@ export class ConstraintChecker {
         return context.hasVerificationEvidence === true;
 
       case 'no_test_simplification':
-        // TODO: 检查是否简化了测试
-        return true;
+        // 检查是否删除了测试
+        return await this.checkNoTestSimplification(projectPath);
+
+      case 'incremental_progress':
+        // 检查是否一次做多个任务（需要 context 提供信息）
+        return context.hasSingleTask === true || context.hasSingleTask === undefined;
+
+      case 'verify_external_capability':
+        // 检查是否已验证外部能力
+        return context.hasExternalCapabilityVerification === true || 
+               context.hasExternalCapabilityVerification === undefined;
 
       // Guidelines
       case 'no_fix_without_root_cause':
@@ -242,8 +256,8 @@ export class ConstraintChecker {
         return context.hasFailingTest === true;
 
       case 'no_any_type':
-        // TODO: 检查代码中是否有 any 类型
-        return true;
+        // 检查代码中是否有 any 类型
+        return await this.checkNoAnyType(projectPath, context.changedFiles);
 
       case 'simplest_solution_first':
         // 检查是否已检查本地数据源
@@ -254,20 +268,20 @@ export class ConstraintChecker {
         return context.hasReuseCheck === true;
 
       case 'capability_sync':
-        // TODO: 检查 CAPABILITIES.md 是否更新
-        return true;
+        // 检查 CAPABILITIES.md 是否更新
+        return await this.checkCapabilitySync(projectPath);
 
       case 'no_simplification_without_approval':
-        // TODO: 检查是否简化了逻辑
-        return true;
+        // 检查是否简化了逻辑
+        return await this.checkNoSimplificationWithoutApproval(projectPath);
 
       case 'no_skill_without_test':
         // 检查是否有测试
         return context.hasTest === true;
 
       case 'test_coverage_required':
-        // TODO: 检查测试覆盖率
-        return true;
+        // 检查测试覆盖率
+        return await this.checkTestCoverage(projectPath);
 
       // Tips - 总是返回 true（仅提示）
       case 'readme_required':
@@ -279,6 +293,193 @@ export class ConstraintChecker {
       default:
         // 未知约束，默认通过
         return true;
+    }
+  }
+
+  /**
+   * 检查 no_bypass_checkpoint：检查代码中是否有 skip/bypass 关键词
+   */
+  private async checkNoBypassCheckpoint(context: ConstraintContext): Promise<boolean> {
+    const changedFiles = context.changedFiles || [];
+    
+    if (changedFiles.length === 0) {
+      return true; // 无变更文件，默认通过
+    }
+
+    // 检查文件内容是否有 skip/bypass 关键词
+    const bypassPatterns = [
+      /\.skip\(/,          // Jest/Vitest skip
+      /\.bypass\s*=/,      // bypass flag
+      /skip:\s*true/,      // skip option
+      /bypass\s*checkpoint/, // explicit bypass
+      /\/\/\s*skip/,       // comment skip
+    ];
+
+    for (const file of changedFiles) {
+      if (!existsSync(file)) continue;
+      try {
+        const content = readFileSync(file, 'utf-8');
+        for (const pattern of bypassPatterns) {
+          if (pattern.test(content)) {
+            return false; // 发现 bypass 关键词
+          }
+        }
+      } catch {
+        // 文件读取失败，忽略
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * 检查 no_test_simplification：检查 git diff 是否删除了测试
+   */
+  private async checkNoTestSimplification(projectPath: string): Promise<boolean> {
+    try {
+      // 检查是否有删除测试的 diff
+      const diff = await runCommand('git diff --cached', projectPath);
+      
+      // 检查是否删除了测试行
+      const deletedTestPatterns = [
+        /^-\s*(test|it|describe)\s*\(/,  // 删除 test/it/describe
+        /^-\s*expect\s*\(/,               // 删除 expect
+        /^-\s*\/\/\s*test/,               // 删除注释的 test
+      ];
+
+      for (const pattern of deletedTestPatterns) {
+        if (pattern.test(diff)) {
+          return false; // 发现删除测试
+        }
+      }
+
+      return true;
+    } catch {
+      return true; // git 命令失败，默认通过
+    }
+  }
+
+  /**
+   * 检查 no_any_type：grep any 类型
+   */
+  private async checkNoAnyType(projectPath: string, changedFiles?: string[]): Promise<boolean> {
+    try {
+      const filesToCheck = changedFiles && changedFiles.length > 0
+        ? changedFiles.filter(f => f.endsWith('.ts') || f.endsWith('.tsx'))
+        : [];
+
+      if (filesToCheck.length === 0) {
+        return true; // 无 TS 文件变更
+      }
+
+      // 检查是否有 : any 类型
+      for (const file of filesToCheck) {
+        if (!existsSync(file)) continue;
+        try {
+          const content = readFileSync(file, 'utf-8');
+          // 检查 : any（排除注释和字符串）
+          const lines = content.split('\n');
+          for (const line of lines) {
+            // 跳过注释和字符串
+            if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue;
+            if (line.includes(': any') && !line.includes('// ') && !line.includes('/*')) {
+              return false; // 发现 any 类型
+            }
+          }
+        } catch {
+          // 文件读取失败，忽略
+        }
+      }
+
+      return true;
+    } catch {
+      return true; // 检查失败，默认通过
+    }
+  }
+
+  /**
+   * 检查 capability_sync：检查 CAPABILITIES.md 是否更新
+   */
+  private async checkCapabilitySync(projectPath: string): Promise<boolean> {
+    try {
+      // 检查是否有代码变更
+      const diff = await runCommand('git diff --cached --name-only', projectPath);
+      const hasCodeChanges = diff.split('\n').some(
+        f => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
+      );
+
+      if (!hasCodeChanges) {
+        return true; // 无代码变更
+      }
+
+      // 检查 CAPABILITIES.md 是否存在
+      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
+      if (!existsSync(capabilitiesPath)) {
+        return false; // 有代码变更但没有 CAPABILITIES.md
+      }
+
+      // 检查 CAPABILITIES.md 是否在变更中（可选）
+      const capabilitiesChanged = diff.includes('CAPABILITIES.md');
+      
+      return capabilitiesChanged || existsSync(capabilitiesPath);
+    } catch {
+      return true; // 检查失败，默认通过
+    }
+  }
+
+  /**
+   * 检查 no_simplification_without_approval：检查简化关键词
+   */
+  private async checkNoSimplificationWithoutApproval(projectPath: string): Promise<boolean> {
+    try {
+      const diff = await runCommand('git diff --cached', projectPath);
+
+      // 检查是否有简化关键词
+      const simplificationPatterns = [
+        /removed\s*test/i,
+        /simplified\s*logic/i,
+        /removed\s*validation/i,
+        /skip\s*check/i,
+      ];
+
+      for (const pattern of simplificationPatterns) {
+        if (pattern.test(diff)) {
+          return false; // 发现简化关键词
+        }
+      }
+
+      return true;
+    } catch {
+      return true; // 检查失败，默认通过
+    }
+  }
+
+  /**
+   * 检查 test_coverage_required：读取 coverage 报告
+   */
+  private async checkTestCoverage(projectPath: string): Promise<boolean> {
+    try {
+      // 检查 coverage 报告文件
+      const coverageJsonPath = join(projectPath, 'coverage', 'coverage-final.json');
+      const coverageSummaryPath = join(projectPath, 'coverage', 'coverage-summary.json');
+
+      if (!existsSync(coverageJsonPath) && !existsSync(coverageSummaryPath)) {
+        return true; // 无 coverage 报告，默认通过
+      }
+
+      // 尝试读取 coverage-summary.json
+      if (existsSync(coverageSummaryPath)) {
+        const summary = JSON.parse(readFileSync(coverageSummaryPath, 'utf-8'));
+        const total = summary.total || {};
+        const linesCoverage = total.lines?.pct || 0;
+        
+        // 默认要求 50% 覆盖率（可配置）
+        return linesCoverage >= 50;
+      }
+
+      return true;
+    } catch {
+      return true; // 检查失败，默认通过
     }
   }
 

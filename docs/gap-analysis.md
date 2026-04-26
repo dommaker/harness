@@ -52,16 +52,18 @@ case 'no_test_simplification':
 - cli/commands/（CLI 命令）
 - monitoring/（监控系统）
 
-### 4. Gate 未完全实现（🟡 重要）
+### 4. Gate 未完全实现（🟡 重要）→ ❌ 信息过时（2026-04-27 更正）
 
-| Gate | 文件 | 状态 |
-|------|------|:----:|
-| **PassesGate** | passes-gate.ts | ⚠️ 简化版 |
-| **ReviewGate** | review.ts | ⚠️ 未实现 PR 检查 |
-| **SecurityGate** | security.ts | ⚠️ npm audit 未集成 |
-| **PerformanceGate** | performance.ts | ⚠️ 未实现性能检测 |
-| **ContractGate** | contract.ts | ⚠️ OpenAPI 未集成 |
-| **CheckpointValidator** | checkpoint.ts | ⚠️ 检查逻辑空壳 |
+> **更正**：Gate 已完整实现，gap-analysis.md 信息过时
+
+| Gate | 文件 | 实现状态 | 测试状态 |
+|------|------|:-------:|:--------:|
+| **PassesGate** | validators/passes-gate.ts | ✅ 完整 | ⚠️ 只有 extension 测试 |
+| **ReviewGate** | gates/review.ts | ✅ 完整 | ❌ 无测试 |
+| **SecurityGate** | gates/security.ts | ✅ 完整 | ❌ 无测试 |
+| **CheckpointValidator** | validators/checkpoint.ts | ✅ 完整（13种检查）| ❌ 无测试 |
+
+**HZ-003 新任务**：创建 Gate 测试
 
 ---
 

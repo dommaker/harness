@@ -16,8 +16,8 @@ import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
   describe('Iron Laws', () => {
-    it('should have 5 iron laws defined', () => {
-      expect(Object.keys(IRON_LAWS)).toHaveLength(5); // 新增 incremental_progress
+    it('should have 6 iron laws defined', () => {
+      expect(Object.keys(IRON_LAWS)).toHaveLength(6); // no_bypass_checkpoint, no_self_approval, no_completion_without_verification, no_test_simplification, incremental_progress, verify_external_capability
     });
 
     it('should have no exceptions for iron laws', () => {
@@ -47,7 +47,7 @@ describe('Constraint System', () => {
   describe('Helper Functions', () => {
     it('should get all constraints', () => {
       const all = getAllConstraints();
-      expect(all.length).toBe(17); // 5 + 10 + 2 (新增 incremental_progress)
+      expect(all.length).toBe(18); // 6 iron laws + 10 guidelines + 2 tips
     });
 
     it('should find constraints by trigger', () => {

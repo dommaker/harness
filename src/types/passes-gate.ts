@@ -117,3 +117,69 @@ export interface ExtensionTestResult extends TaskTestResult {
   /** 测试类型（扩展名称） */
   type?: string;
 }
+
+// ========================================
+// AS-006: 纯约束验证接口
+// ========================================
+
+/**
+ * 测试结果输入（用于 check() 方法）
+ * 
+ * 业务层运行测试后传入，harness 只验证结果
+ */
+export interface TestResult {
+  /** 是否通过（必填） */
+  passed: boolean;
+
+  /** 测试命令（可选，用于记录） */
+  command?: string;
+
+  /** 覆盖率（可选） */
+  coverage?: number;
+
+  /** 证据路径（可选） */
+  evidence?: string;
+
+  /** 失败列表（可选） */
+  failures?: string[];
+
+  /** 测试输出（可选） */
+  output?: string;
+
+  /** 错误信息（可选） */
+  error?: string;
+
+  /** 执行时间（可选） */
+  duration?: number;
+}
+
+/**
+ * PassesGate 验证违规
+ */
+export interface PassesGateViolation {
+  /** Iron Law ID */
+  id: string;
+
+  /** Iron Law 规则 */
+  rule: string;
+
+  /** 中文消息 */
+  message: string;
+
+  /** 约束层级 */
+  level: 'iron_law';
+}
+
+/**
+ * PassesGate check() 结果
+ */
+export interface PassesGateCheckResult {
+  /** 是否允许标记完成 */
+  allowed: boolean;
+
+  /** Iron Law 违规列表 */
+  violations?: PassesGateViolation[];
+
+  /** 原始测试结果 */
+  testResult?: TestResult;
+}

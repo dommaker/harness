@@ -16,6 +16,9 @@ import type {
   DynamicTask,
   PassesGateExtension,
   ExtensionTestResult,
+  TestResult,
+  PassesGateCheckResult,
+  PassesGateViolation,
 } from '../../types/passes-gate';
 
 const execAsync = promisify(exec);
@@ -55,6 +58,72 @@ export class PassesGate {
 
   constructor(config: Partial<PassesGateConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  // ========================================
+  // AS-006: 纯约束验证接口
+  // ========================================
+
+  /**
+   * 验证测试结果（不运行测试）
+   *
+   * 类似 checkConstraints() 的接口风格：
+   - harness 只负责验证，不负责执行
+   * - 业务层自己运行测试，传入结果
+   *
+   * @param testResult 测试结果（由业务层运行测试后传入）
+   * @returns 验证结果（是否允许标记完成 + Iron Law 违规）
+   *
+   * @example
+   * ```typescript
+   * // Studio 调用方式
+   * const testResult = await runTestCommand(workDir);  // Studio 自己运行
+   * const passesResult = passesGate.check(testResult); // harness 只验证
+   *
+   * if (!passesResult.allowed) {
+   *   return res.status(400).json({
+   *     error: 'Iron Law 违规',
+   *     violations: passesResult.violations,
+   *   });
+   * }
+   * ```
+   */
+  check(testResult: TestResult): PassesGateCheckResult {
+    const violations: PassesGateViolation[] = [];
+
+    // 1. 测试未通过 → Iron Law #2: NO SELF APPROVAL WITHOUT TEST EVIDENCE
+    if (!testResult.passed) {
+      violations.push({
+        id: 'no_self_approval',
+        rule: 'NO SELF APPROVAL WITHOUT TEST EVIDENCE',
+        message: '测试未通过',
+        level: 'iron_law',
+      });
+    }
+
+    // 2. 缺少证据 → Iron Law #3: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION
+    if (this.config.requireEvidence && !testResult.evidence) {
+      violations.push({
+        id: 'no_completion_without_verification',
+        rule: 'NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION',
+        message: '缺少测试证据',
+        level: 'iron_law',
+      });
+    }
+
+    // 3. 返回结果
+    if (violations.length > 0) {
+      return {
+        allowed: false,
+        violations,
+        testResult,
+      };
+    }
+
+    return {
+      allowed: true,
+      testResult,
+    };
   }
 
   /**

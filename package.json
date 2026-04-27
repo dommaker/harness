@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/harness",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "通用工程约束框架 - 铁律系统、检查点验证、测试门控、拦截器",
   "keywords": [
     "harness",

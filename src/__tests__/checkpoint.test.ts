@@ -2,7 +2,7 @@
  * CheckpointValidator 测试
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { CheckpointValidator, validateCheckpoint } from '../core/validators/checkpoint';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -48,7 +48,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-1',
           checks: [{ id: 'c-1', type: 'file_exists', config: { path: 'test.txt' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(true);
@@ -61,7 +61,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-2',
           checks: [{ id: 'c-2', type: 'file_exists', config: { path: 'not-exist.txt' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(false);
@@ -77,7 +77,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-3',
           checks: [{ id: 'c-3', type: 'file_not_empty', config: { path: 'test.txt' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(true);
@@ -89,7 +89,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-4',
           checks: [{ id: 'c-4', type: 'file_not_empty', config: { path: 'empty.txt' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(false);
@@ -104,7 +104,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-5',
           checks: [{ id: 'c-5', type: 'file_contains', config: { path: 'test.txt', content: 'hello' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(true);
@@ -116,10 +116,37 @@ describe('CheckpointValidator', () => {
           id: 'cp-6',
           checks: [{ id: 'c-6', type: 'file_contains', config: { path: 'test.txt', content: 'goodbye' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(false);
+    });
+  });
+
+  describe('file_not_contains', () => {
+    it('文件不包含内容应该通过', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-20',
+          checks: [{ id: 'c-20', type: 'file_not_contains', config: { path: 'test.txt', content: 'goodbye' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('文件包含内容应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-21',
+          checks: [{ id: 'c-21', type: 'file_not_contains', config: { path: 'test.txt', content: 'hello' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(false);
+      expect(result.checks[0].message).toContain('包含');
     });
   });
 
@@ -130,7 +157,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-7',
           checks: [{ id: 'c-7', type: 'json_path', config: { jsonPath: 'name', expected: 'test' } }],
         },
-        { workdir: tempDir, output: { name: 'test', value: 42 } }
+        { workdir: tempDir, projectPath: tempDir, output: { name: 'test', value: 42 } }
       );
       
       expect(result.passed).toBe(true);
@@ -142,7 +169,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-8',
           checks: [{ id: 'c-8', type: 'json_path', config: { jsonPath: 'value', expected: 100 } }],
         },
-        { workdir: tempDir, output: { name: 'test', value: 42 } }
+        { workdir: tempDir, projectPath: tempDir, output: { name: 'test', value: 42 } }
       );
       
       expect(result.passed).toBe(false);
@@ -156,10 +183,103 @@ describe('CheckpointValidator', () => {
           id: 'cp-9',
           checks: [{ id: 'c-9', type: 'output_contains', config: { content: 'success' } }],
         },
-        { workdir: tempDir, output: 'operation success completed' }
+        { workdir: tempDir, projectPath: tempDir, output: 'operation success completed' }
       );
       
       expect(result.passed).toBe(true);
+    });
+    
+    it('输出不包含内容应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-9b',
+          checks: [{ id: 'c-9b', type: 'output_contains', config: { content: 'error' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, output: 'operation success completed' }
+      );
+      
+      expect(result.passed).toBe(false);
+      expect(result.checks[0].message).toContain('不包含');
+    });
+  });
+
+  describe('output_not_contains', () => {
+    it('输出不包含内容应该通过', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-14',
+          checks: [{ id: 'c-14', type: 'output_not_contains', config: { content: 'error' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, output: 'operation success completed' }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('输出包含内容应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-15',
+          checks: [{ id: 'c-15', type: 'output_not_contains', config: { content: 'success' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, output: 'operation success completed' }
+      );
+      
+      expect(result.passed).toBe(false);
+      expect(result.checks[0].message).toContain('包含');
+    });
+  });
+
+  describe('output_matches', () => {
+    it('输出匹配正则应该通过', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-16',
+          checks: [{ id: 'c-16', type: 'output_matches', config: { pattern: '\\d+ tests passed' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, output: '✅ 42 tests passed' }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('输出不匹配正则应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-17',
+          checks: [{ id: 'c-17', type: 'output_matches', config: { pattern: 'Error:.*' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, output: 'All tests passed' }
+      );
+      
+      expect(result.passed).toBe(false);
+      expect(result.checks[0].message).toContain('不匹配');
+    });
+  });
+
+  describe('command_output', () => {
+    it('命令输出匹配应该通过', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-18',
+          checks: [{ id: 'c-18', type: 'command_output', config: { command: 'echo hello', expected: 'hello' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('命令输出不匹配应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-19',
+          checks: [{ id: 'c-19', type: 'command_output', config: { command: 'echo hello', expected: 'world' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(false);
     });
   });
 
@@ -170,7 +290,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-10',
           checks: [{ id: 'c-10', type: 'command_success', config: { command: 'echo test' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(true);
@@ -182,7 +302,7 @@ describe('CheckpointValidator', () => {
           id: 'cp-11',
           checks: [{ id: 'c-11', type: 'command_success', config: { command: 'exit 1' } }],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(false);
@@ -200,7 +320,7 @@ describe('CheckpointValidator', () => {
             { id: 'c-12c', type: 'file_contains', config: { path: 'test.txt', content: 'hello' } },
           ],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(true);
@@ -217,7 +337,7 @@ describe('CheckpointValidator', () => {
             { id: 'c-13b', type: 'file_not_empty', config: { path: 'empty.txt' } },  // 失败
           ],
         },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(false);
@@ -229,11 +349,118 @@ describe('CheckpointValidator', () => {
     it('无检查应该默认通过', async () => {
       const result = await validateCheckpoint(
         { id: 'cp-empty', checks: [] },
-        { workdir: tempDir }
+        { workdir: tempDir, projectPath: tempDir }
       );
       
       expect(result.passed).toBe(true);
       expect(result.message).toContain('无检查点要求');
+    });
+  });
+
+  describe('http_status', () => {
+    it('HTTP 状态码匹配应该通过', async () => {
+      // 使用 httpbin.org 进行测试（公共测试服务）
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-22',
+          checks: [{ id: 'c-22', type: 'http_status', config: { url: 'https://httpbin.org/status/200', expectedStatus: 200 } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('HTTP 状态码不匹配应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-23',
+          checks: [{ id: 'c-23', type: 'http_status', config: { url: 'https://httpbin.org/status/404', expectedStatus: 200 } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(false);
+      expect(result.checks[0].message).toContain('不匹配');
+    });
+  });
+
+  describe('http_body', () => {
+    it('HTTP 响应体包含内容应该通过', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-24',
+          checks: [{ id: 'c-24', type: 'http_body', config: { url: 'https://httpbin.org/get', expected: 'args' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('HTTP 响应体不包含内容应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-25',
+          checks: [{ id: 'c-25', type: 'http_body', config: { url: 'https://httpbin.org/get', expected: 'nonexistent_content_xyz' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(false);
+    });
+  });
+
+  describe('custom', () => {
+    it('自定义检查处理器应该被调用', async () => {
+      const customHandlers = new Map();
+      customHandlers.set('myValidator', async (config: any) => ({
+        checkId: 'c-26',
+        passed: true,
+        message: '自定义检查通过',
+      }));
+
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-26',
+          checks: [{ id: 'c-26', type: 'custom', config: { customFunction: 'myValidator' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, customHandlers }
+      );
+      
+      expect(result.passed).toBe(true);
+    });
+
+    it('自定义检查可以返回失败', async () => {
+      const customHandlers = new Map();
+      customHandlers.set('failValidator', async (config: any) => ({
+        checkId: 'c-26b',
+        passed: false,
+        message: '自定义检查失败',
+      }));
+
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-26b',
+          checks: [{ id: 'c-26b', type: 'custom', config: { customFunction: 'failValidator' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir, customHandlers }
+      );
+      
+      expect(result.passed).toBe(false);
+    });
+
+    it('未注册的自定义检查应该失败', async () => {
+      const result = await validateCheckpoint(
+        {
+          id: 'cp-27',
+          checks: [{ id: 'c-27', type: 'custom', config: { customFunction: 'unknownValidator' } }],
+        },
+        { workdir: tempDir, projectPath: tempDir }
+      );
+      
+      expect(result.passed).toBe(false);
+      expect(result.checks[0].message).toContain('未实现');
     });
   });
 });

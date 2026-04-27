@@ -14,7 +14,7 @@
 
 ---
 
-## 五条铁律
+## 七条铁律
 
 ### 1. NO BYPASSING CHECKPOINTS
 
@@ -120,6 +120,70 @@ trigger: feature_completion_claim
 - 一个 session 一个任务
 - 完成后验证、提交
 - 下一个任务开新 session
+
+---
+
+### 6. REVIEW IMPLEMENTATION AGAINST REQUIREMENTS
+
+```yaml
+id: no_implementation_without_requirement_review
+rule: 实现后必须对比需求验证
+trigger: implementation_complete
+```
+
+**原因**：避免实现偏离需求。
+
+**触发条件**：
+- 功能开发完成
+- Bug 修复完成
+- 重构完成
+
+**必须执行**：
+1. 回顾需求文档（Spec/Roadmap/Issue）
+2. 检查实现是否符合每条 AC
+3. 确认边界情况已覆盖
+4. 输出验证清单
+
+**禁止**：
+- 实现后不对比需求直接提交
+- 只测试"功能能跑"不验证 AC
+- 跳过边界情况验证
+- 假设"差不多就行"
+
+**验证清单模板**：
+```markdown
+| AC | 实现 | 状态 |
+|----|------|:----:|
+| AC-001 | xxx | ✅ |
+| AC-002 | xxx | ✅ |
+```
+
+---
+
+### 7. VERIFY EXTERNAL CAPABILITY BEFORE IMPLEMENTATION
+
+```yaml
+id: verify_external_capability
+rule: 外部依赖能力必须先验证
+trigger: external_api_design
+```
+
+**原因**：避免假设外部系统支持未确认的能力。
+
+**触发条件**：
+- 依赖外部 API/服务的回调/交互机制
+- 使用未验证过的外部系统高级功能
+- 假设外部系统支持某种能力但未查阅文档
+
+**必须执行**：
+1. 查阅官方文档 → 确认能力是否存在
+2. 发送最小测试 → 验证可行性
+3. 记录限制 → 作为设计约束
+
+**案例**：DD-009 Discord 按钮方案
+- 假设 Webhook 支持按钮交互
+- 未查阅 Discord API 文档限制
+- 实现后才发现不支持，浪费 30 分钟
 
 ---
 

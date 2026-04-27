@@ -158,6 +158,48 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 【正确流程】
 设计方案 → 查阅文档限制 → 发送最小测试 → 验证可行 → 开发`,
   },
+
+  /**
+   * 实现后必须对比需求验证
+   * 原因：避免实现偏离需求
+   */
+  no_implementation_without_requirement_review: {
+    id: 'no_implementation_without_requirement_review',
+    rule: 'REVIEW IMPLEMENTATION AGAINST REQUIREMENTS',
+    message: '实现后必须对比需求验证',
+    level: 'iron_law',
+    trigger: 'implementation_complete',
+    enforcement: 'requirement-review',
+    description: `实现完成后，必须对比原始需求进行验证。
+
+【触发条件】
+- 功能开发完成
+- Bug 修复完成
+- 重构完成
+
+【必须执行】
+1. 回顾需求文档（Spec/Roadmap/Issue）
+2. 检查实现是否符合每条 AC
+3. 确认边界情况已覆盖
+4. 输出验证清单
+
+【禁止】
+- 实现后不对比需求直接提交
+- 只测试"功能能跑"不验证 AC
+- 跳过边界情况验证
+- 假设"差不多就行"
+
+【验证清单模板】
+| AC | 实现 | 状态 |
+|----|------|:----:|
+| AC-001 | xxx | ✅ |
+| AC-002 | xxx | ✅ |
+
+【案例】AS-011 Meeting→Project 自动关联（2026-04-27）
+- 需求：会议结束自动创建 Project（如果无关联）
+- 实现：增加了 effectiveProjectId 逻辑
+- 验证：✅ 检查了 Spec 定义、测试了多种场景`,
+  },
 };
 
 // ========================================

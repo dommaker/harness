@@ -81,6 +81,8 @@ harness status
 | `no_self_approval` | 禁止自评通过 | ❌ "应该没问题" |
 | `no_completion_without_verification` | 完成必须有验证 | ❌ "任务完成了"（未测试）|
 | `no_test_simplification` | 禁止简化测试 | ❌ "测试太难，先删掉" |
+| `incremental_progress` | 单任务单会话 | ❌ 一次做多个任务 |
+| `no_implementation_without_requirement_review` | 实现后对比需求 | ❌ 不验证 AC |
 
 ```bash
 harness check
@@ -123,9 +125,9 @@ harness spec list         # 支持的 Spec 类型
 | **Guideline** | 指导 | 🟡 warning | 写代码前写测试 |
 | **Tip** | 提示 | 🔵 info | 新模块要有 README |
 
-### 16 条内置约束
+### 17 条内置约束
 
-**Iron Laws（4 条）**：
+**Iron Laws（7 条）**：
 
 | ID | 规则 |
 |---|------|
@@ -133,6 +135,9 @@ harness spec list         # 支持的 Spec 类型
 | `no_self_approval` | 禁止自评通过 |
 | `no_completion_without_verification` | 完成必须验证 |
 | `no_test_simplification` | 禁止简化测试 |
+| `incremental_progress` | 单任务单会话 |
+| `verify_external_capability` | 外部能力先验证 |
+| `no_implementation_without_requirement_review` | 实现后对比需求 |
 
 **Guidelines（10 条）**：
 

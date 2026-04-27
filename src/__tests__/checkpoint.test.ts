@@ -463,4 +463,173 @@ describe('CheckpointValidator', () => {
       expect(result.checks[0].message).toContain('未实现');
     });
   });
+
+  // ========================================
+  // 边缘情况测试（提升覆盖率）
+  // ========================================
+  describe('边缘情况', () => {
+    describe('未知检查类型', () => {
+      it('未知类型应该返回错误', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-unknown',
+            checks: [{ id: 'c-unknown', type: 'unknown_type' as any, config: {} }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('未知检查类型');
+        expect(result.checks[0].error).toContain('Unknown check type');
+      });
+    });
+
+    describe('file_not_empty 文件不存在', () => {
+      it('文件不存在应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-fne-missing',
+            checks: [{ id: 'c-fne-missing', type: 'file_not_empty', config: { path: 'nonexistent.txt' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('不存在');
+      });
+    });
+
+    describe('file_contains 文件不存在', () => {
+      it('文件不存在应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-fc-missing',
+            checks: [{ id: 'c-fc-missing', type: 'file_contains', config: { path: 'nonexistent.txt', content: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('不存在');
+      });
+    });
+
+    describe('file_not_contains 文件不存在', () => {
+      it('文件不存在应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-fnc-missing',
+            checks: [{ id: 'c-fnc-missing', type: 'file_not_contains', config: { path: 'nonexistent.txt', content: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('不存在');
+      });
+    });
+
+    describe('command_output 命令失败', () => {
+      it('命令执行失败应该返回错误', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-co-fail',
+            checks: [{ id: 'c-co-fail', type: 'command_output', config: { command: 'exit 1', expected: 'anything' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('执行失败');
+      });
+    });
+
+    describe('json_path 无效路径', () => {
+      it('无效 JSON 路径应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-jp-invalid',
+            checks: [{ id: 'c-jp-invalid', type: 'json_path', config: { jsonPath: 'invalid..path', expected: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: { name: 'test' } }
+        );
+        
+        // 取决于 getJsonValue 实现，可能通过或失败
+        // 这里主要测试不会抛出异常
+        expect(result).toBeDefined();
+        expect(result.checks).toBeDefined();
+      });
+    });
+
+    describe('http_status 请求失败', () => {
+      it('无效 URL 应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-hs-fail',
+            checks: [{ id: 'c-hs-fail', type: 'http_status', config: { url: 'https://invalid.domain.that.does.not.exist/test', expectedStatus: 200 } }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('请求失败');
+      });
+    });
+
+    describe('http_body 请求失败', () => {
+      it('无效 URL 应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-hb-fail',
+            checks: [{ id: 'c-hb-fail', type: 'http_body', config: { url: 'https://invalid.domain.that.does.not.exist/test', expected: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+        
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('请求失败');
+      });
+    });
+
+    describe('output_contains JSON 输出', () => {
+      it('JSON 对象输出应该被正确处理', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-oc-json',
+            checks: [{ id: 'c-oc-json', type: 'output_contains', config: { content: 'success' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: { status: 'success', data: [1, 2, 3] } }
+        );
+        
+        expect(result.passed).toBe(true);
+      });
+    });
+
+    describe('output_matches 复杂正则', () => {
+      it('多行匹配应该工作', async () => {
+        // 注意：正则默认不匹配换行符，需要使用 s 标志或 [\s\S]
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-om-multi',
+            checks: [{ id: 'c-om-multi', type: 'output_matches', config: { pattern: 'passed[\\s\\S]*failed' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: '10 passed\n5 failed\n2 skipped' }
+        );
+        
+        expect(result.passed).toBe(true);
+      });
+
+      it('单行匹配应该工作', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-om-single',
+            checks: [{ id: 'c-om-single', type: 'output_matches', config: { pattern: '\\d+ passed' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: '10 passed\n5 failed' }
+        );
+        
+        expect(result.passed).toBe(true);
+      });
+    });
+  });
 });

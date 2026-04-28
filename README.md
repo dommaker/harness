@@ -104,7 +104,7 @@ harness report -f json                # JSON 格式
 harness report -o report.md           # 输出到文件
 ```
 
-### 诊断（已弃用，请用 flow）
+### 诊断
 
 ```bash
 harness flow                          # 一键诊断 + 提案

@@ -132,3 +132,30 @@ describe('Constraint Levels', () => {
     });
   });
 });
+
+describe('IronLawViolationError (deprecated)', () => {
+  it('should be instanceof ConstraintViolationError', () => {
+    const { IronLawViolationError, ConstraintViolationError } = require('../types/constraint');
+    
+    const result = {
+      id: 'test',
+      level: 'iron_law',
+      satisfied: false,
+      constraint: {
+        id: 'test',
+        level: 'iron_law',
+        rule: 'TEST',
+        message: 'test',
+        trigger: 'step_execution',
+        enforcement: 'test',
+      },
+      message: 'Test error',
+      checkedAt: new Date(),
+    };
+
+    const error = new IronLawViolationError(result);
+    expect(error).toBeInstanceOf(ConstraintViolationError);
+    expect(error.name).toBe('IronLawViolationError');
+    expect(error.result).toBe(result);
+  });
+});

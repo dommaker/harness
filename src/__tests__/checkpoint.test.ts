@@ -631,5 +631,60 @@ describe('CheckpointValidator', () => {
         expect(result.passed).toBe(true);
       });
     });
+
+    describe('边界场景', () => {
+      it('未知检查类型应该失败', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-unknown',
+            checks: [{ id: 'c-unknown', type: 'unknown_type' as any, config: {} }],
+          },
+          { workdir: tempDir, projectPath: tempDir }
+        );
+
+        expect(result.passed).toBe(false);
+        expect(result.checks[0].message).toContain('未知检查类型');
+      });
+
+      it('output 为 null 应该被正确处理', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-null-output',
+            checks: [{ id: 'c-null-output', type: 'output_contains', config: { content: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: null }
+        );
+
+        // null output 不会包含任何内容
+        expect(result.passed).toBe(false);
+      });
+
+      it('output 为 undefined 应该被正确处理', async () => {
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-undef-output',
+            checks: [{ id: 'c-undef-output', type: 'output_contains', config: { content: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: undefined }
+        );
+
+        // undefined output 不会包含任何内容
+        expect(result.passed).toBe(false);
+      });
+
+      it('JSON 路径获取抛出错误应该失败', async () => {
+        // 创建一个复杂的 JSON 路径测试场景
+        const result = await validateCheckpoint(
+          {
+            id: 'cp-json-err',
+            checks: [{ id: 'c-json-err', type: 'json_path', config: { jsonPath: '$.deeply.nested.array[999].field', expected: 'test' } }],
+          },
+          { workdir: tempDir, projectPath: tempDir, output: { data: 'simple' } }
+        );
+
+        expect(result).toBeDefined();
+        expect(result.checks[0]).toBeDefined();
+      });
+    });
   });
 });

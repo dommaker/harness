@@ -186,4 +186,119 @@ describe('ErrorClassifier', () => {
       expect(result.type).toBe(ErrorType.TOOL_ERROR);
     });
   });
+
+  describe('其他方法', () => {
+    it('getLevel 应该返回等级', () => {
+      const level = classifier.getLevel(ErrorType.TEST_FAILED);
+      expect(level).toBe(FailureLevel.L1);
+    });
+
+    it('getLevel 未知类型应该返回默认', () => {
+      const level = classifier.getLevel('unknown_type' as any);
+      expect(level).toBe(FailureLevel.L2);
+    });
+
+    it('addRule 应该添加规则', () => {
+      const c = new ErrorClassifier();
+      c.addRule({
+        type: ErrorType.VALIDATION_ERROR,
+        keywords: ['my-custom-error'],
+        level: FailureLevel.L4,
+      });
+
+      const error = new Error('my-custom-error occurred');
+      const result = c.classify(error);
+      expect(result.type).toBe(ErrorType.VALIDATION_ERROR);
+      expect(result.level).toBe(FailureLevel.L4);
+    });
+
+    it('getRules 应该返回所有规则', () => {
+      const c = new ErrorClassifier();
+      const rules = c.getRules();
+      expect(Array.isArray(rules)).toBe(true);
+      expect(rules.length).toBeGreaterThan(0);
+    });
+
+    it('应该支持 pattern 匹配', () => {
+      const c = new ErrorClassifier({
+        rules: [
+          {
+            type: ErrorType.VALIDATION_ERROR,
+            patterns: [/error-code-\d+/],
+            level: FailureLevel.L3,
+          },
+        ],
+      });
+
+      const error = new Error('error-code-500 occurred');
+      const result = c.classify(error);
+      expect(result.type).toBe(ErrorType.VALIDATION_ERROR);
+    });
+
+    it('应该处理没有 keywords 和 patterns 的规则', () => {
+      const c = new ErrorClassifier({
+        rules: [
+          {
+            type: ErrorType.VALIDATION_ERROR,
+            // no keywords or patterns
+          },
+        ],
+      });
+
+      const error = new Error('unknown error');
+      const result = c.classify(error);
+      // 规则没有匹配条件，不会匹配
+      expect(result.type).not.toBe(ErrorType.VALIDATION_ERROR);
+    });
+
+    it('应该支持空 keywords 数组', () => {
+      const c = new ErrorClassifier({
+        rules: [
+          {
+            type: ErrorType.VALIDATION_ERROR,
+            keywords: [],
+          },
+        ],
+      });
+
+      const error = new Error('unknown error');
+      const result = c.classify(error);
+      expect(result.type).not.toBe(ErrorType.VALIDATION_ERROR);
+    });
+
+    it('应该支持空 patterns 数组', () => {
+      const c = new ErrorClassifier({
+        rules: [
+          {
+            type: ErrorType.VALIDATION_ERROR,
+            patterns: [],
+          },
+        ],
+      });
+
+      const error = new Error('unknown error');
+      const result = c.classify(error);
+      expect(result.type).not.toBe(ErrorType.VALIDATION_ERROR);
+    });
+  });
+
+  describe('快速函数', () => {
+    it('classifyError 应该快速分类', () => {
+      const { classifyError } = require('../failure/classifier');
+      const type = classifyError(new Error('test failed'));
+      expect(type).toBe(ErrorType.TEST_FAILED);
+    });
+
+    it('getFailureLevel 应该快速获取等级', () => {
+      const { getFailureLevel } = require('../failure/classifier');
+      const level = getFailureLevel(ErrorType.TEST_FAILED);
+      expect(level).toBe(FailureLevel.L1);
+    });
+
+    it('createErrorClassifier 应该创建实例', () => {
+      const { createErrorClassifier } = require('../failure/classifier');
+      const c = createErrorClassifier();
+      expect(c).toBeInstanceOf(ErrorClassifier);
+    });
+  });
 });

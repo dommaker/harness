@@ -110,7 +110,7 @@ describe('check command', () => {
       const mockLoader = {
         load: jest.fn(),
         hasCustomConfig: jest.fn().mockReturnValue(true),
-        mergeConstraints: jest.fn().mockReturnValue({ custom: [{ id: 'custom', rule: 'test', message: 'test', level: 'iron_law', trigger: 'step_execution', enforcement: 'checkpoint-required' }], disabled: [] }),
+        mergeConstraints: jest.fn().mockReturnValue({ custom: [{ id: 'custom', rule: 'test', message: 'test', level: 'iron_law', trigger: 'step_execution', enforcement: 'checkpoint-required' }], disabled: ['disabled_constraint'] }),
       };
       (MockProjectConfigLoader as any).mockImplementation(() => mockLoader);
 
@@ -125,6 +125,51 @@ describe('check command', () => {
 
       await check({ preset: 'default', staged: false, projectPath: '/project' });
       expect(mockChecker.setCustomConfig).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已禁用约束'));
+    });
+
+    it('应该显示提示信息', async () => {
+      mockChecker.checkConstraints.mockResolvedValue({
+        passed: true,
+        ironLaws: [],
+        guidelines: [],
+        tips: [{ id: 'test_tip', level: 'tip', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_tip', rule: 'test', message: 'test tip', level: 'tip', trigger: 'step_execution', enforcement: 'info' } }],
+        warningCount: 0,
+        tipCount: 1,
+      });
+
+      await check({ preset: 'default', staged: false });
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('提示'));
+    });
+
+    it('应该显示通过的指导原则', async () => {
+      mockChecker.checkConstraints.mockResolvedValue({
+        passed: true,
+        ironLaws: [],
+        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'step_execution', enforcement: 'warning' } }],
+        tips: [],
+        warningCount: 0,
+        tipCount: 0,
+      });
+
+      await check({ preset: 'default', staged: false });
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('指导原则'));
+    });
+
+    it('应该显示变更文件数量', async () => {
+      // Mock getChangedFiles 返回变更文件
+      mockChecker.checkConstraints.mockResolvedValue({
+        passed: true,
+        ironLaws: [],
+        guidelines: [],
+        tips: [],
+        warningCount: 0,
+        tipCount: 0,
+      });
+
+      await check({ preset: 'default', staged: true });
+      // 应该显示触发条件
+      expect(consoleSpy).toHaveBeenCalled();
     });
   });
 

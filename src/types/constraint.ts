@@ -24,6 +24,7 @@ export type ConstraintTrigger =
   | 'bug_fix_attempt'
   | 'task_completion_claim'
   | 'feature_completion_claim'  // 🆕 功能完成声明（Long-Running）
+  | 'implementation_complete'  // 🆕 AS-015: 实现完成触发
   | 'skill_creation'
   | 'code_implementation'
   | 'test_creation'

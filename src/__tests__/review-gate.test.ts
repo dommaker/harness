@@ -2,7 +2,7 @@
  * ReviewGate 测试
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ReviewGate } from '../gates/review';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -40,6 +40,7 @@ describe('ReviewGate', () => {
   describe('check', () => {
     it('本地模式应该返回警告', async () => {
       const result = await gate.check({
+        projectId: 'test-project',
         projectPath: tempDir,
       });
       
@@ -52,6 +53,7 @@ describe('ReviewGate', () => {
       const relaxedGate = new ReviewGate({ requireApproval: false });
       
       const result = await relaxedGate.check({
+        projectId: 'test-project',
         projectPath: tempDir,
       });
       
@@ -80,6 +82,7 @@ describe('ReviewGate', () => {
   describe('checkLocalGit', () => {
     it('应该检查 git 状态', async () => {
       const result = await gate.check({
+        projectId: 'test-project',
         projectPath: tempDir,
       });
       

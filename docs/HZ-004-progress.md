@@ -4,10 +4,10 @@
 harness 测试覆盖率从 44% 提升到 80%
 
 ## 当前状态
-- **覆盖率**: 44% → 80.67%（+36.67%）✅
-- **Tests**: 521 → 815（+294）
+- **覆盖率**: 44% → 81.35%（+37.35%）✅
+- **Tests**: 521 → 833（+312）
 - **Suites**: 44 → 60（+16）
-- **目标**: 80% — 已达成
+- **目标**: 80% — 超额完成
 
 ## 已添加测试
 ### CLI Commands（11 套）
@@ -15,7 +15,7 @@ harness 测试覆盖率从 44% 提升到 80%
 - spec.test.ts (10 tests)
 - validate.test.ts (6 tests)
 - passes-gate.test.ts (7 tests)
-- check.test.ts (7 tests)
+- check.test.ts (7 → 11 tests)
 - report.test.ts (5 tests)
 - diagnose.test.ts (11 tests)
 - traces.test.ts (13 tests)
@@ -27,7 +27,7 @@ harness 测试覆盖率从 44% 提升到 80%
 - interceptor.test.ts (20 tests)
 
 ### Monitoring
-- performance-collector.test.ts (12 tests → 扩展)
+- performance-collector.test.ts (12 → 32 tests)
 - performance-analyzer.test.ts (新增 30 tests)
 - performance-gate.test.ts (扩展)
 
@@ -56,7 +56,8 @@ harness 测试覆盖率从 44% 提升到 80%
 3. `b3273a3` - performance-collector tests
 4. `fe0dcd0` - performance-analyzer tests
 5. `9d1ae53` - 补充测试覆盖率提升至 73.5%
-6. 本轮: propose/passes-gate/performance-analyzer/validator/startup/clean-state/annotation-checker → 80.67%
+6. `a08109a` - propose/passes-gate/performance-analyzer/validator/startup/clean-state/annotation-checker → 80.67%
+7. `ff492c1` - check/performance-collector 扩展 → 81.35%
 
 ## 测试运行命令
 ```bash

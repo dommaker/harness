@@ -480,6 +480,37 @@ export const GUIDELINES: Record<string, Constraint> = {
 - 已有明确设计文档`,
     exceptions: ['explicit_instruction', 'emergency_fix', 'existing_design'],
   },
+
+  /**
+   * 覆盖率不能下降
+   * 例外：删除测试、重构核心逻辑
+   */
+  no_coverage_decrease: {
+    id: 'no_coverage_decrease',
+    rule: 'COVERAGE MUST NOT DECREASE ON NEW COMMITS',
+    message: '新提交不能降低测试覆盖率',
+    level: 'guideline',
+    trigger: 'commit',
+    enforcement: 'coverage-gate',
+    description: `每次提交代码时，测试覆盖率不能低于上一次提交：
+
+[检查方式]
+- Git pre-commit hook 运行覆盖率检查
+- GitHub Actions 在 PR 时验证
+- 对比上一次覆盖率报告
+
+[阈值要求]
+- Statements ≥ 85%
+- Branches ≥ 75%
+- Functions ≥ 80%
+- Lines ≥ 85%
+
+[例外]
+- 删除废弃功能
+- 重构核心逻辑（需评审）
+- 紧急修复（需后续补测）`,
+    exceptions: ['deprecated_removal', 'core_refactor_with_review', 'emergency_fix_pending_test'],
+  },
 };
 
 // ========================================

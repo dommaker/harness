@@ -1,0 +1,72 @@
+name: Coverage Gate
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整历史来对比覆盖率
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --coverage
+
+      - name: Check coverage threshold
+        run: |
+          # 检查覆盖率是否达标
+          node -e "
+            const summary = require('./coverage/coverage-summary.json');
+            const total = summary.total.lines.pct;
+            if (total < 85) {
+              console.error('❌ Coverage ' + total + '% is below threshold 85%');
+              process.exit(1);
+            }
+            console.log('✅ Coverage: ' + total + '%');
+          "
+
+      - name: Check coverage not decreased (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # 获取基准分支覆盖率
+          git checkout ${{ github.base_ref }}
+          npm ci
+          npm test -- --coverage
+          BASE_COVERAGE=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+          
+          # 切回 PR 分支
+          git checkout -
+          npm ci
+          npm test -- --coverage
+          PR_COVERAGE=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+          
+          echo "Base coverage: $BASE_COVERAGE%"
+          echo "PR coverage: $PR_COVERAGE%"
+          
+          # 检查是否下降超过 1%
+          DECREASE=$(echo "$BASE_COVERAGE - $PR_COVERAGE" | bc)
+          if (( $(echo "$DECREASE > 1" | bc -l) )); then
+            echo "❌ Coverage decreased by $DECREASE%"
+            exit 1
+          fi
+          echo "✅ Coverage check passed"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/

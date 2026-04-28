@@ -194,6 +194,15 @@ if [ $? -ne 0 ]; then
   echo "❌ Iron law check failed"
   exit 1
 fi
+
+# 覆盖率检查（仅检查变更文件）
+if command -v npm &> /dev/null; then
+  npm test -- --coverage --coverageThreshold='{"global":{"lines":85}}' --passWithNoTests
+  if [ $? -ne 0 ]; then
+    echo "❌ Coverage below 85% threshold"
+    exit 1
+  fi
+fi
 `;
 
 /**

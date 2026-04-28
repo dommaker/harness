@@ -28,8 +28,8 @@ describe('Constraint System', () => {
   });
 
   describe('Guidelines', () => {
-    it('should have 10 guidelines defined', () => {
-      expect(Object.keys(GUIDELINES)).toHaveLength(10);
+    it('should have 11 guidelines defined', () => {
+      expect(Object.keys(GUIDELINES)).toHaveLength(11);
     });
 
     it('should have exceptions for some guidelines', () => {
@@ -47,7 +47,7 @@ describe('Constraint System', () => {
   describe('Helper Functions', () => {
     it('should get all constraints', () => {
       const all = getAllConstraints();
-      expect(all.length).toBe(19); // 7 iron laws + 10 guidelines + 2 tips
+      expect(all.length).toBe(20); // 7 iron laws + 11 guidelines + 2 tips
     });
 
     it('should find constraints by trigger', () => {

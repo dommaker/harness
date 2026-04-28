@@ -28,6 +28,7 @@ coverage/
 # Internal agent docs
 AGENTS.md
 specs/
+docs/
 
 # 🆕 Internal docs (not for public release)
 docs/specs/

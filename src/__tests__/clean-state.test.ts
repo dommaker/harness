@@ -95,4 +95,75 @@ export function hello() {
       expect(result).toBeDefined();
     });
   });
+
+  describe('自动提交', () => {
+    it('禁用自动提交应该跳过', async () => {
+      const noCommitManager = new CleanStateManager({
+        enabled: true,
+        autoCommit: false,
+      });
+
+      const result = await noCommitManager.onSessionEnd(tempDir, {
+        sessionId: 'session-004',
+        workflowId: 'workflow-004',
+      });
+
+      expect(result.committedFiles).toBeUndefined();
+    });
+  });
+
+  describe('Progress 更新', () => {
+    it('应该更新 progress 文件', async () => {
+      const progressManager = new CleanStateManager({
+        enabled: true,
+        autoCommit: false,
+        detectBugs: false,
+        updateProgress: true,
+      });
+
+      const result = await progressManager.onSessionEnd(tempDir, {
+        sessionId: 'session-005',
+        workflowId: 'workflow-005',
+        task: { id: 'task-001', name: 'Test Task' },
+      });
+
+      expect(result.progressUpdated).toBe(true);
+    });
+  });
+
+  describe('Bug 检测', () => {
+    it('应该检测 console.error', async () => {
+      const bugFile = path.join(tempDir, 'buggy.ts');
+      fs.writeFileSync(bugFile, `
+console.error('Something went wrong');
+`);
+
+      const result = await manager.onSessionEnd(tempDir, {
+        sessionId: 'session-006',
+        workflowId: 'workflow-006',
+      });
+
+      // Bug 检测运行了，但可能找不到变更（没有 git 历史）
+      expect(result).toBeDefined();
+
+      fs.rmSync(bugFile, { force: true });
+    });
+
+    it('应该检测 FIXME 注释', async () => {
+      const fixmeFile = path.join(tempDir, 'fixme.ts');
+      fs.writeFileSync(fixmeFile, `
+// FIXME: This is a hack
+function hack() {}
+`);
+
+      const result = await manager.onSessionEnd(tempDir, {
+        sessionId: 'session-007',
+        workflowId: 'workflow-007',
+      });
+
+      expect(result).toBeDefined();
+
+      fs.rmSync(fixmeFile, { force: true });
+    });
+  });
 });

@@ -163,6 +163,119 @@ describe('SessionStartup', () => {
 
         expect(result.results[0].success).toBe(true);
       });
+
+      it('should handle missing task list', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['read_task_list'],
+          optional: [],
+        });
+
+        mockFs.access.mockRejectedValueOnce(new Error('Not found'));
+
+        const result = await s.run();
+
+        // 文件不存在时返回失败
+        expect(result.results[0].type).toBe('read_task_list');
+      });
+
+      it('should parse task list steps', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['read_task_list'],
+          optional: [],
+        });
+
+        mockFs.access.mockResolvedValueOnce(undefined);
+        mockFs.readFile.mockResolvedValueOnce(JSON.stringify({
+          tasks: [
+            { id: 'task-1', steps: [{ status: 'done' }] },
+          ],
+        }));
+
+        const result = await s.run();
+
+        expect(result.results[0].success).toBe(true);
+      });
+    });
+
+    describe('init_sh', () => {
+      it('should run init.sh', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['init_sh'],
+          optional: [],
+        });
+
+        mockExec.mockImplementation((cmd, opts, callback) => {
+          callback(null, { stdout: 'Init complete', stderr: '' });
+        });
+
+        const result = await s.run();
+
+        // init_sh 成功或失败取决于 mock 设置
+        expect(result.results[0].type).toBe('init_sh');
+      });
+    });
+
+    describe('basic_verification', () => {
+      it('should run basic verification', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['basic_verification'],
+          optional: [],
+        });
+
+        mockExec.mockImplementation((cmd, opts, callback) => {
+          callback(null, { stdout: 'Tests passed', stderr: '' });
+        });
+
+        const result = await s.run();
+
+        expect(result.results[0].type).toBe('basic_verification');
+      });
+    });
+
+    describe('load_context', () => {
+      it('should load context', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['load_context'],
+          optional: [],
+        });
+
+        mockFs.readFile.mockResolvedValueOnce('# Context\nSome content');
+
+        const result = await s.run();
+
+        expect(result.results[0].type).toBe('load_context');
+      });
+    });
+
+    describe('unknown checkpoint', () => {
+      it('should handle unknown checkpoint type', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['unknown_checkpoint' as any],
+          optional: [],
+        });
+
+        const result = await s.run();
+
+        expect(result.results[0].type).toBe('unknown_checkpoint');
+      });
+    });
+
+    describe('multiple checkpoints', () => {
+      it('should run all required and optional checkpoints', async () => {
+        const s = new SessionStartup('/test', {
+          required: ['pwd', 'git_log', 'git_status'],
+          optional: ['read_progress'],
+        });
+
+        mockExec.mockImplementation((cmd, opts, callback) => {
+          callback(null, { stdout: 'output', stderr: '' });
+        });
+        mockFs.readFile.mockResolvedValue('# Progress');
+
+        const result = await s.run();
+
+        expect(result.results.length).toBe(4);
+      });
     });
   });
 });

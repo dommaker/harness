@@ -135,5 +135,97 @@ describe('PassesGate', () => {
       expect(results.length).toBeGreaterThan(1);  // 单元测试 + puppeteer
       expect(results.some(r => r.type === 'puppeteer')).toBe(true);
     });
+
+    it('checkAllPasses 应该返回综合结果', async () => {
+      gate.registerExtension('passing-ext', {
+        name: 'passing-ext',
+        run: async () => ({
+          passed: true,
+          command: 'passing-test',
+          timestamp: new Date(),
+        }),
+      });
+      
+      const result = await gate.checkAllPasses(tempDir);
+      
+      expect(result.passed).toBeDefined();
+      expect(result.results).toBeDefined();
+      expect(Array.isArray(result.failedTypes)).toBe(true);
+    });
+
+    it('checkAllPasses 应该返回失败类型', async () => {
+      const failingGate = createPassesGate({ enabled: true });
+      failingGate.registerExtension('failing-ext', {
+        name: 'failing-ext',
+        run: async () => ({
+          passed: false,
+          command: 'failing-test',
+          timestamp: new Date(),
+        }),
+      });
+      
+      const result = await failingGate.checkAllPasses(tempDir);
+      
+      expect(result.failedTypes).toContain('failing-ext');
+    });
+
+    it('扩展抛错应返回失败结果', async () => {
+      const errorGate = createPassesGate({ enabled: true });
+      errorGate.registerExtension('error-ext', {
+        name: 'error-ext',
+        run: async () => {
+          throw new Error('Extension error');
+        },
+      });
+      
+      const results = await errorGate.runAllTests(tempDir);
+      
+      const errorResult = results.find(r => r.type === 'error-ext');
+      expect(errorResult?.passed).toBe(false);
+      expect(errorResult?.error).toContain('Extension error');
+    });
+  });
+
+  describe('getTestResult', () => {
+    it('应该返回已存储的测试结果', async () => {
+      const result = await gate.setPasses('stored-task', true, tempDir);
+      
+      if (result.allowed && result.testResult) {
+        const stored = gate.getTestResult('stored-task');
+        expect(stored).toBeDefined();
+        expect(stored?.command).toContain('npm');
+      }
+    });
+
+    it('未存储任务应返回 undefined', () => {
+      const stored = gate.getTestResult('nonexistent-task');
+      expect(stored).toBeUndefined();
+    });
+  });
+
+  describe('测试失败重试', () => {
+    it('测试失败后应重试', async () => {
+      const retryDir = join(process.cwd(), 'temp-test-retry');
+      mkdirSync(retryDir, { recursive: true });
+      
+      writeFileSync(join(retryDir, 'package.json'), JSON.stringify({
+        name: 'retry-project',
+        scripts: { test: 'exit 1' },  // 总是失败
+      }));
+      
+      const retryGate = createPassesGate({
+        enabled: true,
+        maxRetries: 1,
+        retryDelay: 100,
+      });
+      
+      const result = await retryGate.setPasses('retry-task', true, retryDir);
+      
+      expect(result.allowed).toBe(false);
+      expect(result.attempts).toBeGreaterThan(1);
+      expect(result.error).toBeDefined();
+      
+      rmSync(retryDir, { recursive: true, force: true });
+    });
   });
 });

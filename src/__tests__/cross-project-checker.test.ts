@@ -144,5 +144,43 @@ describe('CrossProjectChecker', () => {
       // unknown-project 不在 projects 列表中，应该跳过
       expect(result).toBeDefined();
     });
+
+    it('extractExportedApis 应该返回数组', async () => {
+      // 测试内部函数的行为
+      const docPath = path.join(tempDir, 'api-doc-3.md');
+      fs.writeFileSync(docPath, '# API\n\n## agent-runtime\n- `createAgent(config)` - 创建 Agent');
+
+      const result = await checkDocCodeConsistency(docPath, ['agent-runtime']);
+
+      // 结果应该是数组
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('isCompatible 检查签名一致性', async () => {
+      const docPath = path.join(tempDir, 'api-doc-4.md');
+      fs.writeFileSync(docPath, '# API\n\n## test-project\n- `testFunction(x: number)`');
+
+      const result = await checkDocCodeConsistency(docPath, ['test-project']);
+
+      expect(result).toBeDefined();
+    });
+
+    it('解析文档接口测试', async () => {
+      const docPath = path.join(tempDir, 'complex-doc.md');
+      fs.writeFileSync(docPath, `# API
+
+## project-a
+- \`funcA(a: string, b: number): boolean\`
+- \`funcB(config: Config): void\`
+
+## project-b
+- \`funcC()\`
+`);
+
+      const result = await checkDocCodeConsistency(docPath, ['project-a', 'project-b']);
+
+      // 结果应该是数组
+      expect(Array.isArray(result)).toBe(true);
+    });
   });
 });

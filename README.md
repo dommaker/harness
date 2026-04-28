@@ -211,24 +211,48 @@ jobs:
 
 ## 📊 Trace & 日志
 
+### 目录结构
+
 ```
 .harness/
 ├── traces/
-│   ├── execution.log      # 约束检查记录
+│   ├── execution.log      # 约束检查记录（JSON Lines）
 │   └── summary.json       # 统计汇总
-└── logs/
-    ├── performance.log    # 性能日志
-    └── tokens.log         # Token 使用
+└── state.json             # Harness 状态
 ```
 
-### 错误分级
+### 查看日志
 
-| 等级 | 处理 |
-|------|------|
-| L1 | 自动重试 |
-| L2 | 人工审核 |
-| L3 | 开会讨论 |
-| L4 | 回滚 |
+```bash
+# 查看状态和统计
+harness status
+
+# 查看详细统计
+harness status --detail
+
+# 只看异常
+harness status --anomalies
+
+# 分析最近 N 小时
+harness status --hours 48
+```
+
+### 日志格式
+
+**execution.log**（JSON Lines 格式）：
+```json
+{"timestamp":"2026-04-28T15:00:00Z","constraintId":"no_bypass_checkpoint","result":"passed","duration":12}
+{"timestamp":"2026-04-28T15:01:00Z","constraintId":"no_self_approval","result":"bypassed","reason":"hotfix"}
+```
+
+**summary.json**：
+```json
+{"totalChecks":150,"passRate":0.92,"bypassRate":0.08,"anomalies":2}
+```
+
+### 异常检测
+
+当 `harness status --anomalies` 发现异常时，运行 `harness flow` 进行诊断和优化提案。
 
 ---
 

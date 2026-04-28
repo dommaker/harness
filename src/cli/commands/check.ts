@@ -209,9 +209,9 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
   }
   
   // 条件 2: 记录数达到 100 且从未运行过诊断
-  if (traceCount >= 100 && !state.lastDiagnoseRun && !state.shownHints.includes('diagnose_suggest')) {
-    hints.push('💡 数据充足，建议运行 harness diagnose 查看诊断');
-    state.shownHints.push('diagnose_suggest');
+  if (traceCount >= 100 && !state.lastDiagnoseRun && !state.shownHints.includes('flow_suggest')) {
+    hints.push('💡 数据充足，建议运行 harness flow 查看诊断');
+    state.shownHints.push('flow_suggest');
   }
   
   // 条件 3: 检查异常趋势（简单检查绕过率）

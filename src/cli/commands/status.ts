@@ -90,8 +90,8 @@ export async function status(options: StatusOptions): Promise<void> {
 
       // 下一步建议
       console.log(chalk.blue('💡 下一步建议:'));
-      console.log(chalk.gray('  1. 运行 harness diagnose 查看详细诊断'));
-      console.log(chalk.gray('  2. 运行 harness propose 生成优化提案'));
+      console.log(chalk.gray('  1. 运行 harness flow 一键诊断 + 提案'));
+      console.log(chalk.gray('  2. 运行 harness status --detail 查看详情'));
     }
     return;
   }
@@ -158,9 +158,8 @@ export async function status(options: StatusOptions): Promise<void> {
   // 下一步建议
   console.log(chalk.blue('💡 下一步建议:'));
   if (anomalies.length > 0) {
-    console.log(chalk.gray('  1. harness diagnose    # 运行诊断'));
-    console.log(chalk.gray('  2. harness propose     # 生成优化提案'));
-    console.log(chalk.gray('  3. harness flow        # 一键执行诊断+提案'));
+    console.log(chalk.gray('  harness flow            # 一键执行诊断+提案'));
+    console.log(chalk.gray('  harness status --detail # 查看详细状态'));
   } else if (traceCount >= 100) {
     console.log(chalk.gray('  • 状态良好，继续保持！'));
   } else {

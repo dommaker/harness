@@ -12,11 +12,9 @@ const {
   listLaws, 
   validate, 
   runPassesGate, 
+  checkCoverage,
   init, 
   report,
-  tracesCommand,
-  diagnoseCommand,
-  proposeCommand,
   status,
   flow,
   specValidate,
@@ -37,7 +35,7 @@ const program = new Command();
 program
   .name('harness')
   .description('通用工程约束框架 - 铁律系统、检查点验证、测试门控、执行追踪')
-  .version('0.7.0');
+  .version('0.8.0');
 
 // ========================================
 // harness check
@@ -122,85 +120,6 @@ program
   .option('-p, --project-path <path>', '项目路径')
   .action(async (options) => {
     await report(options);
-  });
-
-// ========================================
-// harness traces [DEPRECATED]
-// ========================================
-program
-  .command('traces [subcommand]')
-  .description('[已弃用] 请使用 harness status')
-  .option('--hours <n>', '分析最近 N 小时', '1')
-  .option('--constraint <id>', '过滤约束 ID')
-  .option('--format <format>', '输出格式 (json/text)', 'text')
-  .option('--max-age-days <n>', '清理超过 N 天的文件', '30')
-  .action(async (subcommand, options, command) => {
-    console.log('⚠️  harness traces 已弃用，请使用 harness status');
-    console.log('   harness status          # 查看统计');
-    console.log('   harness status --detail # 查看详情');
-    console.log('   harness status --anomalies # 查看异常');
-    console.log();
-    const sub = subcommand || 'stats';
-    await tracesCommand(sub, {
-      hours: parseInt(options.hours, 10),
-      constraintId: options.constraint,
-      format: options.format,
-      maxAgeDays: parseInt(options.maxAgeDays, 10),
-    });
-  });
-
-// ========================================
-// harness diagnose [DEPRECATED]
-// ========================================
-program
-  .command('diagnose [subcommand]')
-  .description('[已弃用] 请使用 harness flow')
-  .option('--hours <n>', '分析最近 N 小时', '24')
-  .option('--constraint <id>', '过滤约束 ID')
-  .option('--anomaly <id>', '特定异常 ID')
-  .option('--format <format>', '输出格式 (json/text)', 'text')
-  .option('--save', '保存诊断结果', false)
-  .action(async (subcommand, options, command) => {
-    console.log('⚠️  harness diagnose 已弃用，请使用 harness flow');
-    console.log('   harness flow  # 一键执行诊断 + 提案流程');
-    console.log();
-    const sub = subcommand || 'list';
-    await diagnoseCommand(sub, {
-      hours: parseInt(options.hours, 10),
-      constraintId: options.constraint,
-      anomalyId: options.anomaly,
-      format: options.format,
-      save: options.save,
-    });
-  });
-
-// ========================================
-// harness propose [DEPRECATED]
-// ========================================
-program
-  .command('propose [subcommand]')
-  .description('[已弃用] 请使用 harness flow')
-  .option('--diagnosis <id>', '诊断 ID')
-  .option('--status <status>', '过滤状态')
-  .option('--format <format>', '输出格式 (json/text)', 'text')
-  .option('--save', '保存提案', false)
-  .option('--accept', '接受提案', false)
-  .option('--reject', '拒绝提案', false)
-  .option('--comment <text>', '审核意见')
-  .action(async (subcommand, options, command) => {
-    console.log('⚠️  harness propose 已弃用，请使用 harness flow');
-    console.log('   harness flow  # 一键执行诊断 + 提案流程');
-    console.log();
-    const sub = subcommand || 'list';
-    await proposeCommand(sub, {
-      diagnosisId: options.diagnosis,
-      status: options.status,
-      format: options.format,
-      save: options.save,
-      accept: options.accept,
-      reject: options.reject,
-      comment: options.comment,
-    });
   });
 
 // ========================================

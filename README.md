@@ -109,9 +109,6 @@ harness report -o report.md           # 输出到文件
 ```bash
 harness flow                          # 一键诊断 + 提案
 harness flow --auto-apply             # 自动应用低风险提案
-# 以下已弃用
-harness diagnose run --hours 24 --save   # [弃用] 运行诊断
-harness propose generate --save            # [弃用] 生成建议
 ```
 
 ---

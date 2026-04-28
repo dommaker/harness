@@ -20,7 +20,16 @@ const {
   status,
   flow,
   specValidate,
-  listSpecTypes
+  listSpecTypes,
+  acceptance,
+  listAcceptanceCriteria,
+  performance,
+  security,
+  auditDetails,
+  contract,
+  validateSchema,
+  review,
+  reviewStatus
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -254,6 +263,115 @@ program
         file: options.file || (subcommand && !subcommand.startsWith('-') ? subcommand : undefined),
         projectPath: options.projectPath,
         verbose: options.verbose,
+      });
+    }
+  });
+
+// ========================================
+// harness acceptance
+// ========================================
+program
+  .command('acceptance [subcommand]')
+  .description('验收标准门控，检查任务是否满足验收标准')
+  .alias('acc')
+  .option('-t, --task-id <id>', '任务 ID')
+  .option('--tasks-path <path>', 'tasks.yml 路径')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--check-all', '检查所有任务', false)
+  .option('--run-e2e', '运行 E2E 测试', false)
+  .action(async (subcommand, options, command) => {
+    if (subcommand === 'list') {
+      await listAcceptanceCriteria(options);
+    } else {
+      await acceptance(options);
+    }
+  });
+
+// ========================================
+// harness performance
+// ========================================
+program
+  .command('performance')
+  .description('性能门控，检查性能指标')
+  .alias('perf')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--coverage', '检查测试覆盖率', false)
+  .option('--coverage-threshold <n>', '覆盖率阈值', '80')
+  .option('--bundle', '检查打包大小', false)
+  .option('--bundle-threshold <n>', '打包大小阈值 (KB)', '500')
+  .option('--benchmark', '运行基准测试', false)
+  .option('--benchmark-timeout <n>', '基准测试超时（秒）', '60')
+  .action(async (options) => {
+    await performance({
+      projectPath: options.projectPath,
+      coverage: options.coverage,
+      coverageThreshold: parseInt(options.coverageThreshold, 10),
+      bundle: options.bundle,
+      bundleThreshold: parseInt(options.bundleThreshold, 10),
+      benchmark: options.benchmark,
+      benchmarkTimeout: parseInt(options.benchmarkTimeout, 10),
+    });
+  });
+
+// ========================================
+// harness security
+// ========================================
+program
+  .command('security [subcommand]')
+  .description('安全门控，检查安全漏洞')
+  .alias('sec')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--severity <level>', '严重性阈值 (low/moderate/high/critical)', 'high')
+  .option('--ignore-warnings', '忽略警告', false)
+  .option('--ignore-dev-deps', '忽略开发依赖', false)
+  .option('--scan-command <cmd>', '自定义扫描命令')
+  .action(async (subcommand, options, command) => {
+    if (subcommand === 'audit') {
+      await auditDetails(options);
+    } else {
+      await security(options);
+    }
+  });
+
+// ========================================
+// harness contract
+// ========================================
+program
+  .command('contract [subcommand]')
+  .description('API 契约门控，检查 OpenAPI Schema')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--contract-path <path>', '契约文件路径', 'openapi.yaml')
+  .option('--strict', '严格模式', true)
+  .option('--allow-breaking', '允许破坏性变更', false)
+  .action(async (subcommand, options, command) => {
+    if (subcommand === 'validate') {
+      await validateSchema(options);
+    } else {
+      await contract(options);
+    }
+  });
+
+// ========================================
+// harness review
+// ========================================
+program
+  .command('review [subcommand]')
+  .description('代码审查门控，检查审查状态')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--min-reviewers <n>', '最少审查人数', '1')
+  .option('--require-approval', '要求审批', true)
+  .option('--block-on-changes', '阻止变更请求', true)
+  .option('--allowed-reviewers <list>', '允许的审查者（逗号分隔）')
+  .action(async (subcommand, options, command) => {
+    if (subcommand === 'status') {
+      await reviewStatus(options);
+    } else {
+      await review({
+        projectPath: options.projectPath,
+        minReviewers: parseInt(options.minReviewers, 10),
+        requireApproval: options.requireApproval,
+        blockOnChangesRequested: options.blockOnChanges,
+        allowedReviewers: options.allowedReviewers,
       });
     }
   });

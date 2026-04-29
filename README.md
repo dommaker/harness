@@ -78,6 +78,12 @@ harness contract --contract-path api/openapi.yaml
 harness review                          # PR 审查状态检查
 harness review --min-reviewers 2        # 要求 2 个审批
 harness review status                   # PR 详情
+
+# 命令黑名单
+harness command "rm -rf /"             # 检查命令
+harness command --level "DROP TABLE"   # 显示风险等级
+harness command --list                  # 列出所有规则
+harness cmd                              # 别名
 ```
 
 ### Spec 验证
@@ -135,7 +141,7 @@ harness flow --auto-apply             # 自动应用低风险提案
 | `verify_external_capability` | 外部能力先验证 |
 | `no_implementation_without_requirement_review` | 实现后对比需求 |
 
-### 7 种门禁（均有 CLI 命令）
+### 8 种门禁（均有 CLI 命令）
 
 | 门禁 | CLI 命令 | 用途 |
 |------|:--------:|------|
@@ -145,7 +151,7 @@ harness flow --auto-apply             # 自动应用低风险提案
 | SecurityGate | `security` / `sec` | 安全检查 |
 | ContractGate | `contract` | API 契约验证 |
 | ReviewGate | `review` | PR 审核检查 |
-| CommandGate | — | 命令黑名单 |
+| CommandGate | `command` / `cmd` | 命令黑名单 |
 | CheckpointValidator | `validate` | 检查点验证 |
 
 ---

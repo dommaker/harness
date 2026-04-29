@@ -27,7 +27,9 @@ const {
   contract,
   validateSchema,
   review,
-  reviewStatus
+  reviewStatus,
+  command,
+  cmd
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -293,6 +295,71 @@ program
         allowedReviewers: options.allowedReviewers,
       });
     }
+  });
+
+// ========================================
+// harness command
+// ========================================
+program
+  .command('command [cmd]')
+  .description('检查命令是否在黑名单中')
+  .alias('cmd')
+  .option('-l, --level', '显示风险等级')
+  .option('--list', '列出所有黑名单规则')
+  .option('--json', 'JSON 格式输出')
+  .option('--strict', '严格模式（warn 也阻止）')
+  .action(async (cmd, options, command) => {
+    const gate = require('../dist/gates/command').createCommandGate({ strict: options.strict });
+    
+    if (options.list) {
+      const { DEFAULT_COMMAND_BLACKLIST } = require('../dist/gates/command');
+      if (options.json) {
+        console.log(JSON.stringify(DEFAULT_COMMAND_BLACKLIST.map(r => ({
+          id: r.id,
+          level: r.level,
+          message: r.message,
+          category: r.category,
+        })), null, 2));
+      } else {
+        console.log('\n命令黑名单规则：\n');
+        console.log(`共 ${DEFAULT_COMMAND_BLACKLIST.length} 条规则`);
+        console.log('使用 harness command --list --json 查看详情');
+      }
+      return;
+    }
+    
+    if (!cmd) {
+      console.error('错误：请提供要检查的命令');
+      console.error('用法：harness command "your command"');
+      process.exit(1);
+    }
+    
+    const result = await gate.check(cmd);
+    
+    if (options.level) {
+      const { getCommandRiskLevel } = require('../dist/gates/command');
+      const level = getCommandRiskLevel(cmd);
+      if (options.json) {
+        console.log(JSON.stringify({ level, command: cmd }));
+      } else {
+        const levelColors = { high: '\x1b[31m', medium: '\x1b[33m', low: '\x1b[32m' };
+        console.log(`${levelColors[level]}${level}\x1b[0m ${cmd}`);
+      }
+      process.exit(level === 'high' ? 1 : 0);
+    }
+    
+    if (options.json) {
+      console.log(JSON.stringify({
+        command: cmd,
+        passed: result.passed,
+        message: result.message,
+        details: result.details,
+      }, null, 2));
+    } else {
+      console.log(result.passed ? `\x1b[32m✓\x1b[0m ${result.message}` : `\x1b[31m✗\x1b[0m ${result.message}`);
+    }
+    
+    process.exit(result.passed ? 0 : 1);
   });
 
 // 解析命令行参数

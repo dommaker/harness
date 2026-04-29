@@ -145,9 +145,8 @@ harness flow --auto-apply             # 自动应用低风险提案
 | SecurityGate | `security` / `sec` | 安全检查 |
 | ContractGate | `contract` | API 契约验证 |
 | ReviewGate | `review` | PR 审核检查 |
+| CommandGate | — | 命令黑名单 |
 | CheckpointValidator | `validate` | 检查点验证 |
-| CheckpointValidator | 检查点验证 |
-| SpecAcceptanceGate | 验收标准检查 |
 
 ---
 
@@ -157,8 +156,8 @@ harness flow --auto-apply             # 自动应用低风险提案
 import {
   IronLawChecker,
   PassesGate,
+  CommandGate,
   CheckpointValidator,
-  interceptOperation,
 } from '@dommaker/harness';
 
 // 铁律检查
@@ -169,17 +168,15 @@ const results = await checker.checkAll(context);
 const gate = new PassesGate({ requireEvidence: true });
 const passed = await gate.runTests();
 
-// 检查点验证
-const validator = CheckpointValidator.getInstance();
-const result = await validator.validate(checkpoints, context);
-
-// 拦截器（自动执行 enforcement）
-await interceptOperation('task_completion_claim', context);
+// 命令黑名单
+const commandGate = new CommandGate();
+const result = await commandGate.check('rm -rf /');
+// { passed: false, message: '命令被禁止执行...' }
 ```
 
----
+> 详细 API 参考：[capabilities/](capabilities/) 目录
 
-## 📁 项目配置
+---
 
 ### .harness/config.yml
 

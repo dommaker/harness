@@ -132,3 +132,28 @@ export interface AcceptanceCriteria {
   checked?: boolean;
   notes?: string;
 }
+
+/**
+ * 命令黑名单规则
+ */
+export interface CommandBlacklistRule {
+  id: string;
+  pattern: RegExp;
+  level: 'block' | 'warn' | 'audit';
+  message: string;
+  category: string;
+}
+
+/**
+ * 命令门禁配置
+ */
+export interface CommandGateConfig {
+  /** 是否启用 */
+  enabled?: boolean;
+  /** 严格模式（warn 也阻止） */
+  strict?: boolean;
+  /** 自定义黑名单规则 */
+  customBlacklist?: CommandBlacklistRule[];
+  /** 忽略的类别 */
+  ignoreCategories?: string[];
+}

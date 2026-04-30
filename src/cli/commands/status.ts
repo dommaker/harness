@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TraceCollector } from '../../monitoring/traces';
 import { TraceAnalyzer } from '../../monitoring/trace-analyzer';
+import type { TraceSummary, TraceAnomaly } from '../../types/trace';
 
 export interface StatusOptions {
   /** 项目路径 */
@@ -80,11 +81,11 @@ export async function status(options: StatusOptions): Promise<void> {
     } else {
       console.log(chalk.yellow(`⚠️  发现 ${anomalies.length} 个异常:`));
       console.log();
-      anomalies.forEach((a: any) => {
+      anomalies.forEach((a: TraceAnomaly) => {
         console.log(chalk.yellow(`  ${a.constraintId}`));
         console.log(chalk.gray(`    类型: ${a.type}`));
-        console.log(chalk.gray(`    当前值: ${a.current}`));
-        console.log(chalk.gray(`    阈值: ${a.threshold}`));
+        console.log(chalk.gray(`    当前值: ${a.data?.currentRate ?? (a as any).current ?? 'N/A'}`));
+        console.log(chalk.gray(`    阈值: ${a.data?.threshold ?? (a as any).threshold ?? 'N/A'}`));
         console.log();
       });
 
@@ -101,10 +102,10 @@ export async function status(options: StatusOptions): Promise<void> {
   console.log();
 
   // Iron Laws
-  const ironLawSummaries = summaries.filter((s: any) => s.level === 'iron_law');
+  const ironLawSummaries = summaries.filter((s: TraceSummary) => s.level === 'iron_law');
   if (ironLawSummaries.length > 0) {
     console.log(chalk.red('🔴 Iron Laws:'));
-    ironLawSummaries.forEach((s: any) => {
+    ironLawSummaries.forEach((s: TraceSummary) => {
       const status = s.passRate >= 1 ? '✅' : '❌';
       console.log(`  ${status} ${s.constraintId}`);
       if (options.detail) {
@@ -115,10 +116,10 @@ export async function status(options: StatusOptions): Promise<void> {
   }
 
   // Guidelines
-  const guidelineSummaries = summaries.filter((s: any) => s.level === 'guideline');
+  const guidelineSummaries = summaries.filter((s: TraceSummary) => s.level === 'guideline');
   if (guidelineSummaries.length > 0) {
     console.log(chalk.yellow('🟡 Guidelines:'));
-    guidelineSummaries.forEach((s: any) => {
+    guidelineSummaries.forEach((s: TraceSummary) => {
       const status = s.passRate >= 0.8 ? '✅' : s.passRate >= 0.5 ? '⚠️' : '❌';
       console.log(`  ${status} ${s.constraintId}`);
       if (options.detail) {
@@ -129,10 +130,10 @@ export async function status(options: StatusOptions): Promise<void> {
   }
 
   // Tips
-  const tipSummaries = summaries.filter((s: any) => s.level === 'tip');
+  const tipSummaries = summaries.filter((s: TraceSummary) => s.level === 'tip');
   if (tipSummaries.length > 0) {
     console.log(chalk.blue('🔵 Tips:'));
-    tipSummaries.forEach((s: any) => {
+    tipSummaries.forEach((s: TraceSummary) => {
       console.log(`  💡 ${s.constraintId}`);
     });
     console.log();
@@ -142,7 +143,7 @@ export async function status(options: StatusOptions): Promise<void> {
   if (anomalies.length > 0) {
     console.log(chalk.yellow(`⚠️  发现 ${anomalies.length} 个异常`));
     console.log();
-    anomalies.slice(0, 3).forEach((a: any) => {
+    anomalies.slice(0, 3).forEach((a: TraceAnomaly) => {
       console.log(chalk.yellow(`  - ${a.constraintId}: ${a.type}`));
     });
     console.log();

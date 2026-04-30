@@ -219,26 +219,21 @@ export class ProgressiveLoader {
     processor: (item: T) => Promise<R>,
     concurrency: number = 5
   ): Promise<R[]> {
-    const results: R[] = [];
-    const executing: Promise<void>[] = [];
+    const results = new Array<R>(items.length);
+    let nextIndex = 0;
 
-    for (const item of items) {
-      const promise = processor(item).then(result => {
-        results.push(result);
-      });
-
-      executing.push(promise);
-
-      if (executing.length >= concurrency) {
-        await Promise.race(executing);
-        executing.splice(
-          executing.findIndex(p => p === promise),
-          1
-        );
+    const worker = async (): Promise<void> => {
+      while (nextIndex < items.length) {
+        const index = nextIndex++;
+        results[index] = await processor(items[index]);
       }
-    }
+    };
 
-    await Promise.all(executing);
+    const workers = Array.from(
+      { length: Math.min(concurrency, items.length) },
+      () => worker()
+    );
+    await Promise.all(workers);
     return results;
   }
 

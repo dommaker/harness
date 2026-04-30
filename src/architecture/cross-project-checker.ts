@@ -4,7 +4,7 @@
  * 检测多工程开发时的接口不一致问题
  */
 
-import { execSync } from 'child_process';
+import { runCommand } from '../utils/exec';
 import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
 
@@ -78,7 +78,7 @@ async function checkApiSync(context: CrossProjectContext): Promise<CrossProjectV
 
   // 检查 runtime API 变更
   if (context.changedProjects.includes('agent-runtime')) {
-    const runtimeApiChanges = getApiChanges('agent-runtime', context.baseBranch);
+    const runtimeApiChanges = await getApiChanges('agent-runtime', context.baseBranch);
     
     for (const change of runtimeApiChanges) {
       // 检查 studio 是否同步更新
@@ -146,7 +146,7 @@ async function checkBreakingChanges(context: CrossProjectContext): Promise<Cross
   for (const project of context.changedProjects) {
     const dependents = getDependents(project);
     
-    for (const change of getApiChanges(project, context.baseBranch)) {
+    for (const change of await getApiChanges(project, context.baseBranch)) {
       if (isBreakingChange(change)) {
         // 检查所有依赖方是否已适配
         for (const dependent of dependents) {
@@ -227,11 +227,10 @@ export async function checkDocCodeConsistency(
 
 // ============ 辅助函数 ============
 
-function getApiChanges(project: string, baseBranch: string): ApiChange[] {
+async function getApiChanges(project: string, baseBranch: string): Promise<ApiChange[]> {
   try {
-    const output = execSync(
-      `git diff ${baseBranch}...HEAD --name-only -- "projects/${project}/src/api/**/*"`,
-      { encoding: 'utf-8' }
+    const output = await runCommand(
+      `git diff ${baseBranch}...HEAD --name-only -- "projects/${project}/src/api/**/*"`
     );
     
     return output.trim().split('\n').filter(f => f).map(f => ({

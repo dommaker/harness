@@ -96,28 +96,26 @@ export class FailureRecorder {
    * 按类型获取记录
    */
   async getByType(type: string, limit?: number): Promise<FailureRecord[]> {
-    const records = await this.getHistory();
-    const filtered = records.filter((r) => r.type === type);
-
-    if (limit && limit > 0) {
-      return filtered.slice(-limit);
-    }
-
-    return filtered;
+    return this.getFiltered((r) => r.type === type, limit);
   }
 
   /**
    * 按等级获取记录
    */
   async getByLevel(level: string, limit?: number): Promise<FailureRecord[]> {
+    return this.getFiltered((r) => r.level === level, limit);
+  }
+
+  /**
+   * 按条件过滤记录
+   */
+  private async getFiltered(
+    predicate: (r: FailureRecord) => boolean,
+    limit?: number
+  ): Promise<FailureRecord[]> {
     const records = await this.getHistory();
-    const filtered = records.filter((r) => r.level === level);
-
-    if (limit && limit > 0) {
-      return filtered.slice(-limit);
-    }
-
-    return filtered;
+    const filtered = records.filter(predicate);
+    return limit && limit > 0 ? filtered.slice(-limit) : filtered;
   }
 
   /**

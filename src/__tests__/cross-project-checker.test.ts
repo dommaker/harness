@@ -2,18 +2,18 @@
  * CrossProjectChecker 测试
  */
 
-import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, jest } from '@jest/globals';
 import { checkCrossProjectContracts, checkDocCodeConsistency } from '../architecture/cross-project-checker';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Mock child_process
-jest.mock('child_process', () => ({
-  execSync: jest.fn(),
+// Mock utils/exec
+jest.mock('../utils/exec', () => ({
+  runCommand: jest.fn((() => Promise.resolve('')) as any),
 }));
 
-import { execSync } from 'child_process';
-const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+import { runCommand } from '../utils/exec';
+const mockRunCommand = runCommand as jest.MockedFunction<typeof runCommand>;
 
 describe('CrossProjectChecker', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-cross');
@@ -36,7 +36,7 @@ describe('CrossProjectChecker', () => {
 
   describe('checkCrossProjectContracts', () => {
     it('应该检查跨项目依赖', async () => {
-      mockExecSync.mockReturnValue('');
+      mockRunCommand.mockResolvedValue('');
       
       const result = await checkCrossProjectContracts({
         baseBranch: 'main',
@@ -49,7 +49,7 @@ describe('CrossProjectChecker', () => {
     });
 
     it('空变更列表应该返回空数组', async () => {
-      mockExecSync.mockReturnValue('');
+      mockRunCommand.mockResolvedValue('');
       
       const result = await checkCrossProjectContracts({
         baseBranch: 'main',
@@ -61,8 +61,8 @@ describe('CrossProjectChecker', () => {
     });
 
     it('runtime API 变更未同步到 studio 应该报错', async () => {
-      mockExecSync.mockReturnValueOnce('projects/agent-runtime/src/api/types.ts\nprojects/agent-runtime/src/api/client.ts');
-      mockExecSync.mockReturnValue('');
+      mockRunCommand.mockResolvedValueOnce('projects/agent-runtime/src/api/types.ts\nprojects/agent-runtime/src/api/client.ts');
+      mockRunCommand.mockResolvedValue('');
 
       const result = await checkCrossProjectContracts({
         baseBranch: 'main',
@@ -77,8 +77,8 @@ describe('CrossProjectChecker', () => {
     });
 
     it('runtime 和 studio 同时变更不应该报错', async () => {
-      mockExecSync.mockReturnValueOnce('projects/agent-runtime/src/api/types.ts');
-      mockExecSync.mockReturnValue('');
+      mockRunCommand.mockResolvedValueOnce('projects/agent-runtime/src/api/types.ts');
+      mockRunCommand.mockResolvedValue('');
 
       const result = await checkCrossProjectContracts({
         baseBranch: 'main',
@@ -95,8 +95,8 @@ describe('CrossProjectChecker', () => {
     });
 
     it('破坏性变更未适配依赖项目应该报错', async () => {
-      mockExecSync.mockReturnValueOnce('projects/harness/src/core/checkpoint.ts');
-      mockExecSync.mockReturnValue('');
+      mockRunCommand.mockResolvedValueOnce('projects/harness/src/core/checkpoint.ts');
+      mockRunCommand.mockResolvedValue('');
 
       const result = await checkCrossProjectContracts({
         baseBranch: 'main',
@@ -110,9 +110,7 @@ describe('CrossProjectChecker', () => {
     });
 
     it('git 命令失败时应该返回空数组', async () => {
-      mockExecSync.mockImplementation(() => {
-        throw new Error('git error');
-      });
+      mockRunCommand.mockRejectedValue(new Error('git error'));
 
       const result = await checkCrossProjectContracts({
         baseBranch: 'main',

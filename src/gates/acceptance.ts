@@ -17,13 +17,11 @@
  * ```
  */
 
+import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 
-const execAsync = promisify(exec);
 
 // ==================== 类型定义 ====================
 

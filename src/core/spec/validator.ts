@@ -12,6 +12,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as glob from 'fast-glob';
+import { execAsync } from '../../utils/exec';
 import type {
   SpecValidatorConfig,
   SpecValidationResult,
@@ -292,10 +293,6 @@ export class SpecValidator {
    * 获取暂存的 Spec 文件
    */
   private async getStagedFiles(): Promise<string[]> {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
     try {
       const { stdout } = await execAsync('git diff --cached --name-only');
       const allFiles = stdout.trim().split('\n').filter(Boolean);

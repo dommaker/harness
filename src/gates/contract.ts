@@ -7,13 +7,10 @@
  * - 版本兼容性
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { GateResult, GateContext, ContractGateConfig } from './types';
-
-const execAsync = promisify(exec);
 
 /**
  * 契约门禁

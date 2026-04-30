@@ -7,11 +7,8 @@
  * - 是否所有评论已解决
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../utils/exec';
 import type { GateResult, GateContext, ReviewGateConfig } from './types';
-
-const execAsync = promisify(exec);
 
 /**
  * 审查门禁

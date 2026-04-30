@@ -1,5 +1,7 @@
 /**
- * Shell 命令执行工具
+ * 通用工具模块
+ *
+ * 提供命令执行、数组规范化、延迟等公共函数，减少各子系统重复代码。
  */
 
 import { exec } from 'child_process';
@@ -35,4 +37,22 @@ export async function isCommandAvailable(command: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * 将单值或数组统一为数组（用于 trigger 等字段）
+ */
+export function normalizeTriggers<T>(
+  value: T | T[] | undefined,
+  fallback: T[] = []
+): T[] {
+  if (value === undefined || value === null) return fallback;
+  return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * 异步延迟
+ */
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

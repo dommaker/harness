@@ -109,71 +109,55 @@ export class ProjectConfigLoader {
       }
     }
 
-  /**
-   * 添加自定义约束
-   */
-  for (const [id, customDef] of Object.entries(this.customConstraints)) {
-    // 检查是否是纯扩展模式（只有 extend_exceptions，没有其他覆盖字段）
-    const isExtendOnly = customDef.extend_exceptions &&
-      customDef.extend_exceptions.length > 0 &&
-      !customDef.rule &&
-      !customDef.exceptions; // 没有 rule 和 exceptions 表示只是扩展例外
+    // 2. 添加自定义约束
+    for (const [id, customDef] of Object.entries(this.customConstraints)) {
+      const extendExceptions = customDef.extend_exceptions;
+      const isExtendOnly =
+        !!extendExceptions && extendExceptions.length > 0 &&
+        !customDef.rule &&
+        !customDef.exceptions;
 
-    if (isExtendOnly) {
-      // 纯扩展模式：只追加例外，保留内置约束其他属性
-      const builtIn = this.findBuiltInConstraint(id, result);
-      if (builtIn) {
-        // 复制内置约束
-        const constraint = { ...builtIn };
-        // 合并例外
-        constraint.exceptions = [
-          ...(builtIn.exceptions || []),
-          ...customDef.extend_exceptions!,
-        ];
-        // 更新到对应层级
-        if (result.ironLaws[id]) result.ironLaws[id] = constraint;
-        if (result.guidelines[id]) result.guidelines[id] = constraint;
-        if (result.tips[id]) result.tips[id] = constraint;
-        continue; // 跳过后续处理
+      if (isExtendOnly) {
+        const builtIn = this.findBuiltInConstraint(id, result);
+        if (builtIn) {
+          const constraint = { ...builtIn };
+          constraint.exceptions = [
+            ...(builtIn.exceptions || []),
+            ...extendExceptions!,
+          ];
+          if (result.ironLaws[id]) result.ironLaws[id] = constraint;
+          if (result.guidelines[id]) result.guidelines[id] = constraint;
+          if (result.tips[id]) result.tips[id] = constraint;
+          continue;
+        }
       }
-    }
 
-    // 完整定义模式：创建新约束
-    const constraint = this.toConstraint(customDef, id);
+      const constraint = this.toConstraint(customDef, id);
 
-    // 处理 extend_exceptions + 其他字段的情况
-    if (customDef.extend_exceptions && customDef.extend_exceptions.length > 0) {
-      const builtIn = this.findBuiltInConstraint(id, result);
-      if (builtIn) {
+      if (extendExceptions && extendExceptions.length > 0) {
+        const builtIn = this.findBuiltInConstraint(id, result);
         constraint.exceptions = [
-          ...(builtIn.exceptions || []),
+          ...(builtIn?.exceptions || []),
           ...(customDef.exceptions || []),
-          ...customDef.extend_exceptions,
-        ];
-      } else {
-        constraint.exceptions = [
-          ...(customDef.exceptions || []),
-          ...customDef.extend_exceptions,
+          ...extendExceptions,
         ];
       }
-    }
 
-    result.custom.push(id);
+      result.custom.push(id);
 
-    // 根据层级添加到对应集合
-    const level = customDef.level || 'guideline';
-    switch (level) {
-      case 'iron_law':
-        result.ironLaws[id] = constraint;
-        break;
-      case 'guideline':
-        result.guidelines[id] = constraint;
-        break;
-      case 'tip':
-        result.tips[id] = constraint;
-        break;
+      const level = customDef.level || 'guideline';
+      switch (level) {
+        case 'iron_law':
+          result.ironLaws[id] = constraint;
+          break;
+        case 'guideline':
+          result.guidelines[id] = constraint;
+          break;
+        case 'tip':
+          result.tips[id] = constraint;
+          break;
+      }
     }
-  }
 
     return result;
   }

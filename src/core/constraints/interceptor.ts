@@ -8,6 +8,8 @@ import type {
   ConstraintContext,
   ConstraintLevel,
 } from '../../types/constraint';
+import { ConstraintViolationError } from '../../types/constraint';
+import { normalizeTriggers } from '../../utils/exec';
 import type {
   EnforcementId,
   EnforcementExecutor,
@@ -15,9 +17,7 @@ import type {
   EnforcementResult,
   InterceptionResult,
 } from '../../types/enforcement';
-import { ConstraintViolationError } from '../../types/constraint';
 import { constraintChecker } from './checker';
-import { getTraceCollector } from '../../monitoring/traces';
 
 export class ConstraintInterceptor {
   private static instance: ConstraintInterceptor;
@@ -116,12 +116,9 @@ export class ConstraintInterceptor {
       ...Object.values(constraints.tips),
     ];
 
-    const applicableConstraints = allConstraints.filter(constraint => {
-      const triggers = Array.isArray(constraint.trigger)
-        ? constraint.trigger
-        : [constraint.trigger];
-      return triggers.includes(trigger);
-    });
+    const applicableConstraints = allConstraints.filter(
+      (c) => normalizeTriggers<ConstraintTrigger>(c.trigger).includes(trigger)
+    );
 
     const order: Record<ConstraintLevel, number> = { iron_law: 0, guideline: 1, tip: 2 };
     const ordered = applicableConstraints.sort((a, b) => order[a.level] - order[b.level]);

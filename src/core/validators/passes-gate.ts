@@ -5,8 +5,7 @@
  * 禁止 Agent 自评通过
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync, delay } from '../../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type {
@@ -21,7 +20,6 @@ import type {
   PassesGateViolation,
 } from '../../types/passes-gate';
 
-const execAsync = promisify(exec);
 
 /**
  * 默认配置
@@ -199,13 +197,13 @@ export class PassesGate {
         
         // 等待后重试
         if (attempts <= this.config.maxRetries) {
-          await this.delay(this.config.retryDelay);
+          await delay(this.config.retryDelay);
         }
       } catch (error: any) {
         lastError = error.message;
         
         if (attempts <= this.config.maxRetries) {
-          await this.delay(this.config.retryDelay);
+          await delay(this.config.retryDelay);
         }
       }
     }
@@ -605,12 +603,6 @@ export class PassesGate {
     };
   }
 
-  /**
-   * 延迟函数
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 }
 
 /**

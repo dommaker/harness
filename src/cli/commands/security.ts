@@ -5,10 +5,7 @@
  */
 
 import chalk from 'chalk';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { execAsync } from '../../utils/exec';
 
 export interface SecurityOptions {
   /** 项目路径 */

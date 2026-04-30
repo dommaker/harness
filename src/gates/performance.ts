@@ -13,13 +13,10 @@
  * - 返回详细的错误信息
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { GateResult, GateContext, PerformanceGateConfig, PerformanceThresholds } from './types';
-
-const execAsync = promisify(exec);
 
 // 默认超时时间（毫秒）
 const DEFAULT_TIMEOUTS = {

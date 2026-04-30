@@ -7,22 +7,53 @@
  * - Tips：检查失败记录提示
  */
 
-import type {
+import {
   Constraint,
   ConstraintContext,
   ConstraintResult,
   ConstraintCheckResult,
   ConstraintTrigger,
   ConstraintLevel,
+  ConstraintViolationError,
 } from '../../types/constraint';
-import { ConstraintViolationError } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
 import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
-import { execAsync, runCommand } from '../../utils/exec';
+import { normalizeTriggers } from '../../utils/exec';
+import { runCommand } from '../../utils/exec';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+
+/**
+ * 例外名称 → ConstraintContext 中布尔字段的映射
+ */
+const EXCEPTION_FIELD_MAP: Record<string, keyof ConstraintContext> = {
+  scalability_required: 'scalabilityRequired',
+  security_required: 'securityRequired',
+  performance_required: 'performanceRequired',
+  reliability_required: 'reliabilityRequired',
+  simple_typo: 'isSimpleTypo',
+  config_value_error: 'isConfigValueError',
+  missing_config: 'isMissingConfig',
+  config_file: 'isConfigFile',
+  type_definition: 'isTypeDefinition',
+  simple_accessor: 'isSimpleAccessor',
+  pure_display_component: 'isPureDisplayComponent',
+  json_parse_result: 'isJsonParseResult',
+  third_party_no_types: 'isThirdPartyNoTypes',
+  legacy_migration: 'isLegacyMigration',
+  internal_refactor: 'isInternalRefactor',
+  bug_fix_only: 'isBugFixOnly',
+  performance_optimization: 'isPerformanceOptimization',
+  redundant_code_cleanup: 'isRedundantCodeCleanup',
+  same_effect_refactor: 'isSameEffectRefactor',
+  unused_code_removal: 'isUnusedCodeRemoval',
+  external_dependency: 'isExternalDependency',
+  explicit_instruction: 'isExplicitInstruction',
+  emergency_fix: 'isEmergencyFix',
+  existing_design: 'isExistingDesign',
+};
 
 /**
  * 约束检查器
@@ -114,84 +145,9 @@ export class ConstraintChecker {
    */
   private checkException(constraint: Constraint, context: ConstraintContext): boolean {
     if (!constraint.exceptions) return false;
-
-    for (const exception of constraint.exceptions) {
-      switch (exception) {
-        // simplest_solution_first 例外
-        case 'scalability_required':
-          if (context.scalabilityRequired) return true;
-          break;
-        case 'security_required':
-          if (context.securityRequired) return true;
-          break;
-        case 'performance_required':
-          if (context.performanceRequired) return true;
-          break;
-        case 'reliability_required':
-          if (context.reliabilityRequired) return true;
-          break;
-
-        // no_fix_without_root_cause 例外
-        case 'simple_typo':
-          if (context.isSimpleTypo) return true;
-          break;
-        case 'config_value_error':
-          if (context.isConfigValueError) return true;
-          break;
-        case 'missing_config':
-          if (context.isMissingConfig) return true;
-          break;
-
-        // no_code_without_test 例外
-        case 'config_file':
-          if (context.isConfigFile) return true;
-          break;
-        case 'type_definition':
-          if (context.isTypeDefinition) return true;
-          break;
-        case 'simple_accessor':
-          if (context.isSimpleAccessor) return true;
-          break;
-        case 'pure_display_component':
-          if (context.isPureDisplayComponent) return true;
-          break;
-
-        // no_any_type 例外
-        case 'json_parse_result':
-          if (context.isJsonParseResult) return true;
-          break;
-        case 'third_party_no_types':
-          if (context.isThirdPartyNoTypes) return true;
-          break;
-        case 'legacy_migration':
-          if (context.isLegacyMigration) return true;
-          break;
-
-        // capability_sync 例外
-        case 'internal_refactor':
-          if (context.isInternalRefactor) return true;
-          break;
-        case 'bug_fix_only':
-          if (context.isBugFixOnly) return true;
-          break;
-        case 'performance_optimization':
-          if (context.isPerformanceOptimization) return true;
-          break;
-
-        // no_simplification_without_approval 例外
-        case 'redundant_code_cleanup':
-          if (context.isRedundantCodeCleanup) return true;
-          break;
-        case 'same_effect_refactor':
-          if (context.isSameEffectRefactor) return true;
-          break;
-        case 'unused_code_removal':
-          if (context.isUnusedCodeRemoval) return true;
-          break;
-      }
-    }
-
-    return false;
+    return constraint.exceptions.some(
+      (ex) => context[EXCEPTION_FIELD_MAP[ex]] === true
+    );
   }
 
   /**
@@ -208,6 +164,38 @@ export class ConstraintChecker {
       default:
         return 'warning';
     }
+  }
+
+  /**
+   * 判断约束是否匹配当前触发条件
+   */
+  private matchesTrigger(constraint: Constraint, operation: ConstraintTrigger): boolean {
+    const triggers = normalizeTriggers<ConstraintTrigger>(constraint.trigger);
+    return triggers.includes(operation);
+  }
+
+  /**
+   * 记录约束检查的 trace
+   */
+  private recordTrace(
+    collector: ReturnType<typeof getTraceCollector>,
+    constraint: Constraint,
+    checkResult: ConstraintResult,
+    context: ConstraintContext
+  ): void {
+    collector.record({
+      constraintId: constraint.id,
+      level: constraint.level,
+      timestamp: Date.now(),
+      result: checkResult.satisfied ? 'pass' : 'fail',
+      operation: context.operation,
+      severity: this.getSeverity(constraint.level),
+      exceptionApplied: checkResult.message?.includes('豁免')
+        ? constraint.exceptions?.[0]
+        : undefined,
+      projectPath: context.projectPath,
+      sessionId: context.sessionId,
+    });
   }
 
   /**
@@ -405,7 +393,7 @@ export class ConstraintChecker {
       // 检查是否有代码变更
       const diff = await runCommand('git diff --cached --name-only', projectPath);
       const hasCodeChanges = diff.split('\n').some(
-        f => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
+        (f: string) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
       );
 
       if (!hasCodeChanges) {
@@ -527,35 +515,16 @@ export class ConstraintChecker {
       tipCount: 0,
     };
 
-    // 获取 trace 收集器（可选启用）
     const traceCollector = getTraceCollector();
-
-    // 获取约束集合（内置 + 自定义）
     const constraints = this.getConstraints();
 
-    // 1. 检查 Iron Laws（必须全部通过）
+    // 1. Iron Laws: 必须全部通过
     for (const constraint of Object.values(constraints.ironLaws)) {
-      const triggers = Array.isArray(constraint.trigger)
-        ? constraint.trigger
-        : [constraint.trigger];
-
-      if (!triggers.includes(context.operation)) continue;
+      if (!this.matchesTrigger(constraint, context.operation)) continue;
 
       const checkResult = await this.check(constraint, context);
       result.ironLaws.push(checkResult);
-
-      // 记录 trace
-      traceCollector.record({
-        constraintId: constraint.id,
-        level: 'iron_law',
-        timestamp: Date.now(),
-        result: checkResult.satisfied ? 'pass' : 'fail',
-        operation: context.operation,
-        severity: this.getSeverity(constraint.level),
-        exceptionApplied: checkResult.message?.includes('豁免') ? constraint.exceptions?.[0] : undefined,
-        projectPath: context.projectPath,
-        sessionId: context.sessionId,
-      });
+      this.recordTrace(traceCollector, constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
         result.passed = false;
@@ -563,58 +532,26 @@ export class ConstraintChecker {
       }
     }
 
-    // 2. 检查 Guidelines（记录警告）
-    for (const constraint of Object.values(GUIDELINES)) {
-      const triggers = Array.isArray(constraint.trigger)
-        ? constraint.trigger
-        : [constraint.trigger];
-
-      if (!triggers.includes(context.operation)) continue;
+    // 2. Guidelines: 记录警告
+    for (const constraint of Object.values(constraints.guidelines)) {
+      if (!this.matchesTrigger(constraint, context.operation)) continue;
 
       const checkResult = await this.check(constraint, context);
       result.guidelines.push(checkResult);
-
-      // 记录 trace
-      const severity = this.getSeverity(constraint.level);
-      traceCollector.record({
-        constraintId: constraint.id,
-        level: 'guideline',
-        timestamp: Date.now(),
-        result: checkResult.satisfied ? 'pass' : 'fail',
-        operation: context.operation,
-        severity,
-        exceptionApplied: checkResult.message?.includes('豁免') ? constraint.exceptions?.[0] : undefined,
-        projectPath: context.projectPath,
-        sessionId: context.sessionId,
-      });
+      this.recordTrace(traceCollector, constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
         result.warningCount++;
       }
     }
 
-    // 3. 检查 Tips（仅记录）
+    // 3. Tips: 仅记录
     for (const constraint of Object.values(constraints.tips)) {
-      const triggers = Array.isArray(constraint.trigger)
-        ? constraint.trigger
-        : [constraint.trigger];
-
-      if (!triggers.includes(context.operation)) continue;
+      if (!this.matchesTrigger(constraint, context.operation)) continue;
 
       const checkResult = await this.check(constraint, context);
       result.tips.push(checkResult);
-
-      // 记录 trace
-      traceCollector.record({
-        constraintId: constraint.id,
-        level: 'tip',
-        timestamp: Date.now(),
-        result: checkResult.satisfied ? 'pass' : 'fail',
-        operation: context.operation,
-        severity: this.getSeverity(constraint.level),
-        projectPath: context.projectPath,
-        sessionId: context.sessionId,
-      });
+      this.recordTrace(traceCollector, constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
         result.tipCount++;
@@ -630,19 +567,13 @@ export class ConstraintChecker {
    * @throws ConstraintViolationError 如果有铁律违规
    */
   async beforeExecution(context: ConstraintContext): Promise<void> {
-    const triggers = Array.isArray(context.operation) ? context.operation : [context.operation];
     const constraints = this.getConstraints();
+    const operations = normalizeTriggers(context.operation);
 
     for (const constraint of Object.values(constraints.ironLaws)) {
-      const constraintTriggers = Array.isArray(constraint.trigger)
-        ? constraint.trigger
-        : [constraint.trigger];
-
-      const matches = triggers.some(t => constraintTriggers.includes(t));
-      if (!matches) continue;
+      if (!normalizeTriggers(constraint.trigger).some((t) => operations.includes(t))) continue;
 
       const result = await this.check(constraint, context);
-
       if (!result.satisfied) {
         throw new ConstraintViolationError(result);
       }

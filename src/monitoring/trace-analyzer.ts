@@ -74,12 +74,15 @@ export class TraceAnalyzer {
         end: Math.max(...timestamps),
       };
 
-      // 计算核心统计
+      // 单次遍历计算核心统计
       const totalChecks = group.length;
-      const passCount = group.filter(t => t.result === 'pass').length;
-      const failCount = group.filter(t => t.result === 'fail').length;
-      const bypassCount = group.filter(t => t.result === 'bypassed').length;
-      const ignoreCount = group.filter(t => t.userAction === 'ignore').length;
+      let passCount = 0, failCount = 0, bypassCount = 0, ignoreCount = 0;
+      for (const t of group) {
+        if (t.result === 'pass') passCount++;
+        else if (t.result === 'fail') failCount++;
+        else if (t.result === 'bypassed') bypassCount++;
+        if (t.userAction === 'ignore') ignoreCount++;
+      }
 
       // 计算比率
       const passRate = totalChecks > 0 ? passCount / totalChecks : 0;

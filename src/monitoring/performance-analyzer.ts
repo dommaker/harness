@@ -74,11 +74,14 @@ export class PerformanceAnalyzer {
         end: Math.max(...timestamps),
       };
 
-      // 计算核心统计
+      // 单次遍历计算核心统计
       const totalCalls = group.length;
-      const okCount = group.filter(t => t.result === 'ok').length;
-      const exceededCount = group.filter(t => t.result === 'exceeded').length;
-      const errorCount = group.filter(t => t.result === 'error').length;
+      let okCount = 0, exceededCount = 0, errorCount = 0;
+      for (const t of group) {
+        if (t.result === 'ok') okCount++;
+        else if (t.result === 'exceeded') exceededCount++;
+        else if (t.result === 'error') errorCount++;
+      }
 
       // 计算比率
       const okRate = totalCalls > 0 ? okCount / totalCalls : 0;

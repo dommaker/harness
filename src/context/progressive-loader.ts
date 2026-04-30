@@ -1,3 +1,5 @@
+import { delay } from '../utils/exec';
+
 /**
  * @spec HZ-002
  * @implements HZ-002-C1
@@ -77,7 +79,7 @@ export class ProgressiveLoader {
     items: T[],
     options: ChunkLoadOptions<T>
   ): Promise<void> {
-    const { chunkSize, onChunk, onProgress, parallel = false, delay = 0 } = options;
+    const { chunkSize, onChunk, onProgress, parallel = false, delay: throttleDelay = 0 } = options;
     const total = items.length;
     const chunks: T[][] = [];
 
@@ -91,8 +93,8 @@ export class ProgressiveLoader {
       // 并行加载
       await Promise.all(
         chunks.map(async (chunk, index) => {
-          if (delay > 0) {
-            await this.sleep(delay * index);
+          if (throttleDelay > 0) {
+            await delay(throttleDelay * index);
           }
           await this.processChunk(chunk, index, onChunk, onProgress, total);
         })
@@ -100,8 +102,8 @@ export class ProgressiveLoader {
     } else {
       // 串行加载
       for (let i = 0; i < chunks.length; i++) {
-        if (delay > 0 && i > 0) {
-          await this.sleep(delay);
+        if (throttleDelay > 0 && i > 0) {
+          await delay(throttleDelay);
         }
         await this.processChunk(chunks[i], i, onChunk, onProgress, total);
       }
@@ -257,9 +259,6 @@ export class ProgressiveLoader {
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 }
 
 // 默认实例

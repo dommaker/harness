@@ -7,6 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execAsync } from '../../utils/exec';
 import { constraintChecker } from '../../core/constraints/checker';
 import { getAllConstraints, IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
@@ -27,10 +28,6 @@ export interface CheckOptions {
  * 从 git diff 获取变更的文件
  */
 async function getChangedFiles(staged: boolean): Promise<string[]> {
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
-  const execAsync = promisify(exec);
-
   try {
     const command = staged ? 'git diff --cached --name-only' : 'git diff --name-only';
     const { stdout } = await execAsync(command);

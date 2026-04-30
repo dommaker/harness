@@ -7,13 +7,10 @@
  * - 敏感信息泄露
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { GateResult, GateContext, SecurityGateConfig } from './types';
-
-const execAsync = promisify(exec);
 
 /**
  * 安全门禁

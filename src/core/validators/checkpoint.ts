@@ -6,8 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../../utils/exec';
 import type {
   Checkpoint,
   CheckpointCheck,
@@ -17,7 +16,6 @@ import type {
   CheckType,
 } from '../../types/checkpoint';
 
-const execAsync = promisify(exec);
 
 /**
  * 检查点验证器

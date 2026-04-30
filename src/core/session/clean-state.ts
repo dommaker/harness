@@ -4,8 +4,7 @@
  * 确保 Agent 结束时必须"打扫干净"，不留烂代码。
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -16,7 +15,6 @@ import type {
   SessionInfo,
 } from '../../types/session';
 
-const execAsync = promisify(exec);
 
 const DEFAULT_CONFIG: Required<CleanStateConfig> = {
   enabled: true,

@@ -7,6 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execAsync } from '../../utils/exec';
 import { PassesGate } from '../../core/validators/passes-gate';
 import type { PassesGateConfig } from '../../types/passes-gate';
 
@@ -129,10 +130,6 @@ export async function checkCoverage(projectPath: string, threshold: number = 80)
   console.log(chalk.blue(`📊 检查测试覆盖率 (阈值: ${threshold}%)...`));
 
   try {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
     // 运行覆盖率检查
     await execAsync('npm test -- --coverage --coverageReporters=json-summary', {
       cwd: projectPath,

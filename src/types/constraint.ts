@@ -241,6 +241,14 @@ export interface ConstraintContext {
   isRedundantCodeCleanup?: boolean;
   isSameEffectRefactor?: boolean;
   isUnusedCodeRemoval?: boolean;
+
+  // 设计决策例外
+  isExplicitInstruction?: boolean;
+  isEmergencyFix?: boolean;
+  isExistingDesign?: boolean;
+
+  // 外部依赖相关
+  isExternalDependency?: boolean;
   
   /** 例外理由说明 */
   exceptionReason?: string;

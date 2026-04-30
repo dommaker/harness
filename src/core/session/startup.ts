@@ -4,8 +4,7 @@
  * 确保 Agent 启动时必须先读上下文，防止"失忆"乱搞。
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execAsync } from '../../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -16,7 +15,6 @@ import type {
   TaskListJson,
 } from '../../types/session';
 
-const execAsync = promisify(exec);
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 

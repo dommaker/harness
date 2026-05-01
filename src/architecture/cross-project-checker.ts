@@ -2,6 +2,9 @@
  * 跨工程接口契约检查
  *
  * 检测多工程开发时的接口不一致问题
+ *
+ * 可通过 CrossProjectConfig 自定义工程依赖关系和契约位置，
+ * 使此模块适用于任意多工程项目，而非仅限于 agent-studio 生态。
  */
 
 import { runCommand } from '../utils/exec';
@@ -29,74 +32,135 @@ export interface CrossProjectContext {
   changedFiles: string[];
 }
 
-// 工程依赖关系图
-const PROJECT_DEPENDENCIES: Record<string, string[]> = {
+/**
+ * 跨工程检查配置
+ *
+ * 允许调用方自定义工程依赖关系和契约位置，
+ * 而非使用硬编码的默认值。
+ */
+export interface CrossProjectConfig {
+  /** 工程依赖关系图：project -> 它依赖的项目列表 */
+  dependencies: Record<string, string[]>;
+  /** 接口契约定义位置：pair name -> 文件路径列表 */
+  contractLocations: Record<string, string[]>;
+}
+
+// 默认配置（向后兼容）
+const DEFAULT_PROJECT_DEPENDENCIES: Record<string, string[]> = {
   'agent-studio': ['agent-runtime', 'harness'],
   'agent-runtime': ['harness', 'agent-workflows'],
   'agent-workflows': ['harness'],
   'harness': [],
 };
 
-// 接口契约定义位置
-const CONTRACT_LOCATIONS: Record<string, string[]> = {
+const DEFAULT_CONTRACT_LOCATIONS: Record<string, string[]> = {
   'studio-runtime': [
-    'agent-runtime/src/api/types.ts',      // runtime 导出的 API 类型
-    'agent-studio/src/services/runtime-client.ts', // studio 调用 runtime 的客户端
+    'agent-runtime/src/api/types.ts',
+    'agent-studio/src/services/runtime-client.ts',
   ],
   'runtime-harness': [
-    'harness/src/index.ts',                // harness 导出
-    'agent-runtime/src/core/harness-adapter.ts',   // runtime 使用 harness
+    'harness/src/index.ts',
+    'agent-runtime/src/core/harness-adapter.ts',
   ],
 };
 
 /**
  * 检查跨工程接口一致性
+ *
+ * @param context 跨工程上下文
+ * @param config 可选配置，允许自定义工程依赖关系和契约位置
  */
 export async function checkCrossProjectContracts(
-  context: CrossProjectContext
+  context: CrossProjectContext,
+  config?: CrossProjectConfig
 ): Promise<CrossProjectViolation[]> {
   const violations: CrossProjectViolation[] = [];
+  const cfg = config || {
+    dependencies: DEFAULT_PROJECT_DEPENDENCIES,
+    contractLocations: DEFAULT_CONTRACT_LOCATIONS,
+  };
 
   // 1. 检查 API 变更是否同步到调用方
-  violations.push(...await checkApiSync(context));
+  violations.push(...await checkApiSync(context, cfg));
 
   // 2. 检查类型定义一致性
-  violations.push(...await checkTypeConsistency(context));
+  violations.push(...await checkTypeConsistency(context, cfg));
 
   // 3. 检查破坏性变更
-  violations.push(...await checkBreakingChanges(context));
+  violations.push(...await checkBreakingChanges(context, cfg));
 
   return violations;
 }
 
 /**
  * 检查 API 变更同步
- * 场景：改了 runtime API，studio 没更新
  */
-async function checkApiSync(context: CrossProjectContext): Promise<CrossProjectViolation[]> {
+async function checkApiSync(
+  context: CrossProjectContext,
+  config: CrossProjectConfig
+): Promise<CrossProjectViolation[]> {
   const violations: CrossProjectViolation[] = [];
 
-  // 检查 runtime API 变更
-  if (context.changedProjects.includes('agent-runtime')) {
-    const runtimeApiChanges = await getApiChanges('agent-runtime', context.baseBranch);
-    
-    for (const change of runtimeApiChanges) {
-      // 检查 studio 是否同步更新
-      const studioUpdated = context.changedFiles.some(f => 
-        f.includes('agent-studio/src/services/') ||
-        f.includes('agent-studio/src/api/')
-      );
+  for (const project of context.changedProjects) {
+    const dependents = getDependents(project, config);
+    const apiChanges = await getApiChanges(project, context.baseBranch);
 
-      if (!studioUpdated && isPublicApi(change)) {
+    for (const change of apiChanges) {
+      for (const dependent of dependents) {
+        const dependentUpdated = context.changedFiles.some(f =>
+          f.includes(`${dependent}/src/`)
+        );
+
+        if (!dependentUpdated && isPublicApi(change)) {
+          violations.push({
+            type: 'api-mismatch',
+            severity: 'error',
+            message: `'${project}' API '${change.name}' 变更未同步到 '${dependent}'`,
+            fromProject: project,
+            toProject: dependent,
+            details: {
+              interfaceName: change.name,
+              location: change.file,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * 检查类型定义一致性
+ */
+async function checkTypeConsistency(
+  context: CrossProjectContext,
+  config: CrossProjectConfig
+): Promise<CrossProjectViolation[]> {
+  const violations: CrossProjectViolation[] = [];
+
+  for (const [pair, locations] of Object.entries(config.contractLocations)) {
+    const [from, to] = pair.split('-');
+    if (!context.changedProjects.includes(from) && !context.changedProjects.includes(to)) {
+      continue;
+    }
+
+    const fromTypes = extractExportedTypes(from);
+    const toUsage = extractTypeUsage(to, fromTypes);
+
+    for (const [typeName, usage] of Object.entries(toUsage)) {
+      if (usage.hasMismatch) {
         violations.push({
-          type: 'api-mismatch',
+          type: 'doc-code-mismatch',
           severity: 'error',
-          message: `Runtime API '${change.name}' 变更未同步到 Studio`,
-          fromProject: 'agent-runtime',
-          toProject: 'agent-studio',
+          message: `类型 '${typeName}' 在 ${to} 中的使用与 ${from} 定义不一致`,
+          fromProject: from,
+          toProject: to,
           details: {
-            interfaceName: change.name,
-            location: change.file,
+            interfaceName: typeName,
+            expectedType: usage.expected,
+            actualType: usage.actual,
           },
         });
       }
@@ -107,44 +171,16 @@ async function checkApiSync(context: CrossProjectContext): Promise<CrossProjectV
 }
 
 /**
- * 检查类型定义一致性
- * 场景：同一接口在不同工程定义不一致
- */
-async function checkTypeConsistency(context: CrossProjectContext): Promise<CrossProjectViolation[]> {
-  const violations: CrossProjectViolation[] = [];
-  
-  // 检查 harness 类型是否在 runtime 中一致使用
-  const harnessTypes = extractExportedTypes('harness');
-  const runtimeUsage = extractTypeUsage('agent-runtime', harnessTypes);
-  
-  for (const [typeName, usage] of Object.entries(runtimeUsage)) {
-    if (usage.hasMismatch) {
-      violations.push({
-        type: 'doc-code-mismatch',
-        severity: 'error',
-        message: `类型 '${typeName}' 在 runtime 中的使用与 harness 定义不一致`,
-        fromProject: 'harness',
-        toProject: 'agent-runtime',
-        details: {
-          interfaceName: typeName,
-          expectedType: usage.expected,
-          actualType: usage.actual,
-        },
-      });
-    }
-  }
-
-  return violations;
-}
-
-/**
  * 检查破坏性变更
  */
-async function checkBreakingChanges(context: CrossProjectContext): Promise<CrossProjectViolation[]> {
+async function checkBreakingChanges(
+  context: CrossProjectContext,
+  config: CrossProjectConfig
+): Promise<CrossProjectViolation[]> {
   const violations: CrossProjectViolation[] = [];
 
   for (const project of context.changedProjects) {
-    const dependents = getDependents(project);
+    const dependents = getDependents(project, config);
     
     for (const change of await getApiChanges(project, context.baseBranch)) {
       if (isBreakingChange(change)) {
@@ -255,8 +291,8 @@ function isBreakingChange(change: ApiChange): boolean {
          change.changeType === 'rename';
 }
 
-function getDependents(project: string): string[] {
-  return Object.entries(PROJECT_DEPENDENCIES)
+function getDependents(project: string, config: CrossProjectConfig): string[] {
+  return Object.entries(config.dependencies)
     .filter(([_, deps]) => deps.includes(project))
     .map(([name, _]) => name);
 }

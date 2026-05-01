@@ -121,7 +121,6 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 
   /**
    * 禁止实现未验证的外部依赖能力
-   * 来源：DD-009 Discord 按钮方案教训（2026-04-22）
    * 原因：假设外部系统能力存在，实现后发现不支持，浪费开发时间
    */
   verify_external_capability: {
@@ -148,12 +147,11 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 - 已熟悉的库/框架基本功能
 - 标准 CRUD 操作
 
-【案例】DD-009 Discord 按钮方案（2026-04-22）
-- 假设 Webhook 支持按钮交互
-- 未查阅 Discord API 文档限制
-- 实现 NotifyService 支持 components
-- 发送测试消息才发现 Webhook 不支持交互回调
-- 浪费 30 分钟开发时间，改用 /meeting 指令方案
+【案例】
+- 假设外部 API 支持某种交互模式
+- 未查阅官方文档的限制说明
+- 实现完整功能后才发现不支持
+- 浪费开发时间，需要重新设计方案
 
 【正确流程】
 设计方案 → 查阅文档限制 → 发送最小测试 → 验证可行 → 开发`,
@@ -195,9 +193,9 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 | AC-001 | xxx | ✅ |
 | AC-002 | xxx | ✅ |
 
-【案例】AS-011 Meeting→Project 自动关联（2026-04-27）
-- 需求：会议结束自动创建 Project（如果无关联）
-- 实现：增加了 effectiveProjectId 逻辑
+【案例】
+- 需求：事件触发后自动创建关联资源
+- 实现：增加了自动关联逻辑
 - 验证：✅ 检查了 Spec 定义、测试了多种场景`,
   },
 };

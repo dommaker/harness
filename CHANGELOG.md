@@ -15,6 +15,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - （Bug 修复）
 
+## [0.9.0] - 2026-05-01
+
+### Added
+
+#### Phase 1: 知识引擎核心
+- KnowledgeStore: 知识条目 CRUD + 结构化存储
+- KnowledgeQuery: 语义搜索 + 类型/标签过滤
+- ReferenceTracker: 知识引用关系图谱
+- KnowledgeLinter: 知识质量检查 (完整性/一致性/时效性)
+
+#### Phase 2: 上下文管理
+- TokenBudget: 多级 token 预算分配 (system/user/tool/reserve)
+- SessionCompaction: 会话压缩策略 (摘要/截断/滑动窗口)
+- AgentLifecycle: Agent 状态机 (init→running→paused→completed→failed)
+
+#### Phase 3: 安全护栏
+- InputGuardrail: 输入内容安全检查 (注入检测/敏感信息/格式校验)
+- OutputGuardrail: 输出内容安全检查 (泄露检测/有害内容/格式合规)
+- ToolGuardrail: 工具调用安全检查 (权限验证/参数校验/速率限制)
+- Sandbox: 沙箱执行环境管理 (级别 L1-L4/资源限制/隔离策略)
+
+#### Phase 4: 知识引擎集成
+- KnowledgeService: 统一入口 (Store + Query + Tracker + Linter)
+- 知识生命周期: draft → candidate → validated → canonical → archived
+- 跨项目知识迁移: 模式识别 + 最佳实践提炼
+
+#### Phase 5: 约束重构
+- ConstraintContext 扩展: 新增 isExternalDependency/isExplicitInstruction/isEmergencyFix/isExistingDesign
+- 自定义约束配置: .harness/config.yml 支持 extend_exceptions
+- 约束进化提案: 基于 trace 分析自动生成优化建议
+
+#### Phase 6: 冷启动
+- progressive-loader.ts: 渐进式加载 + worker pool 并发
+- cross-project-checker.ts: 跨项目依赖检查 (异步化)
+- project-config-loader.ts: 项目配置加载 + 约束合并
+
+### Changed
+- SafetyService/ContextService/AgentService 单例导出
+- KnowledgeService 单例导出
+- CLI 新增 harness flow --auto-apply 自动应用低风险提案
+
 ## [0.8.4] - 2026-05-01
 
 ### Changed

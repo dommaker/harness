@@ -2,9 +2,12 @@
 
 > AI Agent 的工程约束框架 — 让 Agent 不会乱承诺、不会跳过验证、不会简化测试。
 
+[![npm version](https://img.shields.io/npm/v/@dommaker/harness)](https://www.npmjs.com/package/@dommaker/harness)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 安装
 
@@ -22,6 +25,43 @@ harness check
 
 # 提交前
 harness passes-gate
+```
+
+### 作为库使用
+
+```typescript
+import {
+  IronLawChecker,
+  ConstraintChecker,
+  PassesGate,
+  CommandGate,
+  KnowledgeService,
+  SafetyService,
+  ContextService,
+} from '@dommaker/harness';
+
+// 铁律检查
+const checker = IronLawChecker.getInstance();
+const results = await checker.checkAll(context);
+
+// 完整约束检查 (Iron Laws + Guidelines + Tips)
+const constraintChecker = new ConstraintChecker();
+const checkResult = await constraintChecker.checkConstraints(context);
+
+// 知识引擎
+const knowledge = new KnowledgeService();
+await knowledge.getStore().add(entry);
+const query = await knowledge.getQuery().search('architecture');
+
+// 安全护栏
+const safety = new SafetyService();
+const guardrail = safety.getInputGuardrail();
+const sandbox = safety.getSandbox();
+
+// 上下文管理
+const contextService = new ContextService();
+const budget = contextService.getBudget();
+const compaction = contextService.getCompaction();
 ```
 
 ---
@@ -119,7 +159,7 @@ harness flow --auto-apply             # 自动应用低风险提案
 
 ---
 
-## 🎯 核心概念
+## 核心概念
 
 ### 三层约束体系
 
@@ -153,6 +193,32 @@ harness flow --auto-apply             # 自动应用低风险提案
 | ReviewGate | `review` | PR 审核检查 |
 | CommandGate | `command` / `cmd` | 命令黑名单 |
 | CheckpointValidator | `validate` | 检查点验证 |
+
+### 知识引擎 (Phase 4)
+
+| 组件 | 说明 |
+|------|------|
+| KnowledgeStore | 知识条目存储和检索 |
+| KnowledgeQuery | 语义搜索和过滤 |
+| ReferenceTracker | 知识引用关系追踪 |
+| KnowledgeLinter | 知识质量检查 |
+
+### 安全护栏 (Phase 3)
+
+| 组件 | 说明 |
+|------|------|
+| InputGuardrail | 输入内容安全检查 |
+| OutputGuardrail | 输出内容安全检查 |
+| ToolGuardrail | 工具调用安全检查 |
+| Sandbox | 沙箱执行环境管理 |
+
+### 上下文管理 (Phase 2)
+
+| 组件 | 说明 |
+|------|------|
+| TokenBudget | Token 预算分配和追踪 |
+| SessionCompaction | 会话压缩策略 |
+| AgentLifecycle | Agent 生命周期管理 |
 
 ---
 

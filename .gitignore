@@ -30,6 +30,9 @@ AGENTS.md
 specs/
 docs/
 
+# Claude Code personal settings
+.claude/settings.local.json
+
 # 🆕 Internal docs (not for public release)
 docs/specs/
 specs/

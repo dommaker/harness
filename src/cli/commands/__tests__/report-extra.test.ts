@@ -83,4 +83,20 @@ describe('report command - 补充覆盖', () => {
       expect(mockFs.writeFile).toHaveBeenCalledWith('report.html', expect.stringContaining('<!DOCTYPE html>'), 'utf-8');
     });
   });
+
+  describe('JSON 报告内容', () => {
+    it('JSON 应该包含完整数据结构', async () => {
+      await report({ format: 'json' });
+      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      // Find the JSON block (starts with {)
+      const jsonStart = output.indexOf('{');
+      const jsonStr = output.slice(jsonStart);
+      const data = JSON.parse(jsonStr);
+      expect(data).toHaveProperty('timestamp');
+      expect(data).toHaveProperty('ironLaws');
+      expect(data).toHaveProperty('checkpoints');
+      expect(data).toHaveProperty('passesGate');
+      expect(data.ironLaws.total).toBe(11);
+    });
+  });
 });

@@ -485,4 +485,367 @@ describe('ConstraintChecker - 补充覆盖', () => {
       expect(result).toBeDefined();
     });
   });
+
+  describe('checkException 例外豁免', () => {
+    it('guideline 匹配例外条件应该被豁免', async () => {
+      const context: ConstraintContext = {
+        operation: 'bug_fix_attempt',
+        isSimpleTypo: true,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_fix_without_root_cause',
+          level: 'guideline',
+          rule: 'NO FIXES WITHOUT ROOT CAUSE',
+          message: 'test',
+          trigger: 'bug_fix_attempt',
+          enforcement: 'test',
+          exceptions: ['simple_typo', 'config_value_error'],
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+      expect(result.message).toContain('豁免');
+    });
+
+    it('guideline 不匹配例外条件应该正常检查', async () => {
+      const context: ConstraintContext = {
+        operation: 'bug_fix_attempt',
+        isSimpleTypo: false,
+        isConfigValueError: false,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_fix_without_root_cause',
+          level: 'guideline',
+          rule: 'NO FIXES WITHOUT ROOT CAUSE',
+          message: 'test',
+          trigger: 'bug_fix_attempt',
+          enforcement: 'test',
+          exceptions: ['simple_typo', 'config_value_error'],
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('iron_law 不应该检查例外条件', async () => {
+      const context: ConstraintContext = {
+        operation: 'task_completion_claim',
+        hasTest: false,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_self_approval',
+          level: 'iron_law',
+          rule: 'NO SELF APPROVAL',
+          message: 'test',
+          trigger: 'task_completion_claim',
+          enforcement: 'test',
+          exceptions: ['simple_typo'],
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('无 exceptions 字段应该正常检查', async () => {
+      const context: ConstraintContext = {
+        operation: 'bug_fix_attempt',
+        hasRootCauseInvestigation: true,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_fix_without_root_cause',
+          level: 'guideline',
+          rule: 'NO FIXES WITHOUT ROOT CAUSE',
+          message: 'test',
+          trigger: 'bug_fix_attempt',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+  });
+
+  describe('checkNoBypassCheckpoint 文件内容检查', () => {
+    it('changedFiles 包含 skip 内容应该失败', async () => {
+      const bypassFile = path.join(tempDir, 'bypass-test.ts');
+      fs.writeFileSync(bypassFile, 'test.skip("skipped", () => {});');
+      execSync('git add .', { cwd: tempDir, stdio: 'pipe' });
+
+      const context: ConstraintContext = {
+        operation: 'step_execution',
+        projectPath: tempDir,
+        changedFiles: [bypassFile],
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_bypass_checkpoint',
+          level: 'iron_law',
+          rule: 'NO BYPASS',
+          message: 'test',
+          trigger: 'step_execution',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.unlinkSync(bypassFile);
+      execSync('git reset HEAD -- ' + bypassFile, { cwd: tempDir, stdio: 'pipe' });
+    });
+
+    it('changedFiles 不包含 bypass 内容应该通过', async () => {
+      const cleanFile = path.join(tempDir, 'clean-test.ts');
+      fs.writeFileSync(cleanFile, 'test("clean", () => { expect(true).toBe(true); });');
+      execSync('git add .', { cwd: tempDir, stdio: 'pipe' });
+
+      const context: ConstraintContext = {
+        operation: 'step_execution',
+        projectPath: tempDir,
+        changedFiles: [cleanFile],
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_bypass_checkpoint',
+          level: 'iron_law',
+          rule: 'NO BYPASS',
+          message: 'test',
+          trigger: 'step_execution',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.unlinkSync(cleanFile);
+      execSync('git reset HEAD -- ' + cleanFile, { cwd: tempDir, stdio: 'pipe' });
+    });
+  });
+
+  describe('checkNoAnyType 文件检查', () => {
+    it('.ts 文件包含 : any 应该失败', async () => {
+      const anyFile = path.join(tempDir, 'any-test.ts');
+      fs.writeFileSync(anyFile, 'const x: any = {};');
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: tempDir,
+        changedFiles: [anyFile],
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_any_type',
+          level: 'guideline',
+          rule: 'NO ANY',
+          message: 'test',
+          trigger: 'code_implementation',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.unlinkSync(anyFile);
+    });
+
+    it('.ts 文件注释中的 : any 应该被忽略', async () => {
+      const commentFile = path.join(tempDir, 'comment-any.ts');
+      fs.writeFileSync(commentFile, '// const x: any = {};\nconst y: string = "ok";');
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: tempDir,
+        changedFiles: [commentFile],
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_any_type',
+          level: 'guideline',
+          rule: 'NO ANY',
+          message: 'test',
+          trigger: 'code_implementation',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.unlinkSync(commentFile);
+    });
+
+    it('非 .ts 文件应该跳过检查', async () => {
+      const jsFile = path.join(tempDir, 'any-test.js');
+      fs.writeFileSync(jsFile, 'const x = {};');
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: tempDir,
+        changedFiles: [jsFile],
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_any_type',
+          level: 'guideline',
+          rule: 'NO ANY',
+          message: 'test',
+          trigger: 'code_implementation',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.unlinkSync(jsFile);
+    });
+  });
+
+  describe('checkTestCoverage coverage-final.json', () => {
+    it('只有 coverage-final.json 应该通过', async () => {
+      const coverageDir = path.join(tempDir, 'coverage');
+      fs.mkdirSync(coverageDir, { recursive: true });
+
+      const finalPath = path.join(coverageDir, 'coverage-final.json');
+      fs.writeFileSync(finalPath, JSON.stringify({}));
+
+      const context: ConstraintContext = {
+        operation: 'commit',
+        projectPath: tempDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'test_coverage_required',
+          level: 'guideline',
+          rule: 'COVERAGE',
+          message: 'test',
+          trigger: 'commit',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(coverageDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('deprecated 函数', () => {
+    it('checkIronLaw 应该等同于 checkConstraint', async () => {
+      const { checkIronLaw } = await import('../core/constraints/checker');
+
+      const context: ConstraintContext = {
+        operation: 'task_completion_claim',
+        hasTest: true,
+        hasVerificationEvidence: true,
+      };
+
+      const result = await checkIronLaw('no_self_approval', context);
+      expect(result.id).toBe('no_self_approval');
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('checkAllIronLaws 应该返回所有检查结果', async () => {
+      const { checkAllIronLaws } = await import('../core/constraints/checker');
+
+      const context: ConstraintContext = {
+        operation: 'commit',
+        projectPath: tempDir,
+        hasTest: true,
+      };
+
+      const results = await checkAllIronLaws(context);
+      expect(Array.isArray(results)).toBe(true);
+      expect(results.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('checkConstraint 快捷函数', () => {
+    it('未知约束应该返回不满足', async () => {
+      const { checkConstraint } = await import('../core/constraints/checker');
+
+      const context: ConstraintContext = {
+        operation: 'commit',
+      };
+
+      const result = await checkConstraint('nonexistent_constraint', context);
+      expect(result.satisfied).toBe(false);
+      expect(result.message).toContain('未知');
+    });
+
+    it('已知约束应该正常检查', async () => {
+      const { checkConstraint } = await import('../core/constraints/checker');
+
+      const context: ConstraintContext = {
+        operation: 'task_completion_claim',
+        hasTest: true,
+      };
+
+      const result = await checkConstraint('no_self_approval', context);
+      expect(result.id).toBe('no_self_approval');
+      expect(result.satisfied).toBe(true);
+    });
+  });
+
+  describe('checkConstraints Iron Law 违规', () => {
+    it('Iron Law 违规应该抛出 ConstraintViolationError', async () => {
+      const context: ConstraintContext = {
+        operation: 'task_completion_claim',
+        hasTest: false,
+        hasVerificationEvidence: false,
+      };
+
+      await expect(checkConstraints(context)).rejects.toThrow();
+    });
+  });
+
+  describe('checkNoTestSimplification git diff 失败', () => {
+    it('git diff 失败应该默认通过', async () => {
+      // 非 git 目录
+      const nonGitDir = path.join(tempDir, 'non-git');
+      fs.mkdirSync(nonGitDir, { recursive: true });
+
+      const context: ConstraintContext = {
+        operation: 'test_creation',
+        projectPath: nonGitDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'no_test_simplification',
+          level: 'iron_law',
+          rule: 'NO SIMPLIFY',
+          message: 'test',
+          trigger: 'test_creation',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(nonGitDir, { recursive: true, force: true });
+    });
+  });
 });

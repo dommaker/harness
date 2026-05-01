@@ -168,7 +168,7 @@ describe('status command', () => {
   describe('状态文件更新', () => {
     it('应该更新 .state.json', async () => {
       mockFs.readFileSync.mockReturnValue('{"constraintId":"test","level":"iron_law"}');
-      
+
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue([]),
         detectAnomalies: jest.fn().mockReturnValue([]),
@@ -177,6 +177,130 @@ describe('status command', () => {
 
       await status({});
       expect(mockFs.writeFileSync).toHaveBeenCalled();
+    });
+  });
+
+  describe('Guidelines 统计', () => {
+    it('应该显示 Guidelines 统计', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([
+          { constraintId: 'test_guide', level: 'guideline', passRate: 0.9, totalChecks: 10, bypassRate: 0 },
+        ]),
+        detectAnomalies: jest.fn().mockReturnValue([]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Guidelines'));
+    });
+
+    it('应该显示 Tips 统计', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([
+          { constraintId: 'test_tip', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
+        ]),
+        detectAnomalies: jest.fn().mockReturnValue([]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Tips'));
+    });
+  });
+
+  describe('异常模式', () => {
+    it('应该显示未发现异常当无异常', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({ anomalies: true });
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未发现异常'));
+    });
+
+    it('应该显示异常详情', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([
+          { constraintId: 'test', type: 'high_failure_rate', data: { currentRate: 0.8, threshold: 0.5 } },
+        ]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({ anomalies: true });
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('异常'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('下一步建议'));
+    });
+  });
+
+  describe('建议', () => {
+    it('应该显示良好建议当 trace >= 100', async () => {
+      const traces = Array(100).fill('{"constraintId":"test"}').join('\n');
+      mockFs.readFileSync.mockReturnValue(traces);
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('状态良好'));
+    });
+
+    it('应该显示积累数据建议当 trace < 100', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('继续积累数据'));
+    });
+
+    it('应该显示诊断建议当有异常', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([
+          { constraintId: 'test', type: 'high_failure_rate' },
+        ]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harness flow'));
+    });
+  });
+
+  describe('详细模式', () => {
+    it('应该显示 Guidelines 详细统计', async () => {
+      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
+
+      const mockAnalyze = {
+        summarize: jest.fn().mockReturnValue([
+          { constraintId: 'test_guide', level: 'guideline', passRate: 0.6, totalChecks: 10, bypassRate: 0.1 },
+        ]),
+        detectAnomalies: jest.fn().mockReturnValue([]),
+      };
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
+
+      await status({ detail: true });
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('检查:'));
     });
   });
 });

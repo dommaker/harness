@@ -214,5 +214,130 @@ describe('flow command', () => {
       await flow({ autoApply: true });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('自动应用'));
     });
+
+    it('应该取消当用户在步骤1输入 n', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ constraintId: 'test' }));
+
+      const mockAnalyzer = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([
+          { constraintId: 'test', type: 'high_failure_rate' },
+        ]),
+      };
+      (MockTraceCollector as any).mockImplementation(() => ({}));
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyzer);
+
+      mockRl.question.mockImplementationOnce((q: string, cb: (a: string) => void) => cb('n'));
+
+      await flow({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已取消'));
+    });
+
+    it('应该跳过提案当无提案生成', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ constraintId: 'test' }));
+
+      const mockAnalyzer = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([
+          { constraintId: 'test', type: 'high_failure_rate' },
+        ]),
+      };
+      (MockTraceCollector as any).mockImplementation(() => ({}));
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyzer);
+
+      const mockDoctor = {
+        diagnose: jest.fn().mockResolvedValue({
+          constraintId: 'test',
+          rootCause: { primary: 'test' },
+          impact: { severity: 'high' },
+        }),
+      };
+      (MockConstraintDoctor as any).mockImplementation(() => mockDoctor);
+
+      const mockEvolver = {
+        propose: jest.fn().mockResolvedValue(null),
+      };
+      (MockConstraintEvolver as any).mockImplementation(() => mockEvolver);
+
+      mockRl.question
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('y'))
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('y'));
+
+      await flow({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('无需优化'));
+    });
+
+    it('应该处理诊断失败', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ constraintId: 'test' }));
+
+      const mockAnalyzer = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([
+          { constraintId: 'test', type: 'high_failure_rate' },
+        ]),
+      };
+      (MockTraceCollector as any).mockImplementation(() => ({}));
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyzer);
+
+      const mockDoctor = {
+        diagnose: jest.fn().mockRejectedValue(new Error('diagnosis failed')),
+      };
+      (MockConstraintDoctor as any).mockImplementation(() => mockDoctor);
+
+      const mockEvolver = {
+        propose: jest.fn().mockResolvedValue(null),
+      };
+      (MockConstraintEvolver as any).mockImplementation(() => mockEvolver);
+
+      mockRl.question
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('y'))
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('y'));
+
+      await flow({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('诊断失败'));
+    });
+
+    it('应该跳过提案当用户输入 n', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ constraintId: 'test' }));
+
+      const mockAnalyzer = {
+        summarize: jest.fn().mockReturnValue([]),
+        detectAnomalies: jest.fn().mockReturnValue([
+          { constraintId: 'test', type: 'high_failure_rate' },
+        ]),
+      };
+      (MockTraceCollector as any).mockImplementation(() => ({}));
+      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyzer);
+
+      const mockDoctor = {
+        diagnose: jest.fn().mockResolvedValue({
+          constraintId: 'test',
+          rootCause: { primary: 'test' },
+          impact: { severity: 'high' },
+        }),
+      };
+      (MockConstraintDoctor as any).mockImplementation(() => mockDoctor);
+
+      const mockEvolver = {
+        propose: jest.fn().mockResolvedValue({
+          constraintId: 'test',
+          type: 'adjust_threshold',
+          risk: { level: 'medium' },
+        }),
+      };
+      (MockConstraintEvolver as any).mockImplementation(() => mockEvolver);
+
+      mockRl.question
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('y'))
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('y'))
+        .mockImplementationOnce((q: string, cb: (a: string) => void) => cb('n'));
+
+      await flow({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('跳过提案'));
+    });
   });
 });

@@ -5,11 +5,17 @@
 import { runPassesGate, checkCoverage } from '../passes-gate';
 import * as fs from 'fs/promises';
 import { PassesGate } from '../../../core/validators/passes-gate';
+import { execAsync } from '../../../utils/exec';
 
 // Mock fs/promises
 jest.mock('fs/promises', () => ({
   readFile: jest.fn(),
   access: jest.fn(),
+}));
+
+// Mock execAsync
+jest.mock('../../../utils/exec', () => ({
+  execAsync: jest.fn(),
 }));
 
 // Mock PassesGate
@@ -28,6 +34,7 @@ jest.mock('chalk', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const MockPassesGate = PassesGate as jest.MockedClass<typeof PassesGate>;
+const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
 describe('passes-gate command', () => {
   let consoleSpy: jest.SpyInstance;
@@ -136,10 +143,114 @@ describe('passes-gate command', () => {
   });
 
   describe('checkCoverage', () => {
-    it('应该跳过覆盖率检查（无法 mock child_process）', async () => {
-      // checkCoverage 使用动态 import child_process，无法在测试中 mock
-      // 简单验证函数存在
-      expect(typeof checkCoverage).toBe('function');
+    it('应该返回 true 当覆盖率达标', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        total: { lines: { pct: 85 } },
+      }));
+
+      const result = await checkCoverage('/project', 80);
+      expect(result).toBe(true);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('覆盖率达标'));
+    });
+
+    it('应该返回 false 当覆盖率不足', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        total: { lines: { pct: 60 } },
+      }));
+
+      const result = await checkCoverage('/project', 80);
+      expect(result).toBe(false);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('覆盖率不足'));
+    });
+
+    it('应该返回 true 当执行出错时', async () => {
+      mockExecAsync.mockRejectedValue(new Error('command failed'));
+
+      const result = await checkCoverage('/project');
+      expect(result).toBe(true);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('无法获取覆盖率信息'));
+    });
+
+    it('应该使用默认阈值 80', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        total: { lines: { pct: 80 } },
+      }));
+
+      const result = await checkCoverage('/project');
+      expect(result).toBe(true);
+    });
+
+    it('应该处理 coverage.total 为 undefined', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
+      mockFs.readFile.mockResolvedValue(JSON.stringify({}));
+
+      const result = await checkCoverage('/project', 80);
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('detectTestCommand', () => {
+    it('应该检测 pytest 项目', async () => {
+      // package.json 不存在
+      mockFs.readFile.mockRejectedValue(new Error('no file'));
+      // pytest.ini 存在
+      mockFs.access
+        .mockResolvedValueOnce(undefined) // pytest.ini
+        .mockRejectedValueOnce(new Error('no file')); // go.mod
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
+      });
+      (MockPassesGate as any).mockImplementation(() => ({ runTests: mockRunTests }));
+
+      await runPassesGate({});
+      expect(MockPassesGate).toHaveBeenCalledWith(expect.objectContaining({ testCommand: 'pytest' }));
+    });
+
+    it('应该检测 Go 项目', async () => {
+      mockFs.readFile.mockRejectedValue(new Error('no file'));
+      // Reset access mock to avoid leaking from previous tests
+      mockFs.access.mockReset();
+      mockFs.access
+        .mockRejectedValueOnce(new Error('no file')) // pytest.ini
+        .mockResolvedValueOnce(undefined); // go.mod
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
+      });
+      (MockPassesGate as any).mockImplementation(() => ({ runTests: mockRunTests }));
+
+      await runPassesGate({});
+      expect(MockPassesGate).toHaveBeenCalledWith(expect.objectContaining({ testCommand: 'go test ./...' }));
+    });
+
+    it('应该检测 test:ci 脚本', async () => {
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        scripts: { 'test:ci': 'jest --ci' },
+      }));
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
+      });
+      (MockPassesGate as any).mockImplementation(() => ({ runTests: mockRunTests }));
+
+      await runPassesGate({});
+      expect(MockPassesGate).toHaveBeenCalledWith(expect.objectContaining({ testCommand: 'npm run test:ci' }));
+    });
+
+    it('应该跳过默认 echo 测试脚本', async () => {
+      mockFs.readFile.mockReset();
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        scripts: { test: 'echo "Error: no test specified"' },
+      }));
+      mockFs.access.mockReset();
+      mockFs.access.mockRejectedValue(new Error('no file'));
+
+      await runPassesGate({});
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未检测到测试命令'));
     });
   });
 });

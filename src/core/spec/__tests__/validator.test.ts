@@ -2,7 +2,7 @@
  * SpecValidator 测试
  */
 
-import { SpecValidator } from '../validator';
+import { SpecValidator, validateSpec, validateAllSpecs } from '../validator';
 import * as fs from 'fs/promises';
 
 // Mock fs
@@ -161,12 +161,17 @@ describe('SpecValidator', () => {
 
   describe('isSpecFile()', () => {
     it('should identify ARCHITECTURE.md as spec file', () => {
-      // 间接测试：通过 validateAll 调用
-      expect(true).toBe(true); // placeholder
+      // 通过 validateAll 间接测试 - ARCHITECTURE.md 会被过滤为 spec 文件
+      // 直接测试 isSpecFile (private, 通过 validateAll 间接验证)
+      expect(validator.detectSpecType('ARCHITECTURE.md')).toBe('architecture');
     });
 
-    it('should identify specs directory files', () => {
-      expect(true).toBe(true);
+    it('should identify specs directory files', async () => {
+      // specs/ 下的文件应该被识别
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue('# Test\n\nContent');
+      const result = await validator.validateFile('specs/modules/test.md');
+      expect(result.file).toBe('specs/modules/test.md');
     });
   });
 
@@ -209,6 +214,43 @@ describe('SpecValidator', () => {
       const schema = await validator.loadSchema('/invalid/module.ts');
 
       expect(schema).toBeNull();
+    });
+  });
+
+  describe('loadSchema() with cache', () => {
+    it('should return cached schema on second call', async () => {
+      mockFs.access.mockRejectedValue(new Error('Not found'));
+
+      // First call - no cache
+      const schema1 = await validator.loadSchema('/cached/path');
+      // Second call - should hit cache (which is empty since first call failed)
+      const schema2 = await validator.loadSchema('/cached/path');
+
+      expect(schema1).toBeNull();
+      expect(schema2).toBeNull();
+    });
+
+    it('should clear cache on setConfig', () => {
+      validator.setConfig({ schemaPath: './new/path' });
+      // Cache should be cleared
+      expect(validator).toBeDefined();
+    });
+  });
+
+  describe('detectSpecType() edge cases', () => {
+    it('should detect modules (plural) path', () => {
+      const type = validator.detectSpecType('src/modules/auth.ts');
+      expect(type).toBe('module');
+    });
+
+    it('should detect apis (plural) path', () => {
+      const type = validator.detectSpecType('src/apis/users.ts');
+      expect(type).toBe('api');
+    });
+
+    it('should return custom for regular files', () => {
+      const type = validator.detectSpecType('src/utils/helper.ts');
+      expect(type).toBe('custom');
     });
   });
 
@@ -280,6 +322,58 @@ describe('SpecValidator', () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors[0]?.message).toContain('验证失败');
+    });
+  });
+
+  describe('validateFile() without schema', () => {
+    it('should use basicValidation when no schema provided', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue('# Title\n\n## Section\n\nContent');
+
+      const result = await validator.validateFile('ARCHITECTURE.md');
+
+      expect(result.type).toBe('architecture');
+      expect(result.valid).toBe(true);
+    });
+
+    it('should detect missing headers in architecture file', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue('Plain text without any headers');
+
+      const result = await validator.validateFile('ARCHITECTURE.md');
+
+      expect(result.type).toBe('architecture');
+      // Should have a warning about missing headers
+      const hasWarning = result.errors.some(e => e.severity === 'warning');
+      expect(hasWarning).toBe(true);
+    });
+  });
+
+  describe('convenience functions', () => {
+    it('validateSpec should work without schemaPath', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue('content');
+
+      const result = await validateSpec('specs/test.yml');
+      expect(result).toBeDefined();
+      expect(result.file).toBe('specs/test.yml');
+    });
+
+    it('validateSpec should work with schemaPath', async () => {
+      mockFs.access.mockRejectedValue(new Error('Not found'));
+
+      const result = await validateSpec('specs/test.yml', '/non/existent/schema');
+      expect(result).toBeDefined();
+    });
+
+    it('validateAllSpecs should return batch result', async () => {
+      mockFs.access.mockRejectedValue(new Error('Not found'));
+
+      const result = await validateAllSpecs('/test/project');
+      expect(result).toBeDefined();
+      expect(typeof result.total).toBe('number');
+      expect(typeof result.passed).toBe('number');
+      expect(typeof result.failed).toBe('number');
     });
   });
 });

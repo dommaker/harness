@@ -144,4 +144,128 @@ describe('ConstraintDoctor', () => {
       expect(loaded.anomalyId).toBe('test-load');
     });
   });
+
+  describe('diagnose - 更多异常类型', () => {
+    it('应该诊断 rising_bypass_rate', async () => {
+      const anomaly: TraceAnomaly = {
+        type: 'rising_bypass_rate',
+        constraintId: 'no_fix_without_root_cause',
+        level: 'guideline',
+        message: '绕过率上升',
+        data: { currentRate: 0.4, threshold: 0.2, trend: 'rising' },
+        detectedAt: Date.now(),
+      };
+
+      const diagnosis = await doctor.diagnose(anomaly);
+
+      expect(diagnosis.rootCause.primary).toContain('绕过率');
+      expect(diagnosis.needsChange).toBe(true);
+      expect(diagnosis.urgency).toBe('high');
+    });
+
+    it('应该诊断 low_pass_rate', async () => {
+      const anomaly: TraceAnomaly = {
+        type: 'low_pass_rate',
+        constraintId: 'no_any_type',
+        level: 'guideline',
+        message: '通过率过低',
+        data: { currentRate: 0.1, threshold: 0.5 },
+        detectedAt: Date.now(),
+      };
+
+      const diagnosis = await doctor.diagnose(anomaly);
+
+      expect(diagnosis.rootCause.primary).toContain('通过率');
+      expect(diagnosis.needsChange).toBe(true);
+      expect(diagnosis.urgency).toBe('high');
+    });
+
+    it('应该诊断 exception_overuse', async () => {
+      const anomaly: TraceAnomaly = {
+        type: 'exception_overuse',
+        constraintId: 'no_fix_without_root_cause',
+        level: 'guideline',
+        message: '例外过度使用',
+        data: { currentRate: 0.6, threshold: 0.2 },
+        detectedAt: Date.now(),
+      };
+
+      const diagnosis = await doctor.diagnose(anomaly);
+
+      expect(diagnosis.rootCause.primary).toContain('例外');
+      expect(diagnosis.needsChange).toBe(true);
+    });
+
+    it('rising_fail_rate 应该设置 severity 为 high 当 iron_law', async () => {
+      const anomaly: TraceAnomaly = {
+        type: 'rising_fail_rate',
+        constraintId: 'no_self_approval',
+        level: 'iron_law',
+        message: '失败率上升',
+        data: { currentRate: 0.7, threshold: 0.3, trend: 'rising' },
+        detectedAt: Date.now(),
+      };
+
+      const diagnosis = await doctor.diagnose(anomaly);
+
+      expect(diagnosis.impact.severity).toBe('high');
+    });
+  });
+
+  describe('diagnoseBatch', () => {
+    it('应该批量诊断多个异常', async () => {
+      const anomalies: TraceAnomaly[] = [
+        {
+          type: 'high_bypass_rate',
+          constraintId: 'no_fix_without_root_cause',
+          level: 'guideline',
+          message: '绕过率过高',
+          data: { currentRate: 0.5, threshold: 0.3 },
+          detectedAt: Date.now(),
+        },
+        {
+          type: 'low_pass_rate',
+          constraintId: 'no_any_type',
+          level: 'guideline',
+          message: '通过率过低',
+          data: { currentRate: 0.1, threshold: 0.5 },
+          detectedAt: Date.now(),
+        },
+      ];
+
+      const results = await doctor.diagnoseBatch(anomalies);
+
+      expect(results.length).toBe(2);
+      expect(results[0].constraintId).toBe('no_fix_without_root_cause');
+      expect(results[1].constraintId).toBe('no_any_type');
+    });
+  });
+
+  describe('saveDiagnosis - 目录不存在', () => {
+    it('应该自动创建目录', () => {
+      const nestedPath = path.join(tempDir, 'nested', 'deep', 'diagnosis.json');
+      const diagnosis = {
+        anomalyId: 'nested-test',
+        constraintId: 'test',
+        diagnosedAt: Date.now(),
+        rootCause: { primary: 'Test', evidence: [] },
+        impact: { severity: 'low' as const, scope: 'single_project' as const, userImpact: 'Test' },
+        recommendations: [],
+        needsChange: false,
+        urgency: 'low' as const,
+      };
+
+      doctor.saveDiagnosis(diagnosis, nestedPath);
+
+      expect(fs.existsSync(nestedPath)).toBe(true);
+    });
+  });
+
+  describe('createDoctor 工厂函数', () => {
+    it('应该创建实例', async () => {
+      const { createDoctor } = await import('../monitoring/constraint-doctor');
+      const d = createDoctor();
+      expect(d).toBeDefined();
+    });
+  });
 });

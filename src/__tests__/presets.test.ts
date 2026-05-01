@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { STRICT_PRESET, STANDARD_PRESET, RELAXED_PRESET, getPreset } from '../presets/standard';
+import { STRICT_PRESET, STANDARD_PRESET, RELAXED_PRESET, getPreset, getIronLawPreset, STANDARD_IRON_LAWS_CONFIG } from '../presets/standard';
 
 describe('Presets', () => {
   describe('STRICT_PRESET', () => {
@@ -60,6 +60,45 @@ describe('Presets', () => {
     it('未知预设应该返回 standard', () => {
       const preset = getPreset('unknown');
       expect(preset.name).toBe('standard');
+    });
+  });
+
+  describe('getIronLawPreset (deprecated)', () => {
+    it('strict 应该返回所有 Iron Laws', () => {
+      const config = getIronLawPreset('strict');
+      expect(config.preset).toBe('strict');
+      expect(config.enabled).toBe(true);
+      expect(Array.isArray(config.ironLaws)).toBe(true);
+      expect(config.ironLaws.length).toBeGreaterThan(0);
+    });
+
+    it('standard 应该返回所有 Iron Laws', () => {
+      const config = getIronLawPreset('standard');
+      expect(config.preset).toBe('standard');
+      expect(config.enabled).toBe(true);
+      expect(Array.isArray(config.ironLaws)).toBe(true);
+      expect(config.ironLaws.length).toBeGreaterThan(0);
+    });
+
+    it('relaxed 应该返回过滤后的 Iron Laws', () => {
+      const config = getIronLawPreset('relaxed');
+      expect(config.preset).toBe('relaxed');
+      expect(config.enabled).toBe(true);
+      expect(Array.isArray(config.ironLaws)).toBe(true);
+      expect(config.ironLaws.length).toBe(3);
+    });
+
+    it('未知预设应该返回所有 Iron Laws', () => {
+      const config = getIronLawPreset('unknown');
+      expect(config.preset).toBe('unknown');
+      expect(config.enabled).toBe(true);
+      expect(config.ironLaws.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('STANDARD_IRON_LAWS_CONFIG (deprecated re-export)', () => {
+    it('应该等同于 STANDARD_PRESET', () => {
+      expect(STANDARD_IRON_LAWS_CONFIG).toBe(STANDARD_PRESET);
     });
   });
 });

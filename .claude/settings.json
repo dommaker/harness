@@ -3,13 +3,23 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "command": "node -e \"const {CommandGate} = require('@dommaker/harness/dist/gates/command'); const input = JSON.parse(process.env.TOOL_INPUT || '{}'); const gate = new CommandGate(); if (!gate.isAllowed(input.command || '')) { console.error('❌ Command blocked by harness CommandGate'); process.exit(1); }\""
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const {CommandGate} = require('@dommaker/harness/dist/gates/command'); const input = JSON.parse(process.env.TOOL_INPUT || '{}'); const gate = new CommandGate(); if (!gate.isAllowed(input.command || '')) { console.error('❌ Command blocked by harness CommandGate'); process.exit(1); }\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "node -e \"const {constraintChecker} = require('@dommaker/harness/dist/core/constraints/checker'); constraintChecker.checkConstraints({operation:'code_implementation',projectPath:process.cwd()}).then(r => { if (!r.passed) { console.error('❌ Iron Law violated'); process.exit(1); } if (r.warningCount > 0) { console.warn('⚠️ ' + r.warningCount + ' guideline warning(s)'); } console.log('✅ Constraint check passed'); }).catch(e => { if (e.code === 'CONSTRAINT_VIOLATION') { console.error('❌ ' + e.message); process.exit(1); } console.error('⚠️ Check error: ' + e.message); });\""
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const {constraintChecker} = require('@dommaker/harness/dist/core/constraints/checker'); constraintChecker.checkConstraints({operation:'code_implementation',projectPath:process.cwd()}).then(r => { if (!r.passed) { console.error('❌ Iron Law violated'); process.exit(1); } if (r.warningCount > 0) { console.warn('⚠️ ' + r.warningCount + ' guideline warning(s)'); } console.log('✅ Constraint check passed'); }).catch(e => { if (e.code === 'CONSTRAINT_VIOLATION') { console.error('❌ ' + e.message); process.exit(1); } console.error('⚠️ Check error: ' + e.message); });\""
+          }
+        ]
       }
     ]
   },

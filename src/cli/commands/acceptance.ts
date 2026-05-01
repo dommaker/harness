@@ -34,6 +34,7 @@ export async function acceptance(options: AcceptanceOptions): Promise<void> {
   const gate = new SpecAcceptanceGate({
     tasksPath: options.tasksPath,
     checkAllTasks: options.checkAll,
+    e2eTestCommand: options.runE2e ? 'npx playwright test' : undefined,
   });
 
   try {

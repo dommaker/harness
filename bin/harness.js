@@ -7,13 +7,14 @@
  */
 
 const { Command } = require('commander');
-const { 
-  check, 
-  listLaws, 
-  validate, 
-  runPassesGate, 
+const { version } = require('../package.json');
+const {
+  check,
+  listLaws,
+  validate,
+  runPassesGate,
   checkCoverage,
-  init, 
+  init,
   report,
   status,
   flow,
@@ -28,8 +29,7 @@ const {
   validateSchema,
   review,
   reviewStatus,
-  command,
-  cmd
+  executeCommand,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -37,7 +37,7 @@ const program = new Command();
 program
   .name('harness')
   .description('通用工程约束框架 - 铁律系统、检查点验证、测试门控、执行追踪')
-  .version('0.8.0');
+  .version(version);
 
 // ========================================
 // harness check
@@ -118,7 +118,7 @@ program
   .command('report')
   .description('生成检查报告')
   .option('-o, --output <path>', '输出文件路径')
-  .option('-f, --format <format>', '输出格式 (json/markdown)', 'markdown')
+  .option('-f, --format <format>', '输出格式 (json/markdown/html)', 'markdown')
   .option('-p, --project-path <path>', '项目路径')
   .action(async (options) => {
     await report(options);
@@ -262,7 +262,7 @@ program
   .description('API 契约门控，检查 OpenAPI Schema')
   .option('-p, --project-path <path>', '项目路径')
   .option('--contract-path <path>', '契约文件路径', 'openapi.yaml')
-  .option('--strict', '严格模式', true)
+  .option('--no-strict', '关闭严格模式')
   .option('--allow-breaking', '允许破坏性变更', false)
   .action(async (subcommand, options, command) => {
     if (subcommand === 'validate') {
@@ -280,8 +280,8 @@ program
   .description('代码审查门控，检查审查状态')
   .option('-p, --project-path <path>', '项目路径')
   .option('--min-reviewers <n>', '最少审查人数', '1')
-  .option('--require-approval', '要求审批', true)
-  .option('--block-on-changes', '阻止变更请求', true)
+  .option('--no-require-approval', '不要求审批')
+  .option('--no-block-on-changes', '不阻止变更请求')
   .option('--allowed-reviewers <list>', '允许的审查者（逗号分隔）')
   .action(async (subcommand, options, command) => {
     if (subcommand === 'status') {
@@ -308,58 +308,8 @@ program
   .option('--list', '列出所有黑名单规则')
   .option('--json', 'JSON 格式输出')
   .option('--strict', '严格模式（warn 也阻止）')
-  .action(async (cmd, options, command) => {
-    const gate = require('../dist/gates/command').createCommandGate({ strict: options.strict });
-    
-    if (options.list) {
-      const { DEFAULT_COMMAND_BLACKLIST } = require('../dist/gates/command');
-      if (options.json) {
-        console.log(JSON.stringify(DEFAULT_COMMAND_BLACKLIST.map(r => ({
-          id: r.id,
-          level: r.level,
-          message: r.message,
-          category: r.category,
-        })), null, 2));
-      } else {
-        console.log('\n命令黑名单规则：\n');
-        console.log(`共 ${DEFAULT_COMMAND_BLACKLIST.length} 条规则`);
-        console.log('使用 harness command --list --json 查看详情');
-      }
-      return;
-    }
-    
-    if (!cmd) {
-      console.error('错误：请提供要检查的命令');
-      console.error('用法：harness command "your command"');
-      process.exit(1);
-    }
-    
-    const result = await gate.check(cmd);
-    
-    if (options.level) {
-      const { getCommandRiskLevel } = require('../dist/gates/command');
-      const level = getCommandRiskLevel(cmd);
-      if (options.json) {
-        console.log(JSON.stringify({ level, command: cmd }));
-      } else {
-        const levelColors = { high: '\x1b[31m', medium: '\x1b[33m', low: '\x1b[32m' };
-        console.log(`${levelColors[level]}${level}\x1b[0m ${cmd}`);
-      }
-      process.exit(level === 'high' ? 1 : 0);
-    }
-    
-    if (options.json) {
-      console.log(JSON.stringify({
-        command: cmd,
-        passed: result.passed,
-        message: result.message,
-        details: result.details,
-      }, null, 2));
-    } else {
-      console.log(result.passed ? `\x1b[32m✓\x1b[0m ${result.message}` : `\x1b[31m✗\x1b[0m ${result.message}`);
-    }
-    
-    process.exit(result.passed ? 0 : 1);
+  .action(async (cmd, options) => {
+    await executeCommand(cmd, options);
   });
 
 // 解析命令行参数

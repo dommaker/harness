@@ -6,6 +6,7 @@
 
 import chalk from 'chalk';
 import { execAsync } from '../../utils/exec';
+import { ReviewGate } from '../../gates/review';
 
 export interface ReviewOptions {
   /** 项目路径 */
@@ -27,64 +28,34 @@ export async function review(options: ReviewOptions): Promise<void> {
   console.log(chalk.blue('👀 代码审查门控检查...'));
 
   const projectPath = options.projectPath || process.cwd();
-  const minReviewers = options.minReviewers || 1;
+
+  const gate = new ReviewGate({
+    minReviewers: options.minReviewers ?? 1,
+    requireApproval: options.requireApproval ?? true,
+    blockOnChangesRequested: options.blockOnChangesRequested ?? true,
+    allowedReviewers: options.allowedReviewers
+      ? options.allowedReviewers.split(',').map(s => s.trim()).filter(Boolean)
+      : [],
+  });
 
   try {
-    // 获取当前分支
     const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const currentBranch = branch.trim();
-    console.log(chalk.gray(`当前分支: ${currentBranch}`));
+    console.log(chalk.gray(`当前分支: ${branch.trim()}`));
 
-    // 尝试获取 PR 信息
-    try {
-      const { stdout: prInfo } = await execAsync('gh pr view --json number,title,state,reviewDecision,reviews', {
-        cwd: projectPath,
-      });
-      const pr = JSON.parse(prInfo);
+    const result = await gate.check({ projectPath, projectId: 'default' });
 
-      console.log();
-      console.log(chalk.cyan(`PR #${pr.number}: ${pr.title}`));
-      console.log(chalk.gray(`状态: ${pr.state}`));
-
-      // 检查审查决策
-      if (pr.reviewDecision === 'APPROVED') {
-        console.log(chalk.green(`审查决策: APPROVED ✅`));
-        console.log();
-        console.log(chalk.green('✅ 代码审查门控检查通过'));
-        return;
-      } else if (pr.reviewDecision === 'CHANGES_REQUESTED') {
-        console.log(chalk.red(`审查决策: CHANGES_REQUESTED ❌`));
-        console.log();
-        console.log(chalk.red('❌ 代码审查门控检查失败'));
-        console.log(chalk.red('   有变更请求未处理'));
-        process.exit(1);
-        return;
-      } else if (pr.reviewDecision === 'REVIEW_REQUIRED') {
-        console.log(chalk.yellow(`审查决策: REVIEW_REQUIRED`));
-        console.log();
-        console.log(chalk.red('❌ 代码审查门控检查失败'));
-        console.log(chalk.yellow(`   需要至少 ${minReviewers} 个审查`));
-        process.exit(1);
-        return;
+    console.log();
+    if (result.passed) {
+      console.log(chalk.green('✅ 代码审查门控检查通过'));
+      if (result.details) {
+        console.log(chalk.gray(`   审批: ${result.details.approvals ?? 0}, 变更请求: ${result.details.changesRequested ?? 0}`));
       }
-
-      // 检查审批数
-      const approvals = pr.reviews?.filter((r: any) => r.state === 'APPROVED').length || 0;
-      if (approvals >= minReviewers) {
-        console.log();
-        console.log(chalk.green('✅ 代码审查门控检查通过'));
-        console.log(chalk.gray(`   审批数: ${approvals}`));
-      } else {
-        console.log();
-        console.log(chalk.red('❌ 代码审查门控检查失败'));
-        console.log(chalk.yellow(`   当前审批: ${approvals}`));
-        console.log(chalk.yellow(`   所需审批: ${minReviewers}`));
-        process.exit(1);
+    } else {
+      console.log(chalk.red('❌ 代码审查门控检查失败'));
+      console.log(chalk.red(`   ${result.message}`));
+      if (result.details?.suggestion) {
+        console.log(chalk.gray(`   ${result.details.suggestion}`));
       }
-    } catch {
-      console.log();
-      console.log(chalk.yellow('⚠️  未找到关联的 PR'));
-      console.log(chalk.gray('   使用 gh pr create 创建 PR'));
       process.exit(1);
     }
   } catch (error: any) {
@@ -110,13 +81,9 @@ export async function reviewStatus(options: ReviewOptions): Promise<void> {
   const projectPath = options.projectPath || process.cwd();
 
   try {
-    // 获取当前分支
     const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const currentBranch = branch.trim();
+    console.log(chalk.gray(`当前分支: ${branch.trim()}`));
 
-    console.log(chalk.gray(`当前分支: ${currentBranch}`));
-
-    // 尝试获取 PR 信息
     try {
       const { stdout: prInfo } = await execAsync('gh pr view --json number,title,state,reviewDecision,reviews', {
         cwd: projectPath,

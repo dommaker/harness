@@ -5,7 +5,7 @@
  */
 
 import chalk from 'chalk';
-import { execAsync } from '../../utils/exec';
+import { SecurityGate } from '../../gates/security';
 
 export interface SecurityOptions {
   /** 项目路径 */
@@ -27,64 +27,34 @@ export async function security(options: SecurityOptions): Promise<void> {
   console.log(chalk.blue('🔒 安全门控检查...'));
 
   const projectPath = options.projectPath || process.cwd();
-  const severityThreshold = options.severity || 'high';
 
-  try {
-    // 运行 npm audit
-    const { stdout } = await execAsync('npm audit --json', { cwd: projectPath });
-    const auditResult = JSON.parse(stdout);
+  const gate = new SecurityGate({
+    severityThreshold: options.severity || 'high',
+    scanCommand: options.scanCommand,
+    ignoreWarnings: options.ignoreWarnings,
+    ignoreDevDependencies: options.ignoreDevDeps,
+  });
 
-    // 过滤漏洞
-    const severityOrder = ['low', 'moderate', 'high', 'critical'];
-    const thresholdIndex = severityOrder.indexOf(severityThreshold);
+  const result = await gate.scan({ projectPath, projectId: 'default' });
 
-    const vulnerabilities = Object.entries(auditResult.vulnerabilities || {})
-      .filter(([_, vuln]: [string, any]) => {
-        const severityIndex = severityOrder.indexOf(vuln.severity);
-        return severityIndex >= thresholdIndex;
-      });
-
-    if (vulnerabilities.length === 0) {
-      console.log();
-      console.log(chalk.green('✅ 安全门控检查通过'));
-      console.log(chalk.gray('   未发现安全漏洞'));
-    } else {
-      console.log();
-      console.log(chalk.red('❌ 安全门控检查失败'));
-      console.log(chalk.red(`   发现 ${vulnerabilities.length} 个安全漏洞:\n`));
-
-      vulnerabilities.forEach(([name, vuln]: [string, any], i: number) => {
-        const severityColor = getSeverityColor(vuln.severity);
-        console.log(severityColor(`${i + 1}. [${vuln.severity.toUpperCase()}] ${name}`));
-        console.log(chalk.gray(`   通过: ${vuln.via?.map((x: any) => x.name || x).join(', ') || '未知'}`));
-        if (vuln.fixAvailable) {
-          console.log(chalk.green(`   可修复: npm audit fix`));
-        }
-        console.log();
-      });
-
-      process.exit(1);
+  console.log();
+  if (result.passed) {
+    console.log(chalk.green('✅ 安全门控检查通过'));
+    if (result.details) {
+      console.log(chalk.gray(`   critical: ${result.details.critical}, high: ${result.details.high}, moderate: ${result.details.moderate}, low: ${result.details.low}`));
     }
-  } catch (error: any) {
-    // npm audit 在有漏洞时返回非零退出码，需要解析 stdout
-    if (error.stdout) {
-      try {
-        const auditResult = JSON.parse(error.stdout);
-        if (auditResult.vulnerabilities && Object.keys(auditResult.vulnerabilities).length > 0) {
-          console.log();
-          console.log(chalk.red('❌ 安全门控检查失败'));
-          console.log(chalk.red(`   发现 ${Object.keys(auditResult.vulnerabilities).length} 个安全漏洞`));
-          console.log(chalk.gray('   运行 harness security audit 查看详情'));
-          process.exit(1);
-        }
-      } catch {
-        // JSON 解析失败
-      }
+  } else {
+    console.log(chalk.red('❌ 安全门控检查失败'));
+    console.log(chalk.red(`   ${result.message}`));
+    if (result.details?.vulnerabilities) {
+      console.log();
+      (result.details.vulnerabilities as Array<{ name: string; severity: string; via: string }>).forEach((v, i) => {
+        const severityColor = getSeverityColor(v.severity);
+        console.log(severityColor(`  ${i + 1}. [${v.severity.toUpperCase()}] ${v.name}`));
+        console.log(chalk.gray(`     via: ${v.via}`));
+      });
     }
-
-    console.log();
-    console.log(chalk.red('❌ 安全门控检查出错'));
-    console.log(chalk.red(`   ${error.message}`));
+    console.log(chalk.gray('\n   运行 harness security audit 查看详情'));
     process.exit(1);
   }
 }
@@ -108,57 +78,33 @@ function getSeverityColor(severity: string): (text: string) => string {
 }
 
 /**
- * 运行 npm audit 并返回详细报告
+ * 运行安全审计详情
  */
 export async function auditDetails(options: SecurityOptions): Promise<void> {
   console.log(chalk.blue('🔒 安全审计详情...\n'));
 
   const projectPath = options.projectPath || process.cwd();
 
-  try {
-    const { stdout } = await execAsync('npm audit --json', { cwd: projectPath });
-    const auditResult = JSON.parse(stdout);
+  const gate = new SecurityGate({
+    severityThreshold: options.severity || 'low',
+    scanCommand: options.scanCommand,
+  });
 
-    if (!auditResult.vulnerabilities || Object.keys(auditResult.vulnerabilities).length === 0) {
-      console.log(chalk.green('✅ 未发现安全漏洞'));
-      return;
-    }
+  const result = await gate.scan({ projectPath, projectId: 'default' });
 
-    console.log(chalk.yellow(`发现 ${Object.keys(auditResult.vulnerabilities).length} 个漏洞:\n`));
+  if (result.passed && !result.details?.total) {
+    console.log(chalk.green('✅ 未发现安全漏洞'));
+    return;
+  }
 
-    for (const [name, vuln] of Object.entries(auditResult.vulnerabilities)) {
-      const v = vuln as any;
-      console.log(chalk.cyan(`${name}@${v.via?.[0]?.range || 'unknown'}`));
-      console.log(chalk.gray(`  严重性: ${v.severity}`));
-
-      if (v.via && v.via.length > 0) {
-        console.log(chalk.gray(`  通过: ${v.via.map((x: any) => x.name || x).join(', ')}`));
-      }
-
-      if (v.fixAvailable) {
-        console.log(chalk.green(`  可修复: npm audit fix`));
-      } else {
-        console.log(chalk.yellow(`  需手动修复`));
-      }
+  const details = result.details as any;
+  if (details?.vulnerabilities?.length > 0) {
+    console.log(chalk.yellow(`发现 ${details.total} 个漏洞:\n`));
+    for (const v of details.vulnerabilities) {
+      const severityColor = getSeverityColor(v.severity);
+      console.log(severityColor(`[${v.severity.toUpperCase()}] ${v.name}`));
+      console.log(chalk.gray(`  via: ${v.via}`));
       console.log();
     }
-  } catch (error: any) {
-    if (error.stdout) {
-      const auditResult = JSON.parse(error.stdout);
-      if (auditResult.vulnerabilities) {
-        console.log(chalk.yellow(`发现 ${Object.keys(auditResult.vulnerabilities).length} 个漏洞:\n`));
-        for (const [name, vuln] of Object.entries(auditResult.vulnerabilities)) {
-          const v = vuln as any;
-          console.log(chalk.cyan(`${name}`));
-          console.log(chalk.gray(`  严重性: ${v.severity}`));
-          if (v.fixAvailable) {
-            console.log(chalk.green(`  可修复: npm audit fix`));
-          }
-          console.log();
-        }
-        return;
-      }
-    }
-    console.log(chalk.red(`❌ 安全审计失败: ${error.message}`));
   }
 }

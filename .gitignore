@@ -20,6 +20,7 @@ npm-debug.log*
 
 # Test
 coverage/
+.coverage-*/
 
 # Temp
 *.tmp
@@ -29,6 +30,9 @@ coverage/
 AGENTS.md
 specs/
 docs/
+
+# Runtime state
+.harness/
 
 # Claude Code personal settings
 .claude/settings.local.json

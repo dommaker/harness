@@ -18,3 +18,6 @@ export * from './constraint-doctor';
 export * from './constraint-evolver';
 export * from './performance-collector';
 export * from './performance-analyzer';
+export * from './context-tracker';
+export { KnowledgeDoctor } from './knowledge-doctor';
+export { KnowledgeEvolver } from './knowledge-evolver';

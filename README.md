@@ -1,268 +1,171 @@
 # @dommaker/harness
 
-> AI Agent 的工程约束框架 — 让 Agent 不会乱承诺、不会跳过验证、不会简化测试。
+> AI Agent 工程约束框架 — 从代码质量约束到知识积累引擎
 
 [![npm version](https://img.shields.io/npm/v/@dommaker/harness)](https://www.npmjs.com/package/@dommaker/harness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
----
+## 定位
 
-## 快速开始
-
-### 安装
-
-```bash
-npm install -g @dommaker/harness
+```
+代码质量约束（补偿模型弱点）
+        ↓
+知识积累基础设施（模型做不到的事）
++ 最小安全护栏（模型无关的底线）
 ```
 
-### 最小工作流
+**核心理念：Harness 不是目的，知识才是护城河。**
+
+Skill、Agent、工具链会随模型迭代更新，但领域知识是永恒的。
+
+---
+
+## 安装
 
 ```bash
-# 开发前
-harness check
+npm install @dommaker/harness
+```
 
-# 开发 + 写测试
+### CLI
 
-# 提交前
-harness passes-gate
+```bash
+harness check                # 检查约束（开发前后）
+harness passes-gate          # 测试门控（提交前）
+harness status               # 查看状态和异常
+harness flow                 # 一键诊断 + 优化提案
+harness init --preset standard  # 初始化配置
 ```
 
 ### 作为库使用
 
 ```typescript
 import {
-  IronLawChecker,
-  ConstraintChecker,
-  PassesGate,
-  CommandGate,
+  // 约束系统
+  checkConstraints,
+  checkBeforeExecution,
+  interceptOperation,
+  // 知识引擎
   KnowledgeService,
+  // 安全护栏
   SafetyService,
+  // 上下文管理
   ContextService,
+  // Agent 生命周期
+  AgentService,
 } from '@dommaker/harness';
 
-// 铁律检查
-const checker = IronLawChecker.getInstance();
-const results = await checker.checkAll(context);
+// 约束检查
+const result = await checkConstraints(context);
+if (!result.passed) {
+  console.error(result.ironLaws.filter(r => !r.passed));
+}
 
-// 完整约束检查 (Iron Laws + Guidelines + Tips)
-const constraintChecker = new ConstraintChecker();
-const checkResult = await constraintChecker.checkConstraints(context);
-
-// 知识引擎
-const knowledge = new KnowledgeService();
-await knowledge.getStore().add(entry);
-const query = await knowledge.getQuery().search('architecture');
+// 知识查询
+const knowledge = KnowledgeService.getInstance();
+const docs = await knowledge.getQuery().search('architecture decisions');
 
 // 安全护栏
-const safety = new SafetyService();
+const safety = SafetyService.getInstance();
 const guardrail = safety.getInputGuardrail();
-const sandbox = safety.getSandbox();
+await guardrail.check(userInput);
 
-// 上下文管理
-const contextService = new ContextService();
-const budget = contextService.getBudget();
-const compaction = contextService.getCompaction();
+// Token 预算
+const ctx = ContextService.getInstance();
+const budget = ctx.getBudget();
+budget.allocate('system', 2000);
+budget.allocate('user', 4000);
 ```
 
 ---
 
-## 📋 CLI 命令
-
-### 日常使用
-
-```bash
-harness check           # 检查铁律（开发前后必用）
-harness passes-gate     # 测试门控（提交前验证）
-harness status          # 查看状态（异常、统计）
-harness flow            # 一键诊断 + 提案流程
-```
-
-### 项目初始化
-
-```bash
-harness init --preset standard    # 初始化配置
-harness init --print-snippets     # 输出代码片段
-```
-
-### 门禁检查
-
-```bash
-# 测试门控
-harness passes-gate                    # 运行测试
-harness passes-gate --coverage         # 检查覆盖率
-harness pg                              # 别名
-
-# 验收标准
-harness acceptance --task-id TASK-001  # 检查指定任务
-harness acceptance --check-all         # 检查所有任务
-harness acceptance list                 # 列出验收标准
-harness acc                             # 别名
-
-# 性能门控
-harness performance --coverage --coverage-threshold 85  # 覆盖率检查
-harness performance --bundle --bundle-threshold 300      # 打包大小检查
-harness perf                                              # 别名
-
-# 安全门控
-harness security                        # npm audit 检查
-harness security --severity critical    # 只显示 critical 级别
-harness security audit                  # 详细漏洞报告
-harness sec                             # 别名
-
-# API 契约
-harness contract                        # OpenAPI Schema 验证
-harness contract validate               # Schema 语法验证
-harness contract --contract-path api/openapi.yaml
-
-# 代码审查
-harness review                          # PR 审查状态检查
-harness review --min-reviewers 2        # 要求 2 个审批
-harness review status                   # PR 详情
-
-# 命令黑名单
-harness command "rm -rf /"             # 检查命令
-harness command --level "DROP TABLE"   # 显示风险等级
-harness command --list                  # 列出所有规则
-harness cmd                              # 别名
-```
-
-### Spec 验证
-
-```bash
-harness spec            # 验证所有 Spec
-harness spec --staged   # 验证暂存文件
-harness spec list       # 支持的 Spec 类型
-```
-
-### 检查点验证
-
-```bash
-harness validate                     # 验证检查点
-harness validate --strict            # 严格模式
-harness validate -f checkpoint.json  # 指定文件
-```
-
-### 报告
-
-```bash
-harness report                        # 生成 Markdown 报告
-harness report -f json                # JSON 格式
-harness report -o report.md           # 输出到文件
-```
-
-### 诊断
-
-```bash
-harness flow                          # 一键诊断 + 提案
-harness flow --auto-apply             # 自动应用低风险提案
-```
-
----
-
-## 核心概念
+## 核心架构
 
 ### 三层约束体系
 
 | 层级 | 严重性 | 说明 |
 |------|:------:|------|
-| **Iron Law** | 🔴 error | 绝对禁止，无例外 |
-| **Guideline** | 🟡 warning | 推荐遵守，有例外 |
-| **Tip** | 🔵 info | 信息性提示 |
+| **Iron Law** | error | 绝对禁止，无例外（7 条） |
+| **Guideline** | warning | 推荐遵守，有例外（9 条） |
+| **Tip** | info | 信息性提示（2 条） |
 
-### 7 条铁律
+### 子系统
 
-| ID | 规则 |
-|---|------|
-| `no_bypass_checkpoint` | 禁止跳过检查点 |
-| `no_self_approval` | 禁止自评通过（必须测试）|
-| `no_completion_without_verification` | 完成必须验证 |
-| `no_test_simplification` | 禁止简化测试 |
-| `incremental_progress` | 单任务单会话 |
-| `verify_external_capability` | 外部能力先验证 |
-| `no_implementation_without_requirement_review` | 实现后对比需求 |
-
-### 8 种门禁（均有 CLI 命令）
-
-| 门禁 | CLI 命令 | 用途 |
-|------|:--------:|------|
-| PassesGate | `passes-gate` / `pg` | 测试门控 |
-| SpecAcceptanceGate | `acceptance` / `acc` | 验收标准检查 |
-| PerformanceGate | `performance` / `perf` | 性能门控 |
-| SecurityGate | `security` / `sec` | 安全检查 |
-| ContractGate | `contract` | API 契约验证 |
-| ReviewGate | `review` | PR 审核检查 |
-| CommandGate | `command` / `cmd` | 命令黑名单 |
-| CheckpointValidator | `validate` | 检查点验证 |
-
-### 知识引擎 (Phase 4)
-
-| 组件 | 说明 |
-|------|------|
-| KnowledgeStore | 知识条目存储和检索 |
-| KnowledgeQuery | 语义搜索和过滤 |
-| ReferenceTracker | 知识引用关系追踪 |
-| KnowledgeLinter | 知识质量检查 |
-
-### 安全护栏 (Phase 3)
-
-| 组件 | 说明 |
-|------|------|
-| InputGuardrail | 输入内容安全检查 |
-| OutputGuardrail | 输出内容安全检查 |
-| ToolGuardrail | 工具调用安全检查 |
-| Sandbox | 沙箱执行环境管理 |
-
-### 上下文管理 (Phase 2)
-
-| 组件 | 说明 |
-|------|------|
-| TokenBudget | Token 预算分配和追踪 |
-| SessionCompaction | 会话压缩策略 |
-| AgentLifecycle | Agent 生命周期管理 |
+| 模块 | 目录 | 说明 |
+|------|------|------|
+| **约束引擎** | `core/`, `constraints/` | 三层约束检查、拦截器、自定义约束配置 |
+| **知识引擎** | `knowledge/` | 存储、查询、引用追踪、质量检查、生命周期（draft→canonical→archived） |
+| **上下文管理** | `context/` | Token 预算、会话压缩、渐进式加载、知识注入 |
+| **安全护栏** | `safety/` | 输入/输出/工具调用安全检查、沙箱（L1-L4） |
+| **验证循环** | `verification/` | 规则引擎 + 推理验证，支持检查点恢复 |
+| **门禁系统** | `gates/` | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
+| **监控** | `monitoring/` | Trace 收集分析、约束诊断/进化、知识诊断/进化 |
+| **Agent 管理** | `agents/` | Agent 生命周期状态机（init→running→completed） |
+| **LLM 集成** | `llm/` | LLM 适配层，支持多 provider |
+| **失败处理** | `failure/` | 错误分类、失败记录 |
+| **Dashboard** | `dashboard/` | 统计面板、状态展示 |
+| **架构约束** | `architecture/` | 架构级约束检查、跨项目依赖检查 |
+| **Spec 检查** | `spec/` | 代码注解中的 Spec 验证 |
 
 ---
 
-## 🔧 代码集成
+## CLI 命令
 
-```typescript
-import {
-  IronLawChecker,
-  PassesGate,
-  CommandGate,
-  CheckpointValidator,
-} from '@dommaker/harness';
+### 日常
 
-// 铁律检查
-const checker = IronLawChecker.getInstance();
-const results = await checker.checkAll(context);
-
-// 测试门控
-const gate = new PassesGate({ requireEvidence: true });
-const passed = await gate.runTests();
-
-// 命令黑名单
-const commandGate = new CommandGate();
-const result = await commandGate.check('rm -rf /');
-// { passed: false, message: '命令被禁止执行...' }
+```bash
+harness check                    # 约束检查
+harness passes-gate [options]    # 测试门控（别名: pg）
+harness status [--anomalies]     # 状态查看
+harness flow [--auto-apply]      # 诊断 + 提案
 ```
 
-> 详细 API 参考：[capabilities/](capabilities/) 目录
+### 门禁
+
+```bash
+harness acceptance [--task-id ID] [--check-all]  # 验收标准（别名: acc）
+harness performance [--coverage] [--bundle]       # 性能门控（别名: perf）
+harness security [--severity level]               # 安全检查（别名: sec）
+harness contract [--contract-path path]           # API 契约验证
+harness review [--min-reviewers N]                # PR 审查检查
+harness command "command string"                  # 命令黑名单（别名: cmd）
+```
+
+### 其他
+
+```bash
+harness init [--preset standard|strict|relaxed]  # 初始化
+harness validate [--strict]                       # 检查点验证
+harness spec [--staged]                           # Spec 验证
+harness report [-f json|markdown] [-o file]       # 报告生成
+```
 
 ---
+
+## 配置
 
 ### .harness/config.yml
 
 ```yaml
-preset: standard
+preset: standard  # standard | strict | relaxed
 
 # 自定义约束例外
 custom_constraints:
   no_fix_without_root_cause:
     extend_exceptions:
-      - my_special_case
+      - hotfix_branch
 ```
 
-### CI 集成
+### Presets
+
+| Preset | 说明 |
+|--------|------|
+| `strict` | 全部约束启用（Iron Laws + Guidelines + Tips） |
+| `standard` | Iron Laws + Guidelines（默认） |
+| `relaxed` | 仅 Iron Laws |
+
+---
+
+## CI 集成
 
 ```yaml
 # .github/workflows/harness-check.yml
@@ -278,63 +181,34 @@ jobs:
 
 ---
 
-## 📊 Trace & 日志
+## 日志与诊断
 
-### 目录结构
+运行时状态存储在 `.harness/` 目录：
 
 ```
 .harness/
-├── traces/
-│   ├── execution.log      # 约束检查记录（JSON Lines）
-│   └── summary.json       # 统计汇总
-└── state.json             # Harness 状态
+├── traces/           # 约束检查记录（JSON Lines）
+├── failures/         # 失败记录
+└── state.json        # 运行状态
 ```
-
-### 查看日志
 
 ```bash
-# 查看状态和统计
-harness status
-
-# 查看详细统计
-harness status --detail
-
-# 只看异常
-harness status --anomalies
-
-# 分析最近 N 小时
-harness status --hours 48
+harness status --anomalies    # 查看异常
+harness status --hours 48     # 最近 48 小时统计
+harness flow --auto-apply     # 诊断 + 自动应用低风险提案
 ```
-
-### 日志格式
-
-**execution.log**（JSON Lines 格式）：
-```json
-{"timestamp":"2026-04-28T15:00:00Z","constraintId":"no_bypass_checkpoint","result":"passed","duration":12}
-{"timestamp":"2026-04-28T15:01:00Z","constraintId":"no_self_approval","result":"bypassed","reason":"hotfix"}
-```
-
-**summary.json**：
-```json
-{"totalChecks":150,"passRate":0.92,"bypassRate":0.08,"anomalies":2}
-```
-
-### 异常检测
-
-当 `harness status --anomalies` 发现异常时，运行 `harness flow` 进行诊断和优化提案。
 
 ---
 
-## 🔧 开发
+## 开发
 
 ```bash
 npm install
-npm run build
-npm test
+npm run build          # 编译 TypeScript
+npm test               # 运行测试（覆盖率阈值 50%）
+npm run lint           # ESLint
 ```
 
----
+## 许可证
 
-## 📝 License
-
-MIT © dommaker
+MIT

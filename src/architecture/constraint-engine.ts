@@ -29,6 +29,13 @@ export interface ArchitectureResult {
   violations: ArchitectureViolation[];
 }
 
+export interface ModuleBoundary {
+  /** 源文件 glob 模式 */
+  from: string;
+  /** 禁止导入的目标 glob 模式 */
+  denyImport: string;
+}
+
 export interface ArchitectureRule {
   id: string;
   type: 'forbidden-pattern' | 'file-count' | 'module-boundary' | 'custom';
@@ -40,6 +47,8 @@ export interface ArchitectureRule {
   patterns?: string[];      // 禁止的关键词
   // file-count
   threshold?: number;       // 文件数阈值
+  // module-boundary
+  boundaries?: ModuleBoundary[];  // 模块边界定义
   // custom
   script?: string;          // 自定义脚本路径
 }
@@ -128,26 +137,129 @@ export class ArchitectureConstraintEngine {
     rule: ArchitectureRule,
     context: ArchitectureContext
   ): ArchitectureViolation[] {
-    // TODO: 实现模块边界检查
-    return [];
+    const violations: ArchitectureViolation[] = [];
+    const boundaries = rule.boundaries || [];
+
+    if (boundaries.length === 0) return [];
+
+    // 从 diff 中提取每个文件新增的 import 语句
+    const fileImports = this.extractImportsFromDiff(context.diff);
+
+    for (const boundary of boundaries) {
+      for (const [file, imports] of fileImports.entries()) {
+        if (!this.matchGlob(file, boundary.from)) continue;
+
+        for (const importPath of imports) {
+          const resolved = this.resolveImport(file, importPath);
+          if (resolved && this.matchGlob(resolved, boundary.denyImport)) {
+            violations.push({
+              ruleId: rule.id,
+              message: rule.message || `${file} 不允许导入 ${importPath}（违反模块边界 ${boundary.from} → ${boundary.denyImport}）`,
+              files: [file],
+              severity: rule.severity || 'error',
+            });
+          }
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * 从 diff 中提取每个文件新增的 import 路径
+   * 只解析 + 开头的行（新增内容）
+   */
+  private extractImportsFromDiff(diff: string): Map<string, string[]> {
+    const result = new Map<string, string[]>();
+    let currentFile = '';
+
+    for (const line of diff.split('\n')) {
+      // 解析 diff 文件头: +++ b/src/foo.ts
+      const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
+      if (fileMatch) {
+        currentFile = fileMatch[1];
+        continue;
+      }
+
+      // 只处理新增行
+      if (!line.startsWith('+') || line.startsWith('+++')) continue;
+      if (!currentFile) continue;
+
+      const content = line.slice(1);
+
+      // 匹配各种 import 形式
+      // import ... from 'path'
+      // import 'path'
+      // export ... from 'path'
+      const importMatch = content.match(/(?:import|export)\s+.*?from\s+['"]([^'"]+)['"]/);
+      const sideEffectMatch = content.match(/^import\s+['"]([^'"]+)['"]/);
+
+      const importPath = importMatch?.[1] || sideEffectMatch?.[1];
+      if (importPath) {
+        const existing = result.get(currentFile) || [];
+        existing.push(importPath);
+        result.set(currentFile, existing);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 解析 import 路径为相对于项目根的路径
+   * 相对路径: ./foo, ../bar → 基于导入文件解析
+   * 非相对路径: @scope/foo → 返回 null（外部依赖）
+   */
+  private resolveImport(fromFile: string, importPath: string): string | null {
+    // 外部依赖（非相对路径）跳过
+    if (!importPath.startsWith('.')) return null;
+
+    const fromDir = fromFile.includes('/') ? fromFile.slice(0, fromFile.lastIndexOf('/')) : '';
+    const parts = (fromDir + '/' + importPath).split('/');
+    const resolved: string[] = [];
+
+    for (const part of parts) {
+      if (part === '.' || part === '') continue;
+      if (part === '..') {
+        resolved.pop();
+      } else {
+        resolved.push(part);
+      }
+    }
+
+    return resolved.join('/');
   }
 
   private matchGlob(file: string, pattern: string): boolean {
     // 简化的 glob 匹配
     let regexPattern = pattern;
-    
-    // 处理 **/ 开头（匹配任意前缀路径）
+
+    // 用占位符保护 ** 的不同位置，避免被 * 替换破坏
+    const DS_MID = '\x00DSM\x00';  // /**/ 中间
+    const DS_END = '\x00DSE\x00';  // ** 结尾
+    const DS_SRT = '\x00DSS\x00';  // **/ 开头
+
+    // 优先处理 /**/（中间的 **）
+    regexPattern = regexPattern.replace(/\/\*\*\//g, `/${DS_MID}/`);
+    // 处理 **/ 开头
     if (regexPattern.startsWith('**/')) {
-      regexPattern = '(?:.*/)?' + regexPattern.slice(3);
+      regexPattern = DS_SRT + regexPattern.slice(3);
     }
-    
-    // 处理 /**/（匹配任意中间路径）和 **（匹配任意字符）
+    // 处理剩余的 **（结尾）
+    regexPattern = regexPattern.replace(/\*\*/g, DS_END);
+
+    // 替换单 *（路径通配符）
+    regexPattern = regexPattern.replace(/\*/g, '[^/]*');
+
+    // 恢复 ** 占位符为正则
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     regexPattern = regexPattern
-      .replace(/\/\*\*\//g, '/(?:.*/)?')  // /**/ -> /(?:.*/)?
-      .replace(/\*\*/g, '.*')              // ** -> .*
-      .replace(/\*/g, '[^/]*');            // * -> [^/]*
-    
-    const regex = new RegExp(regexPattern);
+      .replace(new RegExp(`/${esc(DS_MID)}/`, 'g'), '/(?:.*/)?')
+      .replace(new RegExp(esc(DS_SRT), 'g'), '(?:.*/)?')
+      .replace(new RegExp(esc(DS_END), 'g'), '.*');
+
+    const regex = new RegExp(`^${regexPattern}$`);
     return regex.test(file);
   }
 }

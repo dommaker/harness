@@ -1,0 +1,66 @@
+# bugfix/fix - 修复 Bug
+#
+# 输入：
+#   - project_path: 项目路径
+#   - diagnosis: 诊断结果
+#   - bug_description: Bug 描述
+#
+# 输出：
+#   - fix_result: 修复结果
+
+id: bugfix/fix
+stage: fix
+name: 修复 Bug
+description: 根据诊断结果修复 Bug
+category: bugfix
+agent: codex
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  diagnosis:
+    type: object
+    description: 诊断结果
+    required: true
+  bug_description:
+    type: string
+    description: Bug 描述
+    required: true
+
+outputs:
+  - name: fix_result
+    type: object
+    description: 修复结果
+
+prompt: |
+  你是一个专业的 Bug 修复工程师。请根据诊断结果修复 Bug。
+  
+  **Bug 描述**: {{bug_description}}
+  
+  **诊断结果**:
+  ```json
+  {{diagnosis}}
+  ```
+  
+  **项目路径**: {{project_path}}
+  
+  **要求**：
+  1. 只修改必要的代码
+  2. 保持代码风格一致
+  3. 添加必要的注释说明修复原因
+  4. 不引入新问题
+  
+  **输出格式**（JSON）：
+  ```json
+  {
+    "files_modified": ["file1.ts"],
+    "changes_summary": "修改摘要",
+    "potential_side_effects": ["可能的副作用"],
+    "needs_test_update": true/false
+  }
+  ```
+
+temperature: 0.1
+timeout: 180  # 3 分钟

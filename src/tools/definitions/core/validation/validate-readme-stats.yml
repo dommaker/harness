@@ -1,0 +1,155 @@
+# validate-readme-stats.yml - README 统计一致性检查
+# ============================================================================
+# 能力类型: validation（工具型）
+# 执行方式: 纯脚本，检查统计数字
+# 用途: 验证 README 中的统计数据与实际文件数量一致
+# ============================================================================
+
+name: validate-readme-stats
+description: 检查 README 统计数据是否与实际文件数量一致
+category: validation
+version: 1.0.0
+
+# 铁律
+iron_law:
+  rule: "README STATS MUST REFLECT REALITY"
+  message: "README 中的统计数据必须与实际文件数量一致"
+
+# 输入
+input:
+  readme_path:
+    type: path
+    required: false
+    default: "README.md"
+    description: README 文件路径
+  
+  tools_dir:
+    type: path
+    required: false
+    default: "tools"
+    description: tools 目录路径
+  
+  steps_dir:
+    type: path
+    required: false
+    default: "steps"
+    description: steps 目录路径
+  
+  workflows_dir:
+    type: path
+    required: false
+    default: "workflows"
+    description: workflows 目录路径
+
+# 输出
+output:
+  actual_tools:
+    type: number
+    description: 实际 tools 数量
+  
+  actual_steps:
+    type: number
+    description: 实际 steps 数量
+  
+  actual_workflows:
+    type: number
+    description: 实际 workflows 数量
+  
+  readme_tools:
+    type: number
+    description: README 中记录的 tools 数量
+  
+  readme_steps:
+    type: number
+    description: README 中记录的 steps 数量
+  
+  readme_workflows:
+    type: number
+    description: README 中记录的 workflows 数量
+  
+  passed:
+    type: boolean
+    description: 是否全部一致
+
+# 执行脚本
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  README_PATH="{{readme_path}}"
+  TOOLS_DIR="{{tools_dir}}"
+  STEPS_DIR="{{steps_dir}}"
+  WORKFLOWS_DIR="{{workflows_dir}}"
+  
+  echo "🔍 检查 README 统计一致性"
+  echo "  README: $README_PATH"
+  echo ""
+  
+  # 计算实际数量
+  ACTUAL_TOOLS=$(find "$TOOLS_DIR" -name "*.yml" -o -name "*.yaml" 2>/dev/null | grep -v README | wc -l)
+  ACTUAL_STEPS=$(find "$STEPS_DIR" -name "*.yml" -o -name "*.yaml" 2>/dev/null | grep -v README | wc -l)
+  ACTUAL_WORKFLOWS=$(find "$WORKFLOWS_DIR" -name "*.yml" -o -name "*.yaml" 2>/dev/null | wc -l)
+  
+  echo "📊 实际统计:"
+  echo "  Tools: $ACTUAL_TOOLS"
+  echo "  Steps: $ACTUAL_STEPS"
+  echo "  Workflows: $ACTUAL_WORKFLOWS"
+  echo ""
+  
+  # 从 README 提取统计
+  # 格式: | **Tools** | 25 | ... |
+  README_TOOLS=$(grep -E "\*\*Tools\*\*" "$README_PATH" | grep -oE '\|[ ]*[0-9]+' | head -1 | grep -oE '[0-9]+' || echo "0")
+  README_STEPS=$(grep -E "\*\*Steps\*\*" "$README_PATH" | grep -oE '\|[ ]*[0-9]+' | head -1 | grep -oE '[0-9]+' || echo "0")
+  README_WORKFLOWS=$(grep -E "\*\*Workflows\*\*" "$README_PATH" | grep -oE '\|[ ]*[0-9]+' | head -1 | grep -oE '[0-9]+' || echo "0")
+  
+  echo "📝 README 统计:"
+  echo "  Tools: $README_TOOLS"
+  echo "  Steps: $README_STEPS"
+  echo "  Workflows: $README_WORKFLOWS"
+  echo ""
+  
+  # 对比
+  ERRORS=0
+  
+  echo "🔍 对比结果:"
+  
+  if [ "$ACTUAL_TOOLS" = "$README_TOOLS" ]; then
+    echo "  ✅ Tools: $ACTUAL_TOOLS = $README_TOOLS"
+  else
+    echo "  ❌ Tools: 实际=$ACTUAL_TOOLS, README=$README_TOOLS"
+    ERRORS=$((ERRORS + 1))
+  fi
+  
+  if [ "$ACTUAL_STEPS" = "$README_STEPS" ]; then
+    echo "  ✅ Steps: $ACTUAL_STEPS = $README_STEPS"
+  else
+    echo "  ❌ Steps: 实际=$ACTUAL_STEPS, README=$README_STEPS"
+    ERRORS=$((ERRORS + 1))
+  fi
+  
+  if [ "$ACTUAL_WORKFLOWS" = "$README_WORKFLOWS" ]; then
+    echo "  ✅ Workflows: $ACTUAL_WORKFLOWS = $README_WORKFLOWS"
+  else
+    echo "  ❌ Workflows: 实际=$ACTUAL_WORKFLOWS, README=$README_WORKFLOWS"
+    ERRORS=$((ERRORS + 1))
+  fi
+  
+  echo ""
+  
+  if [ $ERRORS -gt 0 ]; then
+    echo "================================"
+    echo "❌ 发现 $ERRORS 处不一致"
+    echo ""
+    echo "请更新 README.md 中的统计数据:"
+    echo ""
+    echo "| 层级 | 数量 |"
+    echo "|------|------|"
+    echo "| **Tools** | $ACTUAL_TOOLS |"
+    echo "| **Steps** | $ACTUAL_STEPS |"
+    echo "| **Workflows** | $ACTUAL_WORKFLOWS |"
+    echo "================================"
+    exit 1
+  fi
+  
+  echo "✅ README 统计数据与实际一致"
+  exit 0

@@ -1,0 +1,167 @@
+# browser-mcp-debug.yml - Chrome DevTools 高级调试能力
+name: browser-mcp-debug
+description: |
+  基于 Chrome DevTools Protocol 的高级浏览器调试能力，提供：
+  - 网络监控：捕获所有 HTTP 请求/响应，分析 API 调用
+  - 性能分析：Core Web Vitals、资源加载时间、渲染性能
+  - 内存检测：检测内存泄漏，分析堆增长趋势
+  - 安全审计：检查 HTTPS、CSP、混合内容等安全问题
+
+# 输入参数
+input:
+  url:
+    type: string
+    required: true
+    description: 要分析的页面 URL
+  
+  diagnostic_type:
+    type: string
+    required: false
+    default: "all"
+    enum: [network, performance, memory, security, all]
+    description: 诊断类型
+  
+  timeout:
+    type: number
+    required: false
+    default: 60000
+    description: 超时时间（毫秒）
+
+# 输出
+output:
+  network_analysis:
+    type: object
+    description: 网络分析结果
+    properties:
+      summary:
+        type: object
+        properties:
+          totalRequests: { type: number }
+          successfulResponses: { type: number }
+          failedRequests: { type: number }
+      slowRequests:
+        type: array
+        description: 最慢的 10 个请求
+      apiCalls:
+        type: array
+        description: API 调用列表
+  
+  performance_audit:
+    type: object
+    description: 性能审计结果
+    properties:
+      webVitals:
+        type: object
+        properties:
+          lcp: { type: number, description: "Largest Contentful Paint (ms)" }
+          fcp: { type: number, description: "First Contentful Paint (ms)" }
+          cls: { type: number, description: "Cumulative Layout Shift" }
+          fid: { type: number, description: "First Input Delay (ms)" }
+      metrics:
+        type: object
+        description: 浏览器性能指标
+      resources:
+        type: object
+        description: 资源加载分析
+  
+  memory_analysis:
+    type: object
+    description: 内存分析结果
+    properties:
+      summary:
+        type: object
+        properties:
+          initialHeapMB: { type: number }
+          finalHeapMB: { type: number }
+          growthPercent: { type: number }
+          potentialLeak: { type: boolean }
+      recommendation:
+        type: string
+  
+  security_audit:
+    type: object
+    description: 安全审计结果
+    properties:
+      summary:
+        type: object
+        properties:
+          totalIssues: { type: number }
+          high: { type: number }
+          medium: { type: number }
+          low: { type: number }
+      issues:
+        type: array
+        description: 发现的安全问题
+      secure:
+        type: boolean
+
+# 执行配置
+timeout: 600  # 10 分钟
+agent: codex
+
+# 执行脚本
+handler: script
+script: ./browser-mcp-debug.sh
+
+# 示例用法
+examples:
+  - name: 全量诊断
+    input:
+      url: https://example.com
+      diagnostic_type: all
+  
+  - name: 网络监控
+    input:
+      url: https://api.example.com
+      diagnostic_type: network
+  
+  - name: 性能分析
+    input:
+      url: https://example.com/dashboard
+      diagnostic_type: performance
+  
+  - name: 内存泄漏检测
+    input:
+      url: https://example.com/spa
+      diagnostic_type: memory
+  
+  - name: 安全审计
+    input:
+      url: https://example.com/login
+      diagnostic_type: security
+
+# 与 Puppeteer 的区别
+comparison:
+  puppeteer:
+    strengths:
+      - 简单易用，快速上手
+      - 适合基础 E2E 测试
+      - 稳定可靠，生态成熟
+    limitations:
+      - 需要自己封装 CDP 功能
+      - 调试能力有限
+  
+  browser_mcp_debug:
+    strengths:
+      - 直接暴露 CDP 全部能力
+      - 专业的性能/安全分析
+      - 内存泄漏检测
+      - 详细的网络监控
+    best_for:
+      - 性能优化
+      - 安全审计
+      - 内存问题排查
+      - 深度调试
+
+# 标签
+tags:
+  - browser
+  - debugging
+  - performance
+  - security
+  - memory
+  - cdp
+  - chrome-devtools
+
+# 分类
+category: debugging

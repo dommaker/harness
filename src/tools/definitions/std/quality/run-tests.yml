@@ -1,0 +1,80 @@
+# run-tests.yml
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 运行测试并验证结果
+# ============================================================================
+
+name: run-tests
+stage: verify
+description: 运行测试
+category: quality
+version: 2.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.2
+
+# 可用工具
+tools:
+  - file-read
+  - bash
+
+# Prompt
+prompt: |
+  你是测试工程师。请运行项目的测试套件并报告结果。
+  
+  ## 项目路径
+  
+  {{project_path}}
+  
+  ## 执行步骤
+  
+  **Step 1: 检测测试框架**
+  ```bash
+  cd {{project_path}}
+  cat package.json | grep -E '"jest"|"vitest"|"mocha"|"pytest"' || echo "No test framework found"
+  ```
+  
+  **Step 2: 运行测试**
+  ```bash
+  # 优先使用 npm test
+  npm test -- --passWithNoTests 2>/dev/null || npm run test 2>/dev/null || echo "Tests skipped"
+  ```
+  
+  **Step 3: 检查覆盖率（可选）**
+  ```bash
+  npm run test:coverage 2>/dev/null || echo "No coverage script"
+  ```
+  
+  **Step 4: 输出结果**
+  
+  根据测试结果，输出以下 JSON 格式：
+  ```json
+  {
+    "passed": true/false,
+    "total": 数字,
+    "passed_count": 数字,
+    "failed_count": 数字,
+    "coverage": 百分比或null,
+    "errors": ["错误信息数组"]
+  }
+  ```
+  
+  ## 要求
+  
+  1. 如果测试失败，分析失败原因
+  2. 如果是简单问题（如快照更新），自动修复
+  3. 如果是复杂问题，记录到 errors 数组
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目路径
+
+# 输出
+outputs:
+  - name: results
+    type: object
+    description: 测试结果

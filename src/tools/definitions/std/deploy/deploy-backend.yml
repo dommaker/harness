@@ -1,0 +1,37 @@
+# deploy-backend.yml
+name: deploy-backend
+stage: deploy
+description: 后端部署
+category: deploy
+version: 1.0.0
+
+inputs:
+  - name: code
+    type: object
+    description: 后端代码
+  
+  - name: platform
+    type: string
+    default: "docker"
+    description: 部署平台（docker/k8s/serverless）
+  
+  - name: env
+    type: string
+    default: "production"
+    description: 环境（production/staging）
+
+outputs:
+  - name: deploy-url
+    type: string
+    description: 部署 URL
+  
+  - name: container-id
+    type: string
+    description: 容器 ID（Docker）
+
+execute:
+  type: tool
+  tool: deploy-backend
+  input:
+    platform: ${{inputs.platform}}
+    env: ${{inputs.env}}

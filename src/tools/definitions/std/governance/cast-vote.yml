@@ -1,0 +1,129 @@
+# cast-vote.yml - 投票步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 内置处理器
+# 用途: 角色对进化建议/审计报告进行投票
+# 核心理念: 每人一票，Owner 有否决权
+# ============================================================================
+
+name: cast-vote
+stage: govern
+description: 角色对进化建议/审计报告进行投票
+category: governance
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: governance/cast-vote
+
+# 输入定义
+inputs:
+  voting_session_id:
+    type: string
+    description: 投票会话 ID
+    required: true
+  
+  voter_id:
+    type: string
+    description: 投票者 ID（角色 ID 或 'owner'）
+    required: true
+  
+  voter_type:
+    type: string
+    description: 投票者类型
+    enum: [role, user]
+    default: role
+  
+  vote:
+    type: string
+    description: 投票选择
+    enum: [approve, reject, abstain]
+    required: true
+  
+  reason:
+    type: string
+    description: 投票理由
+    required: false
+  
+  weight:
+    type: string
+    description: 投票权重
+    enum: [normal, heavy, veto]
+    default: normal
+
+# 投票规则
+voting_rules:
+  # 权重映射
+  weight_values:
+    normal: 1
+    heavy: 2
+    veto: 999999  # 否决权视为无限权重
+  
+  # 默认权重分配
+  default_weights:
+    auditor: normal
+    architect: normal
+    decider: normal
+    owner: veto
+  
+  # 禁止行为
+  forbidden:
+    - 不能投自己的票（角色不能对自己相关的建议投票）
+    - 不能重复投票
+    - 不能修改已投的票
+
+# 输出定义
+outputs:
+  - name: vote_recorded
+    type: boolean
+    description: 投票是否成功记录
+  
+  - name: vote_id
+    type: string
+    description: 投票记录 ID
+  
+  - name: session_status
+    type: string
+    description: 投票会话当前状态
+  
+  - name: current_statistics
+    type: object
+    description: 当前投票统计
+    properties:
+      approve_count:
+        type: number
+      reject_count:
+        type: number
+      abstain_count:
+        type: number
+      total_voters:
+        type: number
+      remaining_voters:
+        type: number
+
+# 错误处理
+errors:
+  VOTER_NOT_PARTICIPANT:
+    message: "投票者不在参与者列表中"
+    severity: error
+  
+  ALREADY_VOTED:
+    message: "该投票者已投过票"
+    severity: error
+  
+  SESSION_CLOSED:
+    message: "投票会话已关闭"
+    severity: error
+  
+  CONFLICT_OF_INTEREST:
+    message: "投票者与投票事项存在利益冲突"
+    severity: error
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - voting
+    - decision-making

@@ -14,6 +14,7 @@ import type {
   TraceAnomaly,
   TraceSummary,
 } from '../types/trace';
+import type { LLMAdapter } from '../llm/types';
 
 /**
  * 诊断结果
@@ -108,8 +109,9 @@ export class ConstraintDoctor {
   private config: ConstraintDoctorConfig;
   private traces: ExecutionTrace[];
   private summary: TraceSummary | null;
+  private llm: LLMAdapter | null;
 
-  constructor(config?: ConstraintDoctorConfig) {
+  constructor(config?: ConstraintDoctorConfig, llm?: LLMAdapter) {
     this.config = {
       enabled: false,
       maxTracesInPrompt: 20,
@@ -118,6 +120,7 @@ export class ConstraintDoctor {
     };
     this.traces = [];
     this.summary = null;
+    this.llm = llm || null;
   }
 
   /**
@@ -140,11 +143,14 @@ export class ConstraintDoctor {
     // 基于规则的初步诊断（不消耗 Token）
     const ruleBasedDiagnosis = this.ruleBasedDiagnose(anomaly, relevantTraces);
 
-    // 如果 Agent 启用，可以进一步分析（预留）
-    if (this.config.enabled && this.config.agentType) {
-      // TODO: 调用 Agent 进行深度分析
-      // const agentDiagnosis = await this.agentDiagnose(anomaly, relevantTraces);
-      // return agentDiagnosis;
+    // 如果 LLM 可用，进行深度分析
+    if (this.config.enabled && this.llm) {
+      try {
+        return await this.agentDiagnose(anomaly, relevantTraces, ruleBasedDiagnosis);
+      } catch {
+        // LLM 调用失败，降级到规则诊断
+        return ruleBasedDiagnosis;
+      }
     }
 
     return ruleBasedDiagnosis;
@@ -303,8 +309,87 @@ export class ConstraintDoctor {
   }
 
   /**
+   * LLM 深度诊断
+   *
+   * 将异常和相关 traces 构造为 prompt，调用 LLM 分析根因
+   * 成本：~2000 Token/次
+   */
+  private async agentDiagnose(
+    anomaly: TraceAnomaly,
+    traces: ExecutionTrace[],
+    fallback: Diagnosis
+  ): Promise<Diagnosis> {
+    const maxTraces = this.config.maxTracesInPrompt || 20;
+    const traceSummary = traces.slice(0, maxTraces).map(t =>
+      `[${t.result}] ${t.constraintId} | ${t.operation || 'unknown'} | ${t.timestamp ? new Date(t.timestamp).toISOString() : 'no-ts'}`
+    ).join('\n');
+
+    const prompt = `你是约束系统诊断专家。分析以下异常并给出诊断结果。
+
+## 异常信息
+- 约束 ID: ${anomaly.constraintId}
+- 异常类型: ${anomaly.type}
+- 约束层级: ${anomaly.level}
+- 当前数据: ${JSON.stringify(anomaly.data)}
+
+## 相关 Traces（最近 ${Math.min(traces.length, maxTraces)} 条）
+${traceSummary || '无相关 traces'}
+
+## 要求
+以 JSON 格式返回诊断结果，包含以下字段：
+{
+  "rootCause": { "primary": "主要原因", "secondary": ["次要原因1", "次要原因2"] },
+  "impact": { "severity": "low|medium|high", "scope": "single_project|multiple_projects|team", "userImpact": "用户影响描述" },
+  "recommendations": [{ "type": "add_exception|adjust_threshold|modify_constraint|user_training", "content": "建议内容", "expectedOutcome": "预期效果", "implementationCost": "low|medium|high" }],
+  "needsChange": true/false,
+  "urgency": "low|medium|high"
+}
+
+只返回 JSON，不要其他内容。`;
+
+    const response = await this.llm!.complete(prompt, {
+      maxTokens: 1000,
+      temperature: 0.3,
+    });
+
+    // 解析 LLM 响应
+    const parsed = this.parseAgentResponse(response);
+
+    return {
+      ...fallback,
+      rootCause: {
+        primary: parsed.rootCause?.primary || fallback.rootCause.primary,
+        secondary: parsed.rootCause?.secondary || fallback.rootCause.secondary,
+        evidence: fallback.rootCause.evidence,
+      },
+      impact: {
+        severity: parsed.impact?.severity || fallback.impact.severity,
+        scope: parsed.impact?.scope || fallback.impact.scope,
+        userImpact: parsed.impact?.userImpact || fallback.impact.userImpact,
+      },
+      recommendations: parsed.recommendations?.length ? parsed.recommendations : fallback.recommendations,
+      needsChange: parsed.needsChange ?? fallback.needsChange,
+      urgency: parsed.urgency || fallback.urgency,
+    };
+  }
+
+  /**
+   * 解析 LLM 返回的 JSON 诊断结果
+   */
+  private parseAgentResponse(response: string): Partial<Diagnosis> {
+    try {
+      // 提取 JSON（可能被 markdown 代码块包裹）
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return {};
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * 过滤相关 traces
- *
+   *
    * 只保留与异常相关的 traces，减少 prompt 内容
    */
   private filterRelevantTraces(anomaly: TraceAnomaly): ExecutionTrace[] {
@@ -409,6 +494,6 @@ export class ConstraintDoctor {
 /**
  * 创建诊断器
  */
-export function createDoctor(config?: ConstraintDoctorConfig): ConstraintDoctor {
-  return new ConstraintDoctor(config);
+export function createDoctor(config?: ConstraintDoctorConfig, llm?: LLMAdapter): ConstraintDoctor {
+  return new ConstraintDoctor(config, llm);
 }

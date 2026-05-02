@@ -1,0 +1,51 @@
+# patch/execute - 执行 Patch 修改
+#
+# 输入：
+#   - project_path: 项目路径
+#   - description: 修改描述
+#
+# 输出：
+#   - result: 修改结果摘要
+
+id: patch/execute
+stage: fix
+name: 执行 Patch
+description: 执行简单的配置/文案修改
+category: patch
+agent: codex
+
+# 输入定义
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  description:
+    type: string
+    description: 修改描述
+    required: true
+
+# 输出定义
+outputs:
+  - name: result
+    type: string
+    description: 修改结果摘要
+
+# Agent Prompt
+prompt: |
+  你是一个极简修改助手。请执行以下修改：
+  
+  **修改描述**: {{description}}
+  
+  **要求**：
+  1. 只修改必要的文件
+  2. 不修改逻辑代码
+  3. 修改完成后简要说明改动
+  
+  **项目路径**: {{project_path}}
+  
+  请直接执行修改，不需要询问确认。
+
+# 配置
+temperature: 0.1
+timeout: 120  # 2 分钟

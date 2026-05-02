@@ -291,26 +291,142 @@ describe('ArchitectureConstraintEngine', () => {
   });
 
   describe('module-boundary 规则', () => {
-    it('应该检测跨模块访问', async () => {
+    it('无 boundaries 配置应该通过', async () => {
       const rules: ArchitectureRule[] = [
         {
           id: 'no-cross-module',
           type: 'module-boundary',
           severity: 'error',
-          message: '禁止跨模块访问',
         },
       ];
 
       const engine = new ArchitectureConstraintEngine(rules);
       const context: ArchitectureContext = {
-        files: ['packages/core/src/index.ts'],
-        diff: '',
+        files: ['src/core/index.ts'],
+        diff: '+++ b/src/core/index.ts\n+import { foo } from "../cli/bar"',
       };
 
       const result = await engine.check(context);
+      expect(result.passed).toBe(true);
+    });
 
-      // module-boundary 需要额外配置才能检测，这里只验证不崩溃
-      expect(result).toBeDefined();
+    it('应该检测跨模块导入', async () => {
+      const rules: ArchitectureRule[] = [
+        {
+          id: 'no-core-to-cli',
+          type: 'module-boundary',
+          severity: 'error',
+          boundaries: [
+            { from: 'src/core/**', denyImport: 'src/cli/**' },
+          ],
+        },
+      ];
+
+      const engine = new ArchitectureConstraintEngine(rules);
+      const context: ArchitectureContext = {
+        files: ['src/core/index.ts'],
+        diff: '+++ b/src/core/index.ts\n+import { bar } from "../cli/bar"',
+      };
+
+      const result = await engine.check(context);
+      expect(result.passed).toBe(false);
+      expect(result.violations.length).toBe(1);
+      expect(result.violations[0].ruleId).toBe('no-core-to-cli');
+    });
+
+    it('合规导入不应该报错', async () => {
+      const rules: ArchitectureRule[] = [
+        {
+          id: 'no-core-to-cli',
+          type: 'module-boundary',
+          severity: 'error',
+          boundaries: [
+            { from: 'src/core/**', denyImport: 'src/cli/**' },
+          ],
+        },
+      ];
+
+      const engine = new ArchitectureConstraintEngine(rules);
+      const context: ArchitectureContext = {
+        files: ['src/core/index.ts'],
+        diff: '+++ b/src/core/index.ts\n+import { util } from "./util"',
+      };
+
+      const result = await engine.check(context);
+      expect(result.passed).toBe(true);
+    });
+
+    it('外部依赖导入应该跳过', async () => {
+      const rules: ArchitectureRule[] = [
+        {
+          id: 'no-core-to-cli',
+          type: 'module-boundary',
+          severity: 'error',
+          boundaries: [
+            { from: 'src/core/**', denyImport: 'src/cli/**' },
+          ],
+        },
+      ];
+
+      const engine = new ArchitectureConstraintEngine(rules);
+      const context: ArchitectureContext = {
+        files: ['src/core/index.ts'],
+        diff: '+++ b/src/core/index.ts\n+import chalk from "chalk"',
+      };
+
+      const result = await engine.check(context);
+      expect(result.passed).toBe(true);
+    });
+
+    it('多条边界规则应该全部检测', async () => {
+      const rules: ArchitectureRule[] = [
+        {
+          id: 'boundary-rules',
+          type: 'module-boundary',
+          severity: 'error',
+          boundaries: [
+            { from: 'src/core/**', denyImport: 'src/cli/**' },
+            { from: 'src/gates/**', denyImport: 'src/core/session/**' },
+          ],
+        },
+      ];
+
+      const engine = new ArchitectureConstraintEngine(rules);
+      const context: ArchitectureContext = {
+        files: ['src/core/index.ts', 'src/gates/review.ts'],
+        diff: [
+          '+++ b/src/core/index.ts',
+          '+import { cmd } from "../cli/command"',
+          '+++ b/src/gates/review.ts',
+          '+import { session } from "../core/session/startup"',
+        ].join('\n'),
+      };
+
+      const result = await engine.check(context);
+      expect(result.violations.length).toBe(2);
+    });
+
+    it('只检查变更文件中的 import', async () => {
+      const rules: ArchitectureRule[] = [
+        {
+          id: 'no-core-to-cli',
+          type: 'module-boundary',
+          severity: 'error',
+          boundaries: [
+            { from: 'src/core/**', denyImport: 'src/cli/**' },
+          ],
+        },
+      ];
+
+      const engine = new ArchitectureConstraintEngine(rules);
+      // 变更文件是 src/other.ts（不在 from 范围内），diff 中有 src/core 的 import
+      const context: ArchitectureContext = {
+        files: ['src/other.ts'],
+        diff: '+++ b/src/other.ts\n+import { cmd } from "../cli/command"',
+      };
+
+      const result = await engine.check(context);
+      expect(result.passed).toBe(true);
     });
   });
 

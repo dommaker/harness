@@ -1,0 +1,73 @@
+# build.yml - Docker 构建
+# ============================================================================
+# 能力类型: docker 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: docker-build
+description: 构建 Docker 镜像
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 项目路径
+    
+  image_name:
+    type: string
+    required: false
+    description: 镜像名称（可选，默认使用目录名）
+    default: ""
+    
+  tag:
+    type: string
+    required: false
+    description: 镜像标签（可选，默认 latest）
+    default: "latest"
+
+output:
+  image_id:
+    type: string
+    description: 构建的镜像 ID
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  IMAGE_NAME="{{image_name}}"
+  TAG="{{tag}}"
+  
+  cd "$REPO_PATH"
+  
+  # 自动确定镜像名
+  if [ -z "$IMAGE_NAME" ]; then
+    IMAGE_NAME=$(basename "$REPO_PATH")
+  fi
+  
+  FULL_IMAGE="$IMAGE_NAME:$TAG"
+  
+  echo "🐳 构建 Docker 镜像..."
+  echo "  路径: $REPO_PATH"
+  echo "  镜像: $FULL_IMAGE"
+  echo ""
+  
+  # 检查 Dockerfile
+  if [ ! -f "Dockerfile" ]; then
+    echo "❌ 未找到 Dockerfile"
+    echo "IMAGE_ID=none"
+    exit 1
+  fi
+  
+  # 构建镜像
+  if docker build -t "$FULL_IMAGE" . 2>&1; then
+    IMAGE_ID=$(docker images -q "$FULL_IMAGE" | head -1)
+    echo ""
+    echo "✅ 镜像构建成功: $FULL_IMAGE"
+    echo "IMAGE_ID=$IMAGE_ID"
+  else
+    echo ""
+    echo "❌ 镜像构建失败"
+    echo "IMAGE_ID=none"
+    exit 1
+  fi

@@ -1,0 +1,81 @@
+# run.yml - Docker 运行
+# ============================================================================
+# 能力类型: docker 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: docker-run
+description: 运行 Docker 容器
+
+input:
+  image_name:
+    type: string
+    required: true
+    description: 镜像名称
+    
+  container_name:
+    type: string
+    required: false
+    description: 容器名称（可选）
+    default: ""
+    
+  ports:
+    type: string
+    required: false
+    description: 端口映射（可选，如 "8080:80"）
+    default: ""
+    
+  env_vars:
+    type: string
+    required: false
+    description: 环境变量（可选，如 "KEY=value"）
+    default: ""
+
+output:
+  container_id:
+    type: string
+    description: 容器 ID
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  IMAGE_NAME="{{image_name}}"
+  CONTAINER_NAME="{{container_name}}"
+  PORTS="{{ports}}"
+  ENV_VARS="{{env_vars}}"
+  
+  echo "🐳 运行 Docker 容器..."
+  echo "  镜像: $IMAGE_NAME"
+  
+  # 构建参数
+  RUN_ARGS=""
+  
+  if [ -n "$CONTAINER_NAME" ]; then
+    RUN_ARGS="$RUN_ARGS --name $CONTAINER_NAME"
+    echo "  容器名: $CONTAINER_NAME"
+  fi
+  
+  if [ -n "$PORTS" ]; then
+    RUN_ARGS="$RUN_ARGS -p $PORTS"
+    echo "  端口: $PORTS"
+  fi
+  
+  if [ -n "$ENV_VARS" ]; then
+    RUN_ARGS="$RUN_ARGS -e $ENV_VARS"
+    echo "  环境变量: $ENV_VARS"
+  fi
+  
+  echo ""
+  
+  # 运行容器
+  CONTAINER_ID=$(docker run -d $RUN_ARGS "$IMAGE_NAME" 2>&1)
+  
+  if [ $? -eq 0 ]; then
+    echo "✅ 容器启动成功"
+    echo "CONTAINER_ID=$CONTAINER_ID"
+  else
+    echo "❌ 容器启动失败"
+    echo "CONTAINER_ID=none"
+    exit 1
+  fi

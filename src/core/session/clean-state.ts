@@ -5,6 +5,7 @@
  */
 
 import { execAsync } from '../../utils/exec';
+import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -96,7 +97,10 @@ export class CleanStateManager {
         ? `[${sessionInfo.task.id}] ${sessionInfo.task.name || sessionInfo.task.id}`
         : `[session] ${sessionInfo.workflowId}`;
       
-      await execAsync(`git commit -m "${msg}"`, { cwd: workDir });
+      // 使用 execFile 避免 shell 注入
+      const { execFile: execFileCb } = await import('child_process');
+      const execFileAsync = promisify(execFileCb);
+      await execFileAsync('git', ['commit', '-m', msg], { cwd: workDir });
       return files;
     } catch { 
       return []; 

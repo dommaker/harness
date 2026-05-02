@@ -30,6 +30,15 @@ const {
   review,
   reviewStatus,
   executeCommand,
+  syncDocs,
+  knowledgeList,
+  knowledgeSearch,
+  knowledgeImport,
+  knowledgeDecay,
+  knowledgeStats,
+  failureList,
+  failureStats,
+  failureClear,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -102,6 +111,7 @@ program
   .command('init')
   .description('初始化项目的 harness 配置')
   .option('-p, --preset <preset>', '预设名称 (strict/standard/relaxed)', 'standard')
+  .option('-g, --governance <level>', '治理级别 (minimal/standard/strict)')
   .option('-t, --type <type>', '项目类型 (node-api/nextjs-app/python-api/custom)')
   .option('--project-path <path>', '项目路径')
   .option('--no-git-hooks', '不创建 Git hooks')
@@ -310,6 +320,108 @@ program
   .option('--strict', '严格模式（warn 也阻止）')
   .action(async (cmd, options) => {
     await executeCommand(cmd, options);
+  });
+
+// ========================================
+// harness sync-docs
+// ========================================
+program
+  .command('sync-docs')
+  .description('同步项目文档（CAPABILITIES.md、CONTEXT.md、CHANGELOG.md）')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('-c, --check', '只检查不修改（CI 模式）', false)
+  .option('--changelog', '生成 CHANGELOG 条目', false)
+  .option('--json', '输出 JSON 格式（供 LLM 消费）', false)
+  .action(async (options) => {
+    const ok = await syncDocs(options);
+    if (!ok && options.check) {
+      process.exit(1);
+    }
+  });
+
+// ========================================
+// harness knowledge
+// ========================================
+program
+  .command('knowledge [subcommand] [arg]')
+  .description('知识库管理（list/search/import/decay/stats）')
+  .alias('kb')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--type <types>', '按类型过滤（逗号分隔）')
+  .option('--maturity <levels>', '按成熟度过滤（逗号分隔）')
+  .option('--tag <tags>', '按标签过滤（逗号分隔）')
+  .option('--sources <sources>', '导入源（逗号分隔: code,git,docs）')
+  .option('--limit <n>', '结果数量限制', '20')
+  .option('--reset', '重置导入状态', false)
+  .option('--json', 'JSON 格式输出', false)
+  .action(async (subcommand, arg, options) => {
+    const opts = { projectPath: options.projectPath, json: options.json };
+    switch (subcommand) {
+      case 'list':
+      case 'ls':
+        await knowledgeList({ ...opts, type: options.type, maturity: options.maturity, tag: options.tag });
+        break;
+      case 'search':
+      case 's':
+        if (!arg) { console.error('请提供搜索关键词'); process.exit(1); }
+        await knowledgeSearch(arg, { ...opts, limit: parseInt(options.limit, 10) });
+        break;
+      case 'import':
+      case 'i':
+        await knowledgeImport({ ...opts, sources: options.sources, reset: options.reset });
+        break;
+      case 'decay':
+      case 'd':
+        await knowledgeDecay(opts);
+        break;
+      case 'stats':
+      case 'st':
+        await knowledgeStats(opts);
+        break;
+      default:
+        // 无子命令时显示帮助
+        if (!subcommand) {
+          program.commands.find(c => c.name() === 'knowledge').help();
+        } else {
+          console.error(`未知子命令: ${subcommand}`);
+          process.exit(1);
+        }
+    }
+  });
+
+// ========================================
+// harness failure
+// ========================================
+program
+  .command('failure [subcommand]')
+  .description('失败记录管理（list/stats/clear）')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--type <type>', '按错误类型过滤')
+  .option('--level <level>', '按失败等级过滤 (L1/L2/L3/L4)')
+  .option('--limit <n>', '结果数量限制', '20')
+  .option('--json', 'JSON 格式输出', false)
+  .action(async (subcommand, options) => {
+    const opts = { projectPath: options.projectPath, json: options.json };
+    switch (subcommand) {
+      case 'list':
+      case 'ls':
+        await failureList({ ...opts, limit: parseInt(options.limit, 10), type: options.type, level: options.level });
+        break;
+      case 'stats':
+      case 'st':
+        await failureStats(opts);
+        break;
+      case 'clear':
+        await failureClear(opts);
+        break;
+      default:
+        if (!subcommand) {
+          program.commands.find(c => c.name() === 'failure').help();
+        } else {
+          console.error(`未知子命令: ${subcommand}`);
+          process.exit(1);
+        }
+    }
   });
 
 // 解析命令行参数

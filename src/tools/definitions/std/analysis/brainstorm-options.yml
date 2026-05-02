@@ -1,0 +1,106 @@
+# brainstorm-options.yml
+name: brainstorm-options
+stage: plan
+description: 方案发散，当需求不明确或需要探索时提供多个候选方案
+category: analysis
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.7
+
+# 可用工具
+tools:
+  - file-read
+  - web-search
+
+# Prompt
+prompt: |
+  你是一个方案策划专家。针对用户的问题，发散思考多个候选方案，帮助用户做出决策。
+  
+  ## 用户问题
+  
+  {{problem}}
+  
+  {{#if context}}
+  ## 已知上下文
+  
+  ```json
+  {{{context}}}
+  ```
+  
+  结合上下文，确保方案符合约束条件。
+  {{/if}}
+  
+  ## 任务
+  
+  输出 **候选方案列表**，格式如下：
+  
+  ```markdown
+  # 方案对比
+  
+  ## 问题分析
+  
+  <问题的核心挑战>
+  
+  ## 候选方案
+  
+  ### 方案 A: <方案名称>
+  
+  | 维度 | 说明 |
+  |------|------|
+  | 核心思路 | <一句话描述> |
+  | 实现复杂度 | ⭐~⭐⭐⭐⭐⭐ |
+  | 时间成本 | <预估时间> |
+  | 优点 | <主要优点> |
+  | 缺点 | <主要缺点> |
+  | 适用场景 | <最适合什么情况> |
+  
+  ### 方案 B: <方案名称>
+  
+  （同上格式）
+  
+  ### 方案 C: <方案名称>（可选）
+  
+  （同上格式）
+  
+  ## 推荐方案
+  
+  **推荐: 方案 X**
+  
+  理由:
+  - <推荐理由 1>
+  - <推荐理由 2>
+  
+  ## 决策点
+  
+  用户需要确认以下决策点：
+  1. <决策点>
+  2. <决策点>
+  ```
+  
+  ## 原则
+  
+  1. 提供 2-3 个方案，不多不少
+  2. 每个方案要具体可行，不是空泛概念
+  3. 明确对比维度，便于决策
+  4. 给出推荐，但保留用户选择权
+  5. 列出决策点，引导用户确认
+
+# 输入参数
+inputs:
+  - name: problem
+    type: string
+    required: true
+    description: 待解决的问题
+  
+  - name: context
+    type: object
+    required: false
+    description: 上下文信息（项目配置、技术约束、历史决策）
+
+# 输出
+outputs:
+  - name: options.md
+    type: content
+    description: 候选方案列表

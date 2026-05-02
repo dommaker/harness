@@ -20,9 +20,9 @@ npm run lint           # ESLint on src/
 
 ### Three-Tier Constraint System
 
-Constraints are defined in `src/core/constraints/definitions.ts` (16 total):
-- **Iron Laws** (7) — severity: error. Violation throws `ConstraintViolationError`, blocks execution.
-- **Guidelines** (9) — severity: warning. Records warning, allows continuation.
+Constraints are defined in `src/core/constraints/definitions.ts` (23 total):
+- **Iron Laws** (8) — severity: error. Violation throws `ConstraintViolationError`, blocks execution.
+- **Guidelines** (13) — severity: warning. Records warning, allows continuation. Each has exception flags mapped via `EXCEPTION_FIELD_MAP` in `checker.ts`.
 - **Tips** (2) — severity: info. Informational only.
 
 Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relaxed` enables only Iron Laws.
@@ -31,6 +31,8 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 
 - `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context
 - `ConstraintInterceptor` (`src/core/constraints/interceptor.ts`) — registers enforcement executors, intercepts operations
+- `ConstraintRegistry` (`src/constraints/registry.ts`) — layered constraint registry with deprecation lifecycle
+- `ConstraintLifecycleRunner` (`src/constraints/lifecycle-runner.ts`) — executes evolver proposals against the registry (degrade/rollback/add exception)
 - `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL
 
 ### Key Subsystems
@@ -42,9 +44,9 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/monitoring/` | Trace collection/analysis, performance monitoring, constraint diagnostics, constraint evolution proposals |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
 | `src/context/` | Progressive context loading with worker pool, token budget management |
-| `src/architecture/` | Architecture-level constraint checking, cross-project dependency checking |
+| `src/architecture/` | Architecture-level constraint checking, cross-project interface contract checking (API sync, type consistency, breaking changes, doc-code consistency) |
 | `src/spec/` | Spec annotation validation in code |
-| `src/cli/commands/` | 14 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command) |
+| `src/cli/commands/` | 17 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure) |
 
 ### Entry Points
 

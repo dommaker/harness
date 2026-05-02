@@ -1,0 +1,262 @@
+# review-spec-approval.yml - 关键变更双签审批
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 工作流编排（等待外部审批）
+# 用途: 关键变更（架构/API/数据模型）的双签审批
+# 审批人: 架构师 + 项目负责人
+# ============================================================================
+# 与 AS-048 联动：动态获取项目负责人
+# 与 spec-review-service.ts 联动：双签审批逻辑
+# ============================================================================
+
+name: review-spec-approval
+stage: govern
+description: 关键变更双签审批（架构师 + 项目负责人）
+category: governance
+version: 1.0.0
+
+# 执行方式：编排步骤（非 Agent）
+type: orchestration
+
+# 输入定义
+inputs:
+  changes:
+    type: array
+    description: Spec 变更列表
+    required: true
+    items:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [architecture, api, data-model, workflow, step, skill, other]
+          description: 变更类型
+        file:
+          type: string
+          description: 变更文件路径
+        description:
+          type: string
+          description: 变更描述
+        impact:
+          type: string
+          enum: [high, medium, low]
+          description: 影响级别
+        diff:
+          type: string
+          description: 变更差异
+  
+  workflow_id:
+    type: string
+    description: 关联的工作流 ID
+    required: false
+  
+  title:
+    type: string
+    description: 审查标题
+    required: true
+  
+  description:
+    type: string
+    description: 审查描述
+    required: false
+  
+  company_id:
+    type: string
+    description: 公司 ID（用于获取项目负责人）
+    required: false
+    default: "default-company"
+  
+  requested_by:
+    type: string
+    description: 请求人 ID
+    required: false
+
+# 配置
+config:
+  # 审批超时（默认 24 小时）
+  approval_timeout_ms: 86400000
+  
+  # 关键变更类型（需要双签）
+  critical_change_types:
+    - architecture
+    - api
+    - data-model
+  
+  # 高影响级别（需要审批）
+  high_impact_levels:
+    - high
+
+# 执行步骤
+steps:
+  # Step 1: 分析变更
+  - id: analyze_changes
+    name: 分析变更
+    action: call
+    service: spec-review-service
+    method: analyzeChanges
+    input:
+      changes: ${{ inputs.changes }}
+    output: analysis_result
+  
+  # Step 2: 判断是否需要审批
+  - id: check_required
+    name: 检查是否需要审批
+    action: condition
+    condition: ${{ steps.analyze_changes.output.required }}
+    on_true: create_review
+    on_false: skip_review
+  
+  # Step 3: 创建审查（分支：需要审批）
+  - id: create_review
+    name: 创建审查请求
+    action: call
+    service: spec-review-service
+    method: createReview
+    input:
+      workflowId: ${{ inputs.workflow_id }}
+      title: ${{ inputs.title }}
+      description: ${{ inputs.description }}
+      changes: ${{ inputs.changes }}
+      requestedBy: ${{ inputs.requested_by }}
+    output: review
+  
+  # Step 4: 等待审批（双签）
+  - id: wait_approval
+    name: 等待双签审批
+    action: wait
+    event: spec-review.approved
+    filter:
+      reviewId: ${{ steps.create_review.output.review.id }}
+    timeout_ms: ${{ config.approval_timeout_ms }}
+    on_timeout: approval_timeout
+    output: approval_result
+  
+  # Step 5: 检查审批结果
+  - id: check_approval
+    name: 检查审批结果
+    action: condition
+    condition: ${{ steps.wait_approval.output.status == 'approved' }}
+    on_true: approval_success
+    on_false: approval_rejected
+  
+  # 分支：审批通过
+  - id: approval_success
+    name: 审批通过
+    action: emit
+    event: spec-review.completed
+    data:
+      reviewId: ${{ steps.create_review.output.review.id }}
+      status: approved
+      approvals: ${{ steps.wait_approval.output.approvals }}
+  
+  # 分支：审批拒绝
+  - id: approval_rejected
+    name: 审批拒绝
+    action: emit
+    event: spec-review.completed
+    data:
+      reviewId: ${{ steps.create_review.output.review.id }}
+      status: rejected
+      reason: ${{ steps.wait_approval.output.rejection_reason }}
+  
+  # 分支：无需审批
+  - id: skip_review
+    name: 无需审批
+    action: emit
+    event: spec-review.completed
+    data:
+      status: not-required
+      reason: ${{ steps.analyze_changes.output.reason }}
+  
+  # 分支：审批超时
+  - id: approval_timeout
+    name: 审批超时
+    action: emit
+    event: spec-review.timeout
+    data:
+      reviewId: ${{ steps.create_review.output.review.id }}
+      status: timeout
+    then:
+      action: fail
+      message: "审批超时，请重新提交"
+
+# 输出定义
+outputs:
+  status:
+    type: string
+    enum: [approved, rejected, not-required, timeout]
+    description: 审批状态
+    value: "${{ steps.approval_success ? 'approved' : steps.approval_rejected ? 'rejected' : steps.skip_review ? 'not-required' : 'timeout' }}"
+  
+  review_id:
+    type: string
+    description: 审查 ID
+    value: ${{ steps.create_review.output.review.id }}
+  
+  approvals:
+    type: object
+    description: 审批记录
+    value: ${{ steps.wait_approval.output.approvals }}
+    properties:
+      architect:
+        type: object
+        properties:
+          approved:
+            type: boolean
+          reviewerName:
+            type: string
+          timestamp:
+            type: string
+      projectLead:
+        type: object
+        properties:
+          approved:
+            type: boolean
+          reviewerName:
+            type: string
+          timestamp:
+            type: string
+  
+  reason:
+    type: string
+    description: 原因说明
+    value: "${{ steps.skip_review.output.reason || steps.wait_approval.output.rejection_reason || '' }}"
+
+# 元数据
+metadata:
+  author: system
+  created_at: 2026-04-14
+  updated_at: 2026-04-14
+  
+  # 与 AS-048 联动说明
+  integration:
+    as_048:
+      description: 动态获取项目负责人
+      usage: |
+        spec-review-service.notifyReviewers() 会调用：
+        roleService.getProjectLead(companyId)
+        
+        返回项目负责人角色信息，用于：
+        - 审批通知
+        - 双签验证
+  
+  # 双签审批逻辑说明
+  dual_sign_logic:
+    description: |
+      关键变更类型（architecture, api, data-model）需要双签：
+      - 架构师批准
+      - 项目负责人批准
+      
+      其他变更类型只需单签（任意一人批准即可）。
+    
+    implementation: |
+      // spec-review-service.ts L160-180
+      const needsDualSign = ['architecture', 'api', 'data-model'].includes(review.changeType);
+      
+      if (needsDualSign) {
+        if (approvals.architect?.approved && approvals.projectLead?.approved) {
+          newStatus = 'approved';
+        }
+      } else {
+        newStatus = 'approved';
+      }

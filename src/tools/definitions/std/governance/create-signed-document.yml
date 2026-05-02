@@ -1,0 +1,23 @@
+# create-signed-document.yml - 创建签署文档
+id: governance/create-signed-document
+stage: govern
+name: 创建签署文档
+description: 创建带签名的审核文档
+
+inputs:
+  - name: document_type
+    type: string
+    required: true
+  - name: content
+    type: string
+    required: true
+  - name: signers
+    type: array
+    required: true
+  - name: metadata
+    type: object
+    required: false
+
+outputs:
+  - name: document
+    type: object

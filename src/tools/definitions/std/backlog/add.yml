@@ -1,0 +1,51 @@
+# backlog/add - 添加待办项
+#
+# 输入：
+#   - project_path: 项目路径
+#   - item: 待办项对象
+#
+# 输出：
+#   - item: 创建的待办项
+#   - backlog_path: backlog 文件路径
+
+id: backlog/add
+stage: plan
+name: 添加待办项
+description: 向项目 Backlog 添加新的待办项
+category: backlog
+execute:
+  type: builtin
+  handler: backlog/add
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  item:
+    type: object
+    description: 待办项内容
+    required: true
+    properties:
+      type:
+        type: string
+        enum: [bug, feature, enhancement, performance, tech-debt, patch]
+      title:
+        type: string
+      priority:
+        type: string
+        enum: [critical, high, medium, low]
+      labels:
+        type: array
+      description:
+        type: string
+      error_log:
+        type: string
+
+outputs:
+  - name: item
+    type: object
+    description: 创建的待办项（含 ID）
+  - name: backlog_path
+    type: string
+    description: backlog.yml 文件路径

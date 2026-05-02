@@ -1,0 +1,140 @@
+# review-spec.yml - 审核代码是否符合任务 spec
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 验证实现是否符合任务的验收标准
+# 不是通用代码审查，而是针对 spec 的符合性检查
+# ============================================================================
+
+name: review-spec
+stage: verify
+description: 审核代码是否符合任务 spec
+category: quality
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.2  # 更低的温度，更严格的审核
+
+# 可用工具
+tools:
+  - file-read
+  - bash
+  - npm-test
+
+# Prompt
+prompt: |
+  你是代码审查专家。请审核实现是否符合任务的验收标准。
+  
+  ## 任务信息
+  
+  **任务 ID**: {{task.id}}
+  **任务名称**: {{task.name}}
+  **任务描述**: {{task.description}}
+  
+  ## 验收标准
+  
+  {{task.acceptance_criteria}}
+  
+  ## 实现信息
+  
+  **修改的文件**: {{implementation.files_changed}}
+  **测试状态**: {{implementation.tests_passed}}
+  **实现说明**: {{implementation.implementation_notes}}
+  
+  **项目路径**: {{project.path}}
+  
+  ## 审核流程
+  
+  **Step 1: 阅读代码**
+  ```bash
+  # 阅读修改的文件
+  cat <file_path>
+  ```
+  
+  **Step 2: 逐条检查验收标准**
+  
+  对于每条验收标准：
+  - 检查代码是否实现
+  - 检查测试是否覆盖
+  - 标记通过/不通过
+  
+  **Step 3: 运行测试**
+  ```bash
+  cd {{project.path}}
+  npm test -- --grep "{{task.name}}"
+  ```
+  
+  **Step 4: 生成审核报告**
+  
+  ## 输出格式
+  
+  请输出以下 JSON 格式：
+  
+  ```json
+  {
+    "passed": true/false,
+    "score": 8,
+    "criteria_results": [
+      {
+        "criterion": "验收标准1",
+        "passed": true,
+        "evidence": "代码位置 + 测试用例"
+      },
+      {
+        "criterion": "验收标准2",
+        "passed": false,
+        "issue": "缺少 xxx 处理",
+        "suggestion": "在 xxx 添加 xxx"
+      }
+    ],
+    "issues": [
+      {
+        "severity": "critical|major|minor",
+        "file": "path/to/file.ts",
+        "line": 42,
+        "description": "问题描述",
+        "suggestion": "修复建议"
+      }
+    ],
+    "summary": "总体评价"
+  }
+  ```
+
+# 输入参数
+inputs:
+  - name: task
+    type: object
+    required: true
+    description: 任务对象（包含验收标准）
+  
+  - name: implementation
+    type: object
+    required: true
+    description: 实现结果（来自 implement-task）
+  
+  - name: project
+    type: object
+    required: true
+    description: 项目上下文
+
+# 输出
+outputs:
+  - name: passed
+    type: boolean
+    description: 是否通过审核
+  
+  - name: score
+    type: integer
+    description: 评分 (0-10)
+  
+  - name: issues
+    type: array
+    description: 发现的问题列表
+  
+  - name: criteria_results
+    type: array
+    description: 每条验收标准的审核结果
+  
+  - name: summary
+    type: string
+    description: 审核总结

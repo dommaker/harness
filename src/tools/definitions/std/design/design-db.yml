@@ -1,0 +1,81 @@
+# design-db.yml
+name: design-db
+stage: plan
+description: 数据库设计
+agent: codex
+temperature: 0.3
+
+tools:
+  - file-read
+  - file-write
+
+prompt: |
+  你是数据库架构师。根据 API 契约设计数据库模型。
+  
+  {{input}}
+  
+  ## 任务
+  
+  ### 1. 分析数据需求
+  
+  从 API 契约中识别：
+  - 数据实体
+  - 关系类型（一对一、一对多、多对多）
+  - 查询模式
+  
+  ### 2. 设计数据模型
+  
+  使用 Prisma Schema：
+  - 定义模型和字段
+  - 设置关系
+  - 添加索引
+  - 考虑性能优化
+  
+  ### 3. 输出
+  
+  创建 `prisma/schema.prisma`：
+  ```prisma
+  datasource db {
+    provider = "sqlite"
+    url      = "file:./dev.db"
+  }
+  
+  generator client {
+    provider = "prisma-client-js"
+  }
+  
+  model User {
+    id        String   @id @default(uuid())
+    email     String   @unique
+    name      String?
+    posts     Post[]
+    createdAt DateTime @default(now())
+  }
+  
+  model Post {
+    id        String   @id @default(uuid())
+    title     String
+    content   String?
+    author    User     @relation(fields: [authorId], references: [id])
+    authorId  String
+  }
+  ```
+  
+  ## 原则
+  
+  - 先设计，后优化
+  - 保持简单（YAGNI）
+  - 考虑扩展性
+
+inputs:
+  - name: apiSpec
+    type: object
+    required: true
+    description: API 契约
+  
+  - name: requirements
+    type: object
+    description: 需求文档
+
+outputs:
+  - prisma/schema.prisma

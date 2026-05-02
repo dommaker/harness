@@ -1,0 +1,96 @@
+# worktree.yml - Git Worktree
+# ============================================================================
+# 能力类型: git 操作（工具型）
+# 来源: Superpowers - using-git-worktrees
+# 版本: 2026-03-28 (需手动同步)
+# 执行方式: 纯脚本，创建隔离工作空间
+# 用途: 为新功能创建隔离的 git worktree，避免污染主分支
+# ============================================================================
+
+name: git-worktree
+description: 为新功能创建隔离的 Git Worktree，避免污染主分支
+
+iron_law:
+  hint: "使用 git worktree 创建隔离环境，避免在主分支直接开发"
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 主仓库路径
+    
+  branch_name:
+    type: string
+    required: true
+    description: 新分支名称（如 feature/xxx）
+    
+  base_branch:
+    type: string
+    required: false
+    description: 基础分支（默认为当前分支）
+    default: ""
+    
+  worktree_path:
+    type: path
+    required: false
+    description: worktree 路径（可选，自动生成）
+    default: ""
+
+output:
+  worktree_path:
+    type: path
+    description: 创建的 worktree 路径
+    
+  branch_name:
+    type: string
+    description: 创建的分支名称
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  BRANCH_NAME="{{branch_name}}"
+  BASE_BRANCH="{{base_branch}}"
+  WORKTREE_PATH="{{worktree_path}}"
+  
+  cd "$REPO_PATH"
+  
+  echo "🌳 创建 Git Worktree"
+  echo "  仓库: $REPO_PATH"
+  echo "  分支: $BRANCH_NAME"
+  echo ""
+  
+  # 获取当前分支作为基础分支
+  if [ -z "$BASE_BRANCH" ]; then
+    BASE_BRANCH=$(git branch --show-current)
+    echo "  基础分支: $BASE_BRANCH (当前分支)"
+  fi
+  
+  # 生成 worktree 路径
+  if [ -z "$WORKTREE_PATH" ]; then
+    WORKTREE_PATH="../$(basename "$REPO_PATH")-${BRANCH_NAME#*/}"
+  fi
+  
+  echo "  Worktree 路径: $WORKTREE_PATH"
+  echo ""
+  
+  # 检查分支是否已存在
+  if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
+    echo "⚠️ 分支已存在: $BRANCH_NAME"
+    echo "  使用现有分支创建 worktree"
+    git worktree add "$WORKTREE_PATH" "$BRANCH_NAME"
+  else
+    echo "✨ 创建新分支和 worktree"
+    git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_BRANCH"
+  fi
+  
+  echo ""
+  echo "✅ Worktree 创建成功！"
+  echo "  路径: $WORKTREE_PATH"
+  echo "  分支: $BRANCH_NAME"
+  echo ""
+  echo "💡 提示: 开发完成后，使用 'git worktree remove $WORKTREE_PATH' 清理"
+  echo ""
+  echo "WORKTREE_PATH=$WORKTREE_PATH"
+  echo "BRANCH_NAME=$BRANCH_NAME"

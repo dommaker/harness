@@ -1,0 +1,109 @@
+# detect-context.yml
+name: detect-context
+stage: plan
+description: |
+  自动检测项目类型（智能版本）。
+  
+  通过 register-language 工具支持 24 种语言：
+  TypeScript, JavaScript, Python, Go, Rust, Java, C++, C,
+  Ruby, PHP, Swift, Kotlin, Scala, C#, F#, Dart, Elixir,
+  Erlang, Haskell, Lua, Perl, R, SQL, Bash, PowerShell,
+  Vue, Svelte, CSS, SCSS, HTML, JSON, YAML, Markdown
+  
+  核心功能：
+  - 自动识别语言和框架
+  - 注册语言解析配置
+  - 输出结构化项目上下文
+
+agent: codex
+temperature: 0.2
+
+tools:
+  - file-read
+  - code/register-language
+
+prompt: |
+  你是项目分析专家。检测项目的技术栈和配置。
+  
+  {{input}}
+  
+  ## Step 0: 注册已知语言
+  
+  ```bash
+  # 查看支持的语言
+  register-language.sh --list
+  
+  # 显示常用语言配置
+  register-language.sh --show typescript
+  register-language.sh --show python
+  register-language.sh --show go
+  ```
+  
+  ## Step 1: 检测语言和框架
+  
+  检查关键文件：
+  - `package.json` → Node.js / TypeScript / JavaScript
+  - `pyproject.toml` / `requirements.txt` → Python
+  - `go.mod` → Go
+  - `Cargo.toml` → Rust
+  - `pom.xml` / `build.gradle` → Java
+  - `composer.json` → PHP
+  
+  ## Step 2: 识别框架
+  
+  从依赖推断：
+  - React/Vue/Next.js/Svelte → 前端框架
+  - Express/Fastify/NestJS → Node.js 后端
+  - Django/FastAPI/Flask → Python 后端
+  - Gin/Echo → Go 后端
+  - Actix/Rocket → Rust 后端
+  
+  ## Step 3: 注册项目语言
+  
+  根据检测结果注册语言：
+  ```bash
+  # 示例：注册 TypeScript
+  register-language.sh typescript
+  
+  # 示例：注册自定义扩展名
+  register-language.sh typescript ".ts,.tsx,.mts"
+  ```
+  
+  ## Step 4: 输出项目上下文
+  
+  创建 `project-context.json`：
+  ```json
+  {
+    "language": "TypeScript",
+    "languages": ["TypeScript", "JavaScript"],
+    "framework": "Express",
+    "frameworks": ["Express", "Prisma", "Jest"],
+    "type": "backend",
+    "packageManager": "npm",
+    "hasTests": true,
+    "hasDocker": false,
+    "registeredLanguages": [
+      {
+        "name": "typescript",
+        "extensions": [".ts", ".tsx", ".mts", ".cts"],
+        "features": ["functions", "classes", "interfaces", "types", "enums", "imports", "exports"]
+      }
+    ]
+  }
+  ```
+  
+  ## 原则
+  
+  - 只检测，不修改代码
+  - 基于文件证据推断
+  - 不确定时标注 unknown
+  - 注册检测到的所有语言
+
+inputs:
+  - name: projectPath
+    type: string
+    default: "."
+    description: 项目路径
+
+outputs:
+  - project-context.json

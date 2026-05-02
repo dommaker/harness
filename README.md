@@ -45,13 +45,20 @@ import {
   checkBeforeExecution,
   interceptOperation,
   // 知识引擎
-  KnowledgeService,
+  KnowledgeStore,
+  KnowledgeQuery,
+  KnowledgeLinter,
+  ReferenceTracker,
   // 安全护栏
-  SafetyService,
+  InputGuardrail,
+  OutputGuardrail,
+  ToolGuardrail,
+  Sandbox,
   // 上下文管理
-  ContextService,
+  TokenBudget,
+  SessionCompaction,
   // Agent 生命周期
-  AgentService,
+  AgentLifecycle,
 } from '@dommaker/harness';
 
 // 约束检查
@@ -60,20 +67,23 @@ if (!result.passed) {
   console.error(result.ironLaws.filter(r => !r.passed));
 }
 
-// 知识查询
-const knowledge = KnowledgeService.getInstance();
-const docs = await knowledge.getQuery().search('architecture decisions');
+// 知识存储与查询
+const store = new KnowledgeStore({ baseDir: '.harness/knowledge' });
+const query = new KnowledgeQuery(store);
+const docs = query.search('architecture decisions');
 
 // 安全护栏
-const safety = SafetyService.getInstance();
-const guardrail = safety.getInputGuardrail();
+const guardrail = new InputGuardrail();
 await guardrail.check(userInput);
 
 // Token 预算
-const ctx = ContextService.getInstance();
-const budget = ctx.getBudget();
+const budget = new TokenBudget({ model: 'claude-3', totalTokens: 200000 });
 budget.allocate('system', 2000);
 budget.allocate('user', 4000);
+
+// Agent 生命周期
+const lifecycle = new AgentLifecycle();
+lifecycle.init({ id: 'agent-1', role: 'coder' });
 ```
 
 ---
@@ -84,8 +94,8 @@ budget.allocate('user', 4000);
 
 | 层级 | 严重性 | 说明 |
 |------|:------:|------|
-| **Iron Law** | error | 绝对禁止，无例外（7 条） |
-| **Guideline** | warning | 推荐遵守，有例外（9 条） |
+| **Iron Law** | error | 绝对禁止，无例外（8 条） |
+| **Guideline** | warning | 推荐遵守，有例外（11 条） |
 | **Tip** | info | 信息性提示（2 条） |
 
 ### 子系统
@@ -116,7 +126,7 @@ budget.allocate('user', 4000);
 harness check                    # 约束检查
 harness passes-gate [options]    # 测试门控（别名: pg）
 harness status [--anomalies]     # 状态查看
-harness flow [--auto-apply]      # 诊断 + 提案
+harness flow [--auto-apply] [--auto-execute]  # 诊断 + 提案
 ```
 
 ### 门禁
@@ -189,6 +199,8 @@ jobs:
 .harness/
 ├── traces/           # 约束检查记录（JSON Lines）
 ├── failures/         # 失败记录
+├── diagnoses/        # 诊断报告
+├── proposals/        # 约束优化提案
 └── state.json        # 运行状态
 ```
 

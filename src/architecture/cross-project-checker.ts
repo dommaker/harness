@@ -8,7 +8,7 @@
  */
 
 import { runCommand } from '../utils/exec';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import * as path from 'path';
 
 export interface CrossProjectViolation {
@@ -45,40 +45,18 @@ export interface CrossProjectConfig {
   contractLocations: Record<string, string[]>;
 }
 
-// 默认配置（向后兼容）
-const DEFAULT_PROJECT_DEPENDENCIES: Record<string, string[]> = {
-  'agent-studio': ['agent-runtime', 'harness'],
-  'agent-runtime': ['harness', 'agent-workflows'],
-  'agent-workflows': ['harness'],
-  'harness': [],
-};
-
-const DEFAULT_CONTRACT_LOCATIONS: Record<string, string[]> = {
-  'studio-runtime': [
-    'agent-runtime/src/api/types.ts',
-    'agent-studio/src/services/runtime-client.ts',
-  ],
-  'runtime-harness': [
-    'harness/src/index.ts',
-    'agent-runtime/src/core/harness-adapter.ts',
-  ],
-};
-
 /**
  * 检查跨工程接口一致性
  *
  * @param context 跨工程上下文
- * @param config 可选配置，允许自定义工程依赖关系和契约位置
+ * @param config 工程依赖关系和契约位置配置
  */
 export async function checkCrossProjectContracts(
   context: CrossProjectContext,
-  config?: CrossProjectConfig
+  config: CrossProjectConfig
 ): Promise<CrossProjectViolation[]> {
   const violations: CrossProjectViolation[] = [];
-  const cfg = config || {
-    dependencies: DEFAULT_PROJECT_DEPENDENCIES,
-    contractLocations: DEFAULT_CONTRACT_LOCATIONS,
-  };
+  const cfg = config;
 
   // 1. 检查 API 变更是否同步到调用方
   violations.push(...await checkApiSync(context, cfg));
@@ -268,12 +246,13 @@ async function getApiChanges(project: string, baseBranch: string): Promise<ApiCh
     const output = await runCommand(
       `git diff ${baseBranch}...HEAD --name-only -- "projects/${project}/src/api/**/*"`
     );
-    
-    return output.trim().split('\n').filter(f => f).map(f => ({
+
+    const files = output.trim().split('\n').filter(f => f);
+    return Promise.all(files.map(async (f) => ({
       file: f,
       name: extractApiName(f),
-      changeType: detectChangeType(f),
-    }));
+      changeType: await detectChangeType(f, baseBranch),
+    })));
   } catch {
     return [];
   }
@@ -303,29 +282,203 @@ interface ApiChange {
   changeType: 'add' | 'remove' | 'modify' | 'rename' | 'signature-change';
 }
 
-// 占位函数（需要具体实现）
+// ============ 辅助函数实现 ============
+
+/**
+ * 递归查找目录中的 .ts 文件（排除 node_modules/__tests__/dist/.d.ts）
+ */
+function findTsFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const results: string[] = [];
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'dist') continue;
+      results.push(...findTsFiles(fullPath));
+    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
 function extractApiName(file: string): string {
   return path.basename(file, '.ts');
 }
 
-function detectChangeType(file: string): ApiChange['changeType'] {
-  return 'modify';
+async function detectChangeType(file: string, baseBranch: string): Promise<ApiChange['changeType']> {
+  try {
+    const statusOutput = await runCommand(
+      `git diff ${baseBranch}...HEAD --name-status -- "${file}"`
+    );
+    const statusLine = statusOutput.trim().split('\n')[0];
+    if (!statusLine) return 'modify';
+
+    const statusCode = statusLine.charAt(0);
+    if (statusCode === 'A') return 'add';
+    if (statusCode === 'D') return 'remove';
+    if (statusCode === 'R') return 'rename';
+
+    // M (modified) — check if export signatures changed
+    if (statusCode === 'M') {
+      const diff = await runCommand(`git diff ${baseBranch}...HEAD -- "${file}"`);
+      const signaturePattern = /^[+-]\s*export\s+(?:async\s+)?(?:function|interface|type|class|enum)\s+\w+/m;
+      if (signaturePattern.test(diff)) {
+        return 'signature-change';
+      }
+    }
+
+    return 'modify';
+  } catch {
+    return 'modify';
+  }
 }
 
 function extractExportedTypes(project: string): string[] {
-  return [];
+  const srcDir = path.join('projects', project, 'src');
+  const files = findTsFiles(srcDir);
+  const types = new Set<string>();
+
+  for (const file of files) {
+    try {
+      const content = readFileSync(file, 'utf-8');
+      const regex = /export\s+(?:interface|type|enum)\s+(\w+)/g;
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        types.add(match[1]);
+      }
+    } catch {
+      // 文件读取失败，跳过
+    }
+  }
+
+  return [...types];
 }
 
-function extractTypeUsage(project: string, types: string[]): Record<string, any> {
-  return {};
+function extractTypeUsage(project: string, types: string[]): Record<string, { hasMismatch: boolean; expected?: string; actual?: string }> {
+  const srcDir = path.join('projects', project, 'src');
+  const files = findTsFiles(srcDir);
+  const result: Record<string, { hasMismatch: boolean; expected?: string; actual?: string }> = {};
+
+  for (const typeName of types) {
+    let importedIn = false;
+    let usedIn = false;
+
+    for (const file of files) {
+      try {
+        const content = readFileSync(file, 'utf-8');
+        // 检查是否导入了该类型
+        const importRegex = new RegExp(`import\\s+(?:type\\s+)?\\{[^}]*\\b${typeName}\\b[^}]*\\}\\s+from`);
+        if (importRegex.test(content)) {
+          importedIn = true;
+          // 检查是否在 import 行之外使用了该类型
+          const lines = content.split('\n');
+          for (const line of lines) {
+            if (line.trim().startsWith('import ')) continue;
+            if (new RegExp(`\\b${typeName}\\b`).test(line)) {
+              usedIn = true;
+              break;
+            }
+          }
+        }
+      } catch {
+        // 文件读取失败，跳过
+      }
+    }
+
+    // 导入但未使用 → 可能是版本不一致
+    if (importedIn && !usedIn) {
+      result[typeName] = { hasMismatch: true, expected: typeName, actual: 'unused import' };
+    }
+  }
+
+  return result;
 }
 
-function parseDocInterfaces(docPath: string): Record<string, Array<{name: string, signature: any}>> {
-  return {};
+function parseDocInterfaces(docPath: string): Record<string, Array<{name: string, signature: string}>> {
+  if (!existsSync(docPath)) return {};
+
+  try {
+    const content = readFileSync(docPath, 'utf-8');
+    const lines = content.split('\n');
+    const result: Record<string, Array<{name: string, signature: string}>> = {};
+    let currentProject: string | null = null;
+
+    for (const line of lines) {
+      // 匹配 ## project-name
+      const headerMatch = line.match(/^##\s+(\S[\w-]*)/);
+      if (headerMatch) {
+        currentProject = headerMatch[1];
+        if (!result[currentProject]) result[currentProject] = [];
+        continue;
+      }
+
+      // 匹配 - `functionName(params): returnType`
+      if (currentProject) {
+        const sigMatch = line.match(/^-\s+`([^`]+)`/);
+        if (sigMatch) {
+          const signature = sigMatch[1];
+          const nameMatch = signature.match(/^(\w+)\s*\(/);
+          const name = nameMatch ? nameMatch[1] : signature;
+          result[currentProject].push({ name, signature });
+        }
+      }
+    }
+
+    return result;
+  } catch {
+    return {};
+  }
 }
 
-function extractExportedApis(project: string): Array<{name: string, signature: any}> {
-  return [];
+function extractExportedApis(project: string): Array<{name: string, signature: string}> {
+  const srcDir = path.join('projects', project, 'src');
+  const files = findTsFiles(srcDir);
+  const apis: Array<{name: string, signature: string}> = [];
+  const seen = new Set<string>();
+
+  for (const file of files) {
+    try {
+      const content = readFileSync(file, 'utf-8');
+
+      // export function / export async function
+      const funcRegex = /export\s+(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)(?::\s*(\S+))?/g;
+      let match;
+      while ((match = funcRegex.exec(content)) !== null) {
+        const name = match[1];
+        if (seen.has(name)) continue;
+        seen.add(name);
+        const params = match[2] ? match[2].trim() : '';
+        const returnType = match[3] || 'void';
+        apis.push({ name, signature: `${name}(${params}): ${returnType}` });
+      }
+
+      // export class
+      const classRegex = /export\s+class\s+(\w+)/g;
+      while ((match = classRegex.exec(content)) !== null) {
+        const name = match[1];
+        if (!seen.has(name)) {
+          seen.add(name);
+          apis.push({ name, signature: name });
+        }
+      }
+
+      // export const arrow functions
+      const arrowRegex = /export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/g;
+      while ((match = arrowRegex.exec(content)) !== null) {
+        const name = match[1];
+        if (!seen.has(name)) {
+          seen.add(name);
+          apis.push({ name, signature: name });
+        }
+      }
+    } catch {
+      // 文件读取失败，跳过
+    }
+  }
+
+  return apis;
 }
 
 function isCompatible(doc: any, actual: any): boolean {

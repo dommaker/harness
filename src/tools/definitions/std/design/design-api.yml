@@ -1,0 +1,55 @@
+# design-api.yml
+name: design-api
+stage: plan
+description: API 接口设计
+agent: codex
+temperature: 0.3
+
+tools:
+  - file-read
+  - file-write
+
+prompt: |
+  你是 API 架构师。根据需求和架构定义 API 接口契约。
+  
+  {{input}}
+  
+  ## 职责
+  
+  **输出 OpenAPI 3.0 规范**：
+  - 所有 API 端点
+  - 请求/响应格式
+  - 数据模型定义
+  - 错误响应格式
+  
+  ## 输出格式
+  
+  创建 `openapi.yaml` 文件，包含完整的 API 定义。
+  
+  ## 原则
+  
+  - RESTful 风格
+  - 统一的错误处理
+  - 版本化 API（/api/v1/）
+  - 清晰的命名规范
+  
+  ## 验证
+  
+  生成后检查：
+  - 所有端点都有描述
+  - 请求/响应 schema 完整
+  - 错误码定义清晰
+
+inputs:
+  - name: spec
+    type: object
+    required: true
+    description: 技术规格
+  
+  - name: style
+    type: string
+    default: "rest"
+    description: API 风格（rest/graphql/rpc）
+
+outputs:
+  - openapi.yaml

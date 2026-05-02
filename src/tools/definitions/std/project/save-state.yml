@@ -1,0 +1,32 @@
+# project/save-state - 保存项目状态
+#
+# 输入：
+#   - project_path: 项目路径
+#   - state: 状态更新
+#
+# 输出：
+#   - state: 更新后的完整状态
+
+id: project/save-state
+stage: plan
+name: 保存项目状态
+description: 保存项目的生命周期状态
+category: project
+execute:
+  type: builtin
+  handler: project/save-state
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  state:
+    type: object
+    description: 状态更新
+    required: true
+
+outputs:
+  - name: state
+    type: object
+    description: 更新后的完整状态

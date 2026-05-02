@@ -1,0 +1,69 @@
+# clone.yml - 克隆仓库
+# ============================================================================
+# 能力类型: git 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# 调用方式: engine/core/workflow.sh capability git/clone --repo_url "<url>"
+# ============================================================================
+
+name: git-clone
+description: 克隆 Git 仓库到本地
+
+# 输入参数
+input:
+  repo_url:
+    type: string
+    required: true
+    description: 仓库 URL（支持 HTTPS 和 SSH）
+    
+  version:
+    type: string
+    required: false
+    description: 版本/分支/标签（可选，默认 main）
+    default: main
+    
+  depth:
+    type: integer
+    required: false
+    description: 克隆深度（可选，默认 1 表示浅克隆）
+    default: 1
+    
+  target_dir:
+    type: string
+    required: false
+    description: 目标目录（可选，默认 /worktrees/research-{timestamp}）
+
+# 输出
+output:
+  repo_path:
+    type: path
+    description: 克隆后的本地路径
+
+# 工具型能力：纯脚本执行
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_URL="{{repo_url}}"
+  VERSION="{{version}}"
+  DEPTH="{{depth}}"
+  TARGET_DIR="${TARGET_DIR:-/worktrees/research-$(date +%s)}"
+  
+  mkdir -p "$(dirname "$TARGET_DIR")"
+  
+  echo "📥 克隆仓库: $REPO_URL"
+  echo "  版本: $VERSION"
+  echo "  深度: $DEPTH"
+  echo "  目标: $TARGET_DIR"
+  
+  if [ -n "$VERSION" ] && [ "$VERSION" != "main" ]; then
+    git clone --depth "$DEPTH" --branch "$VERSION" "$REPO_URL" "$TARGET_DIR"
+  else
+    git clone --depth "$DEPTH" "$REPO_URL" "$TARGET_DIR"
+  fi
+  
+  echo ""
+  echo "✅ 克隆完成: $TARGET_DIR"
+  
+  # 输出变量（供后续步骤使用）
+  export REPO_PATH="$TARGET_DIR"
+  echo "REPO_PATH=$TARGET_DIR"

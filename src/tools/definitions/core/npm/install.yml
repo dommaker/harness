@@ -1,0 +1,58 @@
+# install.yml - NPM 安装依赖
+# ============================================================================
+# 能力类型: npm 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: npm-install
+description: 安装 npm/pnpm 依赖
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 项目路径
+
+output:
+  install_result:
+    type: string
+    description: 安装结果
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  
+  cd "$REPO_PATH"
+  
+  echo "📦 安装依赖..."
+  echo "  路径: $REPO_PATH"
+  
+  # 自动检测包管理器
+  if [ -f "pnpm-lock.yaml" ]; then
+    PKG_MGR="pnpm"
+    INSTALL_CMD="pnpm install"
+  elif [ -f "yarn.lock" ]; then
+    PKG_MGR="yarn"
+    INSTALL_CMD="yarn install"
+  else
+    PKG_MGR="npm"
+    INSTALL_CMD="npm install"
+  fi
+  
+  echo "  包管理器: $PKG_MGR"
+  echo "  命令: $INSTALL_CMD"
+  echo ""
+  
+  # 执行安装
+  if $INSTALL_CMD 2>&1; then
+    echo ""
+    echo "✅ 依赖安装成功"
+    echo "INSTALL_RESULT=success"
+  else
+    echo ""
+    echo "❌ 依赖安装失败"
+    echo "INSTALL_RESULT=failed"
+    exit 1
+  fi

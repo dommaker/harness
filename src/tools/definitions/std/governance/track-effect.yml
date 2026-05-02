@@ -1,0 +1,199 @@
+# track-effect.yml - 效果追踪步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 内置处理器
+# 用途: 追踪进化实现后的效果，验证是否达到预期
+# 核心理念: 指标分层、周期检查、自动回滚
+# ============================================================================
+
+name: track-effect
+stage: govern
+description: 追踪进化实现后的效果，验证是否达到预期
+category: governance
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: governance/track-effect
+
+# 输入定义
+inputs:
+  evolution_item_id:
+    type: string
+    description: 关联的进化建议 ID
+    required: true
+  
+  project_path:
+    type: path
+    description: 项目路径
+    required: true
+  
+  implementation_commit:
+    type: string
+    description: 实现该进化的 commit hash
+    required: true
+  
+  risk_level:
+    type: string
+    description: 风险等级
+    enum: [low, medium, high]
+    default: medium
+  
+  tracking_duration_hours:
+    type: number
+    description: 追踪时长（小时）
+    default: 24
+
+# 指标分层
+metrics:
+  basic:  # 基础层 - 必追踪
+    - name: error_rate
+      description: 错误率
+      source: logs/errors
+      unit: percentage
+    
+    - name: test_pass_rate
+      description: 测试通过率
+      source: test/results
+      unit: percentage
+    
+    - name: build_status
+      description: 构建状态
+      source: ci/build
+      unit: boolean
+  
+  enhanced:  # 增强层 - 可选
+    - name: response_time
+      description: 响应时间
+      source: metrics/response
+      unit: ms
+    
+    - name: memory_usage
+      description: 内存占用
+      source: metrics/memory
+      unit: MB
+    
+    - name: api_success_rate
+      description: API 成功率
+      source: metrics/api
+      unit: percentage
+
+# 检查点调度
+checkpoint_schedule:
+  immediate:
+    time: 0h
+    checks:
+      - build_status
+      - test_pass_rate
+  
+  after_1h:
+    time: 1h
+    checks:
+      - error_rate
+      - api_success_rate
+    condition: "risk_level in [medium, high]"
+  
+  after_1d:
+    time: 24h
+    checks:
+      - error_rate
+      - test_pass_rate
+      - response_time
+      - memory_usage
+    condition: "risk_level == high"
+
+# 阈值配置
+thresholds:
+  low_risk:
+    error_rate_increase: 5      # 错误率增加不超过 5%
+    test_pass_rate_drop: 5      # 测试通过率下降不超过 5%
+    critical_errors: 0          # 不允许关键错误
+  
+  medium_risk:
+    error_rate_increase: 3
+    test_pass_rate_drop: 3
+    critical_errors: 0
+  
+  high_risk:
+    error_rate_increase: 1
+    test_pass_rate_drop: 1
+    critical_errors: 0
+
+# 回滚策略
+rollback_strategy:
+  low:
+    action: notify
+    description: 通知人工处理
+  
+  medium:
+    action: notify_with_suggestion
+    description: 通知 + 建议回滚
+  
+  high:
+    action: auto_rollback
+    description: 自动回滚 + 通知
+
+# 输出定义
+outputs:
+  - name: tracking_id
+    type: string
+    description: 效果追踪记录 ID
+  
+  - name: status
+    type: string
+    enum: [pending, tracking, success, failed, rolled_back]
+    description: 追踪状态
+  
+  - name: checkpoints
+    type: array
+    description: 检查点结果
+    items:
+      type: object
+      properties:
+        scheduled_time:
+          type: string
+        actual_time:
+          type: number
+        metrics:
+          type: array
+        assessment:
+          type: string
+        issues:
+          type: array
+  
+  - name: current_metrics
+    type: object
+    description: 当前指标快照
+    properties:
+      error_rate:
+        type: object
+      test_pass_rate:
+        type: object
+      build_status:
+        type: object
+  
+  - name: rollback_decision
+    type: object
+    description: 回滚决策（如果需要）
+    properties:
+      decision:
+        type: string
+        enum: [rollback, keep, monitor]
+      reason:
+        type: string
+      triggered_by:
+        type: object
+  
+  - name: overall_assessment
+    type: string
+    enum: [success, warning, failure]
+    description: 整体评估
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - effect-tracking
+    - metrics

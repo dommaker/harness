@@ -1,0 +1,105 @@
+# analyze-requirements.yml
+name: analyze-requirements
+stage: plan
+description: 分析需求，生成标准化需求文档
+category: analysis
+version: 3.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+
+# Prompt
+prompt: |
+  你是一个需求分析师。分析以下需求：
+  
+  {{requirement}}
+  
+  {{#if context}}
+  ## 已知上下文
+  
+  ```json
+  {{{context}}}
+  ```
+  
+  结合上下文，确保需求文档符合约束条件。
+  {{/if}}
+  
+  ## 任务
+  
+  生成 `requirements.md` 文件，**严格遵循以下格式**：
+  
+  ```markdown
+  # 需求文档
+  
+  ## 项目概述
+  <一句话描述项目目标>
+  
+  ## 功能点列表
+  
+  ### P0 (必须实现)
+  - [P0] <功能名称>
+    - 描述: <功能描述>
+    - 验收: <验收标准>
+  
+  ### P1 (重要推荐)
+  - [P1] <功能名称>
+    - 描述: <功能描述>
+    - 验收: <验收标准>
+  
+  ### P2 (可选优化)
+  - [P2] <功能名称>
+    - 描述: <功能描述>
+    - 验收: <验收标准>
+  
+  ## 技术约束
+  
+  | 约束项 | 要求 |
+  |--------|------|
+  | 前端框架 | <框架名称> |
+  | 后端 | <有/无> |
+  | 数据存储 | <存储方式> |
+  | 其他 | <其他约束> |
+  
+  ## 非功能需求
+  
+  - 性能: <性能要求>
+  - 兼容性: <兼容性要求>
+  - 其他: <其他非功能需求>
+  
+  ## 风险点
+  
+  | 风险 | 影响 | 建议 |
+  |------|------|------|
+  | <风险描述> | <影响程度> | <缓解建议> |
+  ```
+  
+  ## 格式要求（重要！）
+  
+  1. 功能点必须以 `- [P0/P1/P2]` 开头，便于程序解析
+  2. 每个功能点包含 `描述:` 和 `验收:` 两行
+  3. 技术约束用表格格式，便于提取
+  4. 不要添加额外内容，保持格式一致
+
+# 输入参数
+inputs:
+  - name: requirement
+    type: string
+    required: true
+    description: 需求描述
+  
+  - name: context
+    type: object
+    required: false
+    description: 上下文信息（项目配置、会议记录、澄清结果）
+
+# 输出
+outputs:
+  - name: requirements.md
+    type: file
+    description: 标准化需求文档

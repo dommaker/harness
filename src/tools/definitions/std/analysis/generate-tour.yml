@@ -1,0 +1,102 @@
+name: generate-tour
+stage: plan
+description: |
+  生成项目导览。
+  
+  为新开发者创建学习路径：
+  - 从简单到复杂的组件介绍
+  - 架构层级概览
+  - 语言/框架特定的说明
+  
+  用途：
+  - 新人入职
+  - 项目交接
+  - 学习材料生成
+
+agent: codex
+timeout: 300  # 5 分钟
+
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目根路径
+    
+  - name: knowledge_graph_path
+    type: string
+    required: false
+    description: 知识图谱文件路径
+    
+  - name: target_audience
+    type: string
+    required: false
+    default: "junior"
+    description: |
+      目标受众：
+      - "junior" - 初级开发者
+      - "senior" - 高级开发者
+      - "non-technical" - 非技术人员
+      
+  - name: focus_areas
+    type: array
+    required: false
+    description: 重点关注领域（如：["auth", "api"]）
+
+outputs:
+  - name: tour
+    type: array
+    description: 导览步骤列表
+    
+  - name: tour_count
+    type: number
+    description: 导览步骤数量
+    
+  - name: report
+    type: string
+    description: Markdown 格式的导览文档
+
+prompt: |
+  为项目 {{project_path}} 生成学习导览。
+  
+  ## 任务
+  
+  1. 加载知识图谱
+     - 路径：{{knowledge_graph_path}} 或 .agent/knowledge-graph.json
+  
+  2. 分析组件结构
+     - 识别入口点
+     - 追踪核心流程
+     - 确定依赖关系
+  
+  3. 生成学习路径
+     - 从简单到复杂
+     - 按层级组织
+     - 关联相关组件
+  
+  4. 添加说明
+     - 每个组件的用途
+     - 关键代码片段
+     - 语言/框架特定提示
+  
+  ## 输出格式
+  
+  ```json
+  {
+    "tour": [
+      {
+        "order": 1,
+        "title": "项目入口",
+        "description": "从 main.ts 开始理解项目启动流程",
+        "nodeIds": ["func-001", "func-002"],
+        "languageLesson": "TypeScript 项目通常从 main.ts 或 index.ts 启动..."
+      }
+    ]
+  }
+  ```
+
+retry:
+  max_attempts: 2
+  backoff: exponential
+  initial_delay: 5000
+
+version: "1.0.0"

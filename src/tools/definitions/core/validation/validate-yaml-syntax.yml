@@ -1,0 +1,134 @@
+# validate-yaml-syntax.yml - YAML 语法检查
+# ============================================================================
+# 能力类型: validation（工具型）
+# 执行方式: 纯脚本，检查 YAML 语法
+# 用途: 验证所有 YAML 文件语法正确
+# ============================================================================
+
+name: validate-yaml-syntax
+description: 检查所有 YAML 文件语法正确性
+category: validation
+version: 1.0.0
+
+# 铁律
+iron_law:
+  rule: "YAML MUST BE VALID"
+  message: "所有 YAML 文件必须通过语法检查"
+
+# 输入
+input:
+  search_dirs:
+    type: array
+    required: false
+    default: ["tools", "steps", "workflows"]
+    description: 要检查的目录列表
+  
+  exclude_patterns:
+    type: array
+    required: false
+    default: ["README"]
+    description: 排除的模式列表
+
+# 输出
+output:
+  total_files:
+    type: number
+    description: 检查的文件总数
+  
+  valid_files:
+    type: number
+    description: 有效的文件数量
+  
+  invalid_files:
+    type: array
+    description: 无效文件列表及错误
+  
+  passed:
+    type: boolean
+    description: 是否全部通过
+
+# 执行脚本
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  echo "🔍 检查 YAML 语法"
+  echo ""
+  
+  # 检查是否安装了 yamllint
+  if ! command -v yamllint &> /dev/null; then
+    echo "⚠️  yamllint 未安装，使用基础检查"
+    USE_YAMLLINT=false
+  else
+    USE_YAMLLINT=true
+  fi
+  
+  TOTAL=0
+  VALID=0
+  INVALID=()
+  
+  # 检查函数
+  check_yaml() {
+    local file="$1"
+    
+    if $USE_YAMLLINT; then
+      # 使用 yamllint
+      if yamllint -d "{extends: relaxed, rules: {line-length: disable}}" "$file" > /dev/null 2>&1; then
+        return 0
+      else
+        return 1
+      fi
+    else
+      # 使用 Python yaml 模块
+      if python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
+        return 0
+      else
+        return 1
+      fi
+    fi
+  }
+  
+  # 遍历目录
+  for dir in tools steps workflows; do
+    if [ -d "$dir" ]; then
+      for f in $(find "$dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null | grep -v README | sort); do
+        TOTAL=$((TOTAL + 1))
+        
+        if check_yaml "$f"; then
+          VALID=$((VALID + 1))
+          echo "  ✅ $f"
+        else
+          INVALID+=("$f")
+          echo "  ❌ $f"
+          # 显示错误详情
+          if $USE_YAMLLINT; then
+            yamllint -d "{extends: relaxed, rules: {line-length: disable}}" "$file" 2>&1 | head -5
+          else
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>&1 | head -3
+          fi
+          echo ""
+        fi
+      done
+    fi
+  done
+  
+  echo ""
+  echo "================================"
+  echo "📊 统计:"
+  echo "  总计: $TOTAL 个文件"
+  echo "  有效: $VALID 个"
+  echo "  无效: ${#INVALID[@]} 个"
+  echo "================================"
+  
+  if [ ${#INVALID[@]} -gt 0 ]; then
+    echo ""
+    echo "❌ 发现无效 YAML 文件:"
+    for f in "${INVALID[@]}"; do
+      echo "  - $f"
+    done
+    exit 1
+  fi
+  
+  echo ""
+  echo "✅ 所有 YAML 文件语法正确"
+  exit 0

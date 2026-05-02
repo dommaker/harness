@@ -1,0 +1,23 @@
+# generate-review-report.yml - 生成审核报告
+id: governance/generate-review-report
+stage: govern
+name: 生成审核报告
+description: 生成审核报告
+
+inputs:
+  - name: artifact_type
+    type: string
+    required: true
+  - name: final_decision
+    type: string
+    required: true
+  - name: opinions
+    type: array
+    required: true
+  - name: statistics
+    type: object
+    required: false
+
+outputs:
+  - name: report
+    type: object

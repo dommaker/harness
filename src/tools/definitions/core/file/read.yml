@@ -1,0 +1,69 @@
+# file-read.yml - 读取文件
+# ============================================================================
+# 能力类型: 文件操作（工具型）
+# 执行方式: 纯脚本，读取文件内容
+# ============================================================================
+
+name: file-read
+description: 读取文件内容
+
+# 输入参数
+input:
+  path:
+    type: path
+    required: true
+    description: 文件路径
+    
+  encoding:
+    type: string
+    required: false
+    description: 文件编码
+    default: "utf-8"
+    
+  max_lines:
+    type: integer
+    required: false
+    description: 最大行数（0 表示不限制）
+    default: 0
+
+# 输出
+output:
+  content:
+    type: string
+    description: 文件内容
+    
+  lines:
+    type: integer
+    description: 总行数
+
+# 执行命令
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  FILE_PATH="{{path}}"
+  MAX_LINES="{{max_lines}}"
+  
+  echo "📖 读取文件: $FILE_PATH"
+  
+  if [ ! -f "$FILE_PATH" ]; then
+    echo "❌ 文件不存在: $FILE_PATH"
+    exit 1
+  fi
+  
+  # 统计行数
+  TOTAL_LINES=$(wc -l < "$FILE_PATH")
+  echo "  总行数: $TOTAL_LINES"
+  
+  # 读取内容
+  if [ "$MAX_LINES" -gt 0 ]; then
+    head -n "$MAX_LINES" "$FILE_PATH"
+    echo ""
+    echo "⚠️  已截断，只显示前 $MAX_LINES 行"
+  else
+    cat "$FILE_PATH"
+  fi
+  
+  echo ""
+  echo "✅ 文件读取完成"
+  echo "LINES=$TOTAL_LINES"

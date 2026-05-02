@@ -1,0 +1,128 @@
+# review-code.yml
+name: review-code
+stage: verify
+description: |
+  代码审查（智能版本）。
+  
+  通过 fingerprint 工具区分变更级别：
+  - STRUCTURAL: 深度审查（架构、依赖、测试）
+  - COSMETIC: 快速审查（格式、注释）
+  - NONE: 跳过
+  
+  节省审查时间 30-50%。
+category: quality
+version: 3.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+  - code/fingerprint
+  - npm-build
+  - npm-test
+
+# Prompt
+prompt: |
+  你是代码审查专家。使用智能策略审查代码。
+  
+  ## 输入
+  
+  项目目录：{{input}}
+  
+  ## Step 0: 智能变更检测
+  
+  ```bash
+  # 获取最近的变更
+  CHANGED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || find . -name "*.ts" -o -name "*.tsx" | head -20)
+  
+  # 对每个文件检测变更级别
+  for FILE in $CHANGED_FILES; do
+    fingerprint.sh "$FILE" "." "previous"
+  done
+  ```
+  
+  根据变更级别选择审查策略：
+  
+  | 变更级别 | 审查策略 | 检查项 |
+  |---------|---------|--------|
+  | STRUCTURAL | 深度审查 | 架构、依赖、安全、测试 |
+  | COSMETIC | 快速审查 | 格式、注释、文档 |
+  | NONE | 跳过 | - |
+  
+  ## Step 1: 扫描代码
+  
+  ```bash
+  # 扫描所有代码文件
+  find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" | head -50
+  ```
+  
+  ## Step 2: 运行 Lint
+  
+  ```bash
+  # 如果有 ESLint
+  npm run lint 2>/dev/null || npx eslint . --ext .ts,.tsx 2>/dev/null || echo "No ESLint"
+  ```
+  
+  ## Step 3: 安全扫描
+  
+  ```bash
+  # 检查敏感信息
+  grep -r "password\|secret\|api_key\|token" --include="*.ts" --include="*.js" . | grep -v ".env.example" || echo "No secrets found"
+  ```
+  
+  ## Step 4: 自动修复
+  
+  对于发现的问题，直接修复代码：
+  - 代码风格问题：运行 `npm run lint -- --fix`
+  - 简单 Bug：直接修改代码
+  - 复杂问题：记录到 review.md
+  
+  ## Step 5: 输出报告
+  
+  创建 `review.md`：
+  ```markdown
+  # 代码审查报告
+  
+  ## 变更级别统计
+  
+  | 级别 | 文件数 | 审查策略 |
+  |------|--------|---------|
+  | STRUCTURAL | X | 深度审查 |
+  | COSMETIC | Y | 快速审查 |
+  | NONE | Z | 跳过 |
+  
+  ## 总体评分: X/10
+  
+  ## 已修复问题
+  - [x] 问题1
+  - [x] 问题2
+  
+  ## 需人工处理
+  - [ ] 复杂问题1（原因：xxx）
+  
+  ## 建议
+  - 建议1
+  ```
+  
+  ## 输出标准
+  
+  - 修复所有可自动修复的问题
+  - 记录无法自动修复的问题
+  - 输出 review.md
+
+# 输入参数
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目路径
+
+# 输出
+outputs:
+  - name: review.md
+    type: file
+    description: 审查报告

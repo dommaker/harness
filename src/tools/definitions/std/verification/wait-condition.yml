@@ -1,0 +1,107 @@
+# wait-condition.yml - 条件等待
+# ============================================================================
+# 能力类型: verification（工具型）
+# 来源: Superpowers - condition-based-waiting (Technique)
+# 版本: 2026-03-28 (需手动同步)
+# 执行方式: 纯脚本，轮询检查条件
+# 用途: 等待某个条件满足后再继续执行
+# ============================================================================
+
+name: wait-condition
+stage: verify
+description: 等待条件满足后再继续执行，支持轮询检查
+
+input:
+  condition:
+    type: string
+    required: true
+    description: "等待的条件（如 file exists: /path/to/file）"
+    
+  check_command:
+    type: string
+    required: true
+    description: "检查命令（返回 0 表示条件满足）"
+    
+  timeout_seconds:
+    type: number
+    required: false
+    description: 超时时间（秒）
+    default: 300
+    
+  interval_seconds:
+    type: number
+    required: false
+    description: 检查间隔（秒）
+    default: 5
+    
+  repo_path:
+    type: path
+    required: false
+    description: 项目路径（可选）
+    default: "."
+
+output:
+  satisfied:
+    type: boolean
+    description: 条件是否满足
+    
+  elapsed_seconds:
+    type: number
+    description: 已等待时间（秒）
+    
+  check_count:
+    type: number
+    description: 检查次数
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  CONDITION="{{condition}}"
+  CHECK_CMD="{{check_command}}"
+  TIMEOUT="{{timeout_seconds}}"
+  INTERVAL="{{interval_seconds}}"
+  REPO_PATH="{{repo_path}}"
+  
+  cd "$REPO_PATH" 2>/dev/null || true
+  
+  echo "⏳ 等待条件满足"
+  echo "  条件: $CONDITION"
+  echo "  检查命令: $CHECK_CMD"
+  echo "  超时: ${TIMEOUT}s"
+  echo "  间隔: ${INTERVAL}s"
+  echo ""
+  
+  ELAPSED=0
+  CHECK_COUNT=0
+  
+  while [ $ELAPSED -lt $TIMEOUT ]; do
+    CHECK_COUNT=$((CHECK_COUNT + 1))
+    
+    echo "[$CHECK_COUNT] 检查条件... (已等待 ${ELAPSED}s)"
+    
+    if eval "$CHECK_CMD" >/dev/null 2>&1; then
+      echo ""
+      echo "✅ 条件满足！"
+      echo "  已等待: ${ELAPSED}s"
+      echo "  检查次数: $CHECK_COUNT"
+      echo ""
+      echo "SATISFIED=true"
+      echo "ELAPSED=$ELAPSED"
+      echo "CHECK_COUNT=$CHECK_COUNT"
+      exit 0
+    fi
+    
+    sleep $INTERVAL
+    ELAPSED=$((ELAPSED + INTERVAL))
+  done
+  
+  echo ""
+  echo "❌ 条件未满足，已超时"
+  echo "  已等待: ${ELAPSED}s"
+  echo "  检查次数: $CHECK_COUNT"
+  echo ""
+  echo "SATISFIED=false"
+  echo "ELAPSED=$ELAPSED"
+  echo "CHECK_COUNT=$CHECK_COUNT"
+  exit 1

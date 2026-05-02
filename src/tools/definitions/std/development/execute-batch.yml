@@ -1,0 +1,152 @@
+# execute-batch.yml - 批次执行
+# ============================================================================
+# 类型: 动态执行
+# 用途: 执行一批任务，返回执行结果
+# Superpowers: Phase 4 Execute - 分批执行
+# ============================================================================
+
+name: execute-batch
+stage: develop
+description: |
+  执行一批任务，每个任务调用 develop-task 步骤。
+  
+  支持两种执行模式：
+  - sequential: 串行执行，每个任务完成后执行下一个
+  - parallel: 并行执行，所有任务同时执行
+  
+  返回每个任务的执行结果，用于后续 review。
+category: development
+version: 1.0.0
+
+# 输入定义
+inputs:
+  - name: batch
+    type: array
+    required: true
+    description: 本批次任务列表
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        acceptance:
+          type: array
+        dependencies:
+          type: array
+  
+  - name: batch_index
+    type: number
+    required: true
+    description: 批次索引（从 0 开始）
+  
+  - name: project
+    type: object
+    required: true
+    properties:
+      path:
+        type: string
+      tech_stack:
+        type: object
+    description: 项目上下文
+  
+  - name: execution_mode
+    type: string
+    enum: [sequential, parallel]
+    default: sequential
+    description: 执行模式（默认串行）
+  
+  - name: previous_outputs
+    type: array
+    description: 前序批次的输出结果
+
+# 输出定义
+outputs:
+  - name: results
+    type: array
+    description: 每个任务的执行结果
+    items:
+      type: object
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum: [success, failed, skipped]
+        files_changed:
+          type: array
+        tests_passed:
+          type: boolean
+        commit_hash:
+          type: string
+        error:
+          type: string
+  
+  - name: all_passed
+    type: boolean
+    description: 所有任务是否都成功
+  
+  - name: success_count
+    type: number
+    description: 成功任务数
+  
+  - name: failed_count
+    type: number
+    description: 失败任务数
+  
+  - name: failed_tasks
+    type: array
+    description: 失败的任务列表
+    items:
+      type: object
+
+# 执行配置
+execute:
+  type: dynamic
+  step_template:
+    step: development/develop-task
+    inputs:
+      task: "${task}"
+      project: "${inputs.project}"
+      previous_outputs: "${inputs.previous_outputs}"
+  
+  # 执行模式
+  mode: "${inputs.execution_mode}"  # sequential | parallel
+  
+  # 并发控制（parallel 模式）
+  max_concurrent: 3
+  
+  # 失败处理
+  on_failure: continue  # continue | stop
+  
+  # 进度回调
+  on_progress:
+    - event: task.completed
+      action: report
+      message: "任务 ${task.id} 完成"
+
+# 前置条件
+preconditions:
+  - condition: "${inputs.batch.length > 0}"
+    message: "批次不能为空"
+  
+  - condition: "${inputs.project.path != null}"
+    message: "项目路径不能为空"
+
+# 后置处理
+postprocess:
+  - name: aggregate_results
+    description: 汇总执行结果
+    
+  - name: generate_summary
+    description: 生成执行摘要
+    
+  - name: notify_completion
+    condition: "${outputs.all_passed || outputs.failed_count > 0}"
+    message: |
+      批次 {{inputs.batch_index}} 执行完成
+      ✅ 成功: {{outputs.success_count}}
+      ❌ 失败: {{outputs.failed_count}}

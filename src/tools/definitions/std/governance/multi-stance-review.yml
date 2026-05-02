@@ -1,0 +1,154 @@
+# multi-stance-review.yml - 多立场审核步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 并行调用多个 Agent
+# 用途: 多个立场并行审核，汇聚意见后做出决策
+# 核心理念: 多角色共同审核重大决策
+# ============================================================================
+
+name: multi-stance-review
+stage: govern
+description: 多立场并行会审（会审制度）
+category: governance
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - define-stance
+  - validate-artifact
+  - aggregate-opinions
+
+# 输入定义
+inputs:
+  - name: artifact_type
+    type: string
+    required: true
+    description: 审核对象类型
+  
+  - name: artifact_content
+    type: string
+    required: true
+    description: 审核对象内容
+  
+  - name: stances
+    type: array
+    description: |
+      参与审核的立场列表，默认使用决策类立场：
+      - critic: 挑刺者
+      - supporter: 支持者
+      - decider: 决策者
+    default: ["critic", "supporter", "decider"]
+  
+  - name: aggregation_method
+    type: string
+    description: |
+      意见汇聚方式：
+      - consensus: 一致同意
+      - majority: 多数同意
+      - weighted: 加权投票（critic 权重更高）
+      - decider: 决策者决定
+    default: "decider"
+  
+  - name: review_criteria
+    type: array
+    description: 审核标准列表
+    default: []
+
+# 输出定义
+outputs:
+  - name: final_decision
+    type: string
+    description: |
+      最终决策：
+      - approved: 通过
+      - rejected: 拒绝
+      - changes_requested: 要求修改
+  
+  - name: reason
+    type: string
+    description: 决策理由
+  
+  - name: opinions
+    type: array
+    description: 各立场审核意见
+    items:
+      type: object
+      properties:
+        stanceId:
+          type: string
+        verdict:
+          type: string
+        opinion:
+          type: string
+        issues:
+          type: array
+  
+  - name: statistics
+    type: object
+    description: 审核统计
+    properties:
+      approve:
+        type: number
+      reject:
+        type: number
+      request_changes:
+        type: number
+      total:
+        type: number
+
+# Prompt 模板
+prompt: |
+  你正在组织多立场会审。
+  
+  ## 审核对象
+  类型: {{artifact_type}}
+  内容: {{artifact_content}}
+  
+  ## 参与立场
+  {{#each stances}}
+  - {{this}}
+  {{/each}}
+  
+  ## 汇聚方式
+  {{aggregation_method}}
+  
+  ## 审核标准
+  {{#if review_criteria}}
+  {{#each review_criteria}}
+  - {{this}}
+  {{/each}}
+  {{else}}
+  - 完整性
+  - 可行性
+  - 风险评估
+  {{/if}}
+  
+  请按照以下流程执行：
+  1. 为每个立场生成审核 prompt
+  2. 并行执行各立场审核
+  3. 汇聚审核意见
+  4. 做出最终决策
+
+# 执行配置
+execute:
+  type: builtin
+  handler: multi-stance-review
+
+# 并行执行配置
+parallel: true
+max_parallel: 3
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - review
+    - multi-stance
+    - multi-stakeholder
+    - stance-isolation

@@ -1,0 +1,113 @@
+# analyze-architecture-impact.yml - 架构影响分析
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 分析新功能对现有架构的影响，识别需要修改/新增的模块
+# ============================================================================
+
+name: analyze-architecture-impact
+stage: plan
+description: 分析新功能对现有架构的影响
+category: design
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - bash
+
+# Prompt
+prompt: |
+  你是一个系统架构师。请分析新功能对现有架构的影响。
+  
+  ## 输入信息
+  
+  **新功能需求**: {{requirements}}
+  
+  **现有架构**: {{existing_architecture}}
+  
+  **现有模块**: {{existing_modules}}
+  
+  ## 任务
+  
+  分析新功能对现有架构的影响，输出以下内容：
+  
+  ### 1. 影响分析
+  
+  评估变更范围：
+  - 影响程度: 低/中/高
+  - 是否需要架构调整: 是/否
+  - 是否有破坏性变更: 是/否
+  
+  ### 2. 需要修改的模块
+  
+  列出需要修改的现有模块：
+  ```json
+  ["module/path/1", "module/path/2"]
+  ```
+  
+  ### 3. 需要新增的模块
+  
+  列出需要新增的模块：
+  ```json
+  ["new/module/1", "new/module/2"]
+  ```
+  
+  ### 4. 破坏性变更
+  
+  列出可能影响现有功能的变更：
+  - API 变更
+  - 数据模型变更
+  - 接口变更
+  
+  ## 输出格式（JSON）
+  
+  ```json
+  {
+    "impact_analysis": {
+      "level": "medium",
+      "requires_architecture_change": false,
+      "has_breaking_changes": false,
+      "summary": "简要分析说明"
+    },
+    "modules_to_modify": ["module/path/1"],
+    "modules_to_add": ["new/module/1"],
+    "breaking_changes": []
+  }
+  ```
+
+# 输入参数
+inputs:
+  - name: requirements
+    type: string
+    description: 新功能需求
+    required: true
+  
+  - name: existing_architecture
+    type: string
+    description: 现有架构描述
+  
+  - name: existing_modules
+    type: array
+    description: 现有模块列表
+
+# 输出
+outputs:
+  - name: impact_analysis
+    type: object
+    description: 影响分析结果
+  
+  - name: modules_to_modify
+    type: array
+    description: 需要修改的模块列表
+  
+  - name: modules_to_add
+    type: array
+    description: 需要新增的模块列表
+  
+  - name: breaking_changes
+    type: array
+    description: 破坏性变更列表

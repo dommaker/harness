@@ -1,0 +1,77 @@
+# check-feature-list.yml - 检查 feature_list.json
+# ============================================================================
+# 类型: 验证步骤
+# 用途: 检查项目是否存在 feature_list.json 并验证格式
+# ============================================================================
+
+name: check-feature-list
+stage: govern
+description: 检查 feature_list.json 存在性和格式
+category: validation
+version: 1.0.0
+
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目路径
+  
+  - name: strict
+    type: boolean
+    default: false
+    description: 是否严格模式（缺失时报错）
+
+outputs:
+  - name: exists
+    type: boolean
+    description: feature_list.json 是否存在
+  
+  - name: valid
+    type: boolean
+    description: 格式是否正确
+  
+  - name: feature_count
+    type: number
+    description: 功能数量
+  
+  - name: features_with_passes
+    type: number
+    description: 有 passes 字段的功能数量
+  
+  - name: errors
+    type: array
+    description: 错误列表
+
+# Prompt（用于 Agent 执行）
+prompt: |
+  你是项目约束检查器。请检查项目的 feature_list.json 文件。
+  
+  ## 项目路径
+  
+  {{project_path}}
+  
+  ## 检查流程
+  
+  1. 检查文件是否存在: `{{project_path}}/feature_list.json`
+  
+  2. 如果存在，检查格式：
+     - 是否是有效的 JSON
+     - 是否有 `features` 数组字段
+     - 每个 feature 是否有 `id`, `name`, `description` 字段
+     - 检查有多少 feature 有 `passes` 字段
+  
+  3. 输出检查结果：
+     ```json
+     {
+       "exists": true/false,
+       "valid": true/false,
+       "feature_count": N,
+       "features_with_passes": N,
+       "errors": ["错误1", "错误2", ...]
+     }
+     ```
+  
+  ## 注意
+  
+  - 如果 strict=true 且文件不存在，返回错误
+  - 如果 strict=false 且文件不存在，返回 exists=false, valid=false（不报错）

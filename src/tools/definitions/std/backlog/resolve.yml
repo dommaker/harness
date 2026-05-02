@@ -1,0 +1,37 @@
+# backlog/resolve - 解决待办项
+#
+# 输入：
+#   - project_path: 项目路径
+#   - item_id: 待办项 ID
+#   - resolution: 解决说明（可选）
+#
+# 输出：
+#   - item: 解决后的待办项
+
+id: backlog/resolve
+stage: plan
+name: 解决待办项
+description: 标记待办项为已解决
+category: backlog
+execute:
+  type: builtin
+  handler: backlog/resolve
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  item_id:
+    type: string
+    description: 待办项 ID（如 BUG-001）
+    required: true
+  resolution:
+    type: string
+    description: 解决说明
+    required: false
+
+outputs:
+  - name: item
+    type: object
+    description: 解决后的待办项

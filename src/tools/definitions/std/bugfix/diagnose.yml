@@ -1,0 +1,68 @@
+# bugfix/diagnose - 诊断 Bug
+#
+# 输入：
+#   - project_path: 项目路径
+#   - bug_description: Bug 描述
+#   - error_log: 可选的错误日志
+#
+# 输出：
+#   - diagnosis: 诊断结果
+
+id: bugfix/diagnose
+stage: fix
+name: 诊断 Bug
+description: 分析代码和错误信息，定位 Bug 根因
+category: bugfix
+agent: codex
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  bug_description:
+    type: string
+    description: Bug 描述
+    required: true
+  error_log:
+    type: string
+    description: 错误日志（可选）
+    required: false
+
+outputs:
+  - name: diagnosis
+    type: object
+    description: 诊断结果
+
+prompt: |
+  你是一个专业的 Bug 诊断专家。请分析以下 Bug 并找出根因。
+  
+  **Bug 描述**: {{bug_description}}
+  
+  {{#if error_log}}
+  **错误日志**:
+  ```
+  {{error_log}}
+  ```
+  {{/if}}
+  
+  **项目路径**: {{project_path}}
+  
+  **任务**：
+  1. 分析相关代码文件
+  2. 找出 Bug 根因
+  3. 提出修复方案
+  
+  **输出格式**（JSON）：
+  ```json
+  {
+    "root_cause": "根本原因描述",
+    "affected_files": ["file1.ts", "file2.ts"],
+    "fix_suggestion": "修复建议",
+    "estimated_complexity": "low/medium/high",
+    "related_tests": ["test1.test.ts"]
+  }
+  ```
+
+temperature: 0.2
+timeout: 180  # 3 分钟

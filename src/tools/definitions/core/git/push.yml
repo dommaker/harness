@@ -1,0 +1,79 @@
+# push.yml - Git 推送
+# ============================================================================
+# 能力类型: git 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: git-push
+description: 推送 Git 分支到远程
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 仓库路径
+    
+  branch:
+    type: string
+    required: false
+    description: 分支名称（可选，默认当前分支）
+    default: ""
+    
+  remote:
+    type: string
+    required: false
+    description: 远程名称（可选，默认 origin）
+    default: "origin"
+    
+  set_upstream:
+    type: boolean
+    required: false
+    description: 是否设置上游分支（可选，默认 false）
+    default: false
+
+output:
+  push_result:
+    type: string
+    description: 推送结果
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  BRANCH="{{branch}}"
+  REMOTE="{{remote}}"
+  SET_UPSTREAM="{{set_upstream}}"
+  
+  cd "$REPO_PATH"
+  
+  # 获取当前分支
+  if [ -z "$BRANCH" ]; then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  fi
+  
+  echo "🚀 推送分支..."
+  echo "  路径: $REPO_PATH"
+  echo "  远程: $REMOTE"
+  echo "  分支: $BRANCH"
+  
+  # 构建推送命令
+  PUSH_CMD="git push $REMOTE $BRANCH"
+  
+  if [ "$SET_UPSTREAM" = "true" ]; then
+    PUSH_CMD="git push -u $REMOTE $BRANCH"
+  fi
+  
+  echo ""
+  
+  # 推送
+  if $PUSH_CMD 2>&1; then
+    echo ""
+    echo "✅ 推送成功"
+    echo "PUSH_RESULT=success"
+  else
+    echo ""
+    echo "❌ 推送失败"
+    echo "PUSH_RESULT=failed"
+    exit 1
+  fi

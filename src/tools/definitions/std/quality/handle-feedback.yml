@@ -1,0 +1,108 @@
+# handle-feedback.yml - 处理审查反馈
+# ============================================================================
+# 能力类型: quality（步骤型）
+# 来源: Superpowers - receiving-code-review
+# 版本: 2026-03-28 (需手动同步)
+# 执行方式: 调用 Agent 处理代码审查反馈
+# 用途: 处理代码审查反馈，修改代码并回复
+# ============================================================================
+
+name: handle-feedback
+stage: verify
+description: |
+  Handle code review feedback - process comments and make necessary changes
+
+category: quality
+version: 1.0.0
+
+inputs:
+  - name: feedback
+    type: object
+    required: true
+    description: 审查反馈（包含 comments, suggestions）
+  
+  - name: code_path
+    type: path
+    required: true
+    description: 代码路径
+  
+  - name: context
+    type: ProjectContext
+    description: 项目上下文
+
+outputs:
+  - name: changes
+    type: array
+    description: 修改列表
+  
+  - name: replies
+    type: array
+    description: 回复列表
+  
+  - name: resolved_count
+    type: number
+    description: 已解决的反馈数
+
+execute:
+  type: agent
+  prompt: |
+    你是一个代码审查反馈处理专家。
+    
+    ## 任务
+    处理以下代码审查反馈，做出必要的修改并回复。
+    
+    ## 审查反馈
+    {{inputs.feedback}}
+    
+    ## 代码路径
+    {{inputs.code_path}}
+    
+    ## 处理原则
+    
+    ### 1. 优先级判断
+    - 🔴 **必须修改**: 安全问题、性能问题、严重 bug
+    - 🟡 **建议修改**: 代码风格、可读性、最佳实践
+    - 🟢 **可选修改**: 个人偏好、微小优化
+    
+    ### 2. 回复策略
+    - 明确说明修改内容和原因
+    - 如果不修改，解释原因
+    - 感谢审查者的建议
+    
+    ### 3. 修改原则
+    - **最小化修改**: 只修改必要的部分
+    - **保持一致**: 与现有代码风格保持一致
+    - **测试验证**: 修改后运行相关测试
+    
+    ## 铁律
+    - NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
+    - 修改前必须理解问题根本原因
+    - 修改后必须验证测试通过
+    
+    ## 输出格式
+    
+    ```json
+    {
+      "changes": [
+        {
+          "file": "path/to/file",
+          "line": 42,
+          "type": "modify",
+          "before": "原代码",
+          "after": "修改后代码",
+          "reason": "修改原因"
+        }
+      ],
+      "replies": [
+        {
+          "comment_id": "xxx",
+          "reply": "感谢建议，已在 xxx 中修改"
+        }
+      ],
+      "resolved_count": 5
+    }
+    ```
+    
+    开始处理反馈。
+  
+  temperature: 0.3

@@ -210,6 +210,10 @@ export class ConstraintInterceptor {
 
 export const constraintInterceptor = ConstraintInterceptor.getInstance();
 
+// 注册内置 executors
+import { registerDefaultExecutors } from './default-executors';
+registerDefaultExecutors();
+
 export async function interceptOperation(
   trigger: ConstraintTrigger,
   context: ConstraintContext

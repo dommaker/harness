@@ -1,0 +1,74 @@
+name: develop-shared-types
+stage: develop
+description: |
+  共享类型开发步骤。
+  
+  实现前后端共享的类型定义：
+  - TypeScript 接口
+  - API 请求/响应类型
+  - 数据模型类型
+  
+  输入：
+  - requirement: 需求描述
+  - api_contract: API 契约
+
+agent: codex
+timeout: 300  # 5 分钟
+
+inputs:
+  - name: requirement
+    type: string
+    required: true
+    description: 需求描述
+    
+  - name: api_contract
+    type: string
+    required: false
+    description: API 契约路径
+
+outputs:
+  - name: implemented
+    type: boolean
+    description: 是否完成实现
+    
+  - name: types_defined
+    type: array
+    description: 定义的类型列表
+    
+  - name: files_changed
+    type: array
+    description: 变更的文件列表
+
+prompt: |
+  # 共享类型开发任务
+  
+  ## 需求
+  {{requirement}}
+  
+  {{#if api_contract}}
+  ## API 契约
+  参考：{{api_contract}}
+  {{/if}}
+  
+  ## 任务
+  
+  1. 阅读现有类型定义
+  2. 定义数据模型接口
+  3. 定义 API 请求/响应类型
+  4. 确保前后端兼容
+  5. 导出所有类型
+  
+  ## 输出格式
+  
+  完成后提供：
+  - 定义的类型列表
+  - 变更的文件
+  - 使用建议
+
+tools:
+  - file-read
+  - file-write
+
+temperature: 0.7
+
+version: "1.0.0"

@@ -1,0 +1,42 @@
+# backlog/update - 更新待办项
+#
+# 输入：
+#   - project_path: 项目路径
+#   - item_id: 待办项 ID
+#   - status: 新状态（可选）
+#   - priority: 新优先级（可选）
+#
+# 输出：
+#   - item: 更新后的待办项
+
+id: backlog/update
+stage: plan
+name: 更新待办项
+description: 更新待办项状态或优先级
+category: backlog
+execute:
+  type: builtin
+  handler: backlog/update
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  item_id:
+    type: string
+    description: 待办项 ID（如 BUG-001）
+    required: true
+  status:
+    type: string
+    enum: [open, in_progress, resolved, closed]
+    required: false
+  priority:
+    type: string
+    enum: [critical, high, medium, low]
+    required: false
+
+outputs:
+  - name: item
+    type: object
+    description: 更新后的待办项

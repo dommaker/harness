@@ -1,0 +1,163 @@
+# debug-systematic.yml - 系统性调试
+# ============================================================================
+# 能力类型: quality（步骤型）
+# 来源: Superpowers - systematic-debugging
+# 版本: 2026-03-28 (需手动同步)
+# 执行方式: 调用 Agent 进行系统性调试
+# 铁律: NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
+# 用途: 系统性地定位和修复问题
+# ============================================================================
+
+name: debug-systematic
+stage: verify
+description: |
+  Systematic debugging workflow - find root cause before fixing
+
+category: quality
+version: 1.0.0
+
+iron_law:
+  rule: "NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST"
+  message: "在修复问题之前，必须先找到根本原因"
+
+inputs:
+  - name: error_message
+    type: string
+    required: true
+    description: 错误信息
+  
+  - name: code_path
+    type: path
+    required: true
+    description: 代码路径
+  
+  - name: context
+    type: ProjectContext
+    description: 项目上下文
+  
+  - name: reproduction_steps
+    type: array
+    required: false
+    description: 重现步骤
+    default: []
+
+outputs:
+  - name: root_cause
+    type: object
+    description: 根本原因分析
+  
+  - name: fix_suggestion
+    type: object
+    description: 修复建议
+  
+  - name: verification_steps
+    type: array
+    description: 验证步骤
+
+execute:
+  type: agent
+  prompt: |
+    你是一个系统性调试专家。
+    
+    ## 任务
+    系统性地分析问题，找到根本原因后再提出修复方案。
+    
+    ## 错误信息
+    ```
+    {{inputs.error_message}}
+    ```
+    
+    ## 代码路径
+    {{inputs.code_path}}
+    
+    ## 重现步骤
+    {{inputs.reproduction_steps}}
+    
+    ## 调试流程（必须严格按顺序执行）
+    
+    ### Phase 1: 根本原因调查
+    1. **仔细阅读错误消息**
+       - 提取关键信息：错误类型、位置、相关变量
+       - 不要跳过任何细节
+    
+    2. **稳定重现问题**
+       - 确认重现步骤
+       - 记录每次重现的条件
+    
+    3. **检查最近的更改**
+       - 查看 git log
+       - 找到引入问题的 commit
+    
+    4. **跟踪数据流**
+       - 从错误位置向上追踪
+       - 找到数据的来源和变化
+    
+    ### Phase 2: 模式分析
+    1. **找到工作的例子**
+       - 搜索类似的正常工作代码
+       - 对比差异
+    
+    2. **对比差异**
+       - 逐行比较工作代码和问题代码
+       - 找出关键差异点
+    
+    ### Phase 3: 假设测试
+    1. **形成一个清晰的假设**
+       - "问题是因为 X 导致 Y"
+       - 假设必须可验证
+    
+    2. **设计最小测试验证/证伪**
+       - 编写最小测试用例
+       - 确认假设正确或错误
+    
+    ### Phase 4: 修复验证
+    1. **修复根本原因，不是症状**
+       - 不要只是修复错误消息
+       - 解决导致错误的根本原因
+    
+    2. **写测试覆盖此 bug**
+       - 防止回归
+       - 文档化问题
+    
+    3. **验证无回归**
+       - 运行所有相关测试
+       - 确认没有引入新问题
+    
+    ## 铁律
+    ⚠️ **NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST**
+    
+    - 禁止在没有找到根本原因的情况下修复问题
+    - 禁止只修复症状而不解决根本原因
+    - 禁止跳过测试验证
+    
+    ## 输出格式
+    
+    ```json
+    {
+      "root_cause": {
+        "type": "数据流错误",
+        "location": "src/utils/parser.ts:42",
+        "description": "变量 X 在条件 Y 下未正确初始化",
+        "evidence": [
+          "日志显示 X 为 undefined",
+          "条件 Y 在步骤 3 触发"
+        ]
+      },
+      "fix_suggestion": {
+        "file": "src/utils/parser.ts",
+        "line": 42,
+        "before": "const result = process(data);",
+        "after": "const result = data ? process(data) : defaultValue;",
+        "explanation": "在调用 process 前检查 data 是否存在"
+      },
+      "verification_steps": [
+        "npm test",
+        "手动重现原问题，确认已修复",
+        "检查边界情况"
+      ]
+    }
+    ```
+    
+    开始系统性调试。记住：先找根本原因，再修复！
+  
+  temperature: 0.3

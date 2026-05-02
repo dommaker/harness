@@ -1,0 +1,46 @@
+# validate-tasks.yml - 校验 tasks.yml 格式
+# ============================================================================
+# 类型: Validation
+# 用途: 校验 tasks.yml 是否符合规范
+# ============================================================================
+
+name: validate-tasks
+stage: plan
+description: 校验 tasks.yml 格式和内容
+category: planning
+version: 1.0.0
+
+# Agent 配置（不需要 Agent，用 builtin）
+execute:
+  type: builtin
+  handler: validate-tasks
+
+# 输入参数
+inputs:
+  - name: tasks_path
+    type: string
+    required: true
+    description: tasks.yml 文件路径
+  
+  - name: strict
+    type: boolean
+    default: false
+    description: 严格模式（WARN 也视为失败）
+
+# 输出
+outputs:
+  - name: valid
+    type: boolean
+    description: 是否通过校验
+  
+  - name: errors
+    type: array
+    description: 错误列表
+  
+  - name: warnings
+    type: array
+    description: 警告列表
+  
+  - name: tasks_summary
+    type: object
+    description: 任务摘要

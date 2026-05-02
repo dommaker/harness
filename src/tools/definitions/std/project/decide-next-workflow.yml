@@ -1,0 +1,38 @@
+# decide-next-workflow - 智能决策下一步工作流
+#
+# 输入：
+#   - project_path: 项目路径
+#
+# 输出：
+#   - decision: 决策结果
+#   - reason: 决策理由
+#   - next_workflow: 建议的工作流
+
+id: decide-next-workflow
+stage: plan
+name: 智能决策下一步
+description: 根据项目状态智能决策下一步工作流
+category: project
+execute:
+  type: builtin
+  handler: decide-next-workflow
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+
+outputs:
+  - name: decision
+    type: string
+    description: 决策结果（工作流 ID 或 ask_user）
+  - name: reason
+    type: string
+    description: 决策理由
+  - name: next_workflow
+    type: string
+    description: 建议的下一个工作流
+  - name: suggestions
+    type: array
+    description: 可选的工作流建议（当 decision 为 ask_user 时）

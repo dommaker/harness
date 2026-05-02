@@ -1,0 +1,74 @@
+name: code/register-language
+description: |
+  注册编程语言支持。
+  
+  为代码解析器添加新语言：
+  - Tree-sitter 语法配置
+  - 文件扩展名映射
+  - 解析规则
+  
+  支持 30+ 语言：
+  TypeScript, JavaScript, Python, Go, Rust, Java, C++, C,
+  Ruby, PHP, Swift, Kotlin, Scala, C#, F#, Dart, Elixir,
+  Erlang, Haskell, Lua, Perl, R, SQL, Bash, PowerShell,
+  Vue, Svelte, CSS, SCSS, HTML, JSON, YAML, Markdown
+
+inputs:
+  - name: language
+    type: string
+    required: true
+    description: 语言名称（如 typescript, python, go）
+    
+  - name: extensions
+    type: array
+    required: false
+    description: 文件扩展名列表（如 [".ts", ".tsx"]）
+    
+  - name: parser_config
+    type: object
+    required: false
+    description: |
+      自定义解析器配置（可选）
+      ```yaml
+      function_patterns:
+        - "function {name}({params})"
+      class_patterns:
+        - "class {name}"
+      import_patterns:
+        - "import {specifiers} from {source}"
+      ```
+
+outputs:
+  - name: registered
+    type: boolean
+    description: 是否注册成功
+    
+  - name: language_config
+    type: object
+    description: 语言配置对象
+    
+  - name: supported_features
+    type: array
+    description: 支持的特性列表
+
+handler: script
+script: ./register-language.sh
+
+examples:
+  - description: 注册 Python 支持
+    inputs:
+      language: "python"
+      extensions: [".py", ".pyw"]
+    outputs:
+      registered: true
+      supported_features: ["functions", "classes", "imports"]
+
+  - description: 注册 Go 支持
+    inputs:
+      language: "go"
+      extensions: [".go"]
+    outputs:
+      registered: true
+      supported_features: ["functions", "structs", "interfaces", "imports"]
+
+version: "1.0.0"

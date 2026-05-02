@@ -1,0 +1,21 @@
+# read.yml - 读取文件
+# =============================================================================
+# 步骤类型: 文件操作
+# 用途: 读取文件内容
+# ============================================================================
+
+id: file/read
+stage: develop
+name: 读取文件
+description: 读取指定路径的文件内容
+
+inputs:
+  - name: path
+    type: string
+    required: true
+    description: 文件路径
+
+outputs:
+  - name: content
+    type: string
+    description: 文件内容

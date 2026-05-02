@@ -1,0 +1,161 @@
+# backlog/github-sync - GitHub Issues 同步
+# ============================================================================
+# 功能：backlog.yml 与 GitHub Issues 双向同步
+# 设计：AW-015
+# ============================================================================
+#
+# 输入：
+#   - project_path: 项目路径
+#   - direction: 同步方向 (to_github | from_github | bidirectional)
+#   - conflict_strategy: 冲突策略（可选）
+#
+# 输出：
+#   - sync_result: 同步结果统计
+#   - conflicts: 冲突列表（如有）
+#
+# 冲突策略：
+#   - github_wins: GitHub 优先
+#   - backlog_wins: backlog.yml 优先
+#   - timestamp_wins: 时间戳优先
+#   - human_confirm: 人工确认
+#   - ai_merge: AI 智能合并（推荐）
+#   - layered: 分层策略（不同字段不同策略）
+#
+# 分层策略默认配置：
+#   status: github_wins
+#   title: ai_merge
+#   priority: timestamp_wins
+#   labels: merge
+#   description: human_confirm
+
+id: backlog/github-sync
+stage: plan
+name: GitHub Issues 同步
+description: backlog.yml 与 GitHub Issues 双向同步
+category: backlog
+execute:
+  type: builtin
+  handler: backlog/github-sync
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  direction:
+    type: string
+    description: 同步方向
+    enum: [to_github, from_github, bidirectional]
+    default: bidirectional
+  
+  conflict_strategy:
+    type: string
+    description: 冲突处理策略
+    enum: [github_wins, backlog_wins, timestamp_wins, human_confirm, ai_merge, layered]
+    default: layered
+  
+  # 分层策略配置（仅 layered 模式）
+  layered_config:
+    type: object
+    description: 分层策略字段级配置
+    default:
+      status: github_wins
+      title: ai_merge
+      priority: timestamp_wins
+      labels: merge
+      description: human_confirm
+
+outputs:
+  - name: sync_result
+    type: object
+    description: 同步结果统计
+    properties:
+      to_github:
+        type: object
+        properties:
+          created: number
+          updated: number
+          skipped: number
+      from_github:
+        type: object
+        properties:
+          created: number
+          updated: number
+          skipped: number
+      conflicts:
+        type: number
+  
+  - name: conflicts
+    type: array
+    description: 冲突详情列表
+    items:
+      type: object
+      properties:
+        item_id: string
+        github_issue_number: number
+        field: string
+        backlog_value: string
+        github_value: string
+        resolution: string
+
+# ============================================================================
+# 实现逻辑
+# ============================================================================
+# 
+# 1. 读取 backlog.yml
+#    - 解析 items 列表
+#    - 读取 github_sync 配置
+#
+# 2. 获取 GitHub Issues
+#    - gh issue list --repo ${repo} --json number,title,state,labels,body
+#    - 解析 Issues 列表
+#
+# 3. 建立映射
+#    - backlog item.id → GitHub issue number
+#    - 通过 github_issue_number 字段或 title 匹配
+#
+# 4. 对比差异
+#    - status: backlog.status vs GitHub state
+#    - title: backlog.title vs GitHub title
+#    - priority: backlog.priority vs GitHub labels
+#    - description: backlog.description vs GitHub body
+#
+# 5. 处理冲突
+#    - 根据冲突策略选择处理方式
+#    - layered: 按字段策略分别处理
+#
+# 6. 执行同步
+#    - to_github: gh issue create/edit
+#    - from_github: 更新 backlog.yml
+#
+# 7. 生成报告
+#    - 统计同步结果
+#    - 输出冲突列表
+#
+# ============================================================================
+# gh CLI 命令示例
+# ============================================================================
+#
+# 创建 Issue：
+# gh issue create --repo ${repo} \
+#   --title "${title}" \
+#   --body "${description}" \
+#   --label "${labels}"
+#
+# 更新 Issue：
+# gh issue edit ${number} --repo ${repo} \
+#   --title "${title}" \
+#   --body "${description}"
+#
+# 添加标签：
+# gh issue edit ${number} --repo ${repo} \
+#   --add-label "${label}"
+#
+# 关闭 Issue：
+# gh issue close ${number} --repo ${repo}
+#
+# 获取 Issues：
+# gh issue list --repo ${repo} --json number,title,state,labels,body,updatedAt
+#
+# ============================================================================

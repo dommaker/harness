@@ -1,0 +1,148 @@
+# rollback.yml - 部署回滚
+# ============================================================================
+# 类型: 部署类步骤
+# 执行方式: 工具调用
+# 用途: 发布失败时回滚到上一个稳定版本
+# ============================================================================
+
+name: rollback
+stage: deploy
+description: 发布失败时回滚到上一个稳定版本
+category: deploy
+version: 1.0.0
+
+# 输入定义
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目路径
+  
+  - name: rollback_type
+    type: string
+    default: "previous_commit"
+    description: 回滚类型（previous_commit/tag/branch）
+  
+  - name: target
+    type: string
+    description: 目标版本（tag 或 branch 名称）
+  
+  - name: force_push
+    type: boolean
+    default: true
+    description: 是否强制推送
+
+# 输出定义
+outputs:
+  - name: rollback_commit
+    type: string
+    description: 回滚到的 commit hash
+  
+  - name: status
+    type: string
+    description: 回滚状态
+  
+  - name: report
+    type: string
+    description: 回滚报告
+
+# 执行配置
+execute:
+  type: builtin
+  handler: rollback
+  
+  logic: |
+    ## 回滚流程
+    
+    ### Step 1: 确认当前状态
+    ```bash
+    cd {{project_path}}
+    git status
+    git log -1 --oneline
+    ```
+    
+    ### Step 2: 执行回滚
+    
+    **previous_commit**:
+    ```bash
+    git reset --hard HEAD~1
+    git push --force
+    ```
+    
+    **tag**:
+    ```bash
+    git checkout {{target}}
+    git push --force origin HEAD:main
+    ```
+    
+    **branch**:
+    ```bash
+    git checkout {{target}}
+    git push --force origin HEAD:main
+    ```
+    
+    ### Step 3: 验证回滚
+    ```bash
+    git log -1 --oneline
+    npm test
+    ```
+    
+    ### Step 4: 生成回滚报告
+    ```markdown
+    # 回滚报告
+    
+    **时间**: <timestamp>
+    **项目**: {{project_path}}
+    
+    ## 回滚信息
+    - 类型: {{rollback_type}}
+    - 目标: {{target}}
+    - 回滚 commit: <commit_hash>
+    
+    ## 回滚前状态
+    - Commit: <old_commit>
+    - Message: <old_message>
+    
+    ## 回滚后状态
+    - Commit: <new_commit>
+    - Message: <new_message>
+    
+    ## 验证结果
+    - Git 状态: ✅ 已回滚
+    - 测试状态: ✅ 通过/❌ 失败
+    
+    ## 后续建议
+    1. 检查回滚后的代码
+    2. 修复原始问题
+    3. 重新发布
+    ```
+
+# 错误处理
+error_handling:
+  - error: UNCOMMITTED_CHANGES
+    message: "有未提交的更改，请先处理"
+    action: abort
+  
+  - error: NO_PREVIOUS_COMMIT
+    message: "没有可回滚的 commit"
+    action: abort
+  
+  - error: FORCE_PUSH_FAILED
+    message: "强制推送失败，请检查权限"
+    action: warn
+  
+  - error: TESTS_FAILED
+    message: "回滚后测试失败"
+    action: warn
+
+# 安全检查
+safety_checks:
+  - name: confirm_rollback
+    type: prompt
+    message: "⚠️ 确认要回滚到上一个版本吗？此操作不可逆。"
+    default: false
+  
+  - name: check_production
+    type: environment
+    condition: "NODE_ENV == 'production'"
+    require_confirmation: true

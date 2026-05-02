@@ -1,0 +1,82 @@
+# define-stance.yml - 立场注入工具
+# ============================================================================
+# 类型: 治理类工具
+# 执行方式: 内置处理器
+# 用途: 注入立场 prompt，引导 Agent 以特定立场思考
+# 核心理念: 角色绑定立场，立场决定思考方式
+# ============================================================================
+
+name: define-stance
+stage: govern
+description: 注入立场 prompt（三省六部制核心工具）
+category: governance
+version: 1.0.0
+
+# 输入定义
+inputs:
+  - name: stance_id
+    type: string
+    required: true
+    description: |
+      立场 ID，可选值：
+      决策类：critic, supporter, decider
+      执行类：planner, executor, tester
+      专业类：architect, security, performance
+      审计：auditor
+  
+  - name: task
+    type: string
+    description: 当前任务描述
+  
+  - name: input_content
+    type: string
+    description: 输入内容
+  
+  - name: context
+    type: string
+    description: 上下文信息
+  
+  - name: additional_prompt
+    type: string
+    description: 额外的 prompt 内容
+
+# 输出定义
+outputs:
+  - name: injected_prompt
+    type: string
+    description: 注入立场后的完整 prompt
+  
+  - name: stance
+    type: object
+    description: 立场信息
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      nameZh:
+        type: string
+      category:
+        type: string
+  
+  - name: forbidden_actions
+    type: array
+    description: 禁止行为列表
+  
+  - name: focus_areas
+    type: array
+    description: 关注重点列表
+
+# 执行配置
+execute:
+  type: script
+  script: ./define-stance.sh
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - stance
+    - prompt-injection
+    - stance-isolation

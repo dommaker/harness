@@ -112,7 +112,9 @@ export class KnowledgeStore {
   }
 
   private entryPath(entry: KnowledgeEntry): string {
-    return path.join(this.baseDir, `${entry.type}-${entry.id}.md`);
+    const safeType = path.basename(entry.type);
+    const safeId = path.basename(entry.id);
+    return path.join(this.baseDir, `${safeType}-${safeId}.md`);
   }
 
   private findFile(id: string): string | undefined {

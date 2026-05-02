@@ -1,0 +1,97 @@
+# design-architecture.yml
+name: design-architecture
+stage: plan
+description: 架构设计，生成标准化架构文档
+category: design
+version: 3.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+
+# Prompt
+prompt: |
+  你是一个系统架构师。根据需求文档设计架构。
+  
+  请先读取 requirements.md 文件了解需求。
+  
+  ## 任务
+  
+  生成 `architecture.md` 文件，**严格遵循以下格式**：
+  
+  ```markdown
+  # 架构设计
+  
+  ## 技术栈
+  
+  | 类别 | 选择 | 理由 |
+  |------|------|------|
+  | 框架 | <框架名> | <选择理由> |
+  | 语言 | <语言> | <选择理由> |
+  | 存储 | <存储方式> | <选择理由> |
+  | 构建 | <构建工具> | <选择理由> |
+  
+  ## 模块划分
+  
+  ### 模块: <模块路径>
+  - 职责: <模块职责>
+  - 依赖: <依赖的其他模块，无则填"无">
+  
+  ### 模块: <模块路径>
+  - 职责: <模块职责>
+  - 依赖: <依赖的其他模块>
+  
+  ## 目录结构
+  
+  ```
+  <项目名>/
+  ├── <目录>/
+  │   └── <文件>
+  └── ...
+  ```
+  
+  ## 数据模型
+  
+  ### <模型名>
+  ```typescript
+  {
+    <字段名>: <类型>  // <说明>
+  }
+  ```
+  
+  ## API 设计
+  
+  | 方法 | 路径 | 功能 |
+  |------|------|------|
+  | GET | /api/xxx | <功能描述> |
+  | POST | /api/xxx | <功能描述> |
+  
+  ## 实现建议
+  
+  1. <建议1>
+  2. <建议2>
+  ```
+  
+  ## 格式要求（重要！）
+  
+  1. 技术栈用表格格式，便于程序提取
+  2. 模块划分必须用 `### 模块:` 格式，每个模块包含 `职责:` 和 `依赖:` 两行
+  3. 依赖关系必须明确，便于生成任务依赖图
+  4. 不要添加额外内容，保持格式一致
+
+# 输入参数
+inputs:
+  - name: requirements
+    type: string
+    description: 需求文档路径（可选，默认读取 requirements.md）
+
+# 输出
+outputs:
+  - name: architecture.md
+    type: file
+    description: 标准化架构文档

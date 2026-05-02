@@ -1,0 +1,75 @@
+# file-write.yml - 写入文件
+# ============================================================================
+# 能力类型: 文件操作（工具型）
+# 执行方式: 纯脚本，写入文件内容
+# ============================================================================
+
+name: file-write
+description: 写入文件内容
+
+# 输入参数
+input:
+  path:
+    type: path
+    required: true
+    description: 文件路径
+    
+  content:
+    type: string
+    required: true
+    description: 文件内容
+    
+  mode:
+    type: string
+    required: false
+    description: 写入模式（overwrite/append）
+    default: "overwrite"
+    
+  create_dirs:
+    type: boolean
+    required: false
+    description: 是否创建父目录
+    default: true
+
+# 输出
+output:
+  path:
+    type: path
+    description: 文件路径
+    
+  bytes:
+    type: integer
+    description: 写入字节数
+
+# 执行命令
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  FILE_PATH="{{path}}"
+  CONTENT="{{content}}"
+  MODE="{{mode}}"
+  CREATE_DIRS="{{create_dirs}}"
+  
+  echo "📝 写入文件: $FILE_PATH"
+  echo "  模式: $MODE"
+  
+  # 创建父目录
+  if [ "$CREATE_DIRS" = "true" ]; then
+    mkdir -p "$(dirname "$FILE_PATH")"
+  fi
+  
+  # 写入内容
+  if [ "$MODE" = "append" ]; then
+    echo "$CONTENT" >> "$FILE_PATH"
+  else
+    echo "$CONTENT" > "$FILE_PATH"
+  fi
+  
+  # 统计字节数
+  BYTES=$(wc -c < "$FILE_PATH")
+  echo "  写入: $BYTES 字节"
+  
+  echo "✅ 文件写入完成"
+  echo "PATH=$FILE_PATH"
+  echo "BYTES=$BYTES"

@@ -1,0 +1,186 @@
+# rollback.yml - 回滚步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 内置处理器
+# 用途: 回滚进化实现，恢复到之前状态
+# 核心理念: 效果不好自动回滚，保护系统稳定
+# ============================================================================
+
+name: rollback
+stage: govern
+description: 回滚进化实现，恢复到之前状态
+category: governance
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: governance/rollback
+
+# 输入定义
+inputs:
+  effect_tracking_id:
+    type: string
+    description: 效果追踪记录 ID
+    required: true
+  
+  project_path:
+    type: path
+    description: 项目路径
+    required: true
+  
+  commit_before:
+    type: string
+    description: 进化实现前的 commit hash
+    required: true
+  
+  commit_after:
+    type: string
+    description: 进化实现后的 commit hash
+    required: true
+  
+  reason:
+    type: string
+    description: 回滚原因
+    required: true
+  
+  triggered_by:
+    type: string
+    description: 触发方式
+    enum: [auto, manual]
+    default: auto
+
+# 回滚流程
+rollback_steps:
+  step_1:
+    name: 验证当前状态
+    actions:
+      - 检查是否有未提交的变更
+      - 确认可以安全回滚
+      - 创建备份分支
+  
+  step_2:
+    name: 执行回滚
+    actions:
+      - git reset --hard {commit_before}
+      - 或 git revert {commit_after}
+      - 根据情况选择
+  
+  step_3:
+    name: 验证回滚结果
+    actions:
+      - 运行测试
+      - 检查构建
+      - 确认功能正常
+  
+  step_4:
+    name: 更新记录
+    actions:
+      - 更新 effect-tracking 状态
+      - 记录回滚原因
+      - 通知相关人员
+
+# 回滚策略
+strategies:
+  reset:
+    description: 硬重置到之前 commit
+    use_when: "变更未推送 / 仅本地"
+    command: "git reset --hard {commit_before}"
+  
+  revert:
+    description: 创建回滚 commit
+    use_when: "变更已推送 / 需要保留历史"
+    command: "git revert {commit_after}"
+  
+  branch:
+    description: 创建回滚分支
+    use_when: "需要保留当前状态"
+    commands:
+      - "git branch rollback-backup-{timestamp}"
+      - "git reset --hard {commit_before}"
+
+# 安全检查
+safety_checks:
+  - name: 检查未提交变更
+    command: "git status --porcelain"
+    expected: empty
+    on_fail: warn
+  
+  - name: 检查远程同步
+    command: "git status -sb"
+    expected: 'ahead 0, behind 0 or local-only'
+    on_fail: confirm
+  
+  - name: 检查依赖变更
+    command: "git diff {commit_before}..{commit_after} -- package.json"
+    expected: any
+    on_fail: "需要重新安装依赖"
+
+# 输出定义
+outputs:
+  - name: rollback_status
+    type: string
+    enum: [pending, in_progress, completed, failed]
+    description: 回滚状态
+  
+  - name: strategy_used
+    type: string
+    enum: [reset, revert, branch]
+    description: 使用的回滚策略
+  
+  - name: commit_before
+    type: string
+    description: 回滚前的 commit
+  
+  - name: commit_after
+    type: string
+    description: 回滚后的 commit（新创建的回滚 commit）
+  
+  - name: verification_result
+    type: object
+    description: 回滚验证结果
+    properties:
+      tests_passed:
+        type: boolean
+      build_passed:
+        type: boolean
+      errors:
+        type: array
+  
+  - name: duration_ms
+    type: number
+    description: 回滚执行时长（毫秒）
+  
+  - name: backup_branch
+    type: string
+    description: 备份分支名（如果创建了）
+
+# 错误处理
+errors:
+  UNCOMMITTED_CHANGES:
+    message: "存在未提交的变更，请先处理"
+    severity: warn
+    action: "提示用户处理或自动 stash"
+  
+  PUSHED_CHANGES:
+    message: "变更已推送到远程，建议使用 revert 策略"
+    severity: warn
+    action: "切换到 revert 策略"
+  
+  DEPENDENCY_CHANGED:
+    message: "依赖有变更，回滚后需要重新安装"
+    severity: info
+    action: "自动运行 npm install / pip install"
+  
+  VERIFICATION_FAILED:
+    message: "回滚后验证失败"
+    severity: error
+    action: "回滚失败，需要人工介入"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - rollback
+    - safety

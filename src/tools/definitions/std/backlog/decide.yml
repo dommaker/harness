@@ -1,0 +1,39 @@
+# backlog/decide - 智能决策下一个待处理项
+#
+# 输入：
+#   - project_path: 项目路径
+#
+# 输出：
+#   - recommendation: 推荐的待办项
+#   - suggested_workflow: 建议使用的工作流
+#   - reason: 推荐理由
+#   - queue: 待处理队列（前 5 个）
+
+id: backlog/decide
+stage: plan
+name: 智能决策
+description: 根据优先级和类型推荐下一个待处理项
+category: backlog
+execute:
+  type: builtin
+  handler: backlog/decide
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+
+outputs:
+  - name: recommendation
+    type: object
+    description: 推荐的待办项
+  - name: suggested_workflow
+    type: string
+    description: 建议使用的工作流 ID
+  - name: reason
+    type: string
+    description: 推荐理由
+  - name: queue
+    type: array
+    description: 待处理队列（前 5 个）

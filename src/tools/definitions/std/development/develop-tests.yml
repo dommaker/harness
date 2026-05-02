@@ -1,0 +1,76 @@
+# develop-tests.yml
+name: develop-tests
+stage: develop
+description: 编写测试用例
+agent: codex
+temperature: 0.3
+
+tools:
+  - file-read
+  - file-write
+  - npm-test
+
+prompt: |
+  你是测试工程师。为项目编写测试用例。
+  
+  {{input}}
+  
+  ## 项目目录
+  {{project_dir}}
+  
+  ## 任务
+  
+  ### 如果有现有测试
+  
+  1. 查找最近修改的文件
+     ```bash
+     git diff --name-only HEAD~5 2>/dev/null || echo "no git"
+     ```
+     
+  2. 为修改的代码补充测试
+     - 分析修改内容
+     - 添加缺失的测试用例
+     
+  ### 如果没有测试
+  
+  1. 识别核心模块
+     - 入口文件
+     - 业务逻辑
+     - API 端点
+     
+  2. 创建基本测试结构
+     - 使用项目现有测试框架
+     - 测试文件放在 tests/ 目录
+     
+  3. 编写测试用例
+     - 核心功能测试
+     - 边界条件测试
+     - 错误处理测试
+  
+  ## 要求
+  
+  - **不要安装额外依赖**
+  - 使用现有测试框架
+  - 优先测试关键路径
+  - 测试应该独立、可重复
+  - 使用有意义的测试名称
+  
+  ## 输出
+  
+  创建测试报告 `test-report.md`：
+  - 创建了哪些测试文件
+  - 覆盖了哪些功能
+  - 测试数量统计
+
+inputs:
+  - name: projectDir
+    type: string
+    required: true
+    description: 项目目录
+  
+  - name: focus
+    type: string
+    description: 重点测试的模块
+
+outputs:
+  - test-report.md

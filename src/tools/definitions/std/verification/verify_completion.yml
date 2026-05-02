@@ -1,0 +1,113 @@
+# verify_completion.yml - 验证完成
+# ============================================================================
+# 能力类型: verification（工具型）
+# 来源: Superpowers - verification-before-completion
+# 版本: 2026-03-28 (需手动同步)
+# 执行方式: 纯脚本，执行验证命令
+# 铁律: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+# ============================================================================
+
+name: verify-completion
+stage: verify
+description: 任务完成前验证，运行验证命令并检查结果
+
+iron_law:
+  rule: "NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE"
+  message: "在声明任务完成之前，必须运行验证命令"
+
+input:
+  claim:
+    type: string
+    required: true
+    description: 完成声明（如 "all tests pass"）
+    
+  command:
+    type: string
+    required: true
+    description: 验证命令（如 "npm test"）
+    
+  repo_path:
+    type: path
+    required: true
+    description: 项目路径
+    
+  expected_output:
+    type: string
+    required: false
+    description: 期望输出（可选，用于验证）
+    default: ""
+
+output:
+  verified:
+    type: boolean
+    description: 是否验证通过
+    
+  evidence:
+    type: string
+    description: 验证证据（命令输出）
+    
+  timestamp:
+    type: string
+    description: 验证时间戳
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  CLAIM="{{claim}}"
+  COMMAND="{{command}}"
+  EXPECTED="{{expected_output}}"
+  
+  cd "$REPO_PATH"
+  
+  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  
+  echo "🔍 验证完成声明"
+  echo "  声明: $CLAIM"
+  echo "  命令: $COMMAND"
+  echo "  时间: $TIMESTAMP"
+  echo ""
+  
+  # 执行验证命令
+  echo "▶ 执行验证命令..."
+  if OUTPUT=$(eval "$COMMAND" 2>&1); then
+    echo ""
+    echo "✅ 验证命令执行成功"
+    
+    # 检查期望输出
+    if [ -n "$EXPECTED" ]; then
+      if echo "$OUTPUT" | grep -q "$EXPECTED"; then
+        echo "✅ 输出匹配期望值"
+        VERIFIED="true"
+      else
+        echo "❌ 输出不匹配期望值"
+        echo "  期望: $EXPECTED"
+        echo "  实际: ${OUTPUT:0:200}..."
+        VERIFIED="false"
+      fi
+    else
+      VERIFIED="true"
+    fi
+  else
+    echo ""
+    echo "❌ 验证命令执行失败"
+    echo "  输出: ${OUTPUT:0:500}"
+    VERIFIED="false"
+  fi
+  
+  echo ""
+  echo "--- 验证结果 ---"
+  echo "VERIFIED=$VERIFIED"
+  echo "TIMESTAMP=$TIMESTAMP"
+  
+  if [ "$VERIFIED" = "true" ]; then
+    echo ""
+    echo "🎉 完成声明已验证通过！"
+    echo "  可以安全地声明: $CLAIM"
+  else
+    echo ""
+    echo "⚠️ 完成声明验证失败！"
+    echo "  不应声明: $CLAIM"
+    exit 1
+  fi

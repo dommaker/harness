@@ -1,0 +1,105 @@
+name: search-enhance
+stage: plan
+description: |
+  增强搜索能力，支持模糊搜索和语义搜索。
+  
+  使用 Fuse.js 进行模糊匹配：
+  - 组件名搜索
+  - 文件路径搜索
+  - 代码内容搜索
+  
+  用途：
+  - 快速定位组件
+  - 代码导航
+  - 重构影响分析
+
+agent: codex
+timeout: 180  # 3 分钟
+
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目根路径
+    
+  - name: query
+    type: string
+    required: true
+    description: 搜索查询
+    
+  - name: search_type
+    type: string
+    required: false
+    default: "all"
+    description: |
+      搜索类型：
+      - "components" - 只搜索组件
+      - "files" - 只搜索文件
+      - "code" - 只搜索代码内容
+      - "all" - 全部搜索
+      
+  - name: limit
+    type: number
+    required: false
+    default: 20
+    description: 返回结果数量限制
+
+outputs:
+  - name: results
+    type: array
+    description: 搜索结果列表
+    
+  - name: total
+    type: number
+    description: 总结果数
+    
+  - name: index_path
+    type: string
+    description: 搜索索引文件路径
+
+prompt: |
+  在项目 {{project_path}} 中搜索 "{{query}}"。
+  
+  ## 任务
+  
+  1. 加载或构建搜索索引
+     - 索引路径：.agent/search-index.json
+     - 包含：组件名、文件路径、函数名、类名
+  
+  2. 执行模糊搜索
+     - 使用 Fuse.js 算法
+     - 支持拼写错误容忍
+     - 支持部分匹配
+  
+  3. 过滤结果
+     - 按 search_type 过滤
+     - 按相关度排序
+  
+  4. 返回结果
+  
+  ## 输出格式
+  
+  ```json
+  {
+    "results": [
+      {
+        "type": "component",
+        "name": "UserCard",
+        "filePath": "src/components/UserCard.tsx",
+        "line": 1,
+        "score": 0.95,
+        "matches": ["UserCard", "User Card"],
+        "context": "export function UserCard({ user }) { ... }"
+      }
+    ],
+    "total": 5
+  }
+  ```
+
+tools:
+  - file-read
+  - shell-execute
+
+temperature: 0.3
+
+version: "1.0.0"

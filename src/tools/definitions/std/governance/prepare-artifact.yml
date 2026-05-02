@@ -1,0 +1,20 @@
+# prepare-artifact.yml - 准备审核对象
+id: governance/prepare-artifact
+stage: govern
+name: 准备审核对象
+description: 准备审核对象内容
+
+inputs:
+  - name: artifact_type
+    type: string
+    required: true
+  - name: content
+    type: string
+    required: true
+  - name: context
+    type: object
+    required: false
+
+outputs:
+  - name: output
+    type: object

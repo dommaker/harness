@@ -1,0 +1,179 @@
+# impeach.yml - 弹劾步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 内置处理器 + Agent 审核
+# 用途: 发起和处理角色弹劾流程
+# 核心理念: 独立审计发现问题，启动弹劾程序
+# ============================================================================
+
+name: impeach
+stage: govern
+description: 发起和处理角色弹劾流程
+category: governance
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: governance/impeach
+
+# 输入定义
+inputs:
+  target_id:
+    type: string
+    description: 被弹劾角色 ID
+    required: true
+  
+  reason:
+    type: string
+    description: 弹劾理由
+    required: true
+  
+  severity:
+    type: string
+    description: 弹劾严重程度
+    enum: [critical, major, minor]
+    required: true
+  
+  evidence:
+    type: array
+    description: 证据链
+    items:
+      type: string
+    required: true
+  
+  audit_report_id:
+    type: string
+    description: 关联的审计报告 ID
+    required: false
+  
+  initiated_by:
+    type: string
+    description: 发起人 ID（通常是 auditor）
+    required: true
+
+# 弹劾条件
+impeachment_conditions:
+  critical:
+    reasons:
+      - 严重失职导致重大损失
+      - 故意隐瞒问题
+      - 伪造签署文档
+      - 滥用职权
+    penalty: 解雇
+  
+  major:
+    reasons:
+      - 连续 3 个月绩效不达标
+      - 多次审核失误
+      - 违反工作流程
+    penalty: 降级 + 扣质量分
+  
+  minor:
+    reasons:
+      - 工作态度问题
+      - 沟通不畅
+      - 配合度低
+    penalty: 警告 + 扣质量分
+
+# 处理流程
+workflow:
+  step_1:
+    name: 发起弹劾
+    role: auditor
+    actions:
+      - 创建弹劾记录
+      - 收集证据
+      - 通知被弹劾角色
+  
+  step_2:
+    name: 技术负责人审核
+    role: tech-lead
+    actions:
+      - 审核证据
+      - 听取当事人陈述
+      - 做出初步判断
+  
+  step_3:
+    name: 用户裁决
+    role: owner
+    actions:
+      - 审核弹劾报告
+      - 做出最终决定
+      - 执行处罚
+
+# 处罚选项
+penalties:
+  critical:
+    - 解雇
+    - 降级 + 扣质量分
+    - 警告 + 扣质量分
+  
+  major:
+    - 降级 + 扣质量分
+    - 警告 + 扣质量分
+    - 无处罚（情节轻微）
+  
+  minor:
+    - 警告 + 扣质量分
+    - 口头警告
+    - 无处罚
+
+# 输出定义
+outputs:
+  - name: impeachment_id
+    type: string
+    description: 弹劾记录 ID
+  
+  - name: status
+    type: string
+    enum: [pending, reviewed, decided, executed, dismissed]
+    description: 弹劾状态
+  
+  - name: tech_lead_decision
+    type: object
+    description: 技术负责人决策
+    properties:
+      decision:
+        type: string
+        enum: [proceed, dismiss]
+      opinion:
+        type: string
+  
+  - name: owner_decision
+    type: object
+    description: 用户决策
+    properties:
+      decision:
+        type: string
+        enum: [approve, reject, mitigate]
+      penalty:
+        type: string
+  
+  - name: timeline
+    type: object
+    description: 时间线
+    properties:
+      initiated_at:
+        type: number
+      reviewed_at:
+        type: number
+      decided_at:
+        type: number
+      executed_at:
+        type: number
+
+# 保护措施
+protections:
+  - 被弹劾角色有权申辩
+  - 弹劾记录需要证据支撑
+  - 严重弹劾需要用户最终确认
+  - 弹劾失败不记入档案
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - impeachment
+    - accountability

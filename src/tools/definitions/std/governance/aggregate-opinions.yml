@@ -1,0 +1,79 @@
+# aggregate-opinions.yml - 意见汇聚工具
+# ============================================================================
+# 类型: 治理类工具
+# 执行方式: 内置处理器
+# 用途: 汇聚多立场审核意见，做出最终决策
+# 核心理念: 多角色意见汇聚决策
+# ============================================================================
+
+name: aggregate-opinions
+stage: govern
+description: 汇聚多立场审核意见
+category: governance
+version: 1.0.0
+
+# 输入定义
+inputs:
+  - name: opinions
+    type: array
+    required: true
+    description: |
+      各立场审核意见列表
+      items:
+        stanceId: 立场 ID
+        roleId: 角色 ID
+        verdict: 审核结论 (approve | reject | request_changes)
+        opinion: 详细意见
+        issues: 问题列表（可选）
+  
+  - name: aggregation_method
+    type: string
+    description: |
+      汇聚方式：
+      - consensus: 一致同意（所有立场都同意才通过）
+      - majority: 多数同意（超过半数同意即通过）
+      - weighted: 加权投票（critic 权重 2.0，decider 权重 1.5）
+      - decider: 决策者决定（以 decider 立场的意见为准）
+    default: "decider"
+
+# 输出定义
+outputs:
+  - name: final_decision
+    type: string
+    description: |
+      最终决策：
+      - approved: 通过
+      - rejected: 拒绝
+      - changes_requested: 要求修改
+  
+  - name: reason
+    type: string
+    description: 决策理由
+  
+  - name: statistics
+    type: object
+    description: 审核统计
+    properties:
+      approve:
+        type: number
+      reject:
+        type: number
+      request_changes:
+        type: number
+      total:
+        type: number
+
+# 执行配置
+execute:
+  type: script
+  script: ./aggregate-opinions.sh
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - aggregation
+    - decision
+    - multi-stakeholder
+    - stance-isolation

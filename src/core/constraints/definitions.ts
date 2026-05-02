@@ -198,6 +198,37 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 - 实现：增加了自动关联逻辑
 - 验证：✅ 检查了 Spec 定义、测试了多种场景`,
   },
+
+  /**
+   * 禁止无需求就开始实现
+   * 原因：没有需求就没有验收标准，实现方向不可控
+   */
+  no_implementation_without_requirement: {
+    id: 'no_implementation_without_requirement',
+    rule: 'NO IMPLEMENTATION WITHOUT REQUIREMENTS',
+    message: '禁止无需求就开始实现',
+    level: 'iron_law',
+    trigger: ['code_implementation', 'feature_development'],
+    enforcement: 'requirement-exists',
+    description: `在开始实现之前，必须有明确的需求定义。
+
+【触发条件】
+- 开始编写业务代码
+- 开始开发新功能
+
+【必须执行】
+1. 确认需求来源（Spec/Issue/Roadmap/用户指令）
+2. 确认验收标准（AC）已定义
+3. 确认边界情况已明确
+
+【禁止】
+- 没有需求就开始写代码
+- 假设"用户想要什么"就开始实现
+- 跳过需求确认直接开发
+
+【正确流程】
+需求确认 → AC 定义 → 实现 → 验证`,
+  },
 };
 
 // ========================================
@@ -508,6 +539,62 @@ export const GUIDELINES: Record<string, Constraint> = {
 - 重构核心逻辑（需评审）
 - 紧急修复（需后续补测）`,
     exceptions: ['deprecated_removal', 'core_refactor_with_review', 'emergency_fix_pending_test'],
+  },
+
+  /**
+   * 关键目录需要 CONTEXT.md
+   * 例外：临时目录、测试目录、生成代码目录
+   */
+  context_doc_sync: {
+    id: 'context_doc_sync',
+    rule: 'KEY DIRECTORIES SHOULD HAVE CONTEXT.MD',
+    message: '关键目录缺少 CONTEXT.md，运行 harness sync-docs 创建模板后填写实际内容',
+    level: 'guideline',
+    trigger: 'module_modification',
+    enforcement: 'context-check',
+    description: `项目的关键目录应包含 CONTEXT.md 文件，描述目录职责和上下文。
+
+[触发条件]
+- 在配置的 required_dirs 目录下新增/修改文件
+- harness check 运行时自动检查
+
+[要求]
+- 每个 required_dirs 中列出的目录必须有 CONTEXT.md
+- CONTEXT.md 应包含：职责、核心导出、依赖关系、注意事项
+
+[例外]
+- 临时目录（tmp、temp）
+- 测试目录（__tests__、test）
+- 生成代码目录（dist、build、generated）`,
+    exceptions: ['temp_dir', 'test_dir', 'generated_code'],
+  },
+
+  /**
+   * 文档应与代码同步
+   * 例外：WIP 分支、实验性修改
+   */
+  docs_freshness: {
+    id: 'docs_freshness',
+    rule: 'DOCS SHOULD BE IN SYNC WITH CODE',
+    message: '文档与代码不同步，运行 harness sync-docs --json 查看详情并修复',
+    level: 'guideline',
+    trigger: 'file_modification',
+    enforcement: 'docs-sync-check',
+    description: `CAPABILITIES.md 等文档应与源码保持同步。
+
+[触发条件]
+- src/ 下有文件新增或删除
+- harness sync-docs --check 检测到差异
+
+[要求]
+- CAPABILITIES.md 中列出的文件应与 src/ 中的实际文件一致
+- 新增模块应添加到 CAPABILITIES.md
+- 删除模块应从 CAPABILITIES.md 移除
+
+[例外]
+- WIP 分支（未完成的功能）
+- 实验性修改（可后续同步）`,
+    exceptions: ['wip_branch', 'experimental_change'],
   },
 };
 

@@ -29,8 +29,8 @@ jobs:
           node-version: ${{ inputs.node-version }}
       - run: npm ci
         continue-on-error: true
-      - run: npx @kww/harness check --preset ${{ inputs.preset }}
-      - run: npx @kww/harness validate
+      - run: npx @dommaker/harness check --preset ${{ inputs.preset }}
+      - run: npx @dommaker/harness validate
         continue-on-error: true
       - if: ${{ !inputs.skip-tests }}
-        run: npx @kww/harness passes-gate
+        run: npx @dommaker/harness passes-gate

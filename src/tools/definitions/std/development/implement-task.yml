@@ -1,0 +1,124 @@
+# implement-task.yml - 实现单个任务（不 commit）
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 根据任务描述实现功能，但不提交代码
+# 输出: 实现结果，供后续 review
+# ============================================================================
+
+name: implement-task
+stage: develop
+description: 实现单个任务（不提交）
+category: development
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+  - bash
+  - npm-test
+
+# Prompt
+prompt: |
+  你是一个资深开发者。请完成以下开发任务。
+  
+  ## 任务信息
+  
+  **任务 ID**: {{task.id}}
+  **任务名称**: {{task.name}}
+  **任务描述**: {{task.description}}
+  
+  ## 验收标准
+  
+  {{task.acceptance_criteria}}
+  
+  ## 项目上下文
+  
+  **项目**: {{project.name}}
+  **技术栈**: {{project.tech_stack}}
+  **项目路径**: {{project.path}}
+  
+  ## 前置依赖
+  
+  {{previous_outputs}}
+  
+  ## 要求
+  
+  1. **TDD 流程**：
+     - 先写测试，确认测试失败
+     - 实现功能，确认测试通过
+     - 重构（如需要）
+  
+  2. **代码质量**：
+     - 遵循项目现有代码风格
+     - 添加必要的注释
+     - 处理边界情况和错误
+  
+  3. **不要提交代码**：
+     - 本次只实现，不 commit
+     - 等待 review 通过后再提交
+  
+  ## 输出
+  
+  完成后请报告：
+  1. 创建/修改了哪些文件
+  2. 测试是否通过
+  3. 实现的关键逻辑
+
+# 输入参数
+inputs:
+  - name: task
+    type: object
+    required: true
+    properties:
+      id:
+        type: string
+        description: 任务 ID
+      name:
+        type: string
+        description: 任务名称
+      description:
+        type: string
+        description: 任务描述
+      acceptance_criteria:
+        type: array
+        description: 验收标准
+    description: 任务对象
+  
+  - name: project
+    type: object
+    required: true
+    properties:
+      name:
+        type: string
+      tech_stack:
+        type: array
+      path:
+        type: string
+    description: 项目上下文
+  
+  - name: previous_outputs
+    type: array
+    description: 前序任务的输出
+
+# 输出
+outputs:
+  - name: files_changed
+    type: array
+    description: 修改的文件列表
+  
+  - name: tests_passed
+    type: boolean
+    description: 测试是否通过
+  
+  - name: implementation_notes
+    type: string
+    description: 实现说明
+  
+  - name: ready_for_review
+    type: boolean
+    description: 是否准备好 review

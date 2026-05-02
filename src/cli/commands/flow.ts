@@ -12,6 +12,7 @@ import { TraceCollector } from '../../monitoring/traces';
 import { TraceAnalyzer } from '../../monitoring/trace-analyzer';
 import { ConstraintDoctor, Diagnosis } from '../../monitoring/constraint-doctor';
 import { ConstraintEvolver, ConstraintProposal } from '../../monitoring/constraint-evolver';
+import { ConstraintLifecycleRunner, type ExecutionResult } from '../../constraints/lifecycle-runner';
 import type { TraceAnomaly } from '../../types/trace';
 
 export interface FlowOptions {
@@ -21,6 +22,8 @@ export interface FlowOptions {
   from?: 'analyze' | 'diagnose' | 'propose';
   /** 自动应用低风险提案 */
   autoApply?: boolean;
+  /** 自动执行已接受的提案（调用 ConstraintLifecycleRunner） */
+  autoExecute?: boolean;
   /** 时间范围（小时） */
   hours?: number;
 }
@@ -207,12 +210,24 @@ export async function flow(options: FlowOptions): Promise<void> {
     console.log(chalk.blue('📝 步骤 4/4: 审核提案'));
     console.log(chalk.gray('────────────────────────────'));
 
+    const runner = options.autoExecute ? new ConstraintLifecycleRunner() : null;
+    const executionResults: ExecutionResult[] = [];
+
     for (let i = 0; i < proposals.length; i++) {
       const p = proposals[i];
-      
+
       // 低风险 → 可自动应用
       if (options.autoApply && p.risk.level === 'low') {
         console.log(chalk.green(`✅ 自动应用提案 ${i + 1} (低风险)`));
+        if (runner) {
+          const result = runner.execute(p);
+          executionResults.push(result);
+          if (result.success) {
+            console.log(chalk.green(`  ✅ 已执行: ${result.details}`));
+          } else {
+            console.log(chalk.yellow(`  ⚠️ 执行失败: ${result.details}`));
+          }
+        }
         continue;
       }
 
@@ -220,10 +235,29 @@ export async function flow(options: FlowOptions): Promise<void> {
       const answer = await ask(rl, `是否应用提案 ${i + 1}？ [y/N] `);
       if (answer === 'y') {
         console.log(chalk.green(`✅ 提案 ${i + 1} 已标记为应用`));
-        console.log(chalk.gray('  请手动更新约束配置'));
+        if (runner) {
+          const result = runner.execute(p);
+          executionResults.push(result);
+          if (result.success) {
+            console.log(chalk.green(`  ✅ 已执行: ${result.details}`));
+          } else {
+            console.log(chalk.yellow(`  ⚠️ 执行失败: ${result.details}`));
+          }
+        } else {
+          console.log(chalk.gray('  请手动更新约束配置'));
+        }
       } else {
         console.log(chalk.gray(`⏭️  跳过提案 ${i + 1}`));
       }
+    }
+
+    // 显示执行摘要
+    if (executionResults.length > 0) {
+      console.log();
+      console.log(chalk.blue('📊 执行摘要:'));
+      const succeeded = executionResults.filter(r => r.success).length;
+      const failed = executionResults.filter(r => !r.success).length;
+      console.log(chalk.gray(`  成功: ${succeeded}, 失败: ${failed}`));
     }
 
     console.log();
@@ -231,8 +265,10 @@ export async function flow(options: FlowOptions): Promise<void> {
     console.log();
     console.log(chalk.blue('💡 下一步:'));
     console.log(chalk.gray('  1. 查看提案文件确认变更'));
-    console.log(chalk.gray('  2. 手动更新约束配置'));
-    console.log(chalk.gray('  3. 运行 harness status 查看效果'));
+    if (!runner) {
+      console.log(chalk.gray('  2. 手动更新约束配置'));
+    }
+    console.log(chalk.gray(`  ${runner ? '2' : '3'}. 运行 harness status 查看效果`));
   } finally {
     rl.close();
   }

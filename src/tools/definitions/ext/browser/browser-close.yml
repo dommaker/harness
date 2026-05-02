@@ -1,0 +1,55 @@
+# browser-close.yml - 关闭浏览器
+# ============================================================================
+# 工具类型: 浏览器
+# 用途: 关闭浏览器会话
+# ============================================================================
+
+name: browser/browser-close
+description: |
+  关闭浏览器会话
+  
+  功能：
+  - 关闭指定会话
+  - 清理资源
+  - 可选截图保存
+
+input:
+  - name: session_id
+    type: string
+    required: true
+    description: 浏览器会话 ID
+  
+  - name: save_screenshots
+    type: boolean
+    required: false
+    default: true
+    description: 是否保存截图
+
+output:
+  - name: success
+    type: boolean
+    description: 是否关闭成功
+  
+  - name: screenshots
+    type: array
+    description: 保存的截图路径列表
+
+# 实现说明
+implementation:
+  type: script
+  script: ./browser-close.sh
+  note: |
+    使用 agent-browser-stealth (abs) 关闭浏览器
+    
+    1. 可选保存截图
+    2. 调用 abs close 关闭会话
+    3. 清理资源
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags:
+    - browser
+    - puppeteer
+    - e2e

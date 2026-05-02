@@ -1,0 +1,118 @@
+# validate-handlers.yml - Handler 注册完整性检查
+# ============================================================================
+# 能力类型: validation（工具型）
+# 执行方式: 纯脚本，检查 handler 注册
+# 用途: 验证所有 step 的 handler 都已在 builtin-handlers.ts 中注册
+# ============================================================================
+
+name: validate-handlers
+description: 检查 step 的 handler 是否都在 builtin-handlers.ts 中注册
+category: validation
+version: 1.0.0
+
+# 铁律
+iron_law:
+  rule: "NO ORPHAN HANDLERS"
+  message: "所有 step 定义的 handler 必须在 builtin-handlers.ts 中注册"
+
+# 输入
+input:
+  steps_dir:
+    type: path
+    required: false
+    default: "steps"
+    description: steps 目录路径
+  
+  registry_file:
+    type: path
+    required: false
+    default: "../agent-runtime/src/core/builtin-handlers.ts"
+    description: builtin-handlers.ts 文件路径
+
+# 输出
+output:
+  total_handlers:
+    type: number
+    description: 发现的 handler 总数
+  
+  registered:
+    type: number
+    description: 已注册的 handler 数量
+  
+  missing:
+    type: array
+    description: 未注册的 handler 列表
+  
+  passed:
+    type: boolean
+    description: 是否全部通过
+
+# 执行脚本
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  STEPS_DIR="{{steps_dir}}"
+  REGISTRY_FILE="{{registry_file}}"
+  
+  echo "🔍 检查 Handler 注册完整性"
+  echo "  Steps 目录: $STEPS_DIR"
+  echo "  注册文件: $REGISTRY_FILE"
+  echo ""
+  
+  # 检查目录和文件是否存在
+  if [ ! -d "$STEPS_DIR" ]; then
+    echo "❌ Steps 目录不存在: $STEPS_DIR"
+    exit 1
+  fi
+  
+  if [ ! -f "$REGISTRY_FILE" ]; then
+    echo "❌ 注册文件不存在: $REGISTRY_FILE"
+    exit 1
+  fi
+  
+  MISSING=()
+  TOTAL=0
+  REGISTERED=0
+  
+  # 遍历所有 step 文件
+  for f in $(find "$STEPS_DIR" -name "*.yml" -o -name "*.yaml" 2>/dev/null | sort); do
+    # 提取 handler 字段
+    handler=$(grep -E "^\s*handler:" "$f" 2>/dev/null | head -1 | sed 's/.*handler:\s*//' | tr -d '"' | tr -d "'")
+    
+    if [ -n "$handler" ]; then
+      TOTAL=$((TOTAL + 1))
+      
+      # 检查是否在注册文件中
+      if grep -q "'$handler'" "$REGISTRY_FILE" 2>/dev/null; then
+        REGISTERED=$((REGISTERED + 1))
+        echo "  ✅ $handler"
+      else
+        MISSING+=("$handler")
+        echo "  ❌ $handler (from $(basename $(dirname $f))/$(basename $f))"
+      fi
+    fi
+  done
+  
+  echo ""
+  echo "================================"
+  echo "📊 统计:"
+  echo "  总计: $TOTAL 个 handler"
+  echo "  已注册: $REGISTERED 个"
+  echo "  未注册: ${#MISSING[@]} 个"
+  echo "================================"
+  
+  if [ ${#MISSING[@]} -gt 0 ]; then
+    echo ""
+    echo "❌ 发现未注册的 handler:"
+    for h in "${MISSING[@]}"; do
+      echo "  - $h"
+    done
+    echo ""
+    echo "请在 builtin-handlers.ts 中注册这些 handler"
+    exit 1
+  fi
+  
+  echo ""
+  echo "✅ 所有 handler 都已正确注册"
+  exit 0

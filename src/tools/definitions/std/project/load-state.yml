@@ -1,0 +1,31 @@
+# project/load-state - 加载项目状态
+#
+# 输入：
+#   - project_path: 项目路径
+#
+# 输出：
+#   - exists: 是否存在项目状态
+#   - state: 项目状态对象
+
+id: project/load-state
+stage: plan
+name: 加载项目状态
+description: 加载项目的生命周期状态
+category: project
+execute:
+  type: builtin
+  handler: project/load-state
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+
+outputs:
+  - name: exists
+    type: boolean
+    description: 是否存在项目状态
+  - name: state
+    type: object
+    description: 项目状态对象

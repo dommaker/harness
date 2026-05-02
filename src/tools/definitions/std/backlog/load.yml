@@ -1,0 +1,46 @@
+# backlog/load - 加载特定 Backlog 项
+# ============================================================================
+# 类型: 内置处理器
+# 用途: 从 backlog 中加载特定 Feature/Bug（通过 item_id）
+# ============================================================================
+
+name: backlog/load
+stage: plan
+description: 从 Backlog 加载特定 Feature 或 Bug
+category: backlog
+version: 1.0.0
+
+# 输入定义
+inputs:
+  - name: project_path
+    type: string
+    description: 项目路径
+    required: true
+  
+  - name: item_id
+    type: string
+    description: Backlog 项 ID（如 F-001, B-001）
+    required: true
+
+# 输出定义
+outputs:
+  - name: feature
+    type: object
+    description: Feature/Bug 对象
+  
+  - name: feature_title
+    type: string
+    description: Feature/Bug 标题
+  
+  - name: feature_description
+    type: string
+    description: Feature/Bug 描述
+  
+  - name: feature_acceptance
+    type: array
+    description: 验收标准列表
+
+# 执行配置
+execute:
+  type: builtin
+  handler: backlog/load

@@ -15,6 +15,8 @@ export interface InitOptions {
   projectPath?: string;
   /** 预设名称 */
   preset: 'strict' | 'standard' | 'relaxed';
+  /** 治理级别 */
+  governance?: 'minimal' | 'standard' | 'strict';
   /** 项目类型 */
   type?: 'node-api' | 'nextjs-app' | 'python-api' | 'custom';
   /** 是否创建 Git hooks */
@@ -74,6 +76,75 @@ const PRESETS = {
 };
 
 /**
+ * 治理预设
+ */
+const GOVERNANCE_PRESETS: Record<string, Record<string, unknown>> = {
+  minimal: {
+    level: 'minimal',
+    docs: {
+      sync_command: 'harness sync-docs',
+      check_on_ci: false,
+      files: ['CAPABILITIES.md'],
+    },
+    context_files: {
+      enabled: false,
+      required_dirs: [],
+    },
+    changelog: {
+      format: 'keep-a-changelog',
+      auto_append: false,
+    },
+    testing: {
+      test_first: true,
+      coverage_threshold: 85,
+      incremental_coverage: false,
+    },
+  },
+  standard: {
+    level: 'standard',
+    docs: {
+      sync_command: 'harness sync-docs',
+      check_on_ci: true,
+      files: ['CAPABILITIES.md', 'README.md'],
+    },
+    context_files: {
+      enabled: true,
+      required_dirs: ['src'],
+    },
+    changelog: {
+      format: 'keep-a-changelog',
+      auto_append: false,
+    },
+    testing: {
+      test_first: true,
+      coverage_threshold: 85,
+      incremental_coverage: false,
+    },
+  },
+  strict: {
+    level: 'strict',
+    docs: {
+      sync_command: 'harness sync-docs',
+      check_on_ci: true,
+      files: ['CAPABILITIES.md', 'README.md', 'CHANGELOG.md'],
+    },
+    context_files: {
+      enabled: true,
+      required_dirs: ['src'],
+    },
+    changelog: {
+      format: 'keep-a-changelog',
+      auto_append: true,
+    },
+    testing: {
+      test_first: true,
+      coverage_threshold: 85,
+      incremental_coverage: true,
+    },
+  },
+};
+
+/**
  * 初始化项目
  */
 export async function init(options: InitOptions): Promise<void> {
@@ -96,9 +167,16 @@ export async function init(options: InitOptions): Promise<void> {
   const preset = PRESETS[options.preset];
   console.log(chalk.gray(`预设: ${options.preset}`));
 
+  // 合并治理配置
+  const configData: Record<string, unknown> = { ...preset };
+  if (options.governance) {
+    configData.governance = GOVERNANCE_PRESETS[options.governance];
+    console.log(chalk.gray(`治理级别: ${options.governance}`));
+  }
+
   // 写入配置文件
   const configPath = path.join(configDir, 'config.yml');
-  const configContent = yaml.dump(preset, { indent: 2 });
+  const configContent = yaml.dump(configData, { indent: 2 });
   await fs.writeFile(configPath, configContent, 'utf-8');
   console.log(chalk.green(`✅ 已创建配置文件: ${configPath}`));
 
@@ -150,6 +228,11 @@ export async function init(options: InitOptions): Promise<void> {
   // 创建 GitHub Actions
   if (options.githubActions !== false) {
     await setupGitHubActions(projectPath, options.preset);
+  }
+
+  // 治理相关文件生成
+  if (options.governance) {
+    await setupGovernance(projectPath, options.governance);
   }
 
   console.log();
@@ -412,4 +495,191 @@ custom_constraints:
 
   await fs.writeFile(customConstraintsPath, content, 'utf-8');
   console.log(chalk.green(`✅ 已创建自定义约束示例: custom-constraints.yml`));
+}
+
+/**
+ * 设置治理相关文件
+ */
+async function setupGovernance(projectPath: string, level: string): Promise<void> {
+  const governance = GOVERNANCE_PRESETS[level] as Record<string, unknown>;
+  if (!governance) return;
+
+  console.log();
+  console.log(chalk.blue('📋 设置治理文件...'));
+
+  // 1. 生成 CHANGELOG.md
+  await createChangelog(projectPath, governance);
+
+  // 2. 生成 CONTEXT.md 文件
+  const contextConfig = governance.context_files as Record<string, unknown> | undefined;
+  if (contextConfig?.enabled) {
+    const requiredDirs = (contextConfig.required_dirs as string[]) || [];
+    for (const dir of requiredDirs) {
+      await createContextMd(projectPath, dir);
+    }
+  }
+
+  // 3. 生成治理 CI workflow
+  await setupGovernanceWorkflow(projectPath, level);
+}
+
+/**
+ * 创建 CHANGELOG.md
+ */
+async function createChangelog(projectPath: string, governance: Record<string, unknown>): Promise<void> {
+  const changelogPath = path.join(projectPath, 'CHANGELOG.md');
+
+  try {
+    await fs.access(changelogPath);
+    console.log(chalk.gray(`CHANGELOG.md 已存在`));
+    return;
+  } catch {
+    // 文件不存在，创建
+  }
+
+  const changelogConfig = governance.changelog as Record<string, unknown> | undefined;
+  const format = (changelogConfig?.format as string) || 'keep-a-changelog';
+
+  let content: string;
+  if (format === 'keep-a-changelog') {
+    content = `# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup with harness governance
+
+---
+
+> 此文件可由 \`harness sync-docs\` 辅助维护
+`;
+  } else {
+    content = `# Changelog
+
+## [Unreleased]
+
+- Initial project setup with harness governance
+
+---
+
+> 此文件可由 \`harness sync-docs\` 辅助维护
+`;
+  }
+
+  await fs.writeFile(changelogPath, content, 'utf-8');
+  console.log(chalk.green(`✅ 已创建 CHANGELOG.md`));
+}
+
+/**
+ * 在指定目录创建 CONTEXT.md
+ */
+async function createContextMd(projectPath: string, dir: string): Promise<void> {
+  const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
+
+  try {
+    await fs.access(contextPath);
+    console.log(chalk.gray(`${dir}/CONTEXT.md 已存在`));
+    return;
+  } catch {
+    // 文件不存在，创建
+  }
+
+  // 检查目录是否存在
+  const dirPath = path.join(projectPath, dir);
+  try {
+    await fs.access(dirPath);
+  } catch {
+    console.log(chalk.yellow(`⚠️  目录 ${dir} 不存在，跳过 CONTEXT.md`));
+    return;
+  }
+
+  const dirName = path.basename(dir);
+  const content = `# ${dirName}
+
+> 此文件描述 ${dir} 目录的职责和上下文
+
+## 职责
+
+<!-- 本目录的核心职责是什么 -->
+
+## 核心导出
+
+<!-- 本目录对外暴露的主要模块/函数 -->
+
+## 依赖关系
+
+<!-- 本目录依赖哪些其他模块，谁依赖本目录 -->
+
+## 注意事项
+
+<!-- 开发时需要注意的约束或约定 -->
+`;
+
+  await fs.writeFile(contextPath, content, 'utf-8');
+  console.log(chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+}
+
+/**
+ * 设置治理 CI workflow
+ */
+async function setupGovernanceWorkflow(projectPath: string, level: string): Promise<void> {
+  const workflowsDir = path.join(projectPath, '.github', 'workflows');
+  const workflowPath = path.join(workflowsDir, 'harness-governance.yml');
+
+  // 检查是否已存在
+  try {
+    await fs.access(workflowPath);
+    console.log(chalk.gray(`harness-governance.yml 已存在`));
+    return;
+  } catch {
+    // 不存在，继续创建
+  }
+
+  await fs.mkdir(workflowsDir, { recursive: true });
+
+  const docsCheckStep = level !== 'minimal'
+    ? `
+      - name: Check docs freshness
+        run: npx harness sync-docs --check
+        continue-on-error: true`
+    : '';
+
+  const workflowContent = `name: Harness Governance
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Constraint check
+        run: npx harness check
+
+      - name: Quality gate
+        run: npx harness passes-gate
+${docsCheckStep}
+`;
+
+  await fs.writeFile(workflowPath, workflowContent, 'utf-8');
+  console.log(chalk.green(`✅ 已创建 .github/workflows/harness-governance.yml`));
 }

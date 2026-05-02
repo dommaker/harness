@@ -1,0 +1,50 @@
+# cleanup-worktree.yml - 清理 Git Worktree
+# ============================================================================
+# 能力类型: git 操作（工具型）
+# 执行方式: 纯脚本，清理隔离工作空间
+# 用途: 完成开发后清理 git worktree
+# ============================================================================
+
+name: git-cleanup-worktree
+description: 开发完成后清理 Git Worktree 隔离工作空间
+
+input:
+  worktree_path:
+    type: path
+    required: true
+    description: 工作树路径
+  
+  force:
+    type: boolean
+    default: false
+    description: 强制删除（即使有未提交的更改）
+
+output:
+  result:
+    type: string
+    description: 删除结果
+
+script: |
+  #!/bin/bash
+  set -e
+  
+  WORKTREE_PATH="${input.worktree_path}"
+  FORCE="${input.force:-false}"
+  
+  if [ ! -d "$WORKTREE_PATH" ]; then
+    echo "Worktree not found: $WORKTREE_PATH"
+    exit 1
+  fi
+  
+  # 切换到主仓库
+  MAIN_REPO=$(git -C "$WORKTREE_PATH" worktree list | head -1 | cut -f1)
+  cd "$MAIN_REPO"
+  
+  # 删除 worktree
+  if [ "$FORCE" = "true" ]; then
+    git worktree remove --force "$WORKTREE_PATH"
+  else
+    git worktree remove "$WORKTREE_PATH"
+  fi
+  
+  echo "Worktree removed: $WORKTREE_PATH"

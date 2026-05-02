@@ -74,99 +74,207 @@ export async function check(options: CheckOptions): Promise<void> {
   console.log(chalk.blue('🔍 检查约束...'));
   console.log(chalk.gray(`预设: ${options.preset}`));
 
-  // 加载项目级自定义约束
-  const projectPath = options.projectPath || process.cwd();
-  const configLoader = new ProjectConfigLoader(projectPath);
-  configLoader.load();
-  
-  if (configLoader.hasCustomConfig()) {
-    const merged = configLoader.mergeConstraints();
-    constraintChecker.setCustomConfig(merged);
-    console.log(chalk.gray(`自定义约束: ${merged.custom.length} 条`));
-    if (merged.disabled.length > 0) {
-      console.log(chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
+  try {
+    // 加载项目级自定义约束
+    const projectPath = options.projectPath || process.cwd();
+    const configLoader = new ProjectConfigLoader(projectPath);
+    configLoader.load();
+
+    if (configLoader.hasCustomConfig()) {
+      const merged = configLoader.mergeConstraints();
+      constraintChecker.setCustomConfig(merged);
+      console.log(chalk.gray(`自定义约束: ${merged.custom.length} 条`));
+      if (merged.disabled.length > 0) {
+        console.log(chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
+      }
+    }
+
+    // 获取变更文件
+    const changedFiles = await getChangedFiles(options.staged);
+    if (changedFiles.length > 0) {
+      console.log(chalk.gray(`变更文件: ${changedFiles.length} 个`));
+    }
+
+    // 检测触发条件
+    const trigger = detectTrigger(changedFiles, options);
+    console.log(chalk.gray(`触发条件: ${trigger}`));
+
+    // 构建上下文
+    const context: ConstraintContext = {
+      operation: trigger,
+      projectPath: options.projectPath || process.cwd(),
+      changedFiles,
+      hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),
+      hasFailingTest: await detectFailingTest(projectPath),
+      hasRootCauseInvestigation: detectRootCauseInvestigation(projectPath),
+      hasVerificationEvidence: await detectVerificationEvidence(projectPath),
+      hasReuseCheck: detectReuseCheck(projectPath),
+    };
+
+    // 执行三层检查
+    const result = await constraintChecker.checkConstraints(context);
+
+    // 输出结果
+    console.log();
+
+    // Iron Laws
+    const ironLawViolations = result.ironLaws.filter(r => !r.satisfied);
+    if (ironLawViolations.length === 0 && result.ironLaws.length > 0) {
+      console.log(chalk.green(`✅ 铁律: 全部通过 (${result.ironLaws.length} 条)`));
+    } else if (ironLawViolations.length > 0) {
+      console.log(chalk.red(`❌ 铁律违规: ${ironLawViolations.length} 条`));
+      ironLawViolations.forEach(r => {
+        if (r.constraint) {
+          console.log(chalk.red(`   - ${r.constraint.id}: ${r.constraint.message}`));
+          console.log(chalk.red(`     ${r.constraint.rule}`));
+        }
+      });
+      console.log();
+      console.log(chalk.red('🛑 铁律检查失败，请修复后再提交'));
+      process.exit(1);
+    }
+
+    // Guidelines
+    if (result.warningCount > 0) {
+      console.log(chalk.yellow(`⚠️  指导原则警告: ${result.warningCount} 条`));
+      result.guidelines.filter(r => !r.satisfied).forEach(r => {
+        if (r.constraint) {
+          console.log(chalk.yellow(`   - ${r.constraint.id}: ${r.constraint.message}`));
+        }
+      });
+    } else if (result.guidelines.length > 0) {
+      const passedGuidelines = result.guidelines.filter(r => r.satisfied).length;
+      console.log(chalk.green(`✅ 指导原则: ${passedGuidelines}/${result.guidelines.length} 通过`));
+    }
+
+    // Tips
+    if (result.tipCount > 0) {
+      console.log(chalk.blue(`💡 提示: ${result.tipCount} 条`));
+      result.tips.filter(r => !r.satisfied).forEach(r => {
+        if (r.constraint) {
+          console.log(chalk.blue(`   - ${r.constraint.id}: ${r.constraint.message}`));
+        }
+      });
+    }
+
+    console.log();
+    console.log(chalk.green('✅ 约束检查通过'));
+
+    // 智能提示
+    const hint = await getSmartHint(projectPath);
+    if (hint) {
+      console.log();
+      console.log(chalk.gray('────────────────────────────────────'));
+      console.log(hint);
+      console.log(chalk.gray('────────────────────────────────────'));
+    }
+  } catch (error) {
+    console.log();
+    console.log(chalk.red(`❌ 约束检查异常: ${error instanceof Error ? error.message : String(error)}`));
+    process.exit(1);
+  }
+}
+
+/**
+ * 检测是否有失败的测试记录
+ * 扫描 .harness/traces/ 中最近的 trace 记录
+ */
+async function detectFailingTest(projectPath: string): Promise<boolean> {
+  try {
+    const tracesDir = path.join(projectPath, '.harness', 'traces');
+    if (!fs.existsSync(tracesDir)) return false;
+
+    const traceFile = path.join(tracesDir, 'execution.log');
+    if (!fs.existsSync(traceFile)) return false;
+
+    const content = fs.readFileSync(traceFile, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    if (lines.length === 0) return false;
+
+    // 检查最近 20 条记录是否有 fail
+    const recent = lines.slice(-20);
+    return recent.some(line => {
+      try {
+        const trace = JSON.parse(line);
+        return trace.result === 'fail';
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 检测是否有根因分析文档
+ * 检查 ROOT_CAUSE.md、.harness/diagnoses/、或 git commit 消息
+ */
+function detectRootCauseInvestigation(projectPath: string): boolean {
+  // 检查 ROOT_CAUSE.md
+  if (fs.existsSync(path.join(projectPath, 'ROOT_CAUSE.md'))) return true;
+
+  // 检查 .harness/diagnoses/ 目录
+  const diagnosesDir = path.join(projectPath, '.harness', 'diagnoses');
+  if (fs.existsSync(diagnosesDir)) {
+    try {
+      const files = fs.readdirSync(diagnosesDir);
+      if (files.length > 0) return true;
+    } catch {
+      // ignore
     }
   }
 
-  // 获取变更文件
-  const changedFiles = await getChangedFiles(options.staged);
-  if (changedFiles.length > 0) {
-    console.log(chalk.gray(`变更文件: ${changedFiles.length} 个`));
-  }
+  return false;
+}
 
-  // 检测触发条件
-  const trigger = detectTrigger(changedFiles, options);
-  console.log(chalk.gray(`触发条件: ${trigger}`));
+/**
+ * 检测是否有验证证据
+ * 检查 .harness/traces/ 中最近的成功验证记录
+ */
+async function detectVerificationEvidence(projectPath: string): Promise<boolean> {
+  try {
+    const tracesDir = path.join(projectPath, '.harness', 'traces');
+    if (!fs.existsSync(tracesDir)) return false;
 
-  // 构建上下文
-  const context: ConstraintContext = {
-    operation: trigger,
-    projectPath: options.projectPath || process.cwd(),
-    changedFiles,
-    hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),
-    hasFailingTest: false, // TODO: 实际检查测试状态
-    hasRootCauseInvestigation: false, // TODO: 检查是否有根因分析文档
-    hasVerificationEvidence: false, // TODO: 检查是否有验证证据
-    hasReuseCheck: false, // TODO: 检查是否有复用检查
-  };
+    const traceFile = path.join(tracesDir, 'execution.log');
+    if (!fs.existsSync(traceFile)) return false;
 
-  // 执行三层检查
-  const result = await constraintChecker.checkConstraints(context);
+    const content = fs.readFileSync(traceFile, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    if (lines.length === 0) return false;
 
-  // 输出结果
-  console.log();
-  
-  // Iron Laws
-  const ironLawViolations = result.ironLaws.filter(r => !r.satisfied);
-  if (ironLawViolations.length === 0 && result.ironLaws.length > 0) {
-    console.log(chalk.green(`✅ 铁律: 全部通过 (${result.ironLaws.length} 条)`));
-  } else if (ironLawViolations.length > 0) {
-    console.log(chalk.red(`❌ 铁律违规: ${ironLawViolations.length} 条`));
-    ironLawViolations.forEach(r => {
-      if (r.constraint) {
-        console.log(chalk.red(`   - ${r.constraint.id}: ${r.constraint.message}`));
-        console.log(chalk.red(`     ${r.constraint.rule}`));
+    // 检查最近 10 条记录是否有 pass
+    const recent = lines.slice(-10);
+    return recent.some(line => {
+      try {
+        const trace = JSON.parse(line);
+        return trace.result === 'pass';
+      } catch {
+        return false;
       }
     });
-    console.log();
-    console.log(chalk.red('🛑 铁律检查失败，请修复后再提交'));
-    process.exit(1);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 检测是否有复用检查
+ * 检查 .harness/reuse/ 目录或相关文档
+ */
+function detectReuseCheck(projectPath: string): boolean {
+  const reuseDir = path.join(projectPath, '.harness', 'reuse');
+  if (fs.existsSync(reuseDir)) {
+    try {
+      const files = fs.readdirSync(reuseDir);
+      if (files.length > 0) return true;
+    } catch {
+      // ignore
+    }
   }
 
-  // Guidelines
-  if (result.warningCount > 0) {
-    console.log(chalk.yellow(`⚠️  指导原则警告: ${result.warningCount} 条`));
-    result.guidelines.filter(r => !r.satisfied).forEach(r => {
-      if (r.constraint) {
-        console.log(chalk.yellow(`   - ${r.constraint.id}: ${r.constraint.message}`));
-      }
-    });
-  } else if (result.guidelines.length > 0) {
-    const passedGuidelines = result.guidelines.filter(r => r.satisfied).length;
-    console.log(chalk.green(`✅ 指导原则: ${passedGuidelines}/${result.guidelines.length} 通过`));
-  }
-
-  // Tips
-  if (result.tipCount > 0) {
-    console.log(chalk.blue(`💡 提示: ${result.tipCount} 条`));
-    result.tips.filter(r => !r.satisfied).forEach(r => {
-      if (r.constraint) {
-        console.log(chalk.blue(`   - ${r.constraint.id}: ${r.constraint.message}`));
-      }
-    });
-  }
-
-  console.log();
-  console.log(chalk.green('✅ 约束检查通过'));
-  
-  // 智能提示
-  const hint = await getSmartHint(projectPath);
-  if (hint) {
-    console.log();
-    console.log(chalk.gray('────────────────────────────────────'));
-    console.log(hint);
-    console.log(chalk.gray('────────────────────────────────────'));
-  }
+  return false;
 }
 
 /**

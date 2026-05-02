@@ -32,7 +32,10 @@ export async function runCommand(command: string, cwd?: string): Promise<string>
  */
 export async function isCommandAvailable(command: string): Promise<boolean> {
   try {
-    await execAsync(`which ${command}`);
+    // 使用 execFile 避免命令注入（不通过 shell 解析）
+    const { execFile: execFileCb } = await import('child_process');
+    const execFileAsync = promisify(execFileCb);
+    await execFileAsync('which', [command]);
     return true;
   } catch {
     return false;

@@ -1,0 +1,112 @@
+# prioritize.yml - 进化建议优先级排序
+# ============================================================================
+# 类型: 进化类步骤
+# 执行方式: 内置处理器
+# 用途: 对待处理的进化建议进行优先级排序
+# 核心理念: 严重性 + 影响范围 + 频率 → 优先级
+# ============================================================================
+
+name: prioritize
+stage: govern
+description: 对待处理的进化建议进行优先级排序
+category: evolution
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: evolution/prioritize
+
+# 输入定义
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  max_items:
+    type: number
+    description: 最大返回数量
+    default: 10
+  
+  min_severity:
+    type: string
+    description: 最低严重性过滤
+    enum: [low, medium, high, critical]
+    default: medium
+  
+  status_filter:
+    type: array
+    description: 状态过滤
+    default: [open]
+    items:
+      type: string
+      enum: [open, in_review, accepted, rejected, implemented]
+
+# 排序规则
+priority_scoring:
+  severity_weights:
+    critical: 40
+    high: 30
+    medium: 20
+    low: 10
+  
+  frequency_weights:
+    ">0.5": 30      # 高频问题
+    "0.3-0.5": 20   # 中频问题
+    "0.1-0.3": 10   # 低频问题
+    "<0.1": 5       # 偶发问题
+  
+  impact_weights:
+    multiple_workflows: 20
+    single_workflow: 10
+    single_role: 5
+  
+  effort_bonus:
+    low: 10         # 低工作量优先
+    medium: 0
+    high: -10       # 高工作量降权
+
+# 输出定义
+outputs:
+  - name: prioritized_items
+    type: array
+    description: 排序后的进化建议列表
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+        score:
+          type: number
+        rank:
+          type: number
+        gap_report_id:
+          type: string
+        root_cause:
+          type: string
+        title:
+          type: string
+        suggested_solution:
+          type: string
+        estimated_effort:
+          type: string
+  
+  - name: statistics
+    type: object
+    description: 统计信息
+    properties:
+      total_items:
+        type: number
+      by_severity:
+        type: object
+      by_root_cause:
+        type: object
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - evolution
+    - prioritization
+    - backlog

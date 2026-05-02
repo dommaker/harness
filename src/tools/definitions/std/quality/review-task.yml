@@ -1,0 +1,190 @@
+# review-task.yml - 独立任务审查
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 对单个任务进行独立代码审查，不自动修复，只输出审查报告
+# Superpowers: per-task review - 独立外部审查
+# ============================================================================
+
+name: review-task
+stage: verify
+description: |
+  独立审查单个任务的代码变更，不自动修复，只输出审查报告。
+  
+  与 review-code.yml 的区别：
+  - review-code.yml: 自动修复模式，发现问题直接改代码
+  - review-task.yml: 独立审查模式，只输出报告，修复由其他步骤负责
+  
+  这是 Superpowers per-task review 的核心步骤。
+category: quality
+version: 1.0.0
+
+# Agent 配置
+agent: claude-code
+temperature: 0.2  # 低温度，更严谨
+
+# 可用工具（只读）
+tools:
+  - file-read
+  - bash
+  - git-diff
+
+# Prompt
+prompt: |
+  你是资深代码审查专家。请对以下任务的代码变更进行独立审查。
+  
+  ⚠️ **重要：你只需要审查和报告，不需要修复代码。**
+  
+  ## 任务信息
+  
+  **任务 ID**: {{task.id}}
+  **任务名称**: {{task.name}}
+  **任务描述**: {{task.description}}
+  
+  ## 验收标准
+  
+  {{task.acceptance}}
+  
+  ## 代码变更
+  
+  ```diff
+  {{files_diff}}
+  ```
+  
+  ## 修改的文件列表
+  
+  {{files_changed}}
+  
+  ## 审查清单
+  
+  请按以下维度审查，每项给出 0-10 分：
+  
+  ### 1. 功能完整性 (Functionality)
+  - [ ] 是否满足所有验收标准？
+  - [ ] 边界情况是否处理？
+  - [ ] 错误处理是否完善？
+  
+  ### 2. 代码质量 (Code Quality)
+  - [ ] 代码是否清晰易读？
+  - [ ] 命名是否规范？
+  - [ ] 是否有重复代码？
+  
+  ### 3. 测试覆盖 (Testing)
+  - [ ] 是否有对应的测试？
+  - [ ] 测试覆盖率是否足够？
+  - [ ] 测试用例是否有效？
+  
+  ### 4. 安全性 (Security)
+  - [ ] 是否有安全漏洞？
+  - [ ] 敏感数据是否保护？
+  - [ ] 输入是否验证？
+  
+  ### 5. 性能 (Performance)
+  - [ ] 是否有性能问题？
+  - [ ] 资源是否合理使用？
+  - [ ] 是否有潜在瓶颈？
+  
+  ## 输出格式
+  
+  请以 JSON 格式输出审查报告：
+  
+  ```json
+  {
+    "passed": true/false,
+    "score": 85,
+    "summary": "简要评价",
+    "dimensions": {
+      "functionality": {"score": 90, "issues": []},
+      "code_quality": {"score": 85, "issues": [...]},
+      "testing": {"score": 80, "issues": [...]},
+      "security": {"score": 95, "issues": []},
+      "performance": {"score": 90, "issues": []}
+    },
+    "critical_issues": [...],
+    "warnings": [...],
+    "suggestions": [...]
+  }
+  ```
+  
+  ## 评分标准
+  
+  - 90-100: 优秀 (Excellent) - 可以通过
+  - 80-89: 良好 (Good) - 可以通过，有小问题
+  - 70-79: 一般 (Fair) - 建议修复后通过
+  - 60-69: 较差 (Poor) - 必须修复
+  - <60: 不合格 (Failed) - 需要重新开发
+
+# 输入参数
+inputs:
+  - name: task
+    type: object
+    required: true
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      description:
+        type: string
+      acceptance:
+        type: array
+    description: 任务对象
+  
+  - name: files_changed
+    type: array
+    required: true
+    items:
+      type: string
+    description: 修改的文件列表
+  
+  - name: files_diff
+    type: string
+    description: 代码差异（git diff 输出）
+  
+  - name: project
+    type: object
+    properties:
+      path:
+        type: string
+      tech_stack:
+        type: object
+    description: 项目上下文
+
+# 输出
+outputs:
+  - name: passed
+    type: boolean
+    description: 是否通过审查（score >= 70）
+  
+  - name: score
+    type: number
+    description: 总分 (0-100)
+  
+  - name: summary
+    type: string
+    description: 审查摘要
+  
+  - name: dimensions
+    type: object
+    description: 各维度评分
+  
+  - name: issues
+    type: array
+    description: 发现的问题列表
+    items:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [critical, warning, suggestion]
+        file:
+          type: string
+        line:
+          type: number
+        message:
+          type: string
+        suggestion:
+          type: string
+  
+  - name: report
+    type: object
+    description: 完整审查报告

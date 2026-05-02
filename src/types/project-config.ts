@@ -39,6 +39,70 @@ export interface CustomConstraintDefinition {
 }
 
 /**
+ * 文档同步配置
+ */
+export interface DocsSyncConfig {
+  /** 同步命令（默认: harness sync-docs） */
+  sync_command?: string;
+  /** CI 中是否检查文档新鲜度 */
+  check_on_ci?: boolean;
+  /** 需要同步的文件列表 */
+  files?: string[];
+}
+
+/**
+ * CONTEXT.md 配置
+ */
+export interface ContextFilesConfig {
+  /** 是否启用 CONTEXT.md 检查 */
+  enabled?: boolean;
+  /** 必须包含 CONTEXT.md 的目录列表 */
+  required_dirs?: string[];
+}
+
+/**
+ * CHANGELOG 配置
+ */
+export interface ChangelogConfig {
+  /** 格式 */
+  format?: 'keep-a-changelog' | 'conventional';
+  /** 是否自动生成条目（sync-docs 辅助） */
+  auto_append?: boolean;
+}
+
+/**
+ * 测试治理配置
+ */
+export interface TestingGovernanceConfig {
+  /** 新代码必须有测试（Guideline 提醒） */
+  test_first?: boolean;
+  /** 覆盖率阈值 */
+  coverage_threshold?: number;
+  /** 增量覆盖率检查（只检查新增代码） */
+  incremental_coverage?: boolean;
+}
+
+/**
+ * 治理配置
+ */
+export interface GovernanceConfig {
+  /** 治理级别 */
+  level?: 'minimal' | 'standard' | 'strict';
+
+  /** 文档同步 */
+  docs?: DocsSyncConfig;
+
+  /** CONTEXT.md 配置 */
+  context_files?: ContextFilesConfig;
+
+  /** CHANGELOG 配置 */
+  changelog?: ChangelogConfig;
+
+  /** 测试治理 */
+  testing?: TestingGovernanceConfig;
+}
+
+/**
  * 项目配置
  */
 export interface ProjectConfig {
@@ -49,6 +113,9 @@ export interface ProjectConfig {
 
   /** 使用预设 */
   preset?: 'strict' | 'standard' | 'relaxed';
+
+  /** 治理配置 */
+  governance?: GovernanceConfig;
 
   /** 内置约束启用/禁用配置 */
   constraints?: Record<string, { enabled?: boolean }>;

@@ -1,0 +1,71 @@
+# quick/verify - 验证快速功能
+#
+# 输入：
+#   - project_path: 项目路径
+#   - analysis: 分析结果
+#   - implementation: 实现结果
+#
+# 输出：
+#   - verify_result: 验证结果
+
+id: quick/verify
+stage: develop
+name: 验证功能
+description: 验证快速功能实现是否正确
+category: quick
+agent: codex
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  analysis:
+    type: object
+    description: 分析结果
+    required: true
+  implementation:
+    type: object
+    description: 实现结果
+    required: true
+
+outputs:
+  - name: verify_result
+    type: object
+    description: 验证结果
+
+prompt: |
+  你是一个质量保证工程师。请验证功能实现是否正确。
+  
+  **分析结果**:
+  ```json
+  {{analysis}}
+  ```
+  
+  **实现结果**:
+  ```json
+  {{implementation}}
+  ```
+  
+  **项目路径**: {{project_path}}
+  
+  **验证任务**：
+  1. 检查代码编译是否通过
+  2. 运行相关测试（如果有）
+  3. 验证功能是否按预期工作
+  4. 检查是否引入明显问题
+  
+  **输出格式**（JSON）：
+  ```json
+  {
+    "build_passed": true/false,
+    "tests_passed": true/false,
+    "test_output": "测试输出摘要",
+    "feature_working": true/false,
+    "issues_found": [],
+    "recommendation": "可以提交/需要修复"
+  }
+  ```
+
+temperature: 0.1
+timeout: 120  # 2 分钟

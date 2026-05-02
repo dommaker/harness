@@ -1,0 +1,16 @@
+# collect-issues.yml - 收集问题
+id: governance/collect-issues
+stage: govern
+name: 收集问题
+description: 从审核意见中收集问题列表
+
+inputs:
+  - name: opinions
+    type: array
+    required: true
+
+outputs:
+  - name: issues
+    type: array
+  - name: suggestions
+    type: array

@@ -1,0 +1,72 @@
+name: code/fingerprint
+description: |
+  生成代码结构指纹，用于变更检测。
+  
+  通过提取代码的结构签名（函数签名、类结构、导入导出），
+  可以区分"结构性变更"和"表面变更"（如注释、格式化）。
+  
+  用途：
+  - 增量分析（只处理真正变更的文件）
+  - 变更影响评估
+  - 代码审查优先级排序
+
+inputs:
+  - name: file_path
+    type: string
+    required: true
+    description: 文件路径
+    
+  - name: project_path
+    type: string
+    required: true
+    description: 项目根路径
+    
+  - name: compare_with
+    type: string
+    required: false
+    description: |
+      对比目标：
+      - "previous" - 与上一个 commit 对比
+      - "base" - 与基准分支对比
+      - 具体的 commit hash
+
+outputs:
+  - name: fingerprint
+    type: object
+    description: 结构指纹对象
+    
+  - name: content_hash
+    type: string
+    description: 内容哈希（SHA-256）
+    
+  - name: change_level
+    type: string
+    description: |
+      变更级别：
+      - "NONE" - 无变更
+      - "COSMETIC" - 表面变更（注释、格式）
+      - "STRUCTURAL" - 结构性变更
+      
+  - name: details
+    type: array
+    description: 变更详情列表
+
+handler: script
+script: ./fingerprint.sh
+
+examples:
+  - description: 检测文件变更级别
+    inputs:
+      file_path: "src/utils.ts"
+      project_path: "/home/user/project"
+      compare_with: "previous"
+    outputs:
+      fingerprint:
+        functions: ["helper", "format"]
+        classes: []
+        imports: ["lodash"]
+      content_hash: "abc123..."
+      change_level: "COSMETIC"
+      details: ["internal logic changed (no structural impact)"]
+
+version: "1.0.0"

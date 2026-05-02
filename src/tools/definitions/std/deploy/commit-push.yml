@@ -1,0 +1,33 @@
+# commit-push.yml
+name: commit-push
+stage: deploy
+description: 提交并推送代码
+category: deploy
+version: 1.0.0
+
+inputs:
+  - name: message
+    type: string
+    default: "auto: update code"
+    description: 提交消息
+  
+  - name: branch
+    type: string
+    default: ""
+    description: 目标分支（可选）
+
+outputs:
+  - name: commit-hash
+    type: string
+    description: 提交哈希
+  
+  - name: commit-url
+    type: string
+    description: 提交 URL
+
+execute:
+  type: tool
+  tool: git-commit-push
+  input:
+    message: ${{inputs.message}}
+    branch: ${{inputs.branch}}

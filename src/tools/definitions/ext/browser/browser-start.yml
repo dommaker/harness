@@ -1,0 +1,62 @@
+# browser-start.yml - 启动浏览器
+# ============================================================================
+# 工具类型: 浏览器
+# 用途: 启动浏览器会话
+# ============================================================================
+
+name: browser/browser-start
+description: |
+  启动浏览器会话
+  
+  支持：
+  - 无头模式（headless）
+  - 指定 URL 打开
+  - 会话管理
+
+input:
+  - name: url
+    type: string
+    required: true
+    description: 要打开的 URL
+  
+  - name: headless
+    type: boolean
+    required: false
+    default: true
+    description: 是否使用无头模式
+  
+  - name: browser
+    type: string
+    required: false
+    default: chromium
+    enum: [chromium, firefox, webkit]
+    description: 浏览器类型
+
+output:
+  - name: session_id
+    type: string
+    description: 浏览器会话 ID
+  
+  - name: page_id
+    type: string
+    description: 页面 ID
+
+# 实现说明
+implementation:
+  type: script
+  script: ./browser-start.sh
+  note: |
+    使用 agent-browser-stealth (abs) 启动浏览器
+    
+    1. 调用 abs open 打开 URL
+    2. 返回 session_id
+    3. 支持无头模式和会话管理
+
+# 元数据
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  tags:
+    - browser
+    - puppeteer
+    - e2e

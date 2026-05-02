@@ -1,0 +1,75 @@
+# test.yml - NPM 测试
+# ============================================================================
+# 能力类型: npm 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: npm-test
+description: 运行 npm/pnpm 测试
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 项目路径
+    
+  test_cmd:
+    type: string
+    required: false
+    description: 测试命令（可选，自动检测）
+    default: ""
+
+output:
+  test_result:
+    type: string
+    description: 测试结果
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  TEST_CMD="{{test_cmd}}"
+  
+  cd "$REPO_PATH"
+  
+  echo "🧪 运行测试..."
+  echo "  路径: $REPO_PATH"
+  
+  # 自动检测包管理器
+  if [ -f "pnpm-lock.yaml" ]; then
+    PKG_MGR="pnpm"
+  elif [ -f "yarn.lock" ]; then
+    PKG_MGR="yarn"
+  else
+    PKG_MGR="npm"
+  fi
+  
+  echo "  包管理器: $PKG_MGR"
+  
+  # 确定测试命令
+  if [ -z "$TEST_CMD" ]; then
+    # 检查 package.json 中的测试脚本
+    if [ -f "package.json" ] && grep -q '"test"' package.json; then
+      TEST_CMD="$PKG_MGR test"
+    else
+      echo "⚠️ 未找到测试脚本，跳过测试"
+      echo "TEST_RESULT=skipped"
+      exit 0
+    fi
+  fi
+  
+  echo "  命令: $TEST_CMD"
+  echo ""
+  
+  # 执行测试
+  if $TEST_CMD 2>&1; then
+    echo ""
+    echo "✅ 测试通过"
+    echo "TEST_RESULT=passed"
+  else
+    echo ""
+    echo "❌ 测试失败"
+    echo "TEST_RESULT=failed"
+    exit 1
+  fi

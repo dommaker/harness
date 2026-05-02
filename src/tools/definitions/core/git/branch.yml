@@ -1,0 +1,61 @@
+# branch.yml - Git 创建分支
+# ============================================================================
+# 能力类型: git 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: git-branch
+description: 创建并切换 Git 分支
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 仓库路径
+    
+  branch_name:
+    type: string
+    required: true
+    description: 分支名称
+    
+  base_branch:
+    type: string
+    required: false
+    description: 基础分支（可选，默认当前分支）
+    default: ""
+
+output:
+  branch:
+    type: string
+    description: 创建的分支名
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  BRANCH_NAME="{{branch_name}}"
+  BASE_BRANCH="{{base_branch}}"
+  
+  cd "$REPO_PATH"
+  
+  echo "🌿 创建分支..."
+  echo "  路径: $REPO_PATH"
+  echo "  分支: $BRANCH_NAME"
+  
+  # 检查是否已存在分支
+  if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
+    echo "⚠️ 分支已存在，切换到该分支"
+    git checkout "$BRANCH_NAME"
+  else
+    if [ -n "$BASE_BRANCH" ]; then
+      echo "  基于分支: $BASE_BRANCH"
+      git checkout -b "$BRANCH_NAME" "$BASE_BRANCH"
+    else
+      git checkout -b "$BRANCH_NAME"
+    fi
+  fi
+  
+  echo ""
+  echo "✅ 分支创建成功: $BRANCH_NAME"
+  echo "BRANCH=$BRANCH_NAME"

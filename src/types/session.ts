@@ -99,6 +99,9 @@ export interface DynamicTask {
   current_step_index?: number;   // 当前步骤索引
 }
 
+/**
+ * 测试结果
+ */
 export interface TaskTestResult {
   passed: boolean;
   command: string;
@@ -109,6 +112,9 @@ export interface TaskTestResult {
   evidence?: string;
 }
 
+/**
+ * 步骤状态
+ */
 export interface TaskStepStatus {
   completed: boolean;
   result?: string;

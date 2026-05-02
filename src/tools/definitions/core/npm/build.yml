@@ -1,0 +1,75 @@
+# build.yml - NPM 构建
+# ============================================================================
+# 能力类型: npm 操作（工具型）
+# 执行方式: 纯脚本，不调用 Agent
+# ============================================================================
+
+name: npm-build
+description: 构建 npm/pnpm 项目
+
+input:
+  repo_path:
+    type: path
+    required: true
+    description: 项目路径
+    
+  build_cmd:
+    type: string
+    required: false
+    description: 构建命令（可选，自动检测）
+    default: ""
+
+output:
+  build_result:
+    type: string
+    description: 构建结果
+
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  REPO_PATH="{{repo_path}}"
+  BUILD_CMD="{{build_cmd}}"
+  
+  cd "$REPO_PATH"
+  
+  echo "🔨 构建项目..."
+  echo "  路径: $REPO_PATH"
+  
+  # 自动检测包管理器
+  if [ -f "pnpm-lock.yaml" ]; then
+    PKG_MGR="pnpm"
+  elif [ -f "yarn.lock" ]; then
+    PKG_MGR="yarn"
+  else
+    PKG_MGR="npm"
+  fi
+  
+  echo "  包管理器: $PKG_MGR"
+  
+  # 确定构建命令
+  if [ -z "$BUILD_CMD" ]; then
+    # 检查 package.json 中的构建脚本
+    if [ -f "package.json" ] && grep -q '"build"' package.json; then
+      BUILD_CMD="$PKG_MGR run build"
+    else
+      echo "⚠️ 未找到构建脚本，跳过构建"
+      echo "BUILD_RESULT=skipped"
+      exit 0
+    fi
+  fi
+  
+  echo "  命令: $BUILD_CMD"
+  echo ""
+  
+  # 执行构建
+  if $BUILD_CMD 2>&1; then
+    echo ""
+    echo "✅ 构建成功"
+    echo "BUILD_RESULT=success"
+  else
+    echo ""
+    echo "❌ 构建失败"
+    echo "BUILD_RESULT=failed"
+    exit 1
+  fi

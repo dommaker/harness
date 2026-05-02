@@ -1,0 +1,88 @@
+# file-copy.yml - 复制文件
+# ============================================================================
+# 能力类型: 文件操作（工具型）
+# 执行方式: 纯脚本，复制文件或目录
+# ============================================================================
+
+name: file-copy
+description: 复制文件或目录
+
+# 输入参数
+input:
+  src:
+    type: path
+    required: true
+    description: 源路径
+    
+  dst:
+    type: path
+    required: true
+    description: 目标路径
+    
+  create_dirs:
+    type: boolean
+    required: false
+    description: 是否创建父目录
+    default: true
+    
+  overwrite:
+    type: boolean
+    required: false
+    description: 是否覆盖已存在的文件
+    default: true
+
+# 输出
+output:
+  src:
+    type: path
+    description: 源路径
+    
+  dst:
+    type: path
+    description: 目标路径
+
+# 执行命令
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  SRC="{{src}}"
+  DST="{{dst}}"
+  CREATE_DIRS="{{create_dirs}}"
+  OVERWRITE="{{overwrite}}"
+  
+  echo "📋 复制文件"
+  echo "  源: $SRC"
+  echo "  目标: $DST"
+  
+  # 检查源文件是否存在
+  if [ ! -e "$SRC" ]; then
+    echo "❌ 源路径不存在: $SRC"
+    exit 1
+  fi
+  
+  # 创建父目录
+  if [ "$CREATE_DIRS" = "true" ]; then
+    mkdir -p "$(dirname "$DST")"
+  fi
+  
+  # 复制
+  if [ -d "$SRC" ]; then
+    # 目录
+    if [ "$OVERWRITE" = "true" ]; then
+      cp -r "$SRC" "$DST"
+    else
+      cp -rn "$SRC" "$DST" 2>/dev/null || echo "⚠️  目标已存在，跳过"
+    fi
+    echo "  复制目录完成"
+  else
+    # 文件
+    if [ "$OVERWRITE" = "true" ]; then
+      cp "$SRC" "$DST"
+    else
+      cp -n "$SRC" "$DST" 2>/dev/null || echo "⚠️  目标已存在，跳过"
+    fi
+    echo "  复制文件完成"
+  fi
+  
+  echo "✅ 复制完成"

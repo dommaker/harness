@@ -1,0 +1,72 @@
+# analyze-codebase.yml
+name: analyze-codebase
+stage: plan
+description: 分析代码库，生成知识图谱
+agent: codex
+temperature: 0.3
+
+tools:
+  - file-read
+  - file-write
+
+prompt: |
+  你是代码分析专家。分析代码库并生成知识图谱。
+  
+  {{input}}
+  
+  ## 任务
+  
+  ### 1. 扫描代码文件
+  
+  ```bash
+  find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" | grep -v node_modules | grep -v dist | head -100
+  ```
+  
+  ### 2. 分析代码结构
+  
+  识别：
+  - 入口文件
+  - 核心模块
+  - 依赖关系
+  - 配置文件
+  
+  ### 3. 生成知识图谱
+  
+  创建 `knowledge-graph.json`：
+  ```json
+  {
+    "nodes": [
+      {"id": "src/index.ts", "type": "entry", "label": "主入口"},
+      {"id": "src/api", "type": "module", "label": "API 模块"}
+    ],
+    "edges": [
+      {"from": "src/index.ts", "to": "src/api", "type": "imports"}
+    ],
+    "summary": {
+      "language": "TypeScript",
+      "framework": "Express",
+      "totalFiles": 42,
+      "totalDeps": 15
+    }
+  }
+  ```
+  
+  ## 原则
+  
+  - 关注核心文件，忽略琐碎
+  - 识别关键依赖
+  - 总结项目架构
+
+inputs:
+  - name: scope
+    type: string
+    default: "."
+    description: 分析范围
+  
+  - name: exclude
+    type: array
+    default: ["node_modules", "dist", "coverage", ".git", "build"]
+    description: 排除目录
+
+outputs:
+  - knowledge-graph.json

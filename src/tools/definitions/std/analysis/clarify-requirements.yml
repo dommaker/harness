@@ -1,0 +1,90 @@
+# clarify-requirements.yml
+name: clarify-requirements
+stage: plan
+description: 需求澄清，当用户输入模糊时追问关键信息
+category: analysis
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.5
+
+# 可用工具
+tools:
+  - file-read
+
+# Prompt
+prompt: |
+  你是一个需求澄清专家。用户的需求描述可能不完整或模糊，你的任务是：
+  
+  1. 分析用户输入，识别缺失的关键信息
+  2. 提出针对性的澄清问题
+  3. 不要假设，只追问必要的决策点
+  
+  ## 用户需求
+  
+  {{requirement}}
+  
+  {{#if context}}
+  ## 已知上下文
+  
+  ```json
+  {{{context}}}
+  ```
+  
+  结合上下文，避免重复已知信息。
+  {{/if}}
+  
+  ## 任务
+  
+  输出 **澄清问题列表**，格式如下：
+  
+  ```markdown
+  # 需求澄清
+  
+  ## 已理解的部分
+  - <已明确的需求点>
+  - <已明确的需求点>
+  
+  ## 需要澄清的问题
+  
+  ### 🔴 关键决策（必须确认）
+  1. **<问题主题>**
+     - 背景: <为什么这个问题重要>
+     - 选项: <可选方案列表>
+     - 推荐: <推荐选择及理由>
+  
+  ### 🟡 重要细节（建议确认）
+  1. **<问题主题>**
+     - 背景: <为什么这个问题重要>
+     - 默认: <默认选择>
+  
+  ### 🟢 可延后决策
+  1. **<问题主题>**
+     - 说明: <为什么可以延后>
+  ```
+  
+  ## 原则
+  
+  1. 问题要具体，避免开放式问题
+  2. 提供选项，帮助用户快速决策
+  3. 标注优先级，让用户知道哪些必须确认
+  4. 结合上下文，避免重复已知信息
+
+# 输入参数
+inputs:
+  - name: requirement
+    type: string
+    required: true
+    description: 用户需求描述
+  
+  - name: context
+    type: object
+    required: false
+    description: 上下文信息（项目配置、会议记录、历史决策）
+
+# 输出
+outputs:
+  - name: clarification.md
+    type: content
+    description: 澄清问题列表

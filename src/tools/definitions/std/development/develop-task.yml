@@ -1,0 +1,122 @@
+# develop-task.yml - 开发单个任务（含 review 循环）
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 根据任务描述开发单个功能，包含实现 → 审核 → 修复循环
+# 超能力: per-task review 循环（方案 A 轻量版）
+# ============================================================================
+
+name: develop-task
+stage: develop
+description: 开发单个任务（含 spec 审核）
+category: development
+version: 2.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+  - bash
+  - npm-test
+
+# Prompt
+prompt: |
+  你是资深开发者。请完成以下开发任务，并按流程执行。
+  
+  ## 任务信息
+  
+  **任务 ID**: {{task.id}}
+  **任务名称**: {{task.name}}
+  **任务描述**: {{task.description}}
+  
+  ## 验收标准
+  
+  {{task.acceptance}}
+  
+  ## 项目上下文
+  
+  **项目路径**: {{project.path}}
+  **技术栈**: {{project.tech_stack}}
+  
+  ## 开发流程（必须严格按此顺序执行）
+  
+  ### Phase 1: 实现
+  1. 创建/修改相关文件
+  2. 确保代码符合验收标准
+  3. 运行测试验证
+  
+  ### Phase 2: 自我审核
+  检查以下内容：
+  - [ ] 代码是否符合所有验收标准
+  - [ ] 测试是否通过
+  - [ ] 是否有潜在的 bug
+  
+  ### Phase 3: 修复（如需要）
+  如果审核发现问题，修复后重新审核。
+  
+  ### Phase 4: 提交
+  审核通过后，使用以下命令提交：
+  ```bash
+  git add -A
+  git commit -m "feat({{task.id}}): {{task.name}}"
+  ```
+  
+  ## 输出
+  
+  完成后请报告：
+  1. 创建/修改了哪些文件
+  2. 测试结果
+  3. 审核结论
+  4. 提交 hash（如果有）
+
+# 输入参数
+inputs:
+  - name: task
+    type: object
+    required: true
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      description:
+        type: string
+      acceptance:
+        type: array
+    description: 任务对象
+  
+  - name: project
+    type: object
+    required: true
+    properties:
+      path:
+        type: string
+      tech_stack:
+        type: object
+    description: 项目上下文
+  
+  - name: previous_outputs
+    type: array
+    description: 前序任务的输出
+
+# 输出
+outputs:
+  - name: files_changed
+    type: array
+    description: 修改的文件列表
+  
+  - name: tests_passed
+    type: boolean
+    description: 测试是否通过
+  
+  - name: commit_hash
+    type: string
+    description: 提交 hash
+  
+  - name: status
+    type: string
+    enum: [success, failed]
+    description: 任务状态

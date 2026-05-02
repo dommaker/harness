@@ -1,0 +1,69 @@
+# bugfix/verify - 验证 Bug 修复
+#
+# 输入：
+#   - project_path: 项目路径
+#   - diagnosis: 诊断结果
+#   - fix_result: 修复结果
+#
+# 输出：
+#   - verify_result: 验证结果
+
+id: bugfix/verify
+stage: fix
+name: 验证修复
+description: 验证 Bug 是否已正确修复
+category: bugfix
+agent: codex
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  diagnosis:
+    type: object
+    description: 诊断结果
+    required: true
+  fix_result:
+    type: object
+    description: 修复结果
+    required: true
+
+outputs:
+  - name: verify_result
+    type: object
+    description: 验证结果
+
+prompt: |
+  你是一个质量保证工程师。请验证 Bug 修复是否正确。
+  
+  **诊断结果**:
+  ```json
+  {{diagnosis}}
+  ```
+  
+  **修复结果**:
+  ```json
+  {{fix_result}}
+  ```
+  
+  **项目路径**: {{project_path}}
+  
+  **验证任务**：
+  1. 运行相关测试（如果有）
+  2. 检查修复是否解决了根本原因
+  3. 确认没有引入新问题
+  
+  **输出格式**（JSON）：
+  ```json
+  {
+    "tests_passed": true/false,
+    "test_output": "测试输出摘要",
+    "bug_fixed": true/false,
+    "side_effects_detected": [],
+    "recommendation": "可以提交/需要进一步修复"
+  }
+  ```
+
+temperature: 0.1
+timeout: 120  # 2 分钟

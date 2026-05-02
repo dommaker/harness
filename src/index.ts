@@ -89,6 +89,11 @@ export * from './dashboard';
 export * from './llm';
 
 // ========================================
+// 治理模块导出
+// ========================================
+export * from './governance';
+
+// ========================================
 // 工具注册表导出
 // ========================================
 export * from './tools';
@@ -108,14 +113,19 @@ export * from './presets';
 // ========================================
 
 import { constraintChecker } from './core/constraints/checker';
-import type { ConstraintContext, ConstraintCheckResult, ConstraintResult, ConstraintTrigger } from './types/constraint';
-// 向后兼容
-import type { IronLawContext, IronLawResult } from './types/constraint';
+import type { ConstraintContext, ConstraintCheckResult, ConstraintTrigger } from './types/constraint';
 import { constraintInterceptor } from './core/constraints/interceptor';
-import type { EnforcementExecutor, EnforcementContext, EnforcementResult, EnforcementId, InterceptionResult } from './types/enforcement';
+import type { EnforcementExecutor, EnforcementId, InterceptionResult } from './types/enforcement';
 
+/** 约束拦截器单例，用于注册 enforcement executor 和拦截操作 */
 export const interceptor = constraintInterceptor;
 
+/**
+ * 拦截操作 — 在操作执行前检查约束
+ * @param trigger - 触发条件
+ * @param context - 约束上下文
+ * @returns 拦截结果（是否通过、违规列表）
+ */
 export async function interceptOperation(
   trigger: ConstraintTrigger,
   context: ConstraintContext
@@ -123,6 +133,11 @@ export async function interceptOperation(
   return constraintInterceptor.intercept(trigger, context);
 }
 
+/**
+ * 声明操作意图 — 声明即将执行的操作，但不执行检查
+ * @param trigger - 触发条件
+ * @param context - 约束上下文
+ */
 export async function claimOperation(
   trigger: ConstraintTrigger,
   context: ConstraintContext
@@ -130,6 +145,12 @@ export async function claimOperation(
   return constraintInterceptor.claim(trigger, context);
 }
 
+/**
+ * 注册 enforcement executor — 将 enforcement ID 连接到实际检查逻辑
+ * @param enforcementId - enforcement ID（对应约束定义中的 enforcement 字段）
+ * @param executor - 执行器实现
+ * @param source - 注册来源（如 'builtin', 'plugin'）
+ */
 export function registerExecutor(
   enforcementId: EnforcementId,
   executor: EnforcementExecutor,
@@ -154,18 +175,4 @@ export async function checkBeforeExecution(
   context: ConstraintContext
 ): Promise<void> {
   return constraintChecker.beforeExecution(context);
-}
-
-// ========================================
-// 向后兼容 API
-// ========================================
-
-/**
- * @deprecated 使用 checkConstraints 代替
- */
-export async function checkIronLaws(
-  context: IronLawContext
-): Promise<IronLawResult[]> {
-  const result = await constraintChecker.checkConstraints(context);
-  return [...result.ironLaws, ...result.guidelines, ...result.tips] as IronLawResult[];
 }

@@ -1,0 +1,78 @@
+# analyze-impact.yml
+name: analyze-impact
+stage: plan
+description: 分析代码变更影响范围
+agent: codex
+temperature: 0.3
+
+tools:
+  - file-read
+  - git-diff
+
+prompt: |
+  你是代码影响分析专家。分析代码变更的影响范围。
+  
+  {{input}}
+  
+  ## 任务
+  
+  ### 1. 分析变更
+  
+  检查最近的代码变更：
+  ```bash
+  git diff --name-only HEAD~5 2>/dev/null || echo "no git"
+  ```
+  
+  ### 2. 影响范围分析
+  
+  分析每个变更文件：
+  - 谁依赖这个文件？
+  - 这个文件依赖谁？
+  - 变更是破坏性还是兼容的？
+  
+  ### 3. 风险评估
+  
+  评估变更风险：
+  - **低风险**：文档、注释、样式
+  - **中风险**：业务逻辑、工具函数
+  - **高风险**：核心模块、API 接口、数据库模型
+  
+  ### 4. 输出报告
+  
+  创建 `impact-report.md`：
+  ```markdown
+  ## 影响分析报告
+  
+  ### 变更文件
+  - file1.ts (高风险)
+  - file2.ts (中风险)
+  
+  ### 受影响模块
+  - 模块A：依赖 file1.ts
+  - 模块B：依赖 file1.ts
+  
+  ### 风险等级
+  **高风险** - 涉及核心 API
+  
+  ### 建议
+  1. 需要回归测试模块A、模块B
+  2. 建议增加集成测试
+  ```
+  
+  ## 原则
+  
+  - 宁可高估影响范围
+  - 关注跨模块依赖
+  - 识别潜在的破坏性变更
+
+inputs:
+  - name: graph
+    type: KnowledgeGraph
+    description: 知识图谱（可选）
+  
+  - name: changes
+    type: object
+    description: 变更信息（可选）
+
+outputs:
+  - impact-report.md

@@ -1,0 +1,53 @@
+# backlog/list - 列出待办项
+#
+# 输入：
+#   - project_path: 项目路径
+#   - type: 过滤类型（可选）
+#   - status: 过滤状态（可选）
+#   - priority: 过滤优先级（可选）
+#   - limit: 限制数量（可选）
+#
+# 输出：
+#   - items: 待办项列表
+#   - stats: 统计信息
+
+id: backlog/list
+stage: plan
+name: 列出待办项
+description: 列出项目 Backlog 中的待办项
+category: backlog
+execute:
+  type: builtin
+  handler: backlog/list
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  type:
+    type: string
+    enum: [bug, feature, enhancement, performance, tech-debt, patch]
+    required: false
+  status:
+    type: string
+    enum: [open, in_progress, resolved, closed]
+    required: false
+  priority:
+    type: string
+    enum: [critical, high, medium, low]
+    required: false
+  limit:
+    type: number
+    required: false
+
+outputs:
+  - name: items
+    type: array
+    description: 待办项列表
+  - name: stats
+    type: object
+    description: 统计信息
+  - name: total
+    type: number
+    description: 返回的待办项数量

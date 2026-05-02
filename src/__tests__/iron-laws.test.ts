@@ -16,8 +16,8 @@ import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
   describe('Iron Laws', () => {
-    it('should have 7 iron laws defined', () => {
-      expect(Object.keys(IRON_LAWS)).toHaveLength(7); // no_bypass_checkpoint, no_self_approval, no_completion_without_verification, no_test_simplification, incremental_progress, verify_external_capability, no_implementation_without_requirement_review
+    it('should have 8 iron laws defined', () => {
+      expect(Object.keys(IRON_LAWS)).toHaveLength(8); // no_bypass_checkpoint, no_self_approval, no_completion_without_verification, no_test_simplification, incremental_progress, verify_external_capability, no_implementation_without_requirement_review, no_implementation_without_requirement
     });
 
     it('should have no exceptions for iron laws', () => {
@@ -28,8 +28,8 @@ describe('Constraint System', () => {
   });
 
   describe('Guidelines', () => {
-    it('should have 11 guidelines defined', () => {
-      expect(Object.keys(GUIDELINES)).toHaveLength(11);
+    it('should have 13 guidelines defined', () => {
+      expect(Object.keys(GUIDELINES)).toHaveLength(13);
     });
 
     it('should have exceptions for some guidelines', () => {
@@ -47,7 +47,7 @@ describe('Constraint System', () => {
   describe('Helper Functions', () => {
     it('should get all constraints', () => {
       const all = getAllConstraints();
-      expect(all.length).toBe(20); // 7 iron laws + 11 guidelines + 2 tips
+      expect(all.length).toBe(23); // 8 iron laws + 13 guidelines + 2 tips
     });
 
     it('should find constraints by trigger', () => {
@@ -106,10 +106,87 @@ describe('Constraint Checker', () => {
   it('should check all constraints', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
+      hasRequirement: true,
     };
 
     const result = await constraintChecker.checkConstraints(context);
     expect(result.ironLaws.length + result.guidelines.length + result.tips.length).toBeGreaterThan(0);
+  });
+
+  it('should fail incremental_progress when hasSingleTask is undefined', async () => {
+    const context: ConstraintContext = {
+      operation: 'feature_completion_claim',
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['incremental_progress'], context);
+    expect(result.satisfied).toBe(false);
+  });
+
+  it('should pass incremental_progress when hasSingleTask is true', async () => {
+    const context: ConstraintContext = {
+      operation: 'feature_completion_claim',
+      hasSingleTask: true,
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['incremental_progress'], context);
+    expect(result.satisfied).toBe(true);
+  });
+
+  it('should fail verify_external_capability when hasExternalCapabilityVerification is undefined', async () => {
+    const context: ConstraintContext = {
+      operation: 'external_api_design',
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['verify_external_capability'], context);
+    expect(result.satisfied).toBe(false);
+  });
+
+  it('should pass verify_external_capability when hasExternalCapabilityVerification is true', async () => {
+    const context: ConstraintContext = {
+      operation: 'external_api_design',
+      hasExternalCapabilityVerification: true,
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['verify_external_capability'], context);
+    expect(result.satisfied).toBe(true);
+  });
+
+  it('should fail no_implementation_without_requirement_review when hasRequirementReview is undefined', async () => {
+    const context: ConstraintContext = {
+      operation: 'implementation_complete',
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement_review'], context);
+    expect(result.satisfied).toBe(false);
+  });
+
+  it('should pass no_implementation_without_requirement_review when hasRequirementReview is true', async () => {
+    const context: ConstraintContext = {
+      operation: 'implementation_complete',
+      hasRequirementReview: true,
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement_review'], context);
+    expect(result.satisfied).toBe(true);
+  });
+
+  it('should fail no_implementation_without_requirement when hasRequirement is undefined', async () => {
+    const context: ConstraintContext = {
+      operation: 'code_implementation',
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement'], context);
+    expect(result.satisfied).toBe(false);
+  });
+
+  it('should pass no_implementation_without_requirement when hasRequirement is true', async () => {
+    const context: ConstraintContext = {
+      operation: 'code_implementation',
+      hasRequirement: true,
+    };
+
+    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement'], context);
+    expect(result.satisfied).toBe(true);
   });
 });
 

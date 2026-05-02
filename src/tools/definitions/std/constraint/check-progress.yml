@@ -1,0 +1,97 @@
+# check-progress.yml - 检查 progress.json
+# ============================================================================
+# 类型: 验证步骤
+# 用途: 检查跨 session 进度追踪文件
+# Long-Running Agents: progress.json 用于追踪跨 session 的功能完成进度
+# ============================================================================
+
+name: check-progress
+stage: govern
+description: 检查 progress.json 跨 session 进度追踪
+category: validation
+version: 1.0.0
+
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目路径
+  
+  - name: require_passes_evidence
+    type: boolean
+    default: true
+    description: 是否要求 passes 有证据（截图/测试结果）
+
+outputs:
+  - name: exists
+    type: boolean
+    description: progress.json 是否存在
+  
+  - name: valid
+    type: boolean
+    description: 格式是否正确
+  
+  - name: completed_features
+    type: number
+    description: 已完成的功能数量
+  
+  - name: in_progress_features
+    type: number
+    description: 进行中的功能数量
+  
+  - name: passes_with_evidence
+    type: number
+    description: 有证据的 passes 数量
+  
+  - name: passes_without_evidence
+    type: number
+    description: 缺失证据的 passes 数量
+  
+  - name: errors
+    type: array
+    description: 错误列表
+
+# Prompt
+prompt: |
+  你是 Long-Running Agents 进度检查器。请检查 progress.json。
+  
+  ## 项目路径
+  
+  {{project_path}}
+  
+  ## 检查流程
+  
+  1. 检查文件是否存在: `{{project_path}}/progress.json`
+  
+  2. 如果存在，检查格式：
+     - 是否是有效的 JSON
+     - 是否有 `features` 字段
+     - 每个 feature 是否有 `id`, `status`, `passes` 字段
+     - `status` 是否是有效值: pending, in_progress, completed
+  
+  3. 统计：
+     - 已完成功能数量（status=completed）
+     - 进行中功能数量（status=in_progress）
+     - 有证据的 passes 数量（有 screenshot 或 test_result）
+     - 缺失证据的 passes 数量
+  
+  4. 如果 require_passes_evidence=true：
+     - 检查每个 completed 的 feature 的 passes 是否有证据
+  
+  5. 输出结果：
+     ```json
+     {
+       "exists": true/false,
+       "valid": true/false,
+       "completed_features": N,
+       "in_progress_features": N,
+       "passes_with_evidence": N,
+       "passes_without_evidence": N,
+       "errors": ["错误1", ...]
+     }
+     ```
+  
+  ## 注意
+  
+  - progress.json 是可选的（不存在时不报错）
+  - 如果不存在，返回 exists=false, valid=false

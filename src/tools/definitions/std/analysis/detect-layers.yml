@@ -1,0 +1,125 @@
+name: detect-layers
+stage: plan
+description: |
+  检测项目的架构层级结构。
+  
+  通过分析目录结构和依赖关系，自动识别：
+  - 表现层（presentation）
+  - 业务层（business）
+  - 数据层（data）
+  - 基础设施层（infrastructure）
+  
+  用途：
+  - 架构分析
+  - 层级合规检查
+  - 依赖方向验证
+
+agent: codex
+timeout: 300  # 5 分钟
+
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目根路径
+    
+  - name: knowledge_graph_path
+    type: string
+    required: false
+    description: 知识图谱文件路径
+    
+  - name: custom_layers
+    type: object
+    required: false
+    description: |
+      自定义层级配置（可选）
+      ```yaml
+      layers:
+        - name: frontend
+          patterns: ["src/components/*", "src/pages/*"]
+        - name: backend
+          patterns: ["src/api/*", "src/services/*"]
+      ```
+
+outputs:
+  - name: layers
+    type: array
+    description: 检测到的层级列表
+    
+  - name: layer_nodes
+    type: object
+    description: 每个层级包含的节点 ID
+    
+  - name: violations
+    type: array
+    description: 层级违规（如数据层调用表现层）
+    
+  - name: report
+    type: string
+    description: Markdown 格式的层级报告
+
+prompt: |
+  检测项目 {{project_path}} 的架构层级结构。
+  
+  ## 任务
+  
+  1. 加载知识图谱
+     - 路径：{{knowledge_graph_path}} 或 .agent/knowledge-graph.json
+     - 如果不存在，先扫描项目结构
+  
+  2. 分析目录结构
+     - 常见模式识别：
+       - `components/`, `pages/`, `views/` → 表现层
+       - `services/`, `usecases/`, `domain/` → 业务层
+       - `repositories/`, `models/`, `data/` → 数据层
+       - `infrastructure/`, `config/`, `utils/` → 基础设施层
+  
+  3. 分析依赖关系
+     - 从知识图谱获取节点和边
+     - 计算依赖方向
+     - 识别层级边界
+  
+  4. 检测层级违规
+     - 数据层不应调用表现层
+     - 基础设施层不应依赖业务层
+     - 记录所有违规依赖
+  
+  5. 生成报告
+  
+  ## 输出格式
+  
+  ```json
+  {
+    "layers": [
+      {
+        "id": "layer-001",
+        "name": "presentation",
+        "description": "前端展示层",
+        "patterns": ["src/components/*", "src/pages/*"],
+        "nodeIds": ["func-001", "func-002"],
+        "stats": {
+          "nodes": 15,
+          "imports": 23,
+          "exports": 12
+        }
+      }
+    ],
+    "violations": [
+      {
+        "from": "data/UserRepository",
+        "to": "presentation/UserCard",
+        "type": "upward_dependency",
+        "severity": "error",
+        "message": "数据层不应依赖表现层"
+      }
+    ]
+  }
+  ```
+
+tools:
+  - file-read
+  - shell-execute
+
+temperature: 0.5
+
+version: "1.0.0"

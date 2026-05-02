@@ -1,0 +1,103 @@
+# check-decomposition.yml - 检查功能拆解
+# ============================================================================
+# 类型: 验证步骤
+# 用途: 检查每个功能是否都有可验证的 passes 子任务
+# Long-Running Agents 铁律: 功能实现前必须拆解为可验证的子任务
+# ============================================================================
+
+name: check-decomposition
+stage: govern
+description: 检查功能是否已拆解为可验证的 passes 子任务
+category: validation
+version: 1.0.0
+
+inputs:
+  - name: project_path
+    type: path
+    required: true
+    description: 项目路径
+  
+  - name: constraint_level
+    type: string
+    default: guideline
+    enum: [iron_law, guideline, tip]
+    description: |
+      约束级别：
+      - iron_law: 违反时必须停止
+      - guideline: 违反时警告
+      - tip: 仅提示
+  
+  - name: exceptions
+    type: array
+    default: [trivial_change, bug_fix_only, internal_refactor]
+    description: 允许例外的情况
+
+outputs:
+  - name: passed
+    type: boolean
+    description: 是否通过检查
+  
+  - name: violations
+    type: array
+    description: 违规的功能 ID 列表
+  
+  - name: warning_count
+    type: number
+    description: 警告数量
+  
+  - name: error_count
+    type: number
+    description: 错误数量（iron_law 级别）
+
+# Prompt
+prompt: |
+  你是 Long-Running Agents 约束检查器。请检查功能拆解约束。
+  
+  ## 项目路径
+  
+  {{project_path}}
+  
+  ## 约束级别
+  
+  {{constraint_level}}
+  
+  ## 铁律定义
+  
+  **no_feature_without_decomposition**:
+  实现功能前必须先拆解为可验证的子任务（passes）
+  
+  ## 检查流程
+  
+  1. 加载 feature_list.json:
+     ```bash
+     cat {{project_path}}/feature_list.json
+     ```
+  
+  2. 对每个 feature 检查：
+     - 是否有 `passes` 字段
+     - `passes` 数组是否非空
+     - 每个 pass 是否有 `description` 和 `verification`
+  
+  3. 识别例外情况（跳过检查）：
+     {{exceptions}}
+  
+  4. 输出结果：
+     ```json
+     {
+       "passed": true/false,
+       "violations": ["feature-id-1", "feature-id-2"],
+       "warning_count": N,
+       "error_count": N  // 只在 iron_law 级别
+     }
+     ```
+  
+  ## 约束级别处理
+  
+  - **iron_law**: 违规必须返回 passed=false, error_count>0
+  - **guideline**: 违规返回 passed=true, warning_count>0
+  - **tip**: 违规返回 passed=true，仅提示
+  
+  ## 注意
+  
+  - 如果 feature_list.json 不存在，返回 passed=true（跳过检查）
+  - 只检查 `status` 不是 `completed` 的功能

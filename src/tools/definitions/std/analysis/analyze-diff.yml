@@ -1,0 +1,182 @@
+name: analyze-diff
+stage: plan
+description: |
+  分析 Git diff 影响范围（智能版本）。
+  
+  通过 fingerprint 工具区分变更级别：
+  - STRUCTURAL: 结构性变更（函数签名、类结构、导入变化）
+  - COSMETIC: 表面变更（注释、格式化）
+  - NONE: 无变更
+  
+  核心功能：
+  - 智能跳过表面变更分析
+  - 变更的组件识别
+  - 受影响的下游组件
+  - 架构层级影响
+  - 风险评估
+  
+  用途：
+  - 代码审查前置分析（节省 30-50% 时间）
+  - 测试范围确定
+  - 发布影响评估
+
+agent: codex
+timeout: 300  # 5 分钟
+
+# 集成的工具
+tools:
+  - code/fingerprint
+
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目根路径
+    
+  - name: base_ref
+    type: string
+    required: false
+    default: "main"
+    description: 基准分支或 commit
+    
+  - name: head_ref
+    type: string
+    required: false
+    default: "HEAD"
+    description: 目标分支或 commit
+    
+  - name: knowledge_graph_path
+    type: string
+    required: false
+    description: 知识图谱文件路径（默认 .agent/knowledge-graph.json）
+
+outputs:
+  - name: changed_files
+    type: array
+    description: 变更文件列表
+    
+  - name: changed_nodes
+    type: array
+    description: 变更的知识图谱节点
+    
+  - name: affected_nodes
+    type: array
+    description: 受影响的下游节点
+    
+  - name: affected_layers
+    type: array
+    description: 涉及的架构层级
+    
+  - name: risk_assessment
+    type: object
+    description: 风险评估结果
+    
+  - name: report
+    type: string
+    description: Markdown 格式的分析报告
+
+prompt: |
+  分析项目 {{project_path}} 的 Git diff 影响范围。
+  
+  ## Step 0: 智能变更检测（fingerprint）
+  
+  对每个变更文件执行结构指纹分析：
+  ```bash
+  # 获取变更文件
+  CHANGED_FILES=$(git diff --name-only {{base_ref}}...{{head_ref}})
+  
+  # 对每个文件检测变更级别
+  for FILE in $CHANGED_FILES; do
+    fingerprint.sh "$FILE" "{{project_path}}" "{{base_ref}}"
+  done
+  ```
+  
+  根据变更级别决定分析策略：
+  - **STRUCTURAL**: 执行完整影响分析
+  - **COSMETIC**: 跳过深度分析，仅记录格式变更
+  - **NONE**: 跳过该文件
+  
+  ## Step 1: 获取变更文件列表
+  
+  ```bash
+  # 只分析 STRUCTURAL 变更
+  git diff --name-only {{base_ref}}...{{head_ref}}
+  ```
+  
+  ## Step 2: 加载知识图谱
+  
+  - 路径：{{knowledge_graph_path}} 或 .agent/knowledge-graph.json
+  - 如果不存在，需要先运行 wf-analyze 生成
+  
+  ## Step 3: 映射变更文件到知识图谱节点
+  
+  - 识别变更的组件（函数、类、模块）
+  - 追踪下游依赖关系
+  - 确定受影响范围
+  
+  ## Step 4: 架构层级分析
+  
+  - 识别涉及的层级（如：presentation、business、data）
+  - 判断是否跨层变更
+  
+  ## Step 5: 风险评估
+  
+  - 高复杂度组件变更
+  - 跨层级影响
+  - 大范围下游影响
+  - 新增/未映射文件
+  
+  ## 输出格式
+  
+  生成结构化的影响分析报告，包含：
+  - 变更级别统计（STRUCTURAL/COSMETIC/NONE）
+  - 变更组件清单
+  - 受影响组件清单
+  - 架构层级影响
+  - 风险等级和建议
+  
+  ## 示例输出
+  
+  ```markdown
+  # Diff Analysis: my-project
+  
+  ## Change Level Summary
+  
+  | Level | Count | Files |
+  |-------|-------|-------|
+  | STRUCTURAL | 3 | auth.ts, user.ts, api.ts |
+  | COSMETIC | 2 | utils.ts (格式), config.ts (注释) |
+  | NONE | 0 | - |
+  
+  ## Changed Components (STRUCTURAL only)
+  
+  - **UserService** (class) — 用户认证服务
+    - File: `src/services/auth.ts`
+    - Complexity: complex
+    - Change: 新增 logout 方法
+  
+  ## Affected Components
+  
+  这些组件连接到变更代码，可能需要注意：
+  
+  - **LoginComponent** (function) — 登录表单
+  - **AuthMiddleware** (function) — 认证中间件
+  
+  ## Affected Layers
+  
+  - **presentation**: 前端展示层
+  - **business**: 业务逻辑层
+  
+  ## Risk Assessment
+  
+  - **High complexity**: 1 个复杂组件变更: UserService
+  - **Cross-layer impact**: 变更跨越 2 个架构层级
+  - **Wide blast radius**: 5 个组件受下游影响
+  ```
+
+retry:
+  max_attempts: 2
+  backoff: exponential
+  initial_delay: 5000
+
+version: "1.0.0"

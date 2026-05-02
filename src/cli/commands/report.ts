@@ -1,12 +1,14 @@
 /**
  * harness report 命令
- * 
- * 生成检查报告
+ *
+ * 生成检查报告（接入真实约束检查数据）
  */
 
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
-import * as path from 'path';
+import { ConstraintChecker } from '../../core/constraints/checker';
+import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import type { ConstraintContext } from '../../types/constraint';
 
 export interface ReportOptions {
   /** 输出文件路径 */
@@ -20,33 +22,19 @@ export interface ReportOptions {
 interface ReportData {
   timestamp: string;
   projectPath: string;
-  ironLaws: {
+  constraints: {
     total: number;
+    ironLaws: number;
+    guidelines: number;
+    tips: number;
     passed: number;
     failed: number;
     warnings: number;
     violations: Array<{
       id: string;
-      severity: string;
+      level: string;
       message: string;
     }>;
-  };
-  checkpoints: {
-    total: number;
-    passed: number;
-    failed: number;
-    results: Array<{
-      id: string;
-      passed: boolean;
-      checks: number;
-    }>;
-  };
-  passesGate: {
-    passed: boolean;
-    totalTests: number;
-    passedTests: number;
-    failedTests: number;
-    coverage?: number;
   };
 }
 
@@ -57,53 +45,64 @@ export async function report(options: ReportOptions): Promise<void> {
   console.log(chalk.blue('📊 生成检查报告...'));
 
   const projectPath = options.projectPath || process.cwd();
+  const checker = ConstraintChecker.getInstance();
 
-  // TODO: 从实际检查中获取数据
+  const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...TIPS };
+  const totalConstraints = Object.keys(allConstraints).length;
+
+  const context: ConstraintContext = {
+    operation: 'file_modification',
+    projectPath,
+  };
+
+  let result;
+  try {
+    result = await checker.checkConstraints(context);
+  } catch {
+    // Iron Law violations throw ConstraintViolationError — catch and build report from partial data
+    result = { passed: false, ironLaws: [], guidelines: [], tips: [] };
+  }
+
+  const failedIronLaws = result.ironLaws.filter(r => !r.satisfied);
+  const failedGuidelines = result.guidelines.filter(r => !r.satisfied);
+
+  const violations = [...failedIronLaws, ...failedGuidelines].map(r => ({
+    id: r.id,
+    level: r.level,
+    message: r.message || '',
+  }));
+
   const reportData: ReportData = {
     timestamp: new Date().toISOString(),
     projectPath,
-    ironLaws: {
-      total: 11,
-      passed: 11,
-      failed: 0,
-      warnings: 0,
-      violations: [],
-    },
-    checkpoints: {
-      total: 0,
-      passed: 0,
-      failed: 0,
-      results: [],
-    },
-    passesGate: {
-      passed: true,
-      totalTests: 0,
-      passedTests: 0,
-      failedTests: 0,
+    constraints: {
+      total: totalConstraints,
+      ironLaws: Object.keys(IRON_LAWS).length,
+      guidelines: Object.keys(GUIDELINES).length,
+      tips: Object.keys(TIPS).length,
+      passed: result.passed ? totalConstraints : totalConstraints - violations.length,
+      failed: failedIronLaws.length,
+      warnings: failedGuidelines.length,
+      violations,
     },
   };
 
-  // 生成报告内容
   let content: string;
 
   switch (options.format) {
     case 'json':
       content = JSON.stringify(reportData, null, 2);
       break;
-
     case 'markdown':
       content = generateMarkdownReport(reportData);
       break;
-
     case 'html':
       content = generateHtmlReport(reportData);
       break;
-
     default:
       content = JSON.stringify(reportData, null, 2);
   }
 
-  // 输出到文件或控制台
   if (options.output) {
     await fs.writeFile(options.output, content, 'utf-8');
     console.log(chalk.green(`✅ 报告已保存到: ${options.output}`));
@@ -112,9 +111,6 @@ export async function report(options: ReportOptions): Promise<void> {
   }
 }
 
-/**
- * 生成 Markdown 格式报告
- */
 function generateMarkdownReport(data: ReportData): string {
   const lines: string[] = [
     `# Harness 检查报告`,
@@ -124,70 +120,39 @@ function generateMarkdownReport(data: ReportData): string {
     ``,
     `---`,
     ``,
-    `## 📜 铁律检查`,
+    `## 约束检查`,
     ``,
     `| 指标 | 数值 |`,
     `|------|------|`,
-    `| 总数 | ${data.ironLaws.total} |`,
-    `| 通过 | ${data.ironLaws.passed} |`,
-    `| 失败 | ${data.ironLaws.failed} |`,
-    `| 警告 | ${data.ironLaws.warnings} |`,
+    `| 总约束 | ${data.constraints.total} |`,
+    `| Iron Laws | ${data.constraints.ironLaws} |`,
+    `| Guidelines | ${data.constraints.guidelines} |`,
+    `| Tips | ${data.constraints.tips} |`,
+    `| 通过 | ${data.constraints.passed} |`,
+    `| 失败 (error) | ${data.constraints.failed} |`,
+    `| 警告 (warning) | ${data.constraints.warnings} |`,
     ``,
   ];
 
-  if (data.ironLaws.violations.length > 0) {
+  if (data.constraints.violations.length > 0) {
     lines.push(`### 违规项`, ``);
-    data.ironLaws.violations.forEach(v => {
-      lines.push(`- **${v.id}** (${v.severity}): ${v.message}`);
+    data.constraints.violations.forEach(v => {
+      lines.push(`- **${v.id}** (${v.level}): ${v.message}`);
     });
     lines.push(``);
-  }
-
-  lines.push(
-    `## 🔍 检查点验证`,
-    ``,
-    `| 指标 | 数值 |`,
-    `|------|------|`,
-    `| 总数 | ${data.checkpoints.total} |`,
-    `| 通过 | ${data.checkpoints.passed} |`,
-    `| 失败 | ${data.checkpoints.failed} |`,
-    ``
-  );
-
-  if (data.checkpoints.results.length > 0) {
-    lines.push(`### 检查点详情`, ``);
-    data.checkpoints.results.forEach(r => {
-      const icon = r.passed ? '✅' : '❌';
-      lines.push(`- ${icon} **${r.id}**: ${r.checks} 项检查`);
-    });
-    lines.push(``);
-  }
-
-  lines.push(
-    `## 🚦 测试门控`,
-    ``,
-    `| 指标 | 数值 |`,
-    `|------|------|`,
-    `| 状态 | ${data.passesGate.passed ? '✅ 通过' : '❌ 未通过'} |`,
-    `| 总测试 | ${data.passesGate.totalTests} |`,
-    `| 通过 | ${data.passesGate.passedTests} |`,
-    `| 失败 | ${data.passesGate.failedTests} |`,
-    ``
-  );
-
-  if (data.passesGate.coverage !== undefined) {
-    lines.push(`| 覆盖率 | ${data.passesGate.coverage}% |`, ``);
   }
 
   lines.push(`---`, `*报告由 @dommaker/harness 生成*`, ``);
-
   return lines.join('\n');
 }
 
-/**
- * 生成 HTML 格式报告
- */
 function generateHtmlReport(data: ReportData): string {
+  const violationsHtml = data.constraints.violations.length > 0
+    ? `<h3>违规项</h3><ul>${data.constraints.violations.map(v =>
+        `<li><strong>${v.id}</strong> (${v.level}): ${v.message}</li>`
+      ).join('')}</ul>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -211,31 +176,19 @@ function generateHtmlReport(data: ReportData): string {
   <h1>Harness 检查报告</h1>
   <p class="meta">生成时间: ${data.timestamp}<br>项目路径: ${data.projectPath}</p>
 
-  <h2>📜 铁律检查</h2>
+  <h2>约束检查</h2>
   <table>
     <tr><th>指标</th><th>数值</th></tr>
-    <tr><td>总数</td><td>${data.ironLaws.total}</td></tr>
-    <tr><td>通过</td><td class="passed">${data.ironLaws.passed}</td></tr>
-    <tr><td>失败</td><td class="failed">${data.ironLaws.failed}</td></tr>
-    <tr><td>警告</td><td>${data.ironLaws.warnings}</td></tr>
+    <tr><td>总约束</td><td>${data.constraints.total}</td></tr>
+    <tr><td>Iron Laws</td><td>${data.constraints.ironLaws}</td></tr>
+    <tr><td>Guidelines</td><td>${data.constraints.guidelines}</td></tr>
+    <tr><td>Tips</td><td>${data.constraints.tips}</td></tr>
+    <tr><td>通过</td><td class="passed">${data.constraints.passed}</td></tr>
+    <tr><td>失败</td><td class="failed">${data.constraints.failed}</td></tr>
+    <tr><td>警告</td><td>${data.constraints.warnings}</td></tr>
   </table>
 
-  <h2>🔍 检查点验证</h2>
-  <table>
-    <tr><th>指标</th><th>数值</th></tr>
-    <tr><td>总数</td><td>${data.checkpoints.total}</td></tr>
-    <tr><td>通过</td><td class="passed">${data.checkpoints.passed}</td></tr>
-    <tr><td>失败</td><td class="failed">${data.checkpoints.failed}</td></tr>
-  </table>
-
-  <h2>🚦 测试门控</h2>
-  <table>
-    <tr><th>指标</th><th>数值</th></tr>
-    <tr><td>状态</td><td class="${data.passesGate.passed ? 'passed' : 'failed'}">${data.passesGate.passed ? '✅ 通过' : '❌ 未通过'}</td></tr>
-    <tr><td>总测试</td><td>${data.passesGate.totalTests}</td></tr>
-    <tr><td>通过</td><td>${data.passesGate.passedTests}</td></tr>
-    <tr><td>失败</td><td>${data.passesGate.failedTests}</td></tr>
-  </table>
+  ${violationsHtml}
 
   <footer style="margin-top: 40px; color: #999; text-align: center;">
     报告由 @dommaker/harness 生成

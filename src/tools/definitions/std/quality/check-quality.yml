@@ -1,0 +1,241 @@
+# check-quality.yml - 代码质量检查
+# ============================================================================
+# 类型: 质量类步骤
+# 执行方式: 调用 Agent
+# 用途: 执行代码质量检查，包括 lint、安全漏洞、性能问题
+# ============================================================================
+
+name: check-quality
+stage: verify
+description: 代码质量检查（lint + 安全 + 性能）
+category: quality
+version: 2.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.2
+
+# 可用工具
+tools:
+  - file-read
+  - npm-lint
+  - npm-audit
+
+# 输入定义
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目路径
+  
+  - name: checks
+    type: array
+    default: ["lint", "security", "performance"]
+    description: 检查项目
+  
+  - name: files
+    type: array
+    description: 要检查的文件列表（可选，默认检查全部）
+
+# 输出定义
+outputs:
+  - name: score
+    type: number
+    description: 质量评分（0-100）
+  
+  - name: issues
+    type: array
+    description: 发现的问题列表
+  
+  - name: report
+    type: object
+    description: 详细报告
+  
+  - name: report_file
+    type: string
+    description: 报告文件路径
+
+# Prompt 模板
+prompt: |
+  你是代码质量检查专家。对项目进行质量检查并生成报告。
+  
+  ## 📁 项目路径
+  {{project_path}}
+  
+  ## 🔍 检查项目
+  {{checks}}
+  
+  {{#if files}}
+  ## 📄 检查文件
+  {{#each files}}
+  - {{this}}
+  {{/each}}
+  {{/if}}
+  
+  ---
+  
+  ## 🛠️ 检查流程
+  
+  ### Step 1: Lint 检查
+  
+  ```bash
+  cd {{project_path}}
+  npm run lint 2>&1 || echo "Lint check completed with issues"
+  ```
+  
+  分析 lint 输出，识别：
+  - 错误数量
+  - 警告数量
+  - 具体问题列表
+  
+  ### Step 2: 安全检查
+  
+  ```bash
+  npm audit --json 2>&1 || echo "{}"
+  ```
+  
+  分析安全审计结果，识别：
+  - 高危漏洞
+  - 中危漏洞
+  - 低危漏洞
+  - 建议修复方案
+  
+  ### Step 3: 性能问题检查
+  
+  静态分析代码，识别常见性能问题：
+  - 未使用的依赖
+  - 大文件/大函数
+  - 同步阻塞操作
+  - 内存泄漏风险
+  - N+1 查询问题
+  
+  ### Step 4: 计算质量评分
+  
+  ```javascript
+  // 评分算法
+  let score = 100;
+  
+  // Lint 问题扣分
+  score -= lintErrors * 5;      // 每个错误 -5
+  score -= lintWarnings * 1;    // 每个警告 -1
+  
+  // 安全漏洞扣分
+  score -= criticalVulns * 20;  // 每个高危 -20
+  score -= highVulns * 10;      // 每个中危 -10
+  score -= moderateVulns * 5;   // 每个低危 -5
+  
+  // 性能问题扣分
+  score -= perfIssues * 3;      // 每个问题 -3
+  
+  score = Math.max(0, score);   // 最低 0 分
+  ```
+  
+  ### Step 5: 生成报告
+  
+  创建 `quality-report.md`：
+  
+  ```markdown
+  # 代码质量检查报告
+  
+  **项目**: {{project_path}}
+  **检查时间**: <timestamp>
+  **质量评分**: <score>/100
+  
+  ---
+  
+  ## 📊 评分明细
+  
+  | 检查项 | 问题数 | 扣分 |
+  |--------|--------|------|
+  | Lint 错误 | X | -X*5 |
+  | Lint 警告 | X | -X*1 |
+  | 高危漏洞 | X | -X*20 |
+  | 中危漏洞 | X | -X*10 |
+  | 低危漏洞 | X | -X*5 |
+  | 性能问题 | X | -X*3 |
+  
+  ---
+  
+  ## 🔴 严重问题
+  
+  ### Lint 错误
+  
+  | 文件 | 行号 | 规则 | 描述 |
+  |------|------|------|------|
+  | ... | ... | ... | ... |
+  
+  ### 高危漏洞
+  
+  | 漏洞 | 依赖 | 描述 | 修复方案 |
+  |------|------|------|---------|
+  | ... | ... | ... | ... |
+  
+  ---
+  
+  ## 🟡 中等问题
+  
+  ### Lint 警告
+  
+  ...
+  
+  ### 中危漏洞
+  
+  ...
+  
+  ---
+  
+  ## 🟢 性能建议
+  
+  1. ...
+  2. ...
+  
+  ---
+  
+  ## 📝 总结
+  
+  <总结内容>
+  
+  ## 🎯 建议行动
+  
+  1. **立即修复**: 高危漏洞、严重 lint 错误
+  2. **尽快修复**: 中危漏洞、lint 警告
+  3. **建议优化**: 性能问题
+  ```
+  
+  ---
+  
+  ## 📤 输出格式
+  
+  ```json
+  {
+    "score": 85,
+    "issues": {
+      "lint_errors": [...],
+      "lint_warnings": [...],
+      "security_vulnerabilities": [...],
+      "performance_issues": [...]
+    },
+    "summary": {
+      "total_issues": 15,
+      "critical": 2,
+      "high": 3,
+      "medium": 5,
+      "low": 5
+    },
+    "report_file": "quality-report.md"
+  }
+  ```
+
+# 执行配置
+execute:
+  type: agent
+  agent: codex
+  temperature: 0.2
+  output:
+    content:
+      score: score
+      issues: issues
+      report: report
+    file:
+      path: "{{project_path}}/quality-report.md"
+      content: report_file

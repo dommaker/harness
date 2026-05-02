@@ -1,0 +1,144 @@
+# vote-tally.yml - 投票统计步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 内置处理器
+# 用途: 统计投票结果，计算是否通过
+# 核心理念: 绝对多数 >50%，Owner 否决权
+# ============================================================================
+
+name: vote-tally
+stage: govern
+description: 统计投票结果，计算是否通过
+category: governance
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: governance/vote-tally
+
+# 输入定义
+inputs:
+  voting_session_id:
+    type: string
+    description: 投票会话 ID
+    required: true
+  
+  force_close:
+    type: boolean
+    description: 是否强制结束投票（即使有人未投票）
+    default: false
+  
+  method:
+    type: string
+    description: 通过方式
+    enum: [simple_majority, absolute_majority, unanimous, super_majority]
+    default: absolute_majority
+  
+  threshold:
+    type: number
+    description: 通过阈值（百分比 0-100）
+    default: 50
+
+# 通过条件计算
+pass_conditions:
+  # 绝对多数（默认）
+  absolute_majority:
+    description: "赞成票权重 > 总权重 50%"
+    formula: "approve_weight / total_weight > 0.5"
+  
+  # 简单多数
+  simple_majority:
+    description: "赞成票 > 反对票"
+    formula: "approve_count > reject_count"
+  
+  # 全票通过
+  unanimous:
+    description: "所有人赞成（弃权不计）"
+    formula: "approve_count == actual_voters - abstain_count"
+  
+  # 超级多数
+  super_majority:
+    description: "赞成票 > 总权重 66.7%"
+    formula: "approve_weight / total_weight > 0.667"
+
+# 否决权检查
+veto_check:
+  description: "如果有否决权投反对，直接否决"
+  formula: "any(vote == 'reject' and weight == 'veto')"
+
+# 法定人数检查
+quorum_check:
+  description: "投票人数需要达到最低要求"
+  default_quorum: 0.5  # 默认 50% 参与率
+
+# 输出定义
+outputs:
+  - name: decision
+    type: string
+    description: 最终决策
+    enum: [approved, rejected, no_quorum, vetoed, pending]
+  
+  - name: statistics
+    type: object
+    description: 投票统计
+    properties:
+      total_participants:
+        type: number
+      actual_voters:
+        type: number
+      approve_count:
+        type: number
+      reject_count:
+        type: number
+      abstain_count:
+        type: number
+      approve_weight:
+        type: number
+      reject_weight:
+        type: number
+  
+  - name: checks
+    type: object
+    description: 条件检查结果
+    properties:
+      quorum_met:
+        type: boolean
+      threshold_met:
+        type: boolean
+      veto_exercised:
+        type: boolean
+  
+  - name: vote_breakdown
+    type: array
+    description: 详细投票记录
+    items:
+      type: object
+      properties:
+        voter_id:
+          type: string
+        vote:
+          type: string
+        weight:
+          type: number
+        reason:
+          type: string
+  
+  - name: voting_session
+    type: object
+    description: 完整投票会话信息
+
+# 决策优先级
+decision_priority:
+  1_vetoed: "如果有否决权投反对 → vetoed"
+  2_no_quorum: "如果未达法定人数 → no_quorum"
+  3_threshold: "检查通过阈值 → approved/rejected"
+  4_pending: "投票未结束 → pending"
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - voting
+    - tally

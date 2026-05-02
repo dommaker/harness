@@ -1,0 +1,68 @@
+name: code/parse
+description: |
+  使用 Tree-sitter 解析代码文件，提取 AST 结构。
+  支持函数、类、导入、导出等结构化信息提取。
+  
+  用途：
+  - 代码结构分析
+  - 知识图谱构建
+  - 变更检测（fingerprint）
+  
+inputs:
+  - name: file_path
+    type: string
+    required: true
+    description: 要解析的文件路径
+    
+  - name: language
+    type: string
+    required: false
+    description: |
+      语言类型（可选，自动检测）。
+      支持：typescript, javascript, python, go, rust, java, cpp, c, ruby, php
+      
+  - name: project_path
+    type: string
+    required: false
+    description: 项目根路径（用于相对路径计算）
+
+outputs:
+  - name: ast_nodes
+    type: array
+    description: AST 节点列表
+    
+  - name: functions
+    type: array
+    description: 函数列表（名称、参数、返回类型、行范围）
+    
+  - name: classes
+    type: array
+    description: 类列表（名称、方法、属性、行范围）
+    
+  - name: imports
+    type: array
+    description: 导入列表（来源、说明符）
+    
+  - name: exports
+    type: array
+    description: 导出列表（名称、类型）
+
+handler: builtin
+handlerName: code_parse
+
+examples:
+  - description: 解析 TypeScript 文件
+    inputs:
+      file_path: "src/index.ts"
+      project_path: "/home/user/project"
+    outputs:
+      functions:
+        - name: "main"
+          params: ["args"]
+          returnType: "void"
+          lineRange: [10, 25]
+      imports:
+        - source: "fs"
+          specifiers: ["readFileSync", "writeFileSync"]
+
+version: "1.0.0"

@@ -1,0 +1,149 @@
+# stance-review.yml - 立场审核步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 调用 Agent
+# 用途: 以特定立场审核方案/代码/决策
+# 核心理念: 每个角色只站在自己的立场深入思考
+# ============================================================================
+
+name: stance-review
+stage: govern
+description: 以特定立场审核方案/代码/决策（三省六部制核心）
+category: governance
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3  # 稍高温度允许更深入的思考
+
+# 可用工具
+tools:
+  - file-read
+  - define-stance
+  - validate-artifact
+
+# 输入定义
+inputs:
+  - name: stance_id
+    type: string
+    required: true
+    description: |
+      立场 ID，可选值：
+      - critic: 挑刺者（评审专家）
+      - supporter: 支持者（方案策划）
+      - decider: 决策者（项目负责人）
+      - planner: 规划者
+      - executor: 执行者（开发工程师）
+      - tester: 测试者
+      - architect: 架构师
+      - security: 安全专家
+      - performance: 性能专家
+      - auditor: 审计官
+  
+  - name: artifact_type
+    type: string
+    required: true
+    description: |
+      审核对象类型：
+      - proposal: 方案提案
+      - architecture: 架构设计
+      - code: 代码实现
+      - decision: 决策记录
+      - capability: 能力定义
+  
+  - name: artifact_content
+    type: string
+    required: true
+    description: 审核对象内容
+  
+  - name: review_criteria
+    type: array
+    description: 审核标准列表
+    default: []
+  
+  - name: previous_opinions
+    type: array
+    description: 其他立场已有的审核意见（用于参考）
+    default: []
+
+# 输出定义
+outputs:
+  - name: verdict
+    type: string
+    description: |
+      审核结论：
+      - approve: 通过
+      - reject: 封还（直接退回）
+      - request_changes: 驳正（要求修改）
+  
+  - name: opinion
+    type: string
+    description: 详细审核意见
+  
+  - name: issues
+    type: array
+    description: 发现的问题列表
+    items:
+      type: object
+      properties:
+        severity:
+          type: string
+          description: 严重程度 (critical | major | minor | suggestion)
+        category:
+          type: string
+          description: 问题分类
+        description:
+          type: string
+          description: 问题描述
+        suggestion:
+          type: string
+          description: 改进建议
+  
+  - name: suggestions
+    type: array
+    description: 改进建议列表
+
+# Prompt 模板
+prompt: |
+  你正在进行立场审核。
+  
+  ## 审核立场
+  立场 ID: {{stance_id}}
+  
+  ## 审核对象
+  类型: {{artifact_type}}
+  内容: {{artifact_content}}
+  
+  ## 审核标准
+  {{#if review_criteria}}
+  {{#each review_criteria}}
+  - {{this}}
+  {{/each}}
+  {{else}}
+  - 完整性
+  - 可行性
+  - 风险评估
+  {{/if}}
+  
+  {{#if previous_opinions}}
+  ## 其他立场意见
+  {{#each previous_opinions}}
+  **{{this.verdict}}** ({{this.stanceId}}): {{this.opinion}}
+  {{/each}}
+  {{/if}}
+  
+  请以你的立场进行审核，输出审核结果。
+
+# 执行配置
+execute:
+  type: builtin
+  handler: stance-review
+  
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - review
+    - stance
+    - stance-isolation

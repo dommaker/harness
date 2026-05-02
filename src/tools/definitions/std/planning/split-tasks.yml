@@ -1,0 +1,359 @@
+# split-tasks.yml - 任务拆分
+# ============================================================================
+# 类型: 内置处理器
+# 用途: 将大任务拆分成细粒度子任务
+# 版本: 1.0.0 - AW-022 任务拆分
+# ============================================================================
+#
+# 功能：
+# - 根据 complexity/estimated_time 阈值识别大任务
+# - 自动拆分或 AI 智能拆分
+# - 支持 subtasks（嵌套）和扁平化两种结构
+#
+# 复用：
+# - 复用 split-batch.yml 评分算法判断拆分阈值
+# - 输出符合 tasks-yml-spec.md 格式
+#
+# ============================================================================
+
+name: split-tasks
+stage: plan
+description: |
+  将大任务拆分成细粒度子任务
+  
+  **拆分策略**：
+  - auto: 根据任务描述自动拆分
+  - ai: AI 智能分析拆分
+  - manual: 根据拆分点手动拆分
+  
+  **输出格式**：
+  - nested: subtasks 嵌套结构
+  - flat: 扁平化结构（parent_id 关联）
+
+category: planning
+version: 1.0.0
+
+# ============================================================================
+# 输入定义
+# ============================================================================
+
+inputs:
+  # 任务列表
+  - name: tasks
+    type: array
+    required: true
+    description: 待拆分的任务列表
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 任务 ID
+        name:
+          type: string
+          description: 任务名称
+        description:
+          type: string
+          description: 任务描述
+        complexity:
+          type: string
+          enum: [large, medium, small]
+          description: 复杂度
+        estimated_time:
+          type: string
+          enum: ["<1h", "1-2h", "2-4h", ">4h"]
+          description: 预估时间
+        files:
+          type: array
+          description: 涉及的文件
+  
+  # 拆分阈值
+  - name: split_threshold
+    type: object
+    description: 拆分阈值配置
+    default:
+      complexity:
+        - large
+      estimated_time:
+        - ">4h"
+    properties:
+      complexity:
+        type: array
+        items:
+          type: string
+          enum: [large, medium, small]
+        description: 触发拆分的复杂度阈值
+      estimated_time:
+        type: array
+        items:
+          type: string
+          enum: ["<1h", "1-2h", "2-4h", ">4h"]
+        description: 触发拆分的时间阈值
+  
+  # 拆分策略
+  - name: split_strategy
+    type: string
+    enum: [auto, ai, manual]
+    default: auto
+    description: |
+      拆分策略：
+      - auto: 根据任务描述和文件列表自动拆分
+      - ai: AI 智能分析拆分（推荐）
+      - manual: 根据拆分点手动拆分
+  
+  # 拆分点（manual 策略）
+  - name: split_points
+    type: object
+    description: 手动拆分点配置
+    properties:
+      task_id:
+        type: array
+        items:
+          type: object
+          properties:
+            name: string
+            files: array
+  
+  # 最大子任务数
+  - name: max_subtasks
+    type: number
+    default: 5
+    description: 每个任务最大子任务数
+  
+  # 输出格式
+  - name: output_format
+    type: string
+    enum: [nested, flat]
+    default: nested
+    description: |
+      输出格式：
+      - nested: subtasks 嵌套结构
+      - flat: 扁平化结构（parent_id 关联）
+
+# ============================================================================
+# 输出定义
+# ============================================================================
+
+outputs:
+  - name: split_tasks
+    type: array
+    description: 拆分后的任务列表
+    items:
+      type: object
+      properties:
+        id: string
+        name: string
+        complexity: string
+        estimated_time: string
+        subtasks: array
+        parent_id: string
+  
+  - name: split_count
+    type: number
+    description: 拆分的任务数量
+  
+  - name: subtask_count
+    type: number
+    description: 生成的子任务总数
+  
+  - name: unsplit_tasks
+    type: array
+    description: 未拆分的任务列表（不满足阈值）
+  
+  - name: split_summary
+    type: object
+    description: 拆分摘要
+    properties:
+      total_input_tasks: number
+      total_output_tasks: number
+      tasks_split: number
+      subtasks_created: number
+
+# ============================================================================
+# 执行配置
+# ============================================================================
+
+execute:
+  type: builtin
+  handler: split-tasks
+
+# ============================================================================
+# 拆分规则（复用 split-batch.yml 评分框架）
+# ============================================================================
+
+split_scoring:
+  # 复用评分权重判断哪些任务需要拆分
+  complexity_weights:
+    large: 30      # 大任务需要拆分
+    medium: 10
+    small: 0       # 小任务无需拆分
+  
+  estimated_time_weights:
+    ">4h": 30      # 长时间任务需要拆分
+    "2-4h": 10
+    "1-2h": 5
+    "<1h": 0       # 短任务无需拆分
+  
+  # 拆分阈值（评分 >= 30 则拆分）
+  split_threshold_score: 30
+
+# ============================================================================
+# 拆分策略说明
+# ============================================================================
+
+strategy_details:
+  # 自动拆分策略
+  auto:
+    description: 根据任务描述和文件列表自动拆分
+    algorithm: |
+      1. 分析任务描述，识别功能模块
+      2. 分析文件列表，按模块分组
+      3. 根据分组生成子任务
+      4. 确保每个子任务 estimated_time <= 2h
+    
+    example:
+      input:
+        id: task-001
+        name: "登录认证模块"
+        complexity: large
+        estimated_time: ">4h"
+        files:
+          - path: src/auth/login.ts
+          - path: src/auth/session.ts
+          - path: src/auth/jwt.ts
+          - path: src/pages/Login.tsx
+      
+      output:
+        id: task-001
+        name: "登录认证模块"
+        subtasks:
+          - id: task-001-a
+            name: "登录表单 UI"
+            files: [src/pages/Login.tsx]
+            estimated_time: "1-2h"
+          
+          - id: task-001-b
+            name: "登录 API"
+            files: [src/auth/login.ts]
+            estimated_time: "1-2h"
+          
+          - id: task-001-c
+            name: "Session 管理"
+            files: [src/auth/session.ts, src/auth/jwt.ts]
+            estimated_time: "2-4h"
+  
+  # AI 智能拆分策略
+  ai:
+    description: AI 分析任务上下文，智能拆分
+    algorithm: |
+      1. AI 分析任务描述、文件列表、依赖关系
+      2. 识别自然拆分点
+      3. 考虑任务间依赖
+      4. 生成分批执行计划
+    
+    advantages:
+      - 更智能的拆分
+      - 考虑依赖关系
+      - 适应不同项目类型
+  
+  # 手动拆分策略
+  manual:
+    description: 根据用户指定的拆分点拆分
+    algorithm: |
+      1. 用户指定拆分点
+      2. 按拆分点创建子任务
+      3. 保持原有属性
+
+# ============================================================================
+# 输出格式说明
+# ============================================================================
+
+output_formats:
+  # 嵌套结构（推荐）
+  nested:
+    description: subtasks 嵌套在父任务中
+    example:
+      - id: task-001
+        name: "登录认证模块"
+        complexity: large
+        estimated_time: ">4h"
+        subtasks:
+          - id: task-001-a
+            name: "登录表单 UI"
+            parent_id: task-001
+            complexity: small
+            estimated_time: "1-2h"
+          - id: task-001-b
+            name: "登录 API"
+            parent_id: task-001
+            complexity: small
+            estimated_time: "1-2h"
+  
+  # 扁平化结构
+  flat:
+    description: 所有任务平铺，通过 parent_id 关联
+    example:
+      - id: task-001
+        name: "登录认证模块"
+        complexity: large
+        parent_id: null
+      
+      - id: task-001-a
+        name: "登录表单 UI"
+        complexity: small
+        parent_id: task-001
+      
+      - id: task-001-b
+        name: "登录 API"
+        complexity: small
+        parent_id: task-001
+
+# ============================================================================
+# 使用示例
+# ============================================================================
+
+examples:
+  - description: "自动拆分大任务"
+    input:
+      tasks: [...]
+      split_strategy: auto
+      split_threshold:
+        complexity: [large]
+        estimated_time: [">4h"]
+    
+  - description: "AI 智能拆分"
+    input:
+      tasks: [...]
+      split_strategy: ai
+      max_subtasks: 3
+    
+  - description: "手动指定拆分点"
+    input:
+      tasks: [...]
+      split_strategy: manual
+      split_points:
+        task-001:
+          - name: "登录表单"
+            files: [src/pages/Login.tsx]
+          - name: "认证 API"
+            files: [src/auth/login.ts]
+
+# ============================================================================
+# 元数据
+# ============================================================================
+
+metadata:
+  author: Agent Studio
+  version: 1.0.0
+  changelog:
+    - version: 1.0.0
+      date: 2026-04-07
+      changes:
+        - 初始版本
+        - 支持 auto/ai/manual 三种拆分策略
+        - 支持 nested/flat 两种输出格式
+        - 复用 split-batch.yml 评分框架
+  tags:
+    - planning
+    - task-split
+    - granularity

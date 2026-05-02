@@ -1,0 +1,170 @@
+# check-reuse.yml - 复用检查工具
+# ============================================================================
+# 能力类型: validation（工具型）
+# 执行方式: 纯脚本，检查现有能力
+# 用途: 在创建新 step/tool/workflow 前检查可复用的现有能力
+# 铁律: NO NEW CAPABILITIES WITHOUT REUSE CHECK FIRST
+# ============================================================================
+
+name: check-reuse
+description: 在创建新能力前检查是否有可复用的现有能力
+category: validation
+version: 1.0.0
+
+# 铁律
+iron_law:
+  rule: "NO NEW CAPABILITIES WITHOUT REUSE CHECK FIRST"
+  message: "在创建新能力之前，必须先检查是否有可复用的现有能力"
+
+# 输入
+input:
+  capability_type:
+    type: string
+    required: true
+    enum: [step, tool, workflow]
+    description: 要创建的能力类型
+  
+  keywords:
+    type: array
+    required: true
+    description: 关键词列表（用于搜索现有能力）
+  
+  description:
+    type: string
+    required: false
+    description: 功能描述（用于相似度匹配）
+  
+  workflows_path:
+    type: path
+    required: false
+    default: "~/projects/agent-workflows"
+    description: agent-workflows 路径
+
+# 输出
+output:
+  has_reusable:
+    type: boolean
+    description: 是否有可复用的能力
+  
+  existing_capabilities:
+    type: array
+    description: 找到的现有能力列表
+  
+  reuse_recommendation:
+    type: string
+    description: 复用建议
+  
+  should_create:
+    type: boolean
+    description: 是否建议创建新文件
+
+# 执行脚本
+script: |
+  #!/bin/bash
+  set -euo pipefail
+  
+  CAPABILITY_TYPE="{{capability_type}}"
+  KEYWORDS="{{keywords}}"
+  DESCRIPTION="{{description}}"
+  WORKFLOWS_PATH="{{workflows_path}}"
+  
+  echo "🔍 复用检查: 创建新 $CAPABILITY_TYPE"
+  echo "关键词: $KEYWORDS"
+  echo ""
+  
+  # 展开路径
+  WORKFLOWS_PATH="${WORKFLOWS_PATH/#\~/$HOME}"
+  
+  # 根据能力类型选择搜索目录
+  case "$CAPABILITY_TYPE" in
+    step)
+      SEARCH_DIR="$WORKFLOWS_PATH/steps"
+      ;;
+    tool)
+      SEARCH_DIR="$WORKFLOWS_PATH/tools"
+      ;;
+    workflow)
+      SEARCH_DIR="$WORKFLOWS_PATH/workflows"
+      ;;
+    *)
+      echo "❌ 未知的能力类型: $CAPABILITY_TYPE"
+      exit 1
+      ;;
+  esac
+  
+  if [ ! -d "$SEARCH_DIR" ]; then
+    echo "❌ 搜索目录不存在: $SEARCH_DIR"
+    exit 1
+  fi
+  
+  # 搜索现有能力
+  FOUND=()
+  
+  # 将关键词转换为数组
+  IFS=',' read -ra KEYWORD_ARRAY <<< "$KEYWORDS"
+  
+  for keyword in "${KEYWORD_ARRAY[@]}"; do
+    keyword=$(echo "$keyword" | xargs)  # trim
+    
+    # 搜索文件名和内容
+    for f in $(find "$SEARCH_DIR" -name "*.yml" -o -name "*.yaml" 2>/dev/null | grep -v README); do
+      # 检查文件名
+      if echo "$f" | grep -qi "$keyword"; then
+        FOUND+=("$f (文件名匹配)")
+      # 检查文件内容
+      elif grep -qi "$keyword" "$f" 2>/dev/null; then
+        FOUND+=("$f (内容匹配)")
+      fi
+    done
+  done
+  
+  # 去重
+  FOUND_UNIQUE=($(printf "%s\n" "${FOUND[@]}" | sort -u | tr '\n' ' '))
+  
+  # 输出结果
+  echo "================================"
+  echo "📊 搜索结果"
+  echo "================================"
+  echo ""
+  
+  if [ ${#FOUND_UNIQUE[@]} -gt 0 ]; then
+    echo "✅ 找到 ${#FOUND_UNIQUE[@]} 个相关能力:"
+    echo ""
+    for item in "${FOUND_UNIQUE[@]}"; do
+      echo "  - $item"
+    done
+    echo ""
+    echo "================================"
+    echo "📋 复用建议"
+    echo "================================"
+    echo ""
+    
+    # 根据匹配数量给出建议
+    if [ ${#FOUND_UNIQUE[@]} -ge 3 ]; then
+      echo "⚠️  找到多个相关能力，建议先评估是否可以复用或扩展"
+      echo "REUSE_RECOMMENDATION=evaluate"
+      echo "SHOULD_CREATE=false"
+    else
+      echo "💡 找到相关能力，建议检查是否满足需求"
+      echo "REUSE_RECOMMENDATION=check"
+      echo "SHOULD_CREATE=maybe"
+    fi
+    
+    echo ""
+    echo "has_reusable=true"
+  else
+    echo "❌ 未找到相关能力"
+    echo ""
+    echo "================================"
+    echo "📋 复用建议"
+    echo "================================"
+    echo ""
+    echo "✅ 可以创建新 $CAPABILITY_TYPE"
+    echo ""
+    echo "has_reusable=false"
+    echo "REUSE_RECOMMENDATION=create"
+    echo "SHOULD_CREATE=true"
+  fi
+  
+  echo ""
+  echo "existing_capabilities=${FOUND_UNIQUE[*]}"

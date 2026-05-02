@@ -1,0 +1,70 @@
+# analyze-git-diff.yml
+name: analyze-git-diff
+stage: plan
+description: 分析 Git 变更
+agent: codex
+temperature: 0.2
+
+tools:
+  - file-read
+  - git-diff
+
+prompt: |
+  你是 Git 分析专家。分析代码变更内容。
+  
+  {{input}}
+  
+  ## 任务
+  
+  ### 1. 获取变更
+  
+  ```bash
+  git diff --name-only HEAD~1 2>/dev/null || echo "no git"
+  git diff HEAD~1 2>/dev/null | head -200
+  ```
+  
+  ### 2. 分析变更类型
+  
+  分类变更：
+  - **功能新增**：新文件、新函数
+  - **Bug 修复**：小范围修改
+  - **重构**：文件移动、重命名
+  - **文档**：*.md 文件
+  - **配置**：*.json, *.yml
+  
+  ### 3. 输出变更报告
+  
+  创建 `git-diff-report.json`：
+  ```json
+  {
+    "files": ["src/api.ts", "src/utils.ts"],
+    "changes": [
+      {"file": "src/api.ts", "type": "modified", "lines": 15}
+    ],
+    "summary": {
+      "added": 20,
+      "removed": 5,
+      "files": 2
+    }
+  }
+  ```
+  
+  ## 原则
+  
+  - 关注有意义的变化
+  - 识别潜在的破坏性变更
+  - 生成简洁摘要
+
+inputs:
+  - name: baseRef
+    type: string
+    default: "HEAD~1"
+    description: Git 基准引用
+  
+  - name: headRef
+    type: string
+    default: "HEAD"
+    description: Git 目标引用
+
+outputs:
+  - git-diff-report.json

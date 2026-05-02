@@ -1,0 +1,795 @@
+{
+  "tools": [
+    {
+      "name": "code/fingerprint",
+      "category": "core",
+      "type": "tool",
+      "description": "生成代码结构指纹，用于变更检测。\n\n通过提取代码的结构签名（函数签名、类结构、导入导出），\n可以区分\"结构性变更\"和\"表面变更\"（如注释、格式化）。\n\n用途：\n- 增量分析（只处理真正变更的文件）\n- 变更影响评估\n- 代码审查优先级排序\n",
+      "path": "core/code/fingerprint.yml"
+    },
+    {
+      "name": "code/parse",
+      "category": "core",
+      "type": "tool",
+      "description": "使用 Tree-sitter 解析代码文件，提取 AST 结构。\n支持函数、类、导入、导出等结构化信息提取。\n\n用途：\n- 代码结构分析\n- 知识图谱构建\n- 变更检测（fingerprint）\n",
+      "path": "core/code/parse.yml"
+    },
+    {
+      "name": "code/register-language",
+      "category": "core",
+      "type": "tool",
+      "description": "注册编程语言支持。\n\n为代码解析器添加新语言：\n- Tree-sitter 语法配置\n- 文件扩展名映射\n- 解析规则\n\n支持 30+ 语言：\nTypeScript, JavaScript, Python, Go, Rust, Java, C++, C,\nRuby, PHP, Swift, Kotlin, Scala, C#, F#, Dart, Elixir,\nErlang, Haskell, Lua, Perl, R, SQL, Bash, PowerShell,\nVue, Svelte, CSS, SCSS, HTML, JSON, YAML, Markdown\n",
+      "path": "core/code/register-language.yml"
+    },
+    {
+      "name": "docker-build",
+      "category": "core",
+      "type": "tool",
+      "description": "构建 Docker 镜像",
+      "path": "core/docker/build.yml"
+    },
+    {
+      "name": "docker-run",
+      "category": "core",
+      "type": "tool",
+      "description": "运行 Docker 容器",
+      "path": "core/docker/run.yml"
+    },
+    {
+      "name": "file-copy",
+      "category": "core",
+      "type": "tool",
+      "description": "复制文件或目录",
+      "path": "core/file/copy.yml"
+    },
+    {
+      "name": "file-read",
+      "category": "core",
+      "type": "tool",
+      "description": "读取文件内容",
+      "path": "core/file/read.yml"
+    },
+    {
+      "name": "file-write",
+      "category": "core",
+      "type": "tool",
+      "description": "写入文件内容",
+      "path": "core/file/write.yml"
+    },
+    {
+      "name": "git-branch",
+      "category": "core",
+      "type": "tool",
+      "description": "创建并切换 Git 分支",
+      "path": "core/git/branch.yml"
+    },
+    {
+      "name": "git-cleanup-worktree",
+      "category": "core",
+      "type": "tool",
+      "description": "开发完成后清理 Git Worktree 隔离工作空间",
+      "path": "core/git/cleanup-worktree.yml"
+    },
+    {
+      "name": "git-clone",
+      "category": "core",
+      "type": "tool",
+      "description": "克隆 Git 仓库到本地",
+      "path": "core/git/clone.yml"
+    },
+    {
+      "name": "git-commit",
+      "category": "core",
+      "type": "tool",
+      "description": "Git 提交更改",
+      "path": "core/git/commit.yml"
+    },
+    {
+      "name": "git-push",
+      "category": "core",
+      "type": "tool",
+      "description": "推送 Git 分支到远程",
+      "path": "core/git/push.yml"
+    },
+    {
+      "name": "git-worktree",
+      "category": "core",
+      "type": "tool",
+      "description": "为新功能创建隔离的 Git Worktree，避免污染主分支",
+      "path": "core/git/worktree.yml"
+    },
+    {
+      "name": "notification/notify",
+      "category": "core",
+      "type": "tool",
+      "description": "发送通知到指定渠道\n\n支持渠道：\n- discord\n- slack\n- email（待实现）\n",
+      "path": "core/notification/notify.yml"
+    },
+    {
+      "name": "npm-build",
+      "category": "core",
+      "type": "tool",
+      "description": "构建 npm/pnpm 项目",
+      "path": "core/npm/build.yml"
+    },
+    {
+      "name": "npm-install",
+      "category": "core",
+      "type": "tool",
+      "description": "安装 npm/pnpm 依赖",
+      "path": "core/npm/install.yml"
+    },
+    {
+      "name": "npm-test",
+      "category": "core",
+      "type": "tool",
+      "description": "运行 npm/pnpm 测试",
+      "path": "core/npm/test.yml"
+    },
+    {
+      "name": "check-reuse",
+      "category": "core",
+      "type": "tool",
+      "description": "在创建新能力前检查是否有可复用的现有能力",
+      "path": "core/validation/check-reuse.yml"
+    },
+    {
+      "name": "validate-handlers",
+      "category": "core",
+      "type": "tool",
+      "description": "检查 step 的 handler 是否都在 builtin-handlers.ts 中注册",
+      "path": "core/validation/validate-handlers.yml"
+    },
+    {
+      "name": "validate-readme-stats",
+      "category": "core",
+      "type": "tool",
+      "description": "检查 README 统计数据是否与实际文件数量一致",
+      "path": "core/validation/validate-readme-stats.yml"
+    },
+    {
+      "name": "validate-yaml-syntax",
+      "category": "core",
+      "type": "tool",
+      "description": "检查所有 YAML 文件语法正确性",
+      "path": "core/validation/validate-yaml-syntax.yml"
+    },
+    {
+      "name": "analyze-codebase",
+      "category": "std",
+      "type": "tool",
+      "description": "分析代码库，生成知识图谱",
+      "path": "std/analysis/analyze-codebase.yml"
+    },
+    {
+      "name": "analyze-diff",
+      "category": "std",
+      "type": "tool",
+      "description": "分析 Git diff 影响范围（智能版本）。\n\n通过 fingerprint 工具区分变更级别：\n- STRUCTURAL: 结构性变更（函数签名、类结构、导入变化）\n- COSMETIC: 表面变更（注释、格式化）\n- NONE: 无变更\n\n核心功能：\n- 智能跳过表面变更分析\n- 变更的组件识别\n- 受影响的下游组件\n- 架构层级影响\n- 风险评估\n\n用途：\n- 代码审查前置分析（节省 30-50% 时间）\n- 测试范围确定\n- 发布影响评估\n",
+      "path": "std/analysis/analyze-diff.yml"
+    },
+    {
+      "name": "analyze-git-diff",
+      "category": "std",
+      "type": "tool",
+      "description": "分析 Git 变更",
+      "path": "std/analysis/analyze-git-diff.yml"
+    },
+    {
+      "name": "analyze-impact",
+      "category": "std",
+      "type": "tool",
+      "description": "分析代码变更影响范围",
+      "path": "std/analysis/analyze-impact.yml"
+    },
+    {
+      "name": "analyze-requirements",
+      "category": "std",
+      "type": "tool",
+      "description": "分析需求，生成标准化需求文档",
+      "path": "std/analysis/analyze-requirements.yml"
+    },
+    {
+      "name": "brainstorm-options",
+      "category": "std",
+      "type": "tool",
+      "description": "方案发散，当需求不明确或需要探索时提供多个候选方案",
+      "path": "std/analysis/brainstorm-options.yml"
+    },
+    {
+      "name": "build-graph",
+      "category": "std",
+      "type": "tool",
+      "description": "构建代码库知识图谱。\n\n扫描项目代码，提取：\n- 组件（函数、类、模块）\n- 关系（调用、导入、继承）\n- 架构层级\n- 复杂度评估\n\n用途：\n- 项目结构理解\n- 代码导航\n- 影响分析\n- 架构可视化\n",
+      "path": "std/analysis/build-graph.yml"
+    },
+    {
+      "name": "clarify-requirements",
+      "category": "std",
+      "type": "tool",
+      "description": "需求澄清，当用户输入模糊时追问关键信息",
+      "path": "std/analysis/clarify-requirements.yml"
+    },
+    {
+      "name": "detect-context",
+      "category": "std",
+      "type": "tool",
+      "description": "自动检测项目类型（智能版本）。\n\n通过 register-language 工具支持 24 种语言：\nTypeScript, JavaScript, Python, Go, Rust, Java, C++, C,\nRuby, PHP, Swift, Kotlin, Scala, C#, F#, Dart, Elixir,\nErlang, Haskell, Lua, Perl, R, SQL, Bash, PowerShell,\nVue, Svelte, CSS, SCSS, HTML, JSON, YAML, Markdown\n\n核心功能：\n- 自动识别语言和框架\n- 注册语言解析配置\n- 输出结构化项目上下文\n",
+      "path": "std/analysis/detect-context.yml"
+    },
+    {
+      "name": "detect-layers",
+      "category": "std",
+      "type": "tool",
+      "description": "检测项目的架构层级结构。\n\n通过分析目录结构和依赖关系，自动识别：\n- 表现层（presentation）\n- 业务层（business）\n- 数据层（data）\n- 基础设施层（infrastructure）\n\n用途：\n- 架构分析\n- 层级合规检查\n- 依赖方向验证\n",
+      "path": "std/analysis/detect-layers.yml"
+    },
+    {
+      "name": "generate-tour",
+      "category": "std",
+      "type": "tool",
+      "description": "生成项目导览。\n\n为新开发者创建学习路径：\n- 从简单到复杂的组件介绍\n- 架构层级概览\n- 语言/框架特定的说明\n\n用途：\n- 新人入职\n- 项目交接\n- 学习材料生成\n",
+      "path": "std/analysis/generate-tour.yml"
+    },
+    {
+      "name": "search-enhance",
+      "category": "std",
+      "type": "tool",
+      "description": "增强搜索能力，支持模糊搜索和语义搜索。\n\n使用 Fuse.js 进行模糊匹配：\n- 组件名搜索\n- 文件路径搜索\n- 代码内容搜索\n\n用途：\n- 快速定位组件\n- 代码导航\n- 重构影响分析\n",
+      "path": "std/analysis/search-enhance.yml"
+    },
+    {
+      "name": "添加待办项",
+      "category": "std",
+      "type": "tool",
+      "description": "向项目 Backlog 添加新的待办项",
+      "path": "std/backlog/add.yml"
+    },
+    {
+      "name": "智能决策",
+      "category": "std",
+      "type": "tool",
+      "description": "根据优先级和类型推荐下一个待处理项",
+      "path": "std/backlog/decide.yml"
+    },
+    {
+      "name": "GitHub Issues 同步",
+      "category": "std",
+      "type": "tool",
+      "description": "backlog.yml 与 GitHub Issues 双向同步",
+      "path": "std/backlog/github-sync.yml"
+    },
+    {
+      "name": "列出待办项",
+      "category": "std",
+      "type": "tool",
+      "description": "列出项目 Backlog 中的待办项",
+      "path": "std/backlog/list.yml"
+    },
+    {
+      "name": "backlog/load",
+      "category": "std",
+      "type": "tool",
+      "description": "从 Backlog 加载特定 Feature 或 Bug",
+      "path": "std/backlog/load.yml"
+    },
+    {
+      "name": "解决待办项",
+      "category": "std",
+      "type": "tool",
+      "description": "标记待办项为已解决",
+      "path": "std/backlog/resolve.yml"
+    },
+    {
+      "name": "更新待办项",
+      "category": "std",
+      "type": "tool",
+      "description": "更新待办项状态或优先级",
+      "path": "std/backlog/update.yml"
+    },
+    {
+      "name": "诊断 Bug",
+      "category": "std",
+      "type": "tool",
+      "description": "分析代码和错误信息，定位 Bug 根因",
+      "path": "std/bugfix/diagnose.yml"
+    },
+    {
+      "name": "修复 Bug",
+      "category": "std",
+      "type": "tool",
+      "description": "根据诊断结果修复 Bug",
+      "path": "std/bugfix/fix.yml"
+    },
+    {
+      "name": "验证修复",
+      "category": "std",
+      "type": "tool",
+      "description": "验证 Bug 是否已正确修复",
+      "path": "std/bugfix/verify.yml"
+    },
+    {
+      "name": "check-decomposition",
+      "category": "std",
+      "type": "tool",
+      "description": "检查功能是否已拆解为可验证的 passes 子任务",
+      "path": "std/constraint/check-decomposition.yml"
+    },
+    {
+      "name": "check-feature-list",
+      "category": "std",
+      "type": "tool",
+      "description": "检查 feature_list.json 存在性和格式",
+      "path": "std/constraint/check-feature-list.yml"
+    },
+    {
+      "name": "check-progress",
+      "category": "std",
+      "type": "tool",
+      "description": "检查 progress.json 跨 session 进度追踪",
+      "path": "std/constraint/check-progress.yml"
+    },
+    {
+      "name": "generate-report",
+      "category": "std",
+      "type": "tool",
+      "description": "生成约束检查汇总报告",
+      "path": "std/constraint/generate-report.yml"
+    },
+    {
+      "name": "commit-push",
+      "category": "std",
+      "type": "tool",
+      "description": "提交并推送代码",
+      "path": "std/deploy/commit-push.yml"
+    },
+    {
+      "name": "deploy-backend",
+      "category": "std",
+      "type": "tool",
+      "description": "后端部署",
+      "path": "std/deploy/deploy-backend.yml"
+    },
+    {
+      "name": "deploy-frontend",
+      "category": "std",
+      "type": "tool",
+      "description": "前端部署",
+      "path": "std/deploy/deploy-frontend.yml"
+    },
+    {
+      "name": "rollback",
+      "category": "std",
+      "type": "tool",
+      "description": "发布失败时回滚到上一个稳定版本",
+      "path": "std/deploy/rollback.yml"
+    },
+    {
+      "name": "analyze-architecture-impact",
+      "category": "std",
+      "type": "tool",
+      "description": "分析新功能对现有架构的影响",
+      "path": "std/design/analyze-architecture-impact.yml"
+    },
+    {
+      "name": "design-api",
+      "category": "std",
+      "type": "tool",
+      "description": "API 接口设计",
+      "path": "std/design/design-api.yml"
+    },
+    {
+      "name": "design-architecture",
+      "category": "std",
+      "type": "tool",
+      "description": "架构设计，生成标准化架构文档",
+      "path": "std/design/design-architecture.yml"
+    },
+    {
+      "name": "design-db",
+      "category": "std",
+      "type": "tool",
+      "description": "数据库设计",
+      "path": "std/design/design-db.yml"
+    },
+    {
+      "name": "generate-spec",
+      "category": "std",
+      "type": "tool",
+      "description": "将规划文档转换为 Spec 文档（增加版本号、审批区、变更历史）",
+      "path": "std/design/generate-spec.yml"
+    },
+    {
+      "name": "develop-api",
+      "category": "std",
+      "type": "tool",
+      "description": "API 开发步骤。\n\n实现 API 接口：\n- RESTful API\n- GraphQL API\n- WebSocket 接口\n\n输入：\n- requirement: 需求描述\n- api_contract: API 契约\n- data_model: 数据模型（可选）\n",
+      "path": "std/development/develop-api.yml"
+    },
+    {
+      "name": "develop-backend",
+      "category": "std",
+      "type": "tool",
+      "description": "后端开发步骤。\n\n根据需求和设计文档实现后端功能：\n- API 接口实现\n- 业务逻辑\n- 数据库操作\n- 中间件配置\n\n输入：\n- requirement: 需求描述\n- design_doc: 设计文档路径\n- api_contract: API 契约\n",
+      "path": "std/development/develop-backend.yml"
+    },
+    {
+      "name": "develop-frontend",
+      "category": "std",
+      "type": "tool",
+      "description": "前端开发步骤。\n\n根据需求和设计文档实现前端功能：\n- 组件开发\n- 样式实现\n- 状态管理\n- API 集成\n\n输入：\n- requirement: 需求描述\n- design_doc: 设计文档路径\n- api_contract: API 契约（可选）\n",
+      "path": "std/development/develop-frontend.yml"
+    },
+    {
+      "name": "develop-shared-types",
+      "category": "std",
+      "type": "tool",
+      "description": "共享类型开发步骤。\n\n实现前后端共享的类型定义：\n- TypeScript 接口\n- API 请求/响应类型\n- 数据模型类型\n\n输入：\n- requirement: 需求描述\n- api_contract: API 契约\n",
+      "path": "std/development/develop-shared-types.yml"
+    },
+    {
+      "name": "develop-task",
+      "category": "std",
+      "type": "tool",
+      "description": "开发单个任务（含 spec 审核）",
+      "path": "std/development/develop-task.yml"
+    },
+    {
+      "name": "develop-tests",
+      "category": "std",
+      "type": "tool",
+      "description": "编写测试用例",
+      "path": "std/development/develop-tests.yml"
+    },
+    {
+      "name": "execute-batch",
+      "category": "std",
+      "type": "tool",
+      "description": "执行一批任务，每个任务调用 develop-task 步骤。\n\n支持两种执行模式：\n- sequential: 串行执行，每个任务完成后执行下一个\n- parallel: 并行执行，所有任务同时执行\n\n返回每个任务的执行结果，用于后续 review。\n",
+      "path": "std/development/execute-batch.yml"
+    },
+    {
+      "name": "fix-issues",
+      "category": "std",
+      "type": "tool",
+      "description": "修复 review 发现的问题",
+      "path": "std/development/fix-issues.yml"
+    },
+    {
+      "name": "implement-task",
+      "category": "std",
+      "type": "tool",
+      "description": "实现单个任务（不提交）",
+      "path": "std/development/implement-task.yml"
+    },
+    {
+      "name": "review-fix-cycle",
+      "category": "std",
+      "type": "tool",
+      "description": "对任务执行 review → fix → re-review 循环，直到通过或达到最大迭代次数。\n\n流程：\n1. Review 任务代码\n2. 如果通过 → 结束\n3. 如果未通过 → Fix 问题\n4. Re-review\n5. 循环直到通过或达到最大迭代\n\n这是 Superpowers per-task review 的循环封装。\n",
+      "path": "std/development/review-fix-cycle.yml"
+    },
+    {
+      "name": "implement",
+      "category": "std",
+      "type": "tool",
+      "description": "实现已批准的进化建议",
+      "path": "std/evolution/implement.yml"
+    },
+    {
+      "name": "prioritize",
+      "category": "std",
+      "type": "tool",
+      "description": "对待处理的进化建议进行优先级排序",
+      "path": "std/evolution/prioritize.yml"
+    },
+    {
+      "name": "report-gap",
+      "category": "std",
+      "type": "tool",
+      "description": "分析失败原因并生成能力缺口报告",
+      "path": "std/evolution/report-gap.yml"
+    },
+    {
+      "name": "读取文件",
+      "category": "std",
+      "type": "tool",
+      "description": "读取指定路径的文件内容",
+      "path": "std/file/read.yml"
+    },
+    {
+      "name": "aggregate-opinions",
+      "category": "std",
+      "type": "tool",
+      "description": "汇聚多立场审核意见",
+      "path": "std/governance/aggregate-opinions.yml"
+    },
+    {
+      "name": "audit-task",
+      "category": "std",
+      "type": "tool",
+      "description": "审计特定任务的执行质量",
+      "path": "std/governance/audit-task.yml"
+    },
+    {
+      "name": "cast-vote",
+      "category": "std",
+      "type": "tool",
+      "description": "角色对进化建议/审计报告进行投票",
+      "path": "std/governance/cast-vote.yml"
+    },
+    {
+      "name": "收集问题",
+      "category": "std",
+      "type": "tool",
+      "description": "从审核意见中收集问题列表",
+      "path": "std/governance/collect-issues.yml"
+    },
+    {
+      "name": "创建签署文档",
+      "category": "std",
+      "type": "tool",
+      "description": "创建带签名的审核文档",
+      "path": "std/governance/create-signed-document.yml"
+    },
+    {
+      "name": "create-voting-session",
+      "category": "std",
+      "type": "tool",
+      "description": "创建新的投票会话",
+      "path": "std/governance/create-voting-session.yml"
+    },
+    {
+      "name": "define-stance",
+      "category": "std",
+      "type": "tool",
+      "description": "注入立场 prompt（三省六部制核心工具）",
+      "path": "std/governance/define-stance.yml"
+    },
+    {
+      "name": "生成审核报告",
+      "category": "std",
+      "type": "tool",
+      "description": "生成审核报告",
+      "path": "std/governance/generate-review-report.yml"
+    },
+    {
+      "name": "impeach",
+      "category": "std",
+      "type": "tool",
+      "description": "发起和处理角色弹劾流程",
+      "path": "std/governance/impeach.yml"
+    },
+    {
+      "name": "multi-stance-review",
+      "category": "std",
+      "type": "tool",
+      "description": "多立场并行会审（会审制度）",
+      "path": "std/governance/multi-stance-review.yml"
+    },
+    {
+      "name": "准备审核对象",
+      "category": "std",
+      "type": "tool",
+      "description": "准备审核对象内容",
+      "path": "std/governance/prepare-artifact.yml"
+    },
+    {
+      "name": "review-spec-approval",
+      "category": "std",
+      "type": "tool",
+      "description": "关键变更双签审批（架构师 + 项目负责人）",
+      "path": "std/governance/review-spec-approval.yml"
+    },
+    {
+      "name": "rollback",
+      "category": "std",
+      "type": "tool",
+      "description": "回滚进化实现，恢复到之前状态",
+      "path": "std/governance/rollback.yml"
+    },
+    {
+      "name": "stance-review",
+      "category": "std",
+      "type": "tool",
+      "description": "以特定立场审核方案/代码/决策（三省六部制核心）",
+      "path": "std/governance/stance-review.yml"
+    },
+    {
+      "name": "track-effect",
+      "category": "std",
+      "type": "tool",
+      "description": "追踪进化实现后的效果，验证是否达到预期",
+      "path": "std/governance/track-effect.yml"
+    },
+    {
+      "name": "vote-tally",
+      "category": "std",
+      "type": "tool",
+      "description": "统计投票结果，计算是否通过",
+      "path": "std/governance/vote-tally.yml"
+    },
+    {
+      "name": "执行 Patch",
+      "category": "std",
+      "type": "tool",
+      "description": "执行简单的配置/文案修改",
+      "path": "std/patch/execute.yml"
+    },
+    {
+      "name": "generate-tasks",
+      "category": "std",
+      "type": "tool",
+      "description": "根据需求文档和架构设计生成开发任务清单",
+      "path": "std/planning/generate-tasks.yml"
+    },
+    {
+      "name": "load-tasks",
+      "category": "std",
+      "type": "tool",
+      "description": "读取并解析 tasks.yml 任务清单",
+      "path": "std/planning/load-tasks.yml"
+    },
+    {
+      "name": "split-batch",
+      "category": "std",
+      "type": "tool",
+      "description": "将任务列表拆分成多个批次，支持依赖关系、优先级、风险等多因素排序\n\n**策略选择**：\n- 基础策略：sequential/parallel/balanced\n- 优先级策略：priority_first/risk_first/value_first/fast_first\n- 综合策略：dependency_priority/smart\n\n**评分权重**：\n- 可自定义权重配置\n- 4 种场景预设快速切换\n",
+      "path": "std/planning/split-batch.yml"
+    },
+    {
+      "name": "split-tasks",
+      "category": "std",
+      "type": "tool",
+      "description": "将大任务拆分成细粒度子任务\n\n**拆分策略**：\n- auto: 根据任务描述自动拆分\n- ai: AI 智能分析拆分\n- manual: 根据拆分点手动拆分\n\n**输出格式**：\n- nested: subtasks 嵌套结构\n- flat: 扁平化结构（parent_id 关联）\n",
+      "path": "std/planning/split-tasks.yml"
+    },
+    {
+      "name": "update-tasks",
+      "category": "std",
+      "type": "tool",
+      "description": "更新任务清单（iterative 模式）",
+      "path": "std/planning/update-tasks.yml"
+    },
+    {
+      "name": "validate-tasks",
+      "category": "std",
+      "type": "tool",
+      "description": "校验 tasks.yml 格式和内容",
+      "path": "std/planning/validate-tasks.yml"
+    },
+    {
+      "name": "智能决策下一步",
+      "category": "std",
+      "type": "tool",
+      "description": "根据项目状态智能决策下一步工作流",
+      "path": "std/project/decide-next-workflow.yml"
+    },
+    {
+      "name": "加载项目状态",
+      "category": "std",
+      "type": "tool",
+      "description": "加载项目的生命周期状态",
+      "path": "std/project/load-state.yml"
+    },
+    {
+      "name": "保存项目状态",
+      "category": "std",
+      "type": "tool",
+      "description": "保存项目的生命周期状态",
+      "path": "std/project/save-state.yml"
+    },
+    {
+      "name": "check-quality",
+      "category": "std",
+      "type": "tool",
+      "description": "代码质量检查（lint + 安全 + 性能）",
+      "path": "std/quality/check-quality.yml"
+    },
+    {
+      "name": "debug-systematic",
+      "category": "std",
+      "type": "tool",
+      "description": "Systematic debugging workflow - find root cause before fixing\n",
+      "path": "std/quality/debug-systematic.yml"
+    },
+    {
+      "name": "handle-feedback",
+      "category": "std",
+      "type": "tool",
+      "description": "Handle code review feedback - process comments and make necessary changes\n",
+      "path": "std/quality/handle-feedback.yml"
+    },
+    {
+      "name": "review-code",
+      "category": "std",
+      "type": "tool",
+      "description": "代码审查（智能版本）。\n\n通过 fingerprint 工具区分变更级别：\n- STRUCTURAL: 深度审查（架构、依赖、测试）\n- COSMETIC: 快速审查（格式、注释）\n- NONE: 跳过\n\n节省审查时间 30-50%。\n",
+      "path": "std/quality/review-code.yml"
+    },
+    {
+      "name": "review-spec",
+      "category": "std",
+      "type": "tool",
+      "description": "审核代码是否符合任务 spec",
+      "path": "std/quality/review-spec.yml"
+    },
+    {
+      "name": "review-task",
+      "category": "std",
+      "type": "tool",
+      "description": "独立审查单个任务的代码变更，不自动修复，只输出审查报告。\n\n与 review-code.yml 的区别：\n- review-code.yml: 自动修复模式，发现问题直接改代码\n- review-task.yml: 独立审查模式，只输出报告，修复由其他步骤负责\n\n这是 Superpowers per-task review 的核心步骤。\n",
+      "path": "std/quality/review-task.yml"
+    },
+    {
+      "name": "run-tests",
+      "category": "std",
+      "type": "tool",
+      "description": "运行测试",
+      "path": "std/quality/run-tests.yml"
+    },
+    {
+      "name": "分析需求",
+      "category": "std",
+      "type": "tool",
+      "description": "快速分析功能需求，确定实现方案",
+      "path": "std/quick/analyze.yml"
+    },
+    {
+      "name": "实现功能",
+      "category": "std",
+      "type": "tool",
+      "description": "快速实现功能",
+      "path": "std/quick/implement.yml"
+    },
+    {
+      "name": "验证功能",
+      "category": "std",
+      "type": "tool",
+      "description": "验证快速功能实现是否正确",
+      "path": "std/quick/verify.yml"
+    },
+    {
+      "name": "verify-completion",
+      "category": "std",
+      "type": "tool",
+      "description": "任务完成前验证，运行验证命令并检查结果",
+      "path": "std/verification/verify_completion.yml"
+    },
+    {
+      "name": "wait-condition",
+      "category": "std",
+      "type": "tool",
+      "description": "等待条件满足后再继续执行，支持轮询检查",
+      "path": "std/verification/wait-condition.yml"
+    },
+    {
+      "name": "browser-automate",
+      "category": "ext",
+      "type": "tool",
+      "description": "基于 agent-browser-stealth 的浏览器自动化测试（Puppeteer + 隐身增强），支持反检测、会话保持、调试能力",
+      "path": "ext/browser/browser-automate.yml"
+    },
+    {
+      "name": "browser/browser-close",
+      "category": "ext",
+      "type": "tool",
+      "description": "关闭浏览器会话\n\n功能：\n- 关闭指定会话\n- 清理资源\n- 可选截图保存\n",
+      "path": "ext/browser/browser-close.yml"
+    },
+    {
+      "name": "browser-mcp-debug",
+      "category": "ext",
+      "type": "tool",
+      "description": "基于 Chrome DevTools Protocol 的高级浏览器调试能力，提供：\n- 网络监控：捕获所有 HTTP 请求/响应，分析 API 调用\n- 性能分析：Core Web Vitals、资源加载时间、渲染性能\n- 内存检测：检测内存泄漏，分析堆增长趋势\n- 安全审计：检查 HTTPS、CSP、混合内容等安全问题\n",
+      "path": "ext/browser/browser-mcp-debug.yml"
+    },
+    {
+      "name": "browser/browser-start",
+      "category": "ext",
+      "type": "tool",
+      "description": "启动浏览器会话\n\n支持：\n- 无头模式（headless）\n- 指定 URL 打开\n- 会话管理\n",
+      "path": "ext/browser/browser-start.yml"
+    }
+  ]
+}

@@ -22,8 +22,9 @@ import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { join, relative } from 'path';
+import * as yaml from 'js-yaml';
 
 /**
  * 例外名称 → ConstraintContext 中布尔字段的映射
@@ -227,12 +228,21 @@ export class ConstraintChecker {
 
       case 'incremental_progress':
         // 检查是否一次做多个任务（需要 context 提供信息）
-        return context.hasSingleTask === true || context.hasSingleTask === undefined;
+        // undefined = 未验证 → Iron Law 必须显式确认
+        return context.hasSingleTask === true;
 
       case 'verify_external_capability':
         // 检查是否已验证外部能力
-        return context.hasExternalCapabilityVerification === true || 
-               context.hasExternalCapabilityVerification === undefined;
+        // undefined = 未验证 → Iron Law 必须显式确认
+        return context.hasExternalCapabilityVerification === true;
+
+      case 'no_implementation_without_requirement_review':
+        // 检查实现后是否对比需求验证
+        return context.hasRequirementReview === true;
+
+      case 'no_implementation_without_requirement':
+        // 检查是否有需求文档
+        return context.hasRequirement === true;
 
       // Guidelines
       case 'no_fix_without_root_cause':
@@ -270,6 +280,12 @@ export class ConstraintChecker {
       case 'test_coverage_required':
         // 检查测试覆盖率
         return await this.checkTestCoverage(projectPath);
+
+      case 'context_doc_sync':
+        return await this.checkContextDocSync(projectPath);
+
+      case 'docs_freshness':
+        return await this.checkDocsFreshness(projectPath);
 
       // Tips - 总是返回 true（仅提示）
       case 'readme_required':
@@ -392,11 +408,11 @@ export class ConstraintChecker {
     try {
       // 检查是否有代码变更
       const diff = await runCommand('git diff --cached --name-only', projectPath);
-      const hasCodeChanges = diff.split('\n').some(
+      const changedCodeFiles = diff.split('\n').filter(
         (f: string) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
       );
 
-      if (!hasCodeChanges) {
+      if (changedCodeFiles.length === 0) {
         return true; // 无代码变更
       }
 
@@ -406,12 +422,52 @@ export class ConstraintChecker {
         return false; // 有代码变更但没有 CAPABILITIES.md
       }
 
-      // 检查 CAPABILITIES.md 是否在变更中（可选）
-      const capabilitiesChanged = diff.includes('CAPABILITIES.md');
-      
-      return capabilitiesChanged || existsSync(capabilitiesPath);
+      // 解析 CAPABILITIES.md 中的文件列表
+      const listedFiles = this.parseCapabilitiesFiles(capabilitiesPath);
+
+      // 无表格内容 → 向后兼容，存在即通过
+      if (listedFiles.length === 0) {
+        return true;
+      }
+
+      // 检查变更的非测试代码文件是否在 CAPABILITIES.md 中有记录
+      const significantChanges = changedCodeFiles.filter(
+        (f: string) => !f.includes('__tests__') && !f.includes('.test.') && !f.includes('.spec.')
+      );
+
+      if (significantChanges.length === 0) {
+        return true; // 只有测试文件变更
+      }
+
+      // 至少有一个变更文件被 CAPABILITIES.md 覆盖
+      const covered = significantChanges.some((changed: string) =>
+        listedFiles.some((listed: string) => changed.endsWith(listed) || changed.includes(listed))
+      );
+
+      return covered;
     } catch {
       return true; // 检查失败，默认通过
+    }
+  }
+
+  /**
+   * 解析 CAPABILITIES.md 中表格的文件路径列
+   */
+  private parseCapabilitiesFiles(capabilitiesPath: string): string[] {
+    try {
+      const content = readFileSync(capabilitiesPath, 'utf-8');
+      const files: string[] = [];
+
+      // 匹配 markdown 表格行中的 .ts/.tsx/.js/.jsx 文件路径（第二列）
+      const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
+      let match;
+      while ((match = tableRowRegex.exec(content)) !== null) {
+        files.push(match[1].trim());
+      }
+
+      return files;
+    } catch {
+      return [];
     }
   }
 
@@ -469,6 +525,102 @@ export class ConstraintChecker {
     } catch {
       return true; // 检查失败，默认通过
     }
+  }
+
+  /**
+   * 检查 context_doc_sync：关键目录是否有 CONTEXT.md
+   */
+  private async checkContextDocSync(projectPath: string): Promise<boolean> {
+    try {
+      const configPath = join(projectPath, '.harness', 'config.yml');
+      const configContent = readFileSync(configPath, 'utf-8');
+      const config = yaml.load(configContent) as Record<string, unknown>;
+      const governance = config.governance as Record<string, unknown> | undefined;
+      const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
+
+      if (!contextFiles?.enabled || !Array.isArray(contextFiles.required_dirs)) {
+        return true; // 未配置，跳过
+      }
+
+      const requiredDirs = contextFiles.required_dirs as string[];
+      for (const dir of requiredDirs) {
+        const contextPath = join(projectPath, dir, 'CONTEXT.md');
+        if (!existsSync(contextPath)) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch {
+      return true; // 配置不存在或解析失败，跳过
+    }
+  }
+
+  /**
+   * 检查 docs_freshness：CAPABILITIES.md 是否与源码同步
+   */
+  private async checkDocsFreshness(projectPath: string): Promise<boolean> {
+    try {
+      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
+      const content = readFileSync(capabilitiesPath, 'utf-8');
+
+      // 解析 CAPABILITIES.md 中的文件路径
+      const listedFiles: string[] = [];
+      const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
+      let match;
+      while ((match = tableRowRegex.exec(content)) !== null) {
+        listedFiles.push(match[1].trim());
+      }
+
+      // 如果没有表格行，跳过检查
+      if (listedFiles.length === 0) {
+        return true;
+      }
+
+      // 扫描 src/ 目录中的实际文件
+      const srcDir = join(projectPath, 'src');
+      const actualFiles = this.findSourceFiles(srcDir, projectPath);
+
+      // 检查是否有新增文件未列出
+      for (const file of actualFiles) {
+        if (!listedFiles.includes(file)) {
+          return false; // 有新增文件未列出
+        }
+      }
+
+      return true;
+    } catch {
+      return true; // CAPABILITIES.md 不存在或检查失败，跳过
+    }
+  }
+
+  /**
+   * 查找 src/ 目录中的源文件
+   */
+  private findSourceFiles(dir: string, projectPath: string): string[] {
+    const results: string[] = [];
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return [];
+    }
+
+    for (const entry of entries) {
+      if (entry === 'node_modules' || entry === '__tests__' || entry === 'dist') continue;
+      const entryPath = join(dir, entry);
+      try {
+        const stat = statSync(entryPath);
+        if (stat.isDirectory()) {
+          results.push(...this.findSourceFiles(entryPath, projectPath));
+        } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
+          results.push(relative(projectPath, entryPath));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return results;
   }
 
   /**

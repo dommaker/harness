@@ -1,0 +1,100 @@
+# fix-issues.yml - 修复 review 发现的问题
+# ============================================================================
+# 类型: Agent 执行
+# 用途: 根据 review 结果修复代码问题
+# ============================================================================
+
+name: fix-issues
+stage: develop
+description: 修复 review 发现的问题
+category: development
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+  - bash
+  - npm-test
+
+# Prompt
+prompt: |
+  你是开发者。请根据代码审查结果修复问题。
+  
+  ## 任务信息
+  
+  **任务 ID**: {{task.id}}
+  **任务名称**: {{task.name}}
+  
+  ## 审核结果
+  
+  **评分**: {{review.score}}/10
+  **是否通过**: {{review.passed}}
+  
+  ## 发现的问题
+  
+  {{review.issues}}
+  
+  ## 验收标准未通过项
+  
+  {{review.criteria_results}}
+  
+  ## 项目路径
+  
+  {{project.path}}
+  
+  ## 修复要求
+  
+  1. **逐个修复问题**：
+     - 按 severity 排序，先修 critical
+     - 每修一个，说明修复方法
+  
+  2. **确保测试通过**：
+     - 修复后运行测试
+     - 如果测试失败，继续修复
+  
+  3. **不要提交代码**：
+     - 本次只修复，不 commit
+     - 等待 re-review 通过后再提交
+  
+  ## 输出
+  
+  修复完成后请报告：
+  1. 修复了哪些问题
+  2. 测试是否通过
+  3. 准备好 re-review
+
+# 输入参数
+inputs:
+  - name: task
+    type: object
+    required: true
+    description: 任务对象
+  
+  - name: review
+    type: object
+    required: true
+    description: review 结果（来自 review-spec）
+  
+  - name: project
+    type: object
+    required: true
+    description: 项目上下文
+
+# 输出
+outputs:
+  - name: fixes_applied
+    type: array
+    description: 应用的修复列表
+  
+  - name: tests_passed
+    type: boolean
+    description: 修复后测试是否通过
+  
+  - name: ready_for_review
+    type: boolean
+    description: 是否准备好 re-review

@@ -3,8 +3,10 @@
  */
 
 import { ConstraintRegistry } from '../registry';
-import { SAFETY_CONSTRAINTS, getSafetyConstraints } from '../safety';
-import { QUALITY_CONSTRAINTS, getQualityConstraints } from '../quality';
+import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+
+const SAFETY_COUNT = Object.keys(IRON_LAWS).length;       // 7
+const QUALITY_COUNT = Object.keys(GUIDELINES).length + Object.keys(TIPS).length; // 13
 
 describe('ConstraintRegistry', () => {
   let registry: ConstraintRegistry;
@@ -35,9 +37,7 @@ describe('ConstraintRegistry', () => {
   describe('getAll', () => {
     it('应该返回所有约束', () => {
       const all = registry.getAll();
-      expect(all.length).toBe(
-        Object.keys(SAFETY_CONSTRAINTS).length + Object.keys(QUALITY_CONSTRAINTS).length,
-      );
+      expect(all.length).toBe(SAFETY_COUNT + QUALITY_COUNT);
     });
   });
 
@@ -48,7 +48,7 @@ describe('ConstraintRegistry', () => {
 
       expect(safety.every(c => c.layer === 'safety')).toBe(true);
       expect(quality.every(c => c.layer === 'quality')).toBe(true);
-      expect(safety.length).toBe(Object.keys(SAFETY_CONSTRAINTS).length);
+      expect(safety.length).toBe(SAFETY_COUNT);
     });
   });
 
@@ -73,41 +73,6 @@ describe('ConstraintRegistry', () => {
     });
   });
 
-  describe('getDeprecationCandidates', () => {
-    it('应该返回拦截率低于阈值的约束', () => {
-      const rates = new Map<string, number>();
-      rates.set('no_any_type', 3); // 低于 threshold 8
-      rates.set('simplest_solution_first', 10); // 高于 threshold 8
-
-      const candidates = registry.getDeprecationCandidates(rates);
-      expect(candidates.some(c => c.id === 'no_any_type')).toBe(true);
-      expect(candidates.some(c => c.id === 'simplest_solution_first')).toBe(false);
-    });
-
-    it('应该跳过安全层约束', () => {
-      const rates = new Map<string, number>();
-      rates.set('no_bypass_checkpoint', 0);
-
-      const candidates = registry.getDeprecationCandidates(rates);
-      expect(candidates.length).toBe(0);
-    });
-
-    it('应该跳过已计划退化的约束', () => {
-      // 使用 scheduleDeprecation 设置状态，避免直接修改共享对象
-      registry.scheduleDeprecation('no_any_type', {
-        targetLevel: 'tip',
-        reason: 'test',
-        rollbackable: true,
-      });
-
-      const rates = new Map<string, number>();
-      rates.set('no_any_type', 3);
-
-      const candidates = registry.getDeprecationCandidates(rates);
-      expect(candidates.some(c => c.id === 'no_any_type')).toBe(false);
-    });
-  });
-
   describe('degrade', () => {
     it('应该降低约束级别', () => {
       const result = registry.degrade('no_any_type');
@@ -125,14 +90,13 @@ describe('ConstraintRegistry', () => {
 
     it('不应该退化非 active 约束', () => {
       registry.degrade('no_any_type');
-      // 已经 degraded
       const result = registry.degrade('no_any_type');
       expect(result).toBe(false);
     });
   });
 
   describe('rollback', () => {
-    it('应该回滚可回滚的退化', () => {
+    it('应该回滚退化', () => {
       registry.degrade('no_any_type');
       const result = registry.rollback('no_any_type', 'guideline');
       expect(result).toBe(true);
@@ -140,13 +104,6 @@ describe('ConstraintRegistry', () => {
       const constraint = registry.get('no_any_type');
       expect(constraint?.level).toBe('guideline');
       expect(constraint?.deprecationStatus).toBe('active');
-    });
-
-    it('不应该回滚不可回滚的退化', () => {
-      // no_code_without_test 的 rollbackable = false
-      registry.degrade('no_code_without_test');
-      const result = registry.rollback('no_code_without_test', 'guideline');
-      expect(result).toBe(false);
     });
 
     it('不应该回滚不存在的约束', () => {
@@ -184,11 +141,11 @@ describe('ConstraintRegistry', () => {
       expect(stats.length).toBe(2);
 
       const safetyStats = stats.find(s => s.layer === 'safety')!;
-      expect(safetyStats.totalConstraints).toBe(Object.keys(SAFETY_CONSTRAINTS).length);
+      expect(safetyStats.totalConstraints).toBe(SAFETY_COUNT);
       expect(safetyStats.active).toBe(safetyStats.totalConstraints);
 
       const qualityStats = stats.find(s => s.layer === 'quality')!;
-      expect(qualityStats.totalConstraints).toBe(Object.keys(QUALITY_CONSTRAINTS).length);
+      expect(qualityStats.totalConstraints).toBe(QUALITY_COUNT);
     });
   });
 
@@ -199,7 +156,6 @@ describe('ConstraintRegistry', () => {
       expect(legacy[0]).toHaveProperty('id');
       expect(legacy[0]).toHaveProperty('rule');
       expect(legacy[0]).toHaveProperty('level');
-      // 不包含 layer 和 deprecationStatus
       expect(legacy[0]).not.toHaveProperty('layer');
       expect(legacy[0]).not.toHaveProperty('deprecationStatus');
     });
@@ -236,21 +192,5 @@ describe('ConstraintRegistry', () => {
       expect(registry.remove('temp')).toBe(true);
       expect(registry.get('temp')).toBeUndefined();
     });
-  });
-});
-
-describe('getSafetyConstraints', () => {
-  it('应该返回安全层约束数组', () => {
-    const constraints = getSafetyConstraints();
-    expect(constraints.length).toBe(Object.keys(SAFETY_CONSTRAINTS).length);
-    expect(constraints.every(c => c.layer === 'safety')).toBe(true);
-  });
-});
-
-describe('getQualityConstraints', () => {
-  it('应该返回质量层约束数组', () => {
-    const constraints = getQualityConstraints();
-    expect(constraints.length).toBe(Object.keys(QUALITY_CONSTRAINTS).length);
-    expect(constraints.every(c => c.layer === 'quality')).toBe(true);
   });
 });

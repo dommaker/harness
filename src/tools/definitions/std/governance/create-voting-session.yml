@@ -1,0 +1,101 @@
+# create-voting-session.yml - 创建投票会话
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: 内置处理器
+# 用途: 创建新的投票会话
+# ============================================================================
+
+name: create-voting-session
+stage: govern
+description: 创建新的投票会话
+category: governance
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: governance/create-voting-session
+
+# 输入定义
+inputs:
+  topic:
+    type: string
+    description: 投票主题
+    required: true
+  
+  description:
+    type: string
+    description: 详细描述
+    required: false
+  
+  related_item_id:
+    type: string
+    description: 关联的项目 ID（进化建议/审计报告）
+    required: true
+  
+  related_item_type:
+    type: string
+    description: 关联项目类型
+    enum: [evolution, audit, impeachment]
+    required: true
+  
+  participants:
+    type: array
+    description: 参与者列表
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [role, user]
+        weight:
+          type: string
+          enum: [normal, heavy, veto]
+        required:
+          type: boolean
+    required: true
+  
+  config:
+    type: object
+    description: 投票配置
+    properties:
+      method:
+        type: string
+        enum: [simple_majority, absolute_majority, unanimous, super_majority]
+      threshold:
+        type: number
+      duration_minutes:
+        type: number
+      min_participants:
+        type: number
+      quorum:
+        type: number
+    required: true
+
+# 输出定义
+outputs:
+  - name: voting_session_id
+    type: string
+    description: 投票会话 ID
+  
+  - name: status
+    type: string
+    enum: [pending, voting, completed, cancelled]
+    description: 会话状态
+  
+  - name: voting_ends_at
+    type: number
+    description: 投票截止时间（时间戳）
+  
+  - name: participant_count
+    type: number
+    description: 参与者数量
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - voting

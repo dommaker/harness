@@ -1,0 +1,178 @@
+# audit-task.yml - 任务审计步骤
+# ============================================================================
+# 类型: 治理类步骤
+# 执行方式: Agent（auditor 角色）
+# 用途: 审计特定任务的执行质量
+# 核心理念: 独立审计，发现异常，追溯原因
+# ============================================================================
+
+name: audit-task
+stage: govern
+description: 审计特定任务的执行质量
+category: governance
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.3  # 低温度，保证一致性
+
+# 工具引用
+tools:
+  - file-read
+  - git/log
+  - git/diff
+  - analysis/analyze-code
+
+# 输入定义
+inputs:
+  task_id:
+    type: string
+    description: 要审计的任务 ID
+    required: true
+  
+  project_path:
+    type: path
+    description: 项目路径
+    required: true
+  
+  audit_depth:
+    type: string
+    description: 审计深度
+    enum: [quick, standard, deep]
+    default: standard
+  
+  focus_areas:
+    type: array
+    description: 重点审计领域
+    default: [quality, process, compliance]
+    items:
+      type: string
+      enum: [quality, process, compliance, security, performance]
+
+# 审计检查项
+audit_checks:
+  quality:
+    - name: 代码质量
+      checks:
+        - 是否遵循编码规范
+        - 是否有充分的测试覆盖
+        - 是否有明显的 bug 或问题
+    - name: 文档完整性
+      checks:
+        - 是否更新了相关文档
+        - 注释是否清晰
+        - 提交信息是否规范
+  
+  process:
+    - name: 流程合规
+      checks:
+        - 是否按工作流步骤执行
+        - 是否跳过了必做步骤
+        - 是否通过了必要的审核
+    - name: 签署文档
+      checks:
+        - 是否有必要的签署记录
+        - 签署是否完整
+        - 是否有遗漏的审核环节
+  
+  compliance:
+    - name: 约束遵守
+      checks:
+        - 是否遵守约束级别要求
+        - 是否在权限范围内操作
+        - 是否有越权行为
+
+# Agent Prompt
+prompt: |
+  你是审计官（Auditor），独立于项目团队，负责监督。
+  
+  ## 你的职责
+  - 发现执行中的问题
+  - 追溯问题根源
+  - 评估严重程度
+  - 提出改进建议
+  
+  ## 你的立场
+  - 独立客观，不受项目进度影响
+  - 严谨细致，不放过细节
+  - 公正公平，不偏袒任何角色
+  
+  ## 禁止行为
+  - 参与项目开发
+  - 修改代码或文档
+  - 影响项目进度决策
+  
+  ## 审计任务
+  审计任务: {{task_id}}
+  项目路径: {{project_path}}
+  审计深度: {{audit_depth}}
+  重点领域: {{focus_areas}}
+  
+  ## 输出格式
+  
+  ```yaml
+  audit_result:
+    task_id: {{task_id}}
+    
+    findings:
+      - category: quality/process/compliance
+        severity: critical/major/minor/suggestion
+        description: 问题描述
+        evidence:
+          - 证据1
+          - 证据2
+        recommendation: 改进建议
+    
+    statistics:
+      issues_found: N
+      critical: N
+      major: N
+      minor: N
+      suggestion: N
+    
+    overall_assessment: pass/warn/fail
+    
+    impeachment_required: true/false
+    impeachment_reason: 如果需要弹劾，说明原因
+  ```
+
+# 输出定义
+outputs:
+  - name: audit_result
+    type: object
+    description: 审计结果
+  
+  - name: findings
+    type: array
+    description: 审计发现列表
+    items:
+      type: object
+      properties:
+        category:
+          type: string
+        severity:
+          type: string
+        description:
+          type: string
+        evidence:
+          type: array
+        recommendation:
+          type: string
+  
+  - name: overall_assessment
+    type: string
+    enum: [pass, warn, fail]
+  
+  - name: impeachment_required
+    type: boolean
+  
+  - name: impeachment_reason
+    type: string
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - governance
+    - audit
+    - quality

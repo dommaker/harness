@@ -293,6 +293,40 @@ describe('ConstraintChecker - 补充覆盖', () => {
       execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
     });
 
+    it('有代码变更且 CAPABILITIES.md 有表格但缺少新模块应该失败', async () => {
+      // 创建 CAPABILITIES.md，含表格但不包含新文件
+      const capFile = path.join(tempDir, 'CAPABILITIES.md');
+      fs.writeFileSync(capFile, '# Capabilities\n\n| 模块 | 文件 | 功能 |\n|------|------|------|\n| 旧模块 | old/module.ts | 旧功能 |');
+
+      // 创建新的代码文件并 stage
+      const codeFile = path.join(tempDir, 'new-module.ts');
+      fs.writeFileSync(codeFile, 'export function newModule() {}');
+      execSync('git add .', { cwd: tempDir, stdio: 'pipe' });
+
+      const context: ConstraintContext = {
+        operation: 'commit',
+        projectPath: tempDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'capability_sync',
+          level: 'guideline',
+          rule: 'CAPABILITY SYNC',
+          message: 'test',
+          trigger: 'commit',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      // CAPABILITIES.md 有表格但新文件未被覆盖，应该失败
+      expect(result.satisfied).toBe(false);
+
+      // Cleanup
+      execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
+    });
+
     it('有代码变更但无 CAPABILITIES.md 应该失败', async () => {
       // 确保 CAPABILITIES.md 不存在
       const capFile = path.join(tempDir, 'CAPABILITIES.md');
@@ -846,6 +880,286 @@ describe('ConstraintChecker - 补充覆盖', () => {
       expect(result.satisfied).toBe(true);
 
       fs.rmSync(nonGitDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('checkContextDocSync', () => {
+    it('无 governance 配置应该通过', async () => {
+      // 无 .harness/config.yml
+      const noConfigDir = path.join(tempDir, 'no-config');
+      fs.mkdirSync(noConfigDir, { recursive: true });
+
+      const context: ConstraintContext = {
+        operation: 'module_modification',
+        projectPath: noConfigDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'context_doc_sync',
+          level: 'guideline',
+          rule: 'CONTEXT DOC SYNC',
+          message: 'test',
+          trigger: 'module_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(noConfigDir, { recursive: true, force: true });
+    });
+
+    it('有配置但 CONTEXT.md 存在应该通过', async () => {
+      const configDir = path.join(tempDir, 'with-context');
+      const harnessDir = path.join(configDir, '.harness');
+      const srcDir = path.join(configDir, 'src');
+      fs.mkdirSync(harnessDir, { recursive: true });
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // 写入 governance 配置
+      const yaml = require('js-yaml');
+      const config = {
+        governance: {
+          context_files: {
+            enabled: true,
+            required_dirs: ['src'],
+          },
+        },
+      };
+      fs.writeFileSync(path.join(harnessDir, 'config.yml'), yaml.dump(config));
+
+      // 创建 CONTEXT.md
+      fs.writeFileSync(path.join(srcDir, 'CONTEXT.md'), '# src\n\nTest context');
+
+      const context: ConstraintContext = {
+        operation: 'module_modification',
+        projectPath: configDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'context_doc_sync',
+          level: 'guideline',
+          rule: 'CONTEXT DOC SYNC',
+          message: 'test',
+          trigger: 'module_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it('有配置但缺少 CONTEXT.md 应该失败', async () => {
+      const configDir = path.join(tempDir, 'missing-context');
+      const harnessDir = path.join(configDir, '.harness');
+      const srcDir = path.join(configDir, 'src');
+      fs.mkdirSync(harnessDir, { recursive: true });
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      const yaml = require('js-yaml');
+      const config = {
+        governance: {
+          context_files: {
+            enabled: true,
+            required_dirs: ['src'],
+          },
+        },
+      };
+      fs.writeFileSync(path.join(harnessDir, 'config.yml'), yaml.dump(config));
+      // 不创建 CONTEXT.md
+
+      const context: ConstraintContext = {
+        operation: 'module_modification',
+        projectPath: configDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'context_doc_sync',
+          level: 'guideline',
+          rule: 'CONTEXT DOC SYNC',
+          message: 'test',
+          trigger: 'module_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it('context_files.enabled 为 false 应该跳过', async () => {
+      const configDir = path.join(tempDir, 'disabled-context');
+      const harnessDir = path.join(configDir, '.harness');
+      fs.mkdirSync(harnessDir, { recursive: true });
+
+      const yaml = require('js-yaml');
+      const config = {
+        governance: {
+          context_files: {
+            enabled: false,
+            required_dirs: ['src'],
+          },
+        },
+      };
+      fs.writeFileSync(path.join(harnessDir, 'config.yml'), yaml.dump(config));
+
+      const context: ConstraintContext = {
+        operation: 'module_modification',
+        projectPath: configDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'context_doc_sync',
+          level: 'guideline',
+          rule: 'CONTEXT DOC SYNC',
+          message: 'test',
+          trigger: 'module_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('checkDocsFreshness', () => {
+    it('无 CAPABILITIES.md 应该通过', async () => {
+      const noCapDir = path.join(tempDir, 'no-cap-freshness');
+      fs.mkdirSync(noCapDir, { recursive: true });
+
+      const context: ConstraintContext = {
+        operation: 'file_modification',
+        projectPath: noCapDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: 'file_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(noCapDir, { recursive: true, force: true });
+    });
+
+    it('CAPABILITIES.md 无表格应该通过', async () => {
+      const capDir = path.join(tempDir, 'cap-no-table');
+      fs.mkdirSync(capDir, { recursive: true });
+      fs.writeFileSync(path.join(capDir, 'CAPABILITIES.md'), '# Capabilities\n\nNo table here.');
+
+      const context: ConstraintContext = {
+        operation: 'file_modification',
+        projectPath: capDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: 'file_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(capDir, { recursive: true, force: true });
+    });
+
+    it('CAPABILITIES.md 表格包含所有 src 文件应该通过', async () => {
+      const capDir = path.join(tempDir, 'cap-synced');
+      const srcDir = path.join(capDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // 创建源文件
+      fs.writeFileSync(path.join(srcDir, 'module.ts'), 'export const x = 1;');
+
+      // 创建 CAPABILITIES.md，包含该文件
+      fs.writeFileSync(
+        path.join(capDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| module | src/module.ts | test |'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'file_modification',
+        projectPath: capDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: 'file_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(capDir, { recursive: true, force: true });
+    });
+
+    it('CAPABILITIES.md 表格缺少新文件应该失败', async () => {
+      const capDir = path.join(tempDir, 'cap-stale');
+      const srcDir = path.join(capDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // 创建源文件
+      fs.writeFileSync(path.join(srcDir, 'old.ts'), 'export const x = 1;');
+      fs.writeFileSync(path.join(srcDir, 'new.ts'), 'export const y = 2;');
+
+      // CAPABILITIES.md 只包含 old.ts
+      fs.writeFileSync(
+        path.join(capDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'file_modification',
+        projectPath: capDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: 'file_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(capDir, { recursive: true, force: true });
     });
   });
 });

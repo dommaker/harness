@@ -1,0 +1,44 @@
+# load-tasks.yml - 读取并解析任务清单
+# ============================================================================
+# 类型: 内置处理器
+# 用途: 读取 tasks.yml 文件，解析任务结构，返回结构化数据
+# ============================================================================
+
+name: load-tasks
+stage: plan
+description: 读取并解析 tasks.yml 任务清单
+category: planning
+version: 2.0.0
+
+# 输入定义
+inputs:
+  - name: path
+    type: string
+    description: tasks.yml 文件路径（可选，默认为项目目录下的 tasks.yml）
+
+# 输出定义
+outputs:
+  - name: project
+    type: object
+    description: 项目元信息
+  
+  - name: infrastructure
+    type: array
+    description: 基础设施任务列表
+  
+  - name: tasks
+    type: array
+    description: 开发任务列表
+  
+  - name: execution_plan
+    type: array
+    description: 执行计划
+  
+  - name: dependency_graph
+    type: object
+    description: 依赖关系图
+
+# 执行配置
+execute:
+  type: builtin
+  handler: load-tasks

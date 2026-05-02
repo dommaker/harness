@@ -11,7 +11,7 @@
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 约束定义 | core/constraints/definitions.ts | 16 条内置约束（7 Iron Laws + 9 Guidelines + 2 Tips） |
+| 约束定义 | core/constraints/definitions.ts | 23 条内置约束（8 Iron Laws + 13 Guidelines + 2 Tips） |
 | 约束检查 | core/constraints/checker.ts | 三层约束检查引擎，支持自定义约束配置 |
 | 拦截器 | core/constraints/interceptor.ts | 自动 enforcement 执行，拦截操作并记录 |
 | 项目配置 | core/project-config-loader.ts | 项目级约束配置加载 + 合并 |
@@ -19,16 +19,18 @@
 | CSO 验证 | core/validators/cso.ts | CSO 验证逻辑 |
 | 测试门控 | core/validators/passes-gate.ts | 测试证据验证 |
 | Session 管理 | core/session/ | 启动检查点 + 干净状态管理 |
+| 启动检查 | core/session/startup.ts | 启动检查点验证 |
+| 状态清理 | core/session/clean-state.ts | 结束状态管理 + 自动提交 |
 | Spec 验证 | core/spec/ | 代码注解中的 Spec 验证 |
+| 默认执行器 | core/constraints/default-executors.ts | architecture-check + cross-project-check 执行器 |
 
 ### 约束分层 (src/constraints/)
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 约束定义 | constraints/definitions.ts | 约束条目定义 |
-| 质量约束 | constraints/quality.ts | 代码质量相关约束 |
-| 安全约束 | constraints/safety.ts | 安全相关约束 |
-| 约束注册表 | constraints/registry.ts | 自定义约束注册 |
+| 约束注册表 | constraints/registry.ts | 分层约束注册 + 弃用生命周期（degrade/rollback/scheduleDeprecation） |
+| 生命周期执行器 | constraints/lifecycle-runner.ts | 连接 evolver 提案 → registry 操作（ConstraintLifecycleRunner） |
+| 类型定义 | constraints/types.ts | LayeredConstraint, DeprecationSchedule 等 |
 
 ### 预设 (src/presets/)
 
@@ -38,20 +40,20 @@
 | `standard` | Iron Laws + Guidelines（默认） |
 | `relaxed` | 仅 Iron Laws |
 
+> 三个预设均定义在 `presets/standard.ts` 中。
+
 ---
 
 ## 门禁系统 (src/gates/)
 
 | 模块 | 文件 | CLI 命令 | 功能 |
 |------|------|:--------:|------|
-| 测试门控 | gates/passes-gate.ts | `passes-gate` / `pg` | 测试证据 + 覆盖率验证 |
 | 验收标准 | gates/acceptance.ts | `acceptance` / `acc` | 需求验收验证 |
 | 性能门控 | gates/performance.ts | `performance` / `perf` | 覆盖率 + 打包大小检查 |
 | 安全门控 | gates/security.ts | `security` / `sec` | npm audit 漏洞检查 |
 | 契约门控 | gates/contract.ts | `contract` | OpenAPI Schema 验证 |
 | 审查门控 | gates/review.ts | `review` | PR 审查状态检查 |
 | 命令黑名单 | gates/command.ts | `command` / `cmd` | 危险命令拦截 |
-| 检查点验证 | gates/checkpoint-validator.ts | `validate` | 步骤结果验证 |
 
 ---
 
@@ -132,7 +134,7 @@ draft → candidate → validated → canonical → archived
 | Trace 分析 | monitoring/trace-analyzer.ts | 统计汇总 + 异常检测 |
 | 性能收集 | monitoring/performance-collector.ts | 性能日志收集 |
 | 性能分析 | monitoring/performance-analyzer.ts | 性能统计 + 异常检测 |
-| 约束医生 | monitoring/constraint-doctor.ts | 约束诊断报告生成 |
+| 约束医生 | monitoring/constraint-doctor.ts | 约束诊断报告生成 + LLM 深度分析（可选） |
 | 约束进化 | monitoring/constraint-evolver.ts | 约束优化提案系统 |
 | 知识医生 | monitoring/knowledge-doctor.ts | 知识库健康诊断 |
 | 知识进化 | monitoring/knowledge-evolver.ts | 知识库优化提案 |
@@ -153,8 +155,8 @@ draft → candidate → validated → canonical → archived
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 适配器 | llm/adapter.ts | 多 provider LLM 调用适配 |
-| 类型定义 | llm/types.ts | LLMConfig, LLMResponse 等 |
+| 适配器 | llm/adapter.ts | 可注入的 LLMAdapter 接口（complete/chat/streamChat/summarize/extract） |
+| 类型定义 | llm/types.ts | LLMAdapter, Message, LLMOptions 等 |
 
 ---
 
@@ -172,8 +174,26 @@ draft → candidate → validated → canonical → archived
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 约束引擎 | architecture/constraint-engine.ts | 架构级约束检查 |
-| 跨项目检查 | architecture/cross-project-checker.ts | 跨项目依赖检查（异步） |
+| 约束引擎 | architecture/constraint-engine.ts | 架构级约束检查（forbidden-pattern / file-count / module-boundary / custom） |
+| 跨项目检查 | architecture/cross-project-checker.ts | 跨项目接口契约检查（API 同步/类型一致性/破坏性变更/文档一致性） |
+
+---
+
+## AI 治理 (src/governance/)
+
+| 模块 | 文件 | 功能 |
+|------|------|------|
+| 治理执行器 | governance/executor.ts | 差异检测（CAPABILITIES.md 同步、CONTEXT.md 状态） |
+| 类型定义 | governance/types.ts | GovernanceDiff, DiffType, GovernanceResult |
+
+**治理流程：**
+```
+detectDiffs() → 输出差异 → LLM 自行修复
+```
+
+- harness 只做检测，不做修复
+- LLM 通过 `harness sync-docs --check --json` 获取结构化差异，自行编辑文件
+- `harness sync-docs` 可自动修复结构化问题（加表格行、创建模板）
 
 ---
 
@@ -182,6 +202,7 @@ draft → candidate → validated → canonical → archived
 | 模块 | 文件 | 功能 |
 |------|------|------|
 | 注解检查 | spec/annotation-checker.ts | 代码注解中的 Spec 验证 |
+| Spec 验证器 | spec/validator.ts | Spec 验证逻辑 |
 
 ---
 
@@ -201,6 +222,8 @@ draft → candidate → validated → canonical → archived
 |------|------|------|
 | 工具注册 | tools/registry.ts | 工具注册表 |
 | 核心工具 | tools/core/ | 内置工具集 |
+| 工具加载 | tools/loader.ts | 工具 YAML 加载 |
+| 工具路径 | tools/paths.ts | 工具目录路径解析 |
 | 类型定义 | tools/types.ts | ToolDefinition, ToolResult 等 |
 
 ---
@@ -222,7 +245,10 @@ draft → candidate → validated → canonical → archived
 | `status` | status.ts | 状态查看 + 异常检测 |
 | `flow` | flow.ts | 一键诊断 + 提案 |
 | `report` | report.ts | 报告生成 |
-| `init` | init.ts | 项目初始化 |
+| `init` | init.ts | 项目初始化（支持 `--governance` 治理级别） |
+| `sync-docs` | sync-docs.ts | 文档同步（CAPABILITIES.md + CONTEXT.md 缺失/过时 + CHANGELOG），支持 `--json` 输出 |
+| `knowledge` | knowledge.ts | 知识库管理（list/search/import/decay/stats），支持 `--json` 输出 |
+| `failure` | failure.ts | 失败记录管理（list/stats/clear），支持 `--json` 输出 |
 
 ---
 
@@ -240,7 +266,7 @@ draft → candidate → validated → canonical → archived
 | Enforcement 类型 | types/enforcement.ts | EnforcementId, EnforcementExecutor |
 | Spec 类型 | types/spec.ts | SpecDefinition, SpecValidationResult |
 | CSO 类型 | types/cso.ts | CSO 相关类型 |
-| 项目配置 | types/project-config.ts | 项目级约束配置 |
+| 项目配置 | types/project-config.ts | 项目级约束配置 + 治理配置（GovernanceConfig） |
 
 ---
 
@@ -256,7 +282,7 @@ draft → candidate → validated → canonical → archived
 
 | 原则 | 说明 |
 |------|------|
-| **零 Token 成本** | 所有分析不调用 LLM，纯文件操作 |
+| **零 Token 成本（默认）** | 核心分析不调用 LLM，纯文件操作；LLM 深度分析为可选增强 |
 | **无业务逻辑** | 只提供能力，业务逻辑在调用方 |
 | **文件存储** | 追加写入，单行 JSON，自动滚动 |
 | **可扩展规则** | 支持自定义约束、分类规则 |
@@ -283,7 +309,14 @@ draft → candidate → validated → canonical → archived
 
 | 日期 | 变更内容 |
 |------|---------|
-| 2026-05-02 | **文档对齐**：补充知识引擎/安全护栏/上下文管理/验证循环/Agent/LLM/Dashboard/工具系统 |
+| 2026-05-02 | **knowledge/failure CLI**：新增 `harness knowledge`（list/search/import/decay/stats）和 `harness failure`（list/stats/clear）命令 |
+| 2026-05-02 | **sync-docs 过时检测**：自动发现 CONTEXT.md 并比较 mtime 检测过时，JSON 输出新增 contextStale |
+| 2026-05-02 | **审计修复 #9/#10/#11/#12/#13**：interceptor 吞错 + 覆盖率提升 + JSDoc + CLI 错误处理 + 领域类型 @deprecated 标记 |
+| 2026-05-02 | **AI 治理简化**：移除冗余 hook/apply 机制，harness 只检测不修复，LLM 自行处理；sync-docs 新增 --json 输出；18 个 CONTEXT.md |
+| 2026-05-02 | **治理系统 Phase 2-3**：sync-docs 命令 + context_doc_sync/docs_freshness 约束（Guideline 13 条，共 23 条） |
+| 2026-05-02 | **治理系统 Phase 1**：GovernanceConfig 类型 + init --governance 选项 + CONTEXT.md/CHANGELOG.md/governance CI 生成 |
+| 2026-05-02 | **审计修复**：Iron Law #5-#8 闭环 + cross-project-checker stub 实现 + capability_sync 内容检查 + ConstraintLifecycleRunner + 文档同步 |
+| 2026-05-02 | **TODO 实现**：checkModuleBoundary 模块边界检查 + agentDiagnose LLM 深度分析 |
 | 2026-05-01 | **Phase 1-6 完成**：知识引擎 + 上下文管理 + 安全护栏 + 知识集成 + 约束重构 + 冷启动 |
 | 2026-04-29 | **新增命令黑名单门禁**：CommandGate + CLI |
 | 2026-04-17 | **新增 Failure Classification**：ErrorClassifier, FailureRecorder |

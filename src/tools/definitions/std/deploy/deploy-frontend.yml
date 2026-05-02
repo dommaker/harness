@@ -1,0 +1,37 @@
+# deploy-frontend.yml
+name: deploy-frontend
+stage: deploy
+description: 前端部署
+category: deploy
+version: 1.0.0
+
+inputs:
+  - name: code
+    type: object
+    description: 前端代码
+  
+  - name: platform
+    type: string
+    default: "vercel"
+    description: 部署平台（vercel/netlify/github-pages）
+  
+  - name: env
+    type: string
+    default: "production"
+    description: 环境（production/staging）
+
+outputs:
+  - name: deploy-url
+    type: string
+    description: 部署 URL
+  
+  - name: build-log
+    type: string
+    description: 构建日志
+
+execute:
+  type: tool
+  tool: deploy-frontend
+  input:
+    platform: ${{inputs.platform}}
+    env: ${{inputs.env}}

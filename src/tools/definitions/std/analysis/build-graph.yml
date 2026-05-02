@@ -1,0 +1,154 @@
+name: build-graph
+stage: plan
+description: |
+  构建代码库知识图谱。
+  
+  扫描项目代码，提取：
+  - 组件（函数、类、模块）
+  - 关系（调用、导入、继承）
+  - 架构层级
+  - 复杂度评估
+  
+  用途：
+  - 项目结构理解
+  - 代码导航
+  - 影响分析
+  - 架构可视化
+
+agent: codex
+timeout: 600  # 10 分钟
+
+inputs:
+  - name: project_path
+    type: string
+    required: true
+    description: 项目根路径
+    
+  - name: languages
+    type: array
+    required: false
+    description: |
+      要分析的语言列表（可选，自动检测）。
+      支持：typescript, javascript, python, go, rust, java, cpp, c, ruby, php
+      
+  - name: exclude_patterns
+    type: array
+    required: false
+    default: ["node_modules", "dist", "build", ".git", "vendor"]
+    description: 排除的目录模式
+    
+  - name: output_path
+    type: string
+    required: false
+    default: ".agent/knowledge-graph.json"
+    description: 知识图谱输出路径
+
+outputs:
+  - name: graph
+    type: object
+    description: 知识图谱对象
+    
+  - name: nodes_count
+    type: number
+    description: 节点总数
+    
+  - name: edges_count
+    type: number
+    description: 边总数
+    
+  - name: layers_count
+    type: number
+    description: 层级总数
+    
+  - name: report
+    type: string
+    description: 分析报告
+
+prompt: |
+  构建项目 {{project_path}} 的知识图谱。
+  
+  ## 任务
+  
+  1. 扫描项目结构
+     - 识别主要目录和文件
+     - 检测使用的语言和框架
+     - 排除：{{exclude_patterns}}
+  
+  2. 解析代码文件
+     - 使用 Tree-sitter 提取 AST
+     - 识别函数、类、模块
+     - 提取导入导出关系
+  
+  3. 构建关系图
+     - 调用关系 (calls)
+     - 导入关系 (imports)
+     - 继承关系 (inherits)
+     - 包含关系 (contains)
+  
+  4. 识别架构层级
+     - 分析目录结构
+     - 推断层级划分（如：presentation、business、data）
+     - 关联节点到层级
+  
+  5. 评估复杂度
+     - 函数行数
+     - 参数数量
+     - 嵌套深度
+     - 依赖数量
+  
+  6. 生成知识图谱
+  
+  ## 输出格式
+  
+  保存到 {{output_path}}，格式如下：
+  
+  ```json
+  {
+    "version": "1.0.0",
+    "project": {
+      "name": "my-project",
+      "languages": ["typescript", "python"],
+      "frameworks": ["react", "fastapi"],
+      "description": "...",
+      "analyzedAt": "2026-04-02T...",
+      "gitCommitHash": "abc123..."
+    },
+    "nodes": [
+      {
+        "id": "func-001",
+        "type": "function",
+        "name": "handleSubmit",
+        "filePath": "src/components/Form.tsx",
+        "lineRange": [10, 25],
+        "summary": "处理表单提交",
+        "tags": ["form", "submit"],
+        "complexity": "moderate"
+      }
+    ],
+    "edges": [
+      {
+        "source": "func-001",
+        "target": "func-002",
+        "type": "calls",
+        "direction": "forward",
+        "weight": 0.8
+      }
+    ],
+    "layers": [
+      {
+        "id": "layer-001",
+        "name": "presentation",
+        "description": "前端展示层",
+        "nodeIds": ["func-001", "func-003"]
+      }
+    ],
+    "tour": []
+  }
+  ```
+
+retry:
+  max_attempts: 3
+  backoff: exponential
+  initial_delay: 10000
+
+version: "1.0.0"

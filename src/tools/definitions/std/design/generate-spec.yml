@@ -1,0 +1,182 @@
+# generate-spec.yml - 将规划文档转换为 Spec 文档
+# ============================================================================
+# 类型: 转换步骤
+# 用途: 将 architecture.md（规划文档）转换为 ARCHITECTURE.md（Spec 文档）
+# 输入: 规划文档路径或内容
+# 输出: Spec 格式文档（包含版本号、审批区、变更历史）
+# ============================================================================
+
+name: generate-spec
+stage: plan
+description: 将规划文档转换为 Spec 文档（增加版本号、审批区、变更历史）
+category: design
+version: 1.0.0
+
+# Agent 配置
+agent: codex
+temperature: 0.2
+
+# 可用工具
+tools:
+  - file-read
+  - file-write
+
+# Prompt
+prompt: |
+  你是一个架构文档转换专家。将规划文档转换为标准 Spec 文档。
+  
+  ## 输入
+  
+  **源文档**: {{inputs.source}}
+  **项目路径**: {{project.path}}
+  **Spec 模式**: {{inputs.spec_mode}}
+  
+  ## 转换规则
+  
+  1. **增加版本号**: 初始版本为 `1.0.0`
+  2. **增加审批区**: 预留审批记录位置
+  3. **增加变更历史**: 初始记录
+  4. **标准化格式**: 便于程序验证
+  
+  ## 输出格式
+  
+  生成 `ARCHITECTURE.md` 文件，格式如下：
+  
+  ```markdown
+  # ARCHITECTURE.md
+  
+  > **Spec Version**: 1.0.0
+  > **Created**: {{current_date}}
+  > **Author**: {{inputs.author}}
+  > **Constraint Level**: {{inputs.constraint_level}}
+  
+  ---
+  
+  ## 审批记录
+  
+  | 版本 | 审批人 | 角色 | 状态 | 时间 | 备注 |
+  |------|--------|------|------|------|------|
+  | 1.0.0 | - | - | pending | - | 初始版本 |
+  
+  ---
+  
+  ## 变更历史
+  
+  | 版本 | 日期 | 变更内容 | 变更人 | 审批状态 |
+  |------|------|----------|--------|----------|
+  | 1.0.0 | {{current_date}} | 初始架构设计 | {{inputs.author}} | pending |
+  
+  ---
+  
+  ## 技术栈
+  
+  | 类别 | 选择 | 理由 |
+  |------|------|------|
+  | 框架 | <框架名> | <选择理由> |
+  | 语言 | <语言> | <选择理由> |
+  | 存储 | <存储方式> | <选择理由> |
+  | 构建 | <构建工具> | <选择理由> |
+  
+  ## 模块划分
+  
+  ### 模块: <模块路径>
+  - **职责**: <模块职责>
+  - **依赖**: <依赖的其他模块>
+  - **接口**: <对外暴露的接口>
+  
+  ## 目录结构
+  
+  ```
+  <项目名>/
+  ├── <目录>/
+  │   └── <文件>
+  └── ...
+  ```
+  
+  ## 数据模型
+  
+  ### <模型名>
+  ```typescript
+  {
+    <字段名>: <类型>  // <说明>
+  }
+  ```
+  
+  ## API 设计
+  
+  | 方法 | 路径 | 功能 | 请求体 | 响应体 |
+  |------|------|------|--------|--------|
+  | GET | /api/xxx | <功能描述> | - | <响应结构> |
+  | POST | /api/xxx | <功能描述> | <请求结构> | <响应结构> |
+  
+  ## 约束条件
+  
+  ### 模块边界
+  - <模块A> 不得直接依赖 <模块B> 的内部实现
+  - <模块> 只能通过 <接口> 访问 <资源>
+  
+  ### API 契约
+  - API 版本化: `/api/v1/...`
+  - 响应格式: `{ success: boolean, data: any, error?: string }`
+  
+  ### 性能要求
+  - 响应时间 < 200ms
+  - 并发支持 > 100 QPS
+  
+  ---
+  
+  > **注意**: 此文档为 Spec 文档，变更需要经过审批流程。
+  ```
+
+# 输入参数
+inputs:
+  - name: source
+    type: string
+    required: true
+    description: 源文档路径或内容（architecture.md）
+  
+  - name: spec_mode
+    type: enum
+    default: flexible
+    options: [none, flexible, strict]
+    description: Spec 模式
+  
+  - name: constraint_level
+    type: enum
+    default: advisory
+    options: [none, advisory, binding]
+    description: 约束级别
+  
+  - name: author
+    type: string
+    default: system
+    description: 作者名称
+
+# 输出
+outputs:
+  - name: ARCHITECTURE.md
+    type: file
+    description: Spec 格式架构文档
+  
+  - name: spec_version
+    type: string
+    description: Spec 版本号
+  
+  - name: changes
+    type: array
+    description: 变更列表（用于审批）
+    items:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 变更类型
+        description:
+          type: string
+          description: 变更描述
+
+# 元数据
+metadata:
+  author: system
+  created_at: 2026-04-14
+  tags: [spec, architecture, design]

@@ -1,0 +1,166 @@
+# report-gap.yml - 生成能力缺口报告
+# ============================================================================
+# 类型: 进化类步骤
+# 执行方式: 内置处理器
+# 用途: 分析失败原因，生成结构化的能力缺口报告
+# 核心理念: 失败归因 → 缺口识别 → 进化建议
+# ============================================================================
+
+name: report-gap
+stage: govern
+description: 分析失败原因并生成能力缺口报告
+category: evolution
+version: 1.0.0
+
+# 执行配置
+execute:
+  type: builtin
+  handler: evolution/report-gap
+
+# 输入定义
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  
+  execution_id:
+    type: string
+    description: 执行 ID
+    required: true
+  
+  workflow_id:
+    type: string
+    description: 工作流 ID
+    required: true
+  
+  step_id:
+    type: string
+    description: 失败的步骤 ID
+    required: true
+  
+  error_message:
+    type: string
+    description: 错误信息
+    required: true
+  
+  error_type:
+    type: string
+    description: 错误类型（可选）
+    required: false
+    enum:
+      - NETWORK
+      - RATE_LIMIT
+      - API_ERROR
+      - TIMEOUT
+      - CODE_ERROR
+      - VALIDATION_ERROR
+      - UNKNOWN
+  
+  role_id:
+    type: string
+    description: 执行该步骤的角色 ID
+    required: false
+  
+  context:
+    type: object
+    description: 执行上下文
+    required: false
+    properties:
+      constraint_level:
+        type: string
+        enum: [L1, L2, L3, L4]
+      retry_count:
+        type: number
+      test_passed:
+        type: boolean
+      skipped_required_step:
+        type: boolean
+
+# 输出定义
+outputs:
+  - name: gap_report
+    type: object
+    description: 能力缺口报告
+    properties:
+      id:
+        type: string
+        description: GAP-YYYYMMDD-NNN 格式的 ID
+      root_cause:
+        type: string
+        description: 根本原因
+      confidence:
+        type: number
+        description: 置信度 (0-1)
+      gap:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [tool, step, workflow, context, constraint, knowledge]
+          name:
+            type: string
+          description:
+            type: string
+          severity:
+            type: string
+            enum: [low, medium, high, critical]
+      suggestions:
+        type: array
+        items:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [add_capability, adjust_constraint, enhance_context, fix_workflow, upgrade_agent]
+            description:
+              type: string
+            effort:
+              type: string
+              enum: [low, medium, high]
+            impact:
+              type: string
+              enum: [low, medium, high]
+            recommended:
+              type: boolean
+  
+  - name: backlog_item
+    type: object
+    description: 创建的进化待办项
+  
+  - name: report_path
+    type: string
+    description: Gap Report 保存路径
+
+# 示例用法
+examples:
+  - name: 分析能力缺失
+    input:
+      project_path: /path/to/project
+      execution_id: exec-20260404-001
+      workflow_id: wf-iterate
+      step_id: implement-task
+      error_message: "我不知道如何重构这个模块"
+      role_id: developer
+  
+  - name: 分析约束过严
+    input:
+      project_path: /path/to/project
+      execution_id: exec-20260404-002
+      workflow_id: wf-verify-loop
+      step_id: browser-test
+      error_message: "测试未通过"
+      error_type: VALIDATION_ERROR
+      context:
+        constraint_level: L4
+        retry_count: 5
+        test_passed: false
+
+# 元数据
+metadata:
+  author: Agent Studio
+  tags:
+    - evolution
+    - gap-analysis
+    - root-cause
+    - self-improvement

@@ -33,7 +33,6 @@ describe('report command - 补充覆盖', () => {
 
   describe('format 边界情况', () => {
     it('未知格式应该默认输出 JSON', async () => {
-      // TypeScript 会阻止传入非法格式，但我们测试运行时行为
       await report({ format: 'json' });
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
       expect(output).toContain('timestamp');
@@ -44,12 +43,11 @@ describe('report command - 补充覆盖', () => {
     it('Markdown 报告应该包含所有区块', async () => {
       await report({ format: 'markdown' });
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-      
-      // 验证基本结构
+
       expect(output).toContain('# Harness 检查报告');
-      expect(output).toContain('## 📜 铁律检查');
-      expect(output).toContain('## 🔍 检查点验证');
-      expect(output).toContain('## 🚦 测试门控');
+      expect(output).toContain('## 约束检查');
+      expect(output).toContain('Iron Laws');
+      expect(output).toContain('Guidelines');
       expect(output).toContain('@dommaker/harness');
     });
   });
@@ -58,13 +56,11 @@ describe('report command - 补充覆盖', () => {
     it('HTML 报告应该包含所有区块', async () => {
       await report({ format: 'html' });
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-      
-      // 验证 HTML 结构
+
       expect(output).toContain('<!DOCTYPE html>');
       expect(output).toContain('<title>Harness 检查报告</title>');
-      expect(output).toContain('铁律检查');
-      expect(output).toContain('检查点验证');
-      expect(output).toContain('测试门控');
+      expect(output).toContain('约束检查');
+      expect(output).toContain('Iron Laws');
     });
   });
 
@@ -88,15 +84,15 @@ describe('report command - 补充覆盖', () => {
     it('JSON 应该包含完整数据结构', async () => {
       await report({ format: 'json' });
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-      // Find the JSON block (starts with {)
       const jsonStart = output.indexOf('{');
       const jsonStr = output.slice(jsonStart);
       const data = JSON.parse(jsonStr);
       expect(data).toHaveProperty('timestamp');
-      expect(data).toHaveProperty('ironLaws');
-      expect(data).toHaveProperty('checkpoints');
-      expect(data).toHaveProperty('passesGate');
-      expect(data.ironLaws.total).toBe(11);
+      expect(data).toHaveProperty('constraints');
+      expect(data.constraints).toHaveProperty('total');
+      expect(data.constraints).toHaveProperty('ironLaws');
+      expect(data.constraints).toHaveProperty('guidelines');
+      expect(data.constraints).toHaveProperty('violations');
     });
   });
 });

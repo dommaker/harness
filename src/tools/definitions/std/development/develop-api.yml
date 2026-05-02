@@ -1,0 +1,85 @@
+name: develop-api
+stage: develop
+description: |
+  API 开发步骤。
+  
+  实现 API 接口：
+  - RESTful API
+  - GraphQL API
+  - WebSocket 接口
+  
+  输入：
+  - requirement: 需求描述
+  - api_contract: API 契约
+  - data_model: 数据模型（可选）
+
+agent: codex
+timeout: 600  # 10 分钟
+
+inputs:
+  - name: requirement
+    type: string
+    required: true
+    description: 需求描述
+    
+  - name: api_contract
+    type: string
+    required: true
+    description: API 契约路径
+    
+  - name: data_model
+    type: string
+    required: false
+    description: 数据模型路径
+
+outputs:
+  - name: implemented
+    type: boolean
+    description: 是否完成实现
+    
+  - name: endpoints
+    type: array
+    description: 实现的端点列表
+    
+  - name: files_changed
+    type: array
+    description: 变更的文件列表
+
+prompt: |
+  # API 开发任务
+  
+  ## 需求
+  {{requirement}}
+  
+  ## API 契约
+  参考：{{api_contract}}
+  
+  {{#if data_model}}
+  ## 数据模型
+  参考：{{data_model}}
+  {{/if}}
+  
+  ## 任务
+  
+  1. 阅读现有代码结构
+  2. 实现 API 路由
+  3. 实现请求验证
+  4. 实现响应格式化
+  5. 添加错误处理
+  6. 自测功能
+  
+  ## 输出格式
+  
+  完成后提供：
+  - 实现的端点列表
+  - 变更的文件
+  - 测试建议
+
+tools:
+  - file-read
+  - file-write
+  - shell-execute
+
+temperature: 0.7
+
+version: "1.0.0"

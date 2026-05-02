@@ -1,0 +1,166 @@
+# browser-automate.yml - 浏览器自动化测试能力
+name: browser-automate
+description: 基于 agent-browser-stealth 的浏览器自动化测试（Puppeteer + 隐身增强），支持反检测、会话保持、调试能力
+
+# 输入参数
+input:
+  url:
+    type: string
+    required: true
+    description: 要测试的页面 URL
+  
+  actions:
+    type: array
+    required: false
+    description: 测试动作列表
+    default: []
+    items:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [click, type, wait, screenshot, assert, scroll]
+          description: 动作类型
+        selector:
+          type: string
+          description: CSS 选择器
+        value:
+          type: string
+          description: 输入值（type 动作）
+        delay:
+          type: number
+          description: 延迟时间（毫秒）
+        filename:
+          type: string
+          description: 截图文件名
+        shouldExist:
+          type: boolean
+          description: 断言元素是否存在
+
+  headless:
+    type: boolean
+    required: false
+    default: true
+    description: 是否无头模式运行
+
+  timeout:
+    type: number
+    required: false
+    default: 30000
+    description: 页面加载超时时间（毫秒）
+
+# 输出
+output:
+  results:
+    type: array
+    description: 测试结果列表
+  
+  screenshots:
+    type: array
+    description: 截图文件路径列表
+  
+  metrics:
+    type: object
+    description: 页面性能指标
+  
+  errors:
+    type: array
+    description: 错误列表
+
+# 执行配置
+timeout: 300  # 秒
+agent: codex
+
+# 执行脚本
+handler: script
+script: ./browser-automate.sh
+
+# 示例用法
+examples:
+  - name: 登录测试
+    input:
+      url: https://example.com/login
+      actions:
+        - type: wait
+          selector: "input[name='username']"
+        - type: type
+          selector: "input[name='username']"
+          value: "test@example.com"
+        - type: type
+          selector: "input[name='password']"
+          value: "password123"
+        - type: click
+          selector: "button[type='submit']"
+        - type: wait
+          selector: ".dashboard"
+          delay: 2000
+        - type: screenshot
+          filename: "dashboard.png"
+        - type: assert
+          selector: ".user-profile"
+          shouldExist: true
+
+  - name: 表单填写测试
+    input:
+      url: https://example.com/form
+      actions:
+        - type: wait
+          selector: "form"
+        - type: type
+          selector: "#name"
+          value: "测试用户"
+        - type: type
+          selector: "#email"
+          value: "test@example.com"
+        - type: click
+          selector: "button[type='submit']"
+        - type: wait
+          selector: ".success-message"
+        - type: screenshot
+          filename: "form-success.png"
+
+# 与 agent-browser-stealth 集成说明
+integration:
+  agent_browser_stealth:
+    description: |
+      本 Tool 底层已使用 agent-browser-stealth 作为引擎，提供：
+      
+      1. 反检测 - 多层指纹伪装、行为人性化
+      2. 会话保持 - --session-name 支持多会话
+      3. 调试能力 - trace、profiler、console、errors
+      4. 元素引用 - snapshot -i 获取 @e1, @e2 引用
+      5. 引擎选择 - Chrome + Lightpanda
+      
+    cli_commands: |
+      # 交互式使用（更灵活）
+      abs open https://example.com --session-name my-session
+      abs snapshot -i                    # 获取元素引用 @e1, @e2, ...
+      abs click @e1                      # 点击元素
+      abs type @e2 "hello" --delay 50    # 模拟人类输入
+      abs screenshot result.png          # 截图
+      abs close                          # 关闭
+      
+    advanced: |
+      # 反检测模式
+      abs open https://example.com --risk-mode warn
+      
+      # 使用 Lightpanda 引擎（更快）
+      abs open https://example.com --engine lightpanda
+      
+      # 调试模式
+      abs open https://example.com --trace --verbose
+
+# 标签
+tags:
+  - browser
+  - e2e
+  - testing
+  - automation
+  - puppeteer
+  - stealth
+  - agent-browser-stealth
+  - dom
+  - anti-detection
+
+# 分类
+category: testing

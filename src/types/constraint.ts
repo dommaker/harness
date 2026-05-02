@@ -205,6 +205,12 @@ export interface ConstraintContext {
   
   /** 是否已验证外部能力（用于 verify_external_capability） */
   hasExternalCapabilityVerification?: boolean;
+
+  /** 是否已对比需求验证（用于 no_implementation_without_requirement_review） */
+  hasRequirementReview?: boolean;
+
+  /** 是否有需求文档（用于 no_implementation_without_requirement） */
+  hasRequirement?: boolean;
   
   // ========================================
   // 例外条件（用于 Guidelines）

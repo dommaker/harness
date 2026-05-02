@@ -1,0 +1,87 @@
+name: develop-frontend
+stage: develop
+description: |
+  前端开发步骤。
+  
+  根据需求和设计文档实现前端功能：
+  - 组件开发
+  - 样式实现
+  - 状态管理
+  - API 集成
+  
+  输入：
+  - requirement: 需求描述
+  - design_doc: 设计文档路径
+  - api_contract: API 契约（可选）
+
+agent: codex
+timeout: 600  # 10 分钟
+
+inputs:
+  - name: requirement
+    type: string
+    required: true
+    description: 需求描述
+    
+  - name: design_doc
+    type: string
+    required: false
+    description: 设计文档路径
+    
+  - name: api_contract
+    type: string
+    required: false
+    description: API 契约路径
+
+outputs:
+  - name: implemented
+    type: boolean
+    description: 是否完成实现
+    
+  - name: files_changed
+    type: array
+    description: 变更的文件列表
+    
+  - name: summary
+    type: string
+    description: 实现总结
+
+prompt: |
+  # 前端开发任务
+  
+  ## 需求
+  {{requirement}}
+  
+  {{#if design_doc}}
+  ## 设计文档
+  参考：{{design_doc}}
+  {{/if}}
+  
+  {{#if api_contract}}
+  ## API 契约
+  参考：{{api_contract}}
+  {{/if}}
+  
+  ## 任务
+  
+  1. 阅读现有代码结构
+  2. 实现前端组件和页面
+  3. 确保样式一致
+  4. 集成 API（如有）
+  5. 自测功能
+  
+  ## 输出格式
+  
+  完成后提供：
+  - 实现的组件列表
+  - 变更的文件
+  - 测试建议
+
+tools:
+  - file-read
+  - file-write
+  - shell-execute
+
+temperature: 0.7
+
+version: "1.0.0"

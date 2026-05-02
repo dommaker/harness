@@ -1,0 +1,481 @@
+# split-batch.yml - 任务分批与优先级排序
+# ============================================================================
+# 类型: 内置处理器
+# 用途: 将任务列表按依赖关系、优先级、风险等多因素拆分成批次
+# Superpowers: Phase 4 Execute - 分批执行
+# 版本: 2.0.0 - AW-021 多因素优先级排序
+# ============================================================================
+#
+# 新增功能 (v2.0.0)：
+# - 6 种新增策略（priority_first/risk_first/value_first/fast_first/dependency_priority/smart）
+# - 多因素评分权重配置
+# - 4 种场景预设（mvp_fast/urgent_critical/explore_new/balanced）
+# - 复用 evolution/prioritize.yml 评分框架
+#
+# ============================================================================
+
+name: split-batch
+stage: plan
+description: |
+  将任务列表拆分成多个批次，支持依赖关系、优先级、风险等多因素排序
+  
+  **策略选择**：
+  - 基础策略：sequential/parallel/balanced
+  - 优先级策略：priority_first/risk_first/value_first/fast_first
+  - 综合策略：dependency_priority/smart
+  
+  **评分权重**：
+  - 可自定义权重配置
+  - 4 种场景预设快速切换
+
+category: planning
+version: 2.0.0
+
+# ============================================================================
+# 输入定义
+# ============================================================================
+
+inputs:
+  # 任务列表
+  - name: tasks
+    type: array
+    required: true
+    description: 任务列表
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 任务 ID
+        name:
+          type: string
+          description: 任务名称
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: 依赖的任务 ID
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+          default: medium
+          description: 任务优先级
+        risk:
+          type: string
+          enum: [high, medium, low]
+          default: medium
+          description: 风险等级
+        complexity:
+          type: string
+          enum: [large, medium, small]
+          default: medium
+          description: 复杂度
+        value:
+          type: string
+          enum: [high, medium, low]
+          default: medium
+          description: 业务价值
+        estimated_time:
+          type: string
+          enum: ["<1h", "1-2h", "2-4h", ">4h"]
+          default: "2-4h"
+          description: 预估时间
+  
+  # 批次大小
+  - name: batch_size
+    type: number
+    default: 3
+    description: 每批次最大任务数（默认 3）
+  
+  # 分批策略
+  - name: strategy
+    type: string
+    enum: [sequential, parallel, balanced, priority_first, risk_first, value_first, fast_first, dependency_priority, smart]
+    default: balanced
+    description: |
+      分批策略：
+      
+      **基础策略**：
+      - sequential: 严格按依赖顺序，每批 1 个任务
+      - parallel: 尽可能并行，忽略依赖
+      - balanced: 平衡模式，有依赖的任务在同一批或前后批
+      
+      **优先级策略**：
+      - priority_first: 高优先级任务优先（适合紧急项目）
+      - risk_first: 高风险任务优先（适合新技术探索）
+      - value_first: 高价值任务优先（适合 MVP/原型）
+      - fast_first: 短时间任务优先（适合快速产出）
+      
+      **综合策略**：
+      - dependency_priority: 依赖关系 + 优先级综合（推荐）
+      - smart: AI 综合分析（最智能）
+  
+  # 权重配置
+  - name: weights
+    type: object
+    description: 自定义权重配置（覆盖默认）
+    properties:
+      priority:
+        type: object
+        properties:
+          critical: number
+          high: number
+          medium: number
+          low: number
+      risk:
+        type: object
+        properties:
+          high: number
+          medium: number
+          low: number
+      complexity:
+        type: object
+        properties:
+          large: number
+          medium: number
+          small: number
+      value:
+        type: object
+        properties:
+          high: number
+          medium: number
+          low: number
+      estimated_time:
+        type: object
+        properties:
+          "<1h": number
+          "1-2h": number
+          "2-4h": number
+          ">4h": number
+  
+  # 预设配置
+  - name: preset
+    type: string
+    enum: [default, mvp_fast, urgent_critical, explore_new, balanced]
+    default: default
+    description: |
+      场景预设配置：
+      - default: 默认均衡配置
+      - mvp_fast: MVP/原型 - 快速产出优先
+      - urgent_critical: 紧急项目 - 优先级驱动
+      - explore_new: 新技术探索 - 风险驱动
+      - balanced: 稳定迭代 - 均衡配置
+  
+  # 是否尊重依赖关系
+  - name: respect_dependencies
+    type: boolean
+    default: true
+    description: 是否尊重依赖关系（默认 true）
+
+# ============================================================================
+# 输出定义
+# ============================================================================
+
+outputs:
+  - name: batches
+    type: array
+    description: 批次列表，每个批次是一个任务数组（按评分排序）
+    items:
+      type: array
+      items:
+        type: object
+        properties:
+          id: string
+          name: string
+          score: number
+          rank: number
+  
+  - name: total_batches
+    type: number
+    description: 总批次数
+  
+  - name: execution_plan
+    type: object
+    description: 执行计划摘要
+    properties:
+      total_tasks:
+        type: number
+      batch_size:
+        type: number
+      strategy:
+        type: string
+      preset:
+        type: string
+      estimated_total_time:
+        type: string
+      priority_distribution:
+        type: object
+  
+  - name: scored_tasks
+    type: array
+    description: 评分后的任务列表（排序前）
+    items:
+      type: object
+      properties:
+        id: string
+        score: number
+        factors: object
+  
+  - name: dependency_graph
+    type: object
+    description: 依赖关系图（用于可视化）
+
+# ============================================================================
+# 执行配置
+# ============================================================================
+
+execute:
+  type: builtin
+  handler: split-batch
+
+# ============================================================================
+# 默认权重配置（复用 evolution/prioritize.yml 格式）
+# ============================================================================
+
+default_weights:
+  # 任务优先级权重（业务驱动）
+  priority:
+    critical: 40
+    high: 30
+    medium: 20
+    low: 10
+  
+  # 风险权重（风险驱动）
+  risk:
+    high: 30    # 高风险优先（尽早发现问题）
+    medium: 15
+    low: 5
+  
+  # 复杂度权重（效率驱动）
+  complexity:
+    large: -10   # 大任务降权（耗时）
+    medium: 0
+    small: 10    # 小任务加分（快速产出）
+  
+  # 业务价值权重（价值驱动）
+  value:
+    high: 20
+    medium: 10
+    low: 5
+  
+  # 预估时间权重（时间驱动）
+  estimated_time:
+    "<1h": 15    # 短任务加分
+    "1-2h": 5
+    "2-4h": 0
+    ">4h": -10   # 长任务降权
+  
+  # 依赖关系加分
+  dependency_bonus:
+    no_deps: 10   # 无依赖加分
+    has_deps: 0
+
+# ============================================================================
+# 预设配置
+# ============================================================================
+
+preset_configs:
+  # 默认配置（均衡）
+  default:
+    priority: { critical: 40, high: 30, medium: 20, low: 10 }
+    risk: { high: 30, medium: 15, low: 5 }
+    complexity: { large: -10, medium: 0, small: 10 }
+    value: { high: 20, medium: 10, low: 5 }
+    estimated_time: { "<1h": 15, "1-2h": 5, "2-4h": 0, ">4h": -10 }
+    dependency_bonus: { no_deps: 10, has_deps: 0 }
+  
+  # MVP/原型：快速产出优先
+  mvp_fast:
+    priority: { critical: 30, high: 20, medium: 10, low: 5 }
+    risk: { high: -10, medium: 0, low: 10 }       # 低风险优先
+    complexity: { large: -20, medium: 0, small: 20 }  # 小任务优先
+    value: { high: 40, medium: 20, low: 5 }       # 高价值优先
+    estimated_time: { "<1h": 30, "1-2h": 10, "2-4h": 0, ">4h": -20 }  # 短任务优先
+    dependency_bonus: { no_deps: 15, has_deps: 0 }
+  
+  # 紧急项目：优先级驱动
+  urgent_critical:
+    priority: { critical: 50, high: 40, medium: 20, low: 10 }
+    risk: { high: 0, medium: 0, low: 0 }          # 不考虑风险
+    complexity: { large: 0, medium: 0, small: 0 } # 不考虑复杂度
+    value: { high: 0, medium: 0, low: 0 }         # 不考虑价值
+    estimated_time: { "<1h": 0, "1-2h": 0, "2-4h": 0, ">4h": 0 }
+    dependency_bonus: { no_deps: 0, has_deps: 0 }
+  
+  # 新技术探索：风险驱动
+  explore_new:
+    priority: { critical: 20, high: 15, medium: 10, low: 5 }
+    risk: { high: 40, medium: 20, low: 5 }        # 高风险优先
+    complexity: { large: 10, medium: 5, small: 0 }   # 大任务加分（探索深度）
+    value: { high: 20, medium: 10, low: 5 }
+    estimated_time: { "<1h": -5, "1-2h": 0, "2-4h": 5, ">4h": 10 }  # 长任务加分
+    dependency_bonus: { no_deps: 5, has_deps: 0 }
+  
+  # 稳定迭代：均衡配置
+  balanced:
+    priority: { critical: 25, high: 20, medium: 15, low: 10 }
+    risk: { high: 15, medium: 10, low: 5 }
+    complexity: { large: -5, medium: 0, small: 5 }
+    value: { high: 15, medium: 10, low: 5 }
+    estimated_time: { "<1h": 10, "1-2h": 5, "2-4h": 0, ">4h": -5 }
+    dependency_bonus: { no_deps: 8, has_deps: 0 }
+
+# ============================================================================
+# 算法说明
+# ============================================================================
+
+algorithm: |
+  ## 评分计算公式
+  
+  ```
+  score = Σ(权重 × 因素值)
+  
+  score = priority_weight[priority]
+        + risk_weight[risk]
+        + complexity_weight[complexity]
+        + value_weight[value]
+        + estimated_time_weight[estimated_time]
+        + dependency_bonus[has_deps ? 'has_deps' : 'no_deps']
+  ```
+  
+  ## 策略执行流程
+  
+  ### 基础策略
+  
+  **Sequential**：
+  ```
+  Task1 → Task2 → Task3 → Task4
+  Batch1  Batch2  Batch3  Batch4
+  ```
+  每个任务独立执行，严格串行。
+  
+  **Parallel**：
+  ```
+  [Task1, Task2, Task3, Task4]
+  Batch1 (max batch_size)
+  ```
+  所有任务尽可能并行，适合无依赖场景。
+  
+  **Balanced**：
+  ```
+  Batch1: [Task1, Task2]  # 无依赖，可并行
+  Batch2: [Task3]         # 依赖 Task1
+  Batch3: [Task4]         # 依赖 Task2, Task3
+  ```
+  分析依赖关系，有依赖的任务放在后续批次。
+  
+  ### 优先级策略
+  
+  **Priority First**：
+  ```
+  1. 计算评分（仅考虑 priority + dependencies）
+  2. 按评分降序排序
+  3. 按 batch_size 分批
+  ```
+  适合紧急项目，优先级驱动。
+  
+  **Risk First**：
+  ```
+  1. 计算评分（仅考虑 risk + complexity）
+  2. 按评分降序排序
+  3. 按 batch_size 分批
+  ```
+  适合新技术探索，高风险优先（尽早发现问题）。
+  
+  **Value First**：
+  ```
+  1. 计算评分（仅考虑 value + estimated_time）
+  2. 按评分降序排序
+  3. 按 batch_size 分批
+  ```
+  适合 MVP/原型，高价值优先。
+  
+  **Fast First**：
+  ```
+  1. 计算评分（仅考虑 estimated_time + complexity）
+  2. 按评分降序排序
+  3. 按 batch_size 分批
+  ```
+  适合快速产出，短时间任务优先。
+  
+  ### 综合策略
+  
+  **Dependency Priority**（推荐）：
+  ```
+  1. 计算评分（所有因素）
+  2. 按评分降序排序
+  3. 根据依赖关系调整顺序：
+     - 依赖的任务必须在被依赖任务之后
+  4. 按调整后顺序分批
+  ```
+  综合考虑所有因素 + 依赖约束。
+  
+  **Smart**：
+  ```
+  1. AI 分析任务特征
+  2. 自动选择最优策略
+  3. 动态调整权重
+  4. 输出最优分批方案
+  ```
+  最智能，适合复杂项目。
+
+# ============================================================================
+# 使用示例
+# ============================================================================
+
+examples:
+  - description: "默认配置"
+    input:
+      tasks: [...]
+      strategy: balanced
+      batch_size: 3
+    
+  - description: "MVP 快速产出"
+    input:
+      tasks: [...]
+      strategy: fast_first
+      preset: mvp_fast
+      batch_size: 5
+    
+  - description: "紧急项目"
+    input:
+      tasks: [...]
+      strategy: priority_first
+      preset: urgent_critical
+      batch_size: 2
+    
+  - description: "自定义权重"
+    input:
+      tasks: [...]
+      strategy: dependency_priority
+      weights:
+        priority: { critical: 50, high: 30, medium: 10, low: 5 }
+        risk: { high: 20, medium: 10, low: 5 }
+      batch_size: 3
+
+# ============================================================================
+# 元数据
+# ============================================================================
+
+metadata:
+  author: Agent Studio
+  version: 2.0.0
+  changelog:
+    - version: 2.0.0
+      date: 2026-04-07
+      changes:
+        - 新增 6 种优先级策略
+        - 新增多因素评分权重配置
+        - 新增 4 种场景预设
+        - 复用 evolution/prioritize.yml 评分框架
+        - 支持 risk/complexity/value/estimated_time 字段
+    - version: 1.0.0
+      date: 2026-04-02
+      changes:
+        - 基础分批功能
+        - 3 种基础策略（sequential/parallel/balanced）
+  tags:
+    - planning
+    - batch
+    - priority
+    - scoring

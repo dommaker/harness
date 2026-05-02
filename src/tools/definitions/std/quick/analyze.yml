@@ -1,0 +1,56 @@
+# quick/analyze - 分析快速功能需求
+#
+# 输入：
+#   - project_path: 项目路径
+#   - feature_description: 功能描述
+#
+# 输出：
+#   - analysis: 分析结果
+
+id: quick/analyze
+stage: develop
+name: 分析需求
+description: 快速分析功能需求，确定实现方案
+category: quick
+agent: codex
+
+inputs:
+  project_path:
+    type: string
+    description: 项目路径
+    required: true
+  feature_description:
+    type: string
+    description: 功能描述
+    required: true
+
+outputs:
+  - name: analysis
+    type: object
+    description: 分析结果
+
+prompt: |
+  你是一个快速原型开发专家。请分析以下功能需求。
+  
+  **功能描述**: {{feature_description}}
+  
+  **项目路径**: {{project_path}}
+  
+  **任务**：
+  1. 理解现有项目结构
+  2. 确定需要修改/创建的文件
+  3. 设计简洁的实现方案
+  
+  **输出格式**（JSON）：
+  ```json
+  {
+    "affected_files": ["file1.ts", "file2.ts"],
+    "new_files": ["new-file.ts"],
+    "implementation_plan": "实现计划描述",
+    "estimated_complexity": "low/medium",
+    "dependencies_needed": []
+  }
+  ```
+
+temperature: 0.2
+timeout: 120  # 2 分钟

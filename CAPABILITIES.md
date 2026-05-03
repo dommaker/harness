@@ -136,6 +136,7 @@ draft → candidate → validated → canonical → archived
 | 性能分析 | monitoring/performance-analyzer.ts | 性能统计 + 异常检测 |
 | 约束医生 | monitoring/constraint-doctor.ts | 约束诊断报告生成 + LLM 深度分析（可选） |
 | 约束进化 | monitoring/constraint-evolver.ts | 约束优化提案系统 |
+| 自动进化 | evolution/auto-evolve.ts | 一键进化流水线（traces→诊断→提案→审核→执行），纯计算 API |
 | 知识医生 | monitoring/knowledge-doctor.ts | 知识库健康诊断 |
 | 知识进化 | monitoring/knowledge-evolver.ts | 知识库优化提案 |
 | 上下文追踪 | monitoring/context-tracker.ts | 上下文使用追踪和分析 |

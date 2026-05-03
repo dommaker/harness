@@ -15,6 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - （Bug 修复）
 
+## [0.11.0] - 2026-05-03
+
+### Added
+- `autoEvolve()` 纯计算 API：接收 traces + anomalies，返回进化结果（诊断→提案→审核→执行）
+- `evolution/auto-evolve.ts` 新模块：约束自动进化流水线
+- `checkConstraints()` 新增 `onTrace` 回调参数：每条约束检查后通知调用方
+
+### Changed
+- CAPABILITIES.md 同步更新：新增自动进化模块
+
 ## [0.9.0] - 2026-05-01
 
 ### Added

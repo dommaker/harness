@@ -190,39 +190,7 @@ export async function init(options: InitOptions): Promise<void> {
   // 创建自定义约束示例
   await createCustomConstraintsExample(projectPath);
 
-  // 创建 CAPABILITIES.md（如果不存在）
-  const capabilitiesPath = path.join(projectPath, 'CAPABILITIES.md');
-  try {
-    await fs.access(capabilitiesPath);
-    console.log(chalk.gray(`CAPABILITIES.md 已存在`));
-  } catch {
-    const capabilitiesContent = `# CAPABILITIES.md
-
-## 功能清单
-
-> 此文件由 harness 自动维护，记录项目的核心功能
-
-### 最后更新
-- 时间: ${new Date().toISOString()}
-- 触发: harness init
-
----
-
-## 核心模块
-
-<!-- 在此记录项目的核心模块 -->
-
-## API 能力
-
-<!-- 在此记录项目的 API 能力 -->
-
-## 依赖关系
-
-<!-- 在此记录模块间的依赖关系 -->
-`;
-    await fs.writeFile(capabilitiesPath, capabilitiesContent, 'utf-8');
-    console.log(chalk.green(`✅ 已创建 CAPABILITIES.md`));
-  }
+  // CAPABILITIES.md / CHANGELOG.md 由 sync-docs（AI 治理）管理，init 不创建
 
   // 创建 Git hooks
   if (options.gitHooks !== false) {

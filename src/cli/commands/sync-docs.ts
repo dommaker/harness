@@ -57,14 +57,17 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     contextStale: [],
   };
 
-  // 1. 扫描源码模块
-  const srcDir = path.join(projectPath, 'src');
+  // 1. 扫描源码模块（从 governance config 读取目录列表，默认 src/）
+  const srcDirs = await getSourceDirs(projectPath);
   let currentModules: ModuleInfo[] = [];
-  try {
-    currentModules = await scanSourceModules(srcDir);
-  } catch {
-    if (!isJson) {
-      console.log(chalk.yellow('⚠️  未找到 src/ 目录，跳过模块扫描'));
+  for (const srcDir of srcDirs) {
+    try {
+      const modules = await scanSourceModules(path.join(projectPath, srcDir));
+      currentModules.push(...modules);
+    } catch {
+      if (!isJson) {
+        console.log(chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
+      }
     }
   }
 
@@ -99,7 +102,7 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   }
 
   // 4b. 自动发现已有的 CONTEXT.md：检查过时
-  const existingContextFiles = await findExistingContextFiles(projectPath, srcDir);
+  const existingContextFiles = await findExistingContextFiles(projectPath, srcDirs);
   for (const dir of existingContextFiles) {
     const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
     try {
@@ -338,9 +341,9 @@ async function parseCapabilitiesFiles(capabilitiesPath: string): Promise<string[
 }
 
 /**
- * 自动发现已有 CONTEXT.md 文件的目录（相对于 srcDir）
+ * 自动发现已有 CONTEXT.md 文件的目录（相对于 projectPath）
  */
-async function findExistingContextFiles(projectPath: string, srcDir: string): Promise<string[]> {
+async function findExistingContextFiles(projectPath: string, srcDirs: string[]): Promise<string[]> {
   const dirs: string[] = [];
 
   async function scan(dir: string): Promise<void> {
@@ -367,7 +370,9 @@ async function findExistingContextFiles(projectPath: string, srcDir: string): Pr
     }
   }
 
-  await scan(srcDir);
+  for (const srcDir of srcDirs) {
+    await scan(path.join(projectPath, srcDir));
+  }
   return dirs;
 }
 
@@ -420,6 +425,16 @@ async function getRequiredContextDirs(projectPath: string): Promise<string[]> {
     // 配置不存在或无法解析
   }
   return [];
+}
+
+/**
+ * 获取源码扫描目录列表
+ * 优先从 governance.context_files.required_dirs 读取，默认 ['src']
+ */
+async function getSourceDirs(projectPath: string): Promise<string[]> {
+  const requiredDirs = await getRequiredContextDirs(projectPath);
+  if (requiredDirs.length > 0) return requiredDirs;
+  return ['src'];
 }
 
 /**

@@ -144,13 +144,14 @@ describe('init command', () => {
   });
 
   describe('CAPABILITIES.md', () => {
-    it('应该跳过创建当已存在', async () => {
+    it('init 不应创建 CAPABILITIES.md（由 sync-docs 管理）', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      existingFiles.add('/root/projects/harness/CAPABILITIES.md');
 
       await init({ preset: 'standard' });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('CAPABILITIES.md 已存在'));
+      // init 不再创建 CAPABILITIES.md，由 harness sync-docs（AI 治理）管理
+      const writes = mockFs.writeFile.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(writes.every((w: string) => !w.includes('CAPABILITIES.md'))).toBe(true);
     });
   });
 

@@ -128,7 +128,8 @@ describe('PerformanceCollector', () => {
 
     it('文件不存在时应该返回空统计', () => {
       fs.unlinkSync(logFile);
-      const newCollector = new PerformanceCollector({ logFile: '/nonexistent/perf.log' });
+      const tmpFile = path.join(require('os').tmpdir(), 'harness-test-nonexistent', 'perf.log');
+      const newCollector = new PerformanceCollector({ logFile: tmpFile });
 
       const stats = newCollector.getStats();
 

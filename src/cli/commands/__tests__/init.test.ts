@@ -45,6 +45,9 @@ jest.mock('../validate', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
+// Use explicit projectPath to avoid CI path mismatch
+const PROJECT = '/test/project';
+
 describe('init command', () => {
   let consoleSpy: jest.SpyInstance;
 
@@ -63,7 +66,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       expect(mockFs.mkdir).toHaveBeenCalled();
     });
 
@@ -71,7 +74,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'strict' });
+      await init({ preset: 'strict', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('strict'));
     });
 
@@ -79,7 +82,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'relaxed' });
+      await init({ preset: 'relaxed', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('relaxed'));
     });
 
@@ -102,30 +105,28 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未检测到 Git 仓库'));
     });
 
     it('应该提示手动添加当 pre-commit 已存在', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      // .git exists, pre-commit exists
-      existingFiles.add('/root/projects/harness/.git');
-      existingFiles.add('/root/projects/harness/.git/hooks');
-      existingFiles.add('/root/projects/harness/.git/hooks/pre-commit');
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+      existingFiles.add(`${PROJECT}/.git/hooks/pre-commit`);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pre-commit 已存在'));
     });
 
     it('应该创建 pre-commit hook', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      // .git exists, but pre-commit doesn't
-      existingFiles.add('/root/projects/harness/.git');
-      existingFiles.add('/root/projects/harness/.git/hooks');
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已创建 .git/hooks/pre-commit'));
     });
   });
@@ -135,10 +136,9 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
       mockReaddir.mockResolvedValue(['ci.yml']);
-      // workflows dir exists so findCiWorkflows can read it
-      existingFiles.add('/root/projects/harness/.github/workflows');
+      existingFiles.add(`${PROJECT}/.github/workflows`);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已存在的 CI 配置'));
     });
   });
@@ -148,8 +148,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard' });
-      // init 不再创建 CAPABILITIES.md，由 harness sync-docs（AI 治理）管理
+      await init({ preset: 'standard', projectPath: PROJECT });
       const writes = mockFs.writeFile.mock.calls.map((c: unknown[]) => String(c[0]));
       expect(writes.every((w: string) => !w.includes('CAPABILITIES.md'))).toBe(true);
     });
@@ -159,9 +158,9 @@ describe('init command', () => {
     it('应该跳过创建当已存在', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      existingFiles.add('/root/projects/harness/.harness/custom-constraints.yml');
+      existingFiles.add(`${PROJECT}/.harness/custom-constraints.yml`);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('custom-constraints.yml 已存在'));
     });
   });
@@ -171,7 +170,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('治理级别: standard'));
     });
 
@@ -179,7 +178,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const changelogCall = writeCalls.find((c: any[]) => String(c[0]).includes('CHANGELOG.md'));
       expect(changelogCall).toBeDefined();
@@ -189,19 +188,18 @@ describe('init command', () => {
     it('应该跳过 CHANGELOG.md 当已存在', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      existingFiles.add('/root/projects/harness/CHANGELOG.md');
+      existingFiles.add(`${PROJECT}/CHANGELOG.md`);
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('CHANGELOG.md 已存在'));
     });
 
     it('应该为 standard 治理创建 src/CONTEXT.md', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      // src/ directory exists
-      existingFiles.add('/root/projects/harness/src');
+      existingFiles.add(`${PROJECT}/src`);
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const contextCall = writeCalls.find((c: any[]) => String(c[0]).includes('CONTEXT.md'));
       expect(contextCall).toBeDefined();
@@ -211,9 +209,8 @@ describe('init command', () => {
     it('应该跳过 CONTEXT.md 当目录不存在', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      // src/ does NOT exist
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('目录 src 不存在'));
     });
 
@@ -221,7 +218,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard', governance: 'minimal' });
+      await init({ preset: 'standard', governance: 'minimal', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const contextCall = writeCalls.find((c: any[]) => String(c[0]).includes('CONTEXT.md'));
       expect(contextCall).toBeUndefined();
@@ -231,7 +228,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-governance.yml'));
       expect(workflowCall).toBeDefined();
@@ -242,9 +239,9 @@ describe('init command', () => {
     it('应该跳过治理 CI workflow 当已存在', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
-      existingFiles.add('/root/projects/harness/.github/workflows/harness-governance.yml');
+      existingFiles.add(`${PROJECT}/.github/workflows/harness-governance.yml`);
 
-      await init({ preset: 'standard', governance: 'standard' });
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harness-governance.yml 已存在'));
     });
 
@@ -252,7 +249,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard', governance: 'strict' });
+      await init({ preset: 'standard', governance: 'strict', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-governance.yml'));
       expect(workflowCall![1]).toContain('sync-docs');
@@ -262,7 +259,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard', governance: 'minimal' });
+      await init({ preset: 'standard', governance: 'minimal', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-governance.yml'));
       expect(workflowCall![1]).not.toContain('sync-docs');
@@ -272,7 +269,7 @@ describe('init command', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await init({ preset: 'standard' });
+      await init({ preset: 'standard', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const changelogCall = writeCalls.find((c: any[]) => String(c[0]).includes('CHANGELOG.md'));
       const contextCall = writeCalls.find((c: any[]) => String(c[0]).includes('CONTEXT.md'));

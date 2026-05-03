@@ -104,6 +104,51 @@ export async function validate(options: ValidateOptions): Promise<void> {
 }
 
 /**
+ * 默认检查点列表（供 init 和 upgrade 共用）
+ */
+export const DEFAULT_CHECKPOINTS: Checkpoint[] = [
+  {
+    id: 'build-success',
+    name: '构建成功',
+    checks: [
+      {
+        id: 'build-command',
+        type: 'command_success',
+        config: { command: 'npm run build' },
+        message: '构建命令必须成功执行',
+      },
+    ],
+  },
+  {
+    id: 'test-pass',
+    name: '测试通过',
+    checks: [
+      {
+        id: 'test-command',
+        type: 'command_success',
+        config: { command: 'npm test' },
+        message: '测试命令必须成功执行',
+      },
+    ],
+  },
+  {
+    id: 'no-console',
+    name: '无 console.log',
+    checks: [
+      {
+        id: 'check-console',
+        type: 'output_not_contains',
+        config: {
+          command: 'grep -r "console.log" src/ || true',
+          expected: '',
+        },
+        message: '源代码中不应包含 console.log',
+      },
+    ],
+  },
+];
+
+/**
  * 创建示例检查点文件
  */
 export async function createExampleCheckpoint(projectPath: string): Promise<void> {
@@ -112,49 +157,7 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
 
   await fs.mkdir(dir, { recursive: true });
 
-  const example: Checkpoint[] = [
-    {
-      id: 'build-success',
-      name: '构建成功',
-      checks: [
-        {
-          id: 'build-command',
-          type: 'command_success',
-          config: { command: 'npm run build' },
-          message: '构建命令必须成功执行',
-        },
-      ],
-    },
-    {
-      id: 'test-pass',
-      name: '测试通过',
-      checks: [
-        {
-          id: 'test-command',
-          type: 'command_success',
-          config: { command: 'npm test' },
-          message: '测试命令必须成功执行',
-        },
-      ],
-    },
-    {
-      id: 'no-console',
-      name: '无 console.log',
-      checks: [
-        {
-          id: 'check-console',
-          type: 'output_not_contains',
-          config: {
-            command: 'grep -r "console.log" src/ || true',
-            expected: '',
-          },
-          message: '源代码中不应包含 console.log',
-        },
-      ],
-    },
-  ];
-
-  const content = yaml.dump({ checkpoints: example }, { indent: 2 });
+  const content = yaml.dump({ checkpoints: DEFAULT_CHECKPOINTS }, { indent: 2 });
   await fs.writeFile(filePath, content, 'utf-8');
 
   console.log(chalk.green(`✅ 已创建示例检查点文件: ${filePath}`));

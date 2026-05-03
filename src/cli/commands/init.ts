@@ -8,7 +8,8 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { createExampleCheckpoint } from './validate';
+import { createExampleCheckpoint, DEFAULT_CHECKPOINTS } from './validate';
+import type { Checkpoint } from '../../types/checkpoint';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -25,6 +26,8 @@ export interface InitOptions {
   githubActions?: boolean;
   /** 只输出代码片段，不创建文件 */
   printSnippets?: boolean;
+  /** 升级现有配置（合并缺失字段，不覆盖自定义值） */
+  upgrade?: boolean;
 }
 
 /**
@@ -148,6 +151,12 @@ const GOVERNANCE_PRESETS: Record<string, Record<string, unknown>> = {
  * 初始化项目
  */
 export async function init(options: InitOptions): Promise<void> {
+  // 升级模式
+  if (options.upgrade) {
+    await upgrade(options);
+    return;
+  }
+
   // 只输出代码片段
   if (options.printSnippets) {
     printSnippets();
@@ -245,6 +254,135 @@ export async function init(options: InitOptions): Promise<void> {
   console.log(chalk.gray('  4. 运行 harness status 查看状态'));
   console.log();
   console.log(chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
+}
+
+/**
+ * 获取 harness 包版本
+ */
+function getPackageVersion(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../../../package.json').version;
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * 深度合并：默认值 + 现有值（现有值优先）
+ * 对象递归合并，标量/数组/null 以现有值覆盖
+ */
+function deepMerge(
+  defaults: Record<string, unknown>,
+  overrides: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...defaults };
+  for (const [key, value] of Object.entries(overrides)) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      result[key] !== null &&
+      typeof result[key] === 'object' &&
+      !Array.isArray(result[key])
+    ) {
+      result[key] = deepMerge(
+        result[key] as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * 升级 checkpoints.yml — 追加新检查点，不删已有的
+ */
+async function upgradeCheckpoints(projectPath: string): Promise<void> {
+  const filePath = path.join(projectPath, '.harness', 'checkpoints.yml');
+
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const existing = yaml.load(content) as { checkpoints?: Checkpoint[] };
+    const existingIds = new Set((existing.checkpoints || []).map((c) => c.id));
+    const toAdd = DEFAULT_CHECKPOINTS.filter((c) => !existingIds.has(c.id));
+
+    if (toAdd.length > 0) {
+      existing.checkpoints = [...(existing.checkpoints || []), ...toAdd];
+      await fs.writeFile(filePath, yaml.dump(existing, { indent: 2 }), 'utf-8');
+      console.log(chalk.green(`✅ checkpoints.yml: 追加 ${toAdd.length} 个新检查点`));
+    } else {
+      console.log(chalk.gray('checkpoints.yml: 已是最新'));
+    }
+  } catch {
+    await createExampleCheckpoint(projectPath);
+  }
+}
+
+/**
+ * 升级现有配置 — 合并缺失字段，不覆盖自定义值
+ */
+async function upgrade(options: InitOptions): Promise<void> {
+  console.log(chalk.blue('🔄 升级 harness 配置...'));
+
+  const projectPath = options.projectPath || process.cwd();
+  const configDir = path.join(projectPath, '.harness');
+  const configPath = path.join(configDir, 'config.yml');
+
+  // 检查 .harness/config.yml 是否存在
+  try {
+    await fs.access(configPath);
+  } catch {
+    console.log(chalk.yellow('⚠️  未找到 .harness/config.yml，请先运行 harness init'));
+    return;
+  }
+
+  // 读取现有配置
+  const existingContent = await fs.readFile(configPath, 'utf-8');
+  const existing = yaml.load(existingContent) as Record<string, unknown>;
+  console.log(chalk.gray(`现有配置: ${configPath}`));
+
+  // 确定 preset（用现有 preset 或默认 standard）
+  const presetName = (existing.preset as string) || 'standard';
+  const defaultConfig = (PRESETS as Record<string, typeof PRESETS.standard>)[presetName] || PRESETS.standard;
+  console.log(chalk.gray(`预设: ${presetName}`));
+
+  // Deep merge: 默认值 → 现有值（现有值优先）
+  const merged = deepMerge(defaultConfig, existing);
+
+  // 写入 harness.version
+  const pkgVersion = getPackageVersion();
+  merged.harness = { ...((merged.harness as Record<string, unknown>) || {}), version: pkgVersion };
+  console.log(chalk.gray(`版本: ${pkgVersion}`));
+
+  // 写回 config.yml
+  const configContent = yaml.dump(merged, { indent: 2 });
+  await fs.writeFile(configPath, configContent, 'utf-8');
+  console.log(chalk.green(`✅ config.yml 已升级`));
+
+  // 升级 checkpoints.yml
+  await upgradeCheckpoints(projectPath);
+
+  // governance 文件（创建缺失的，不覆盖已有的）
+  if (existing.governance) {
+    const govLevel = (existing.governance as Record<string, unknown>)?.level as string || 'standard';
+    await setupGovernance(projectPath, govLevel);
+  }
+
+  // 创建 custom-constraints.yml（如不存在）
+  await createCustomConstraintsExample(projectPath);
+
+  console.log();
+  console.log(chalk.green('✅ harness 配置升级完成！'));
+  console.log();
+  console.log(chalk.gray('变更摘要:'));
+  console.log(chalk.gray(`  - config.yml: 合并缺失字段，写入 harness.version = ${pkgVersion}`));
+  console.log(chalk.gray('  - checkpoints.yml: 追加新检查点（如有）'));
+  console.log(chalk.gray('  - governance 文件: 创建缺失的（如有）'));
+  console.log();
+  console.log(chalk.blue('💡 提示: 运行 harness status 查看当前状态'));
 }
 
 /**

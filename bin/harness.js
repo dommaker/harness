@@ -117,6 +117,7 @@ program
   .option('--no-git-hooks', '不创建 Git hooks')
   .option('--no-github-actions', '不创建 GitHub Actions')
   .option('--print-snippets', '只输出代码片段，不创建文件')
+  .option('--upgrade', '升级现有配置（合并缺失字段，不覆盖自定义值）')
   .action(async (options) => {
     await init(options);
   });

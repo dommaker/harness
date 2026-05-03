@@ -109,6 +109,11 @@ export * from './agents';
 export * from './presets';
 
 // ========================================
+// 约束进化导出
+// ========================================
+export * from './evolution';
+
+// ========================================
 // 便捷 API
 // ========================================
 
@@ -161,11 +166,21 @@ export function registerExecutor(
 
 /**
  * 检查约束（三层）
+ *
+ * @param context - 约束上下文
+ * @param options.onTrace - 每条约束检查后的回调（用于记录 trace 到外部存储）
  */
 export async function checkConstraints(
-  context: ConstraintContext
+  context: ConstraintContext,
+  options?: { onTrace?: (result: import('./types/constraint').ConstraintResult) => void }
 ): Promise<ConstraintCheckResult> {
-  return constraintChecker.checkConstraints(context);
+  const result = await constraintChecker.checkConstraints(context);
+  if (options?.onTrace) {
+    for (const r of result.ironLaws) options.onTrace(r);
+    for (const r of result.guidelines) options.onTrace(r);
+    for (const r of result.tips) options.onTrace(r);
+  }
+  return result;
 }
 
 /**

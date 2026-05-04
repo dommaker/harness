@@ -1,6 +1,6 @@
 # harness 功能清单
 
-> 最后更新: 2026-05-02
+> 最后更新: 2026-05-05
 > 铁律：代码变更必须同步更新此文件
 
 ---
@@ -11,8 +11,9 @@
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 约束定义 | core/constraints/definitions.ts | 23 条内置约束（8 Iron Laws + 13 Guidelines + 2 Tips） |
-| 约束检查 | core/constraints/checker.ts | 三层约束检查引擎，支持自定义约束配置 |
+| 约束定义 | core/constraints/definitions.ts | 29 条内置约束（12 Iron Laws + 15 Guidelines + 2 Tips），含 promptInjection 软约束 |
+| 约束检查 | core/constraints/checker.ts | 三层约束检查引擎 + buildConstraintPrompt() + checkBeforeExecution() + 渐进前置检查 |
+| 约束注入 | core/constraints/checker.ts | buildConstraintPrompt() — 收集约束 promptInjection 格式化为 Agent system prompt |
 | 拦截器 | core/constraints/interceptor.ts | 自动 enforcement 执行，拦截操作并记录 |
 | 项目配置 | core/project-config-loader.ts | 项目级约束配置加载 + 合并 |
 | 检查点验证 | core/validators/checkpoint.ts | 步骤结果验证 |
@@ -314,7 +315,8 @@ detectDiffs() → 输出差异 → LLM 自行修复
 | 2026-05-02 | **sync-docs 过时检测**：自动发现 CONTEXT.md 并比较 mtime 检测过时，JSON 输出新增 contextStale |
 | 2026-05-02 | **审计修复 #9/#10/#11/#12/#13**：interceptor 吞错 + 覆盖率提升 + JSDoc + CLI 错误处理 + 领域类型 @deprecated 标记 |
 | 2026-05-02 | **AI 治理简化**：移除冗余 hook/apply 机制，harness 只检测不修复，LLM 自行处理；sync-docs 新增 --json 输出；18 个 CONTEXT.md |
-| 2026-05-02 | **治理系统 Phase 2-3**：sync-docs 命令 + context_doc_sync/docs_freshness 约束（Guideline 13 条，共 23 条） |
+| 2026-05-05 | **NA 新架构**：新增 6 条约束（must_use_worktree / no_fuzzy_completion_claim / no_performative_agreement / two_stage_review_required / no_excuse_patterns / yagni_check）+ meeting_decision_check trigger + buildConstraintPrompt() + ConstraintContext 新增 hasWorktree/worktreePath/completionClaimText/hasTwoStageReview 字段 |
+| 2026-05-02 | **治理系统 Phase 2-3**：sync-docs 命令 + context_doc_sync/docs_freshness 约束（Guideline 15 条，共 29 条） |
 | 2026-05-02 | **治理系统 Phase 1**：GovernanceConfig 类型 + init --governance 选项 + CONTEXT.md/CHANGELOG.md/governance CI 生成 |
 | 2026-05-02 | **审计修复**：Iron Law #5-#8 闭环 + cross-project-checker stub 实现 + capability_sync 内容检查 + ConstraintLifecycleRunner + 文档同步 |
 | 2026-05-02 | **TODO 实现**：checkModuleBoundary 模块边界检查 + agentDiagnose LLM 深度分析 |

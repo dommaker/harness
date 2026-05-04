@@ -7,13 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
-- （新增功能）
+- **6 条新约束**：must_use_worktree / no_fuzzy_completion_claim / no_performative_agreement / two_stage_review_required（Iron Law）+ no_excuse_patterns / yagni_check（Guideline），均含 promptInjection 软约束
+- **meeting_decision_check trigger**：会议决策质量检查（no_fuzzy_completion_claim / no_performative_agreement / no_implementation_without_requirement 支持此 trigger）
+- **buildConstraintPrompt()**：收集匹配约束的 promptInjection 字段，格式化为 Agent system prompt 片段
+- **ConstraintContext 新增字段**：hasWorktree / worktreePath / completionClaimText / hasTwoStageReview
+- **checkNoFuzzyWords() / checkNoPerformativePatterns() / checkNoExcusePatterns() / checkYagni()**：新的 precondition 检查方法
 
 ### Changed
-- （功能变更）
-
-### Fixed
-- （Bug 修复）
+- 约束总数：8 Iron Laws → 12，13 Guidelines → 15，23 条 → 29 条
+- `no_fuzzy_completion_claim` / `no_performative_agreement` / `no_implementation_without_requirement` trigger 扩展为数组格式
+- README / CAPABILITIES.md 同步更新
 
 ## [0.11.0] - 2026-05-03
 

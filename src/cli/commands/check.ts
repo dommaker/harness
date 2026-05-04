@@ -109,6 +109,8 @@ export async function check(options: CheckOptions): Promise<void> {
       hasRootCauseInvestigation: detectRootCauseInvestigation(projectPath),
       hasVerificationEvidence: await detectVerificationEvidence(projectPath),
       hasReuseCheck: detectReuseCheck(projectPath),
+      hasRequirement: detectRequirement(projectPath),
+      hasWorktree: detectWorktree(projectPath),
     };
 
     // 执行三层检查
@@ -263,6 +265,36 @@ async function detectVerificationEvidence(projectPath: string): Promise<boolean>
  * 检测是否有复用检查
  * 检查 .harness/reuse/ 目录或相关文档
  */
+/**
+ * 检测是否有需求来源
+ * 检查 CLAUDE.md、README.md、specs/、docs/specs/ 等
+ */
+function detectRequirement(projectPath: string): boolean {
+  const indicators = [
+    'CLAUDE.md',
+    'README.md',
+    'specs',
+    'docs/specs',
+    '.specs',
+  ];
+  return indicators.some(f => fs.existsSync(path.join(projectPath, f)));
+}
+
+/**
+ * 检测是否在 git worktree 中
+ */
+function detectWorktree(projectPath: string): boolean {
+  try {
+    const gitDir = path.join(projectPath, '.git');
+    if (fs.existsSync(gitDir)) {
+      const content = fs.readFileSync(gitDir, 'utf-8');
+      // 实际 worktree 的 .git 是文件（指向主 repo），不是目录
+      return content.startsWith('gitdir:');
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 function detectReuseCheck(projectPath: string): boolean {
   const reuseDir = path.join(projectPath, '.harness', 'reuse');
   if (fs.existsSync(reuseDir)) {

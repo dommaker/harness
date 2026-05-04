@@ -94,8 +94,8 @@ lifecycle.init({ id: 'agent-1', role: 'coder' });
 
 | 层级 | 严重性 | 说明 |
 |------|:------:|------|
-| **Iron Law** | error | 绝对禁止，无例外（8 条） |
-| **Guideline** | warning | 推荐遵守，有例外（11 条） |
+| **Iron Law** | error | 绝对禁止，无例外（12 条） |
+| **Guideline** | warning | 推荐遵守，有例外（15 条） |
 | **Tip** | info | 信息性提示（2 条） |
 
 ### 子系统

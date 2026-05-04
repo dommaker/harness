@@ -48,7 +48,8 @@ export type ConstraintTrigger =
   | 'merge'
   | 'design_request'
   | 'architecture_change'
-  | 'external_api_design';  // 🆕 Iron Law #6: 外部 API 设计
+  | 'external_api_design'  // 🆕 Iron Law #6: 外部 API 设计
+  | 'meeting_decision_check';  // 🆕 会议决策质量检查
 
 /**
  * 约束定义
@@ -74,10 +75,13 @@ export interface Constraint {
   
   /** 约束描述 */
   description?: string;
-  
+
+  /** 软约束 prompt 注入（引导 Agent 行为的提示文本） */
+  promptInjection?: string;
+
   /** 是否启用 */
   enabled?: boolean;
-  
+
   /** 例外条件（仅 Guidelines 有效） */
   exceptions?: string[];
 }
@@ -211,6 +215,18 @@ export interface ConstraintContext {
 
   /** 是否有需求文档（用于 no_implementation_without_requirement） */
   hasRequirement?: boolean;
+
+  /** 是否在 worktree 中执行（用于 must_use_worktree） */
+  hasWorktree?: boolean;
+
+  /** worktree 路径（用于 worktree 相关检查） */
+  worktreePath?: string;
+
+  /** 完成声明文本（用于 fuzzy/excuse 检查） */
+  completionClaimText?: string;
+
+  /** 是否完成两阶段审查（用于 two_stage_review_required） */
+  hasTwoStageReview?: boolean;
   
   // ========================================
   // 例外条件（用于 Guidelines）

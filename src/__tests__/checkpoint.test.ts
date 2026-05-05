@@ -386,6 +386,9 @@ describe('CheckpointValidator', () => {
   });
 
   describe('http_body', () => {
+    // 需要外网访问 httpbin.org，增加超时 + 网络不可用时跳过
+    const HTTP_TIMEOUT = 15_000;
+
     it('HTTP 响应体包含内容应该通过', async () => {
       const result = await validateCheckpoint(
         {
@@ -394,9 +397,8 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      
       expect(result.passed).toBe(true);
-    });
+    }, HTTP_TIMEOUT);
 
     it('HTTP 响应体不包含内容应该失败', async () => {
       const result = await validateCheckpoint(
@@ -406,9 +408,8 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      
       expect(result.passed).toBe(false);
-    });
+    }, HTTP_TIMEOUT);
   });
 
   describe('custom', () => {

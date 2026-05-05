@@ -35,8 +35,8 @@ docs/
 # Runtime state
 .harness/
 
-# Claude Code personal settings
-.claude/settings.local.json
+# Claude Code
+.claude/
 
 # 🆕 Internal docs (not for public release)
 docs/specs/

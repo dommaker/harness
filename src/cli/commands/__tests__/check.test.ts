@@ -225,50 +225,34 @@ describe('check command', () => {
       expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('变更文件'));
     });
 
-    it('应该检测 code_implementation 触发条件', async () => {
-      // 代码变更但无测试变更
+    it('应该检测 module_modification 触发条件（.ts 文件）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: 'src/foo.ts\nsrc/bar.tsx\n', stderr: '' });
       mockChecker.checkConstraints.mockResolvedValue({
-        passed: true,
-        ironLaws: [],
-        guidelines: [],
-        tips: [],
-        warningCount: 0,
-        tipCount: 0,
+        passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('code_implementation'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
     });
 
-    it('应该检测 .js 和 .jsx 文件的 code_implementation', async () => {
+    it('应该检测 module_modification 触发条件（.js 文件）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: 'src/foo.js\nsrc/bar.jsx\n', stderr: '' });
       mockChecker.checkConstraints.mockResolvedValue({
-        passed: true,
-        ironLaws: [],
-        guidelines: [],
-        tips: [],
-        warningCount: 0,
-        tipCount: 0,
+        passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('code_implementation'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
     });
 
-    it('应该检测仅 .jsx 文件的 code_implementation', async () => {
-      mockExecAsync.mockResolvedValue({ stdout: 'src/bar.jsx\n', stderr: '' });
+    it('应该检测 file_modification 触发条件（非 src/ 目录）', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: 'docs/bar.md\n', stderr: '' });
       mockChecker.checkConstraints.mockResolvedValue({
-        passed: true,
-        ironLaws: [],
-        guidelines: [],
-        tips: [],
-        warningCount: 0,
-        tipCount: 0,
+        passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('code_implementation'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('file_modification'));
     });
 
     it('应该检测 module_modification 触发条件', async () => {

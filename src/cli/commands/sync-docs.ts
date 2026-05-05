@@ -538,23 +538,25 @@ async function createContextMd(projectPath: string, dir: string): Promise<void> 
 
   const content = `# ${dirName}
 
-> 此文件描述 ${dir} 目录的职责和上下文
+> 此文件描述 ${dir} 目录的职责和上下文。
+> 请阅读本目录的源代码，然后填写以下各节。
+> 如果使用 AI 编码助手，将本文件内容作为 prompt 请求它分析并填写。
 
 ## 职责
 
-<!-- 本目录的核心职责是什么 -->
+本目录的核心职责是？
 
 ## 核心导出
 
-<!-- 本目录对外暴露的主要模块/函数 -->
+本目录对外暴露的主要模块/函数：
 
 ## 依赖关系
 
-<!-- 本目录依赖哪些其他模块，谁依赖本目录 -->
+本目录依赖哪些其他模块，谁依赖本目录？
 
 ## 注意事项
 
-<!-- 开发时需要注意的约束或约定 -->
+开发时需要注意的约束或约定：
 `;
 
   await fs.mkdir(path.join(projectPath, dir), { recursive: true });

@@ -367,7 +367,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('findApplicableConstraints', () => {
     it('应该过滤出匹配 trigger 的约束', () => {
       const context: ConstraintContext = {
-        operation: 'code_implementation',
+        operation: 'task_completion_claim',
       };
 
       const result = checker.findApplicableConstraints(context);

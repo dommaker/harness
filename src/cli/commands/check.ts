@@ -41,28 +41,20 @@ async function getChangedFiles(staged: boolean): Promise<string[]> {
  * 检测触发条件
  */
 function detectTrigger(changedFiles: string[], options: CheckOptions): ConstraintTrigger {
-  // 如果指定了触发条件，直接使用
-  if (options.trigger) {
-    return options.trigger;
-  }
+  if (options.trigger) return options.trigger;
 
   // 根据变更文件推断触发条件
-  const hasCodeChange = changedFiles.some(f => 
-    f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js') || f.endsWith('.jsx')
-  );
-  const hasTestChange = changedFiles.some(f => 
+  // 注意：不自动推断 code_implementation——那是 caller 的语义判断。
+  // pre-commit 无法区分"模板编辑"和"逻辑实现"，保守使用 file_modification。
+  const hasTestChange = changedFiles.some(f =>
     f.includes('.test.') || f.includes('.spec.') || f.includes('__tests__')
   );
-  const hasModuleChange = changedFiles.some(f => 
+  const hasModuleChange = changedFiles.some(f =>
     f.includes('src/') && !f.includes('__tests__')
   );
 
-  if (hasCodeChange && !hasTestChange) {
-    return 'code_implementation';
-  }
-  if (hasModuleChange) {
-    return 'module_modification';
-  }
+  if (hasTestChange && !hasModuleChange) return 'test_creation';
+  if (hasModuleChange) return 'module_modification';
 
   return 'file_modification';
 }

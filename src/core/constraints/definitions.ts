@@ -43,7 +43,7 @@ export const IRON_LAWS: Record<string, Constraint> = {
     rule: 'NO SELF APPROVAL WITHOUT TEST EVIDENCE',
     message: '禁止自评通过，必须提供测试证据',
     level: 'iron_law',
-    trigger: 'code_implementation',
+    trigger: 'task_completion_claim',
     enforcement: 'passes-gate',
     description: '任务完成声明必须基于真实测试结果，不能由开发者自评。测试证据包括：测试报告、覆盖率数据、CI 通过记录。',
     promptInjection: '声明任务完成时，必须提供可验证的测试证据（测试报告、覆盖率数据、CI 通过记录），不得仅凭自己的判断声称完成。',

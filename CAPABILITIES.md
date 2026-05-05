@@ -54,7 +54,22 @@
 | 安全门控 | gates/security.ts | `security` / `sec` | npm audit 漏洞检查 |
 | 契约门控 | gates/contract.ts | `contract` | OpenAPI Schema 验证 |
 | 审查门控 | gates/review.ts | `review` | PR 审查状态检查 |
-| 命令黑名单 | gates/command.ts | `command` / `cmd` | 危险命令拦截 |
+| 命令黑名单 | gates/command.ts | `command` / `cmd` | 三级黑名单（block/warn/audit），22 条规则覆盖 8 类危险命令 |
+
+**CommandGate 详细规则：**
+
+| 类别 | 级别 | 典型规则 |
+|------|:--:|------|
+| system | block | `rm -rf /`、`rm -rf *`、`rm -rf ~`、`rm -rf .` |
+| database | block/warn | `DROP DATABASE`、`DROP TABLE`(warn)、`TRUNCATE`(warn)、`DELETE FROM` 无 WHERE |
+| permission | block | `chmod 777`、`chown root`(warn) |
+| network | block | `iptables -F`、`curl \| bash`、`wget \| bash` |
+| privilege | block | `sudo rm`、`sudo dd`、`sudo fdisk` |
+| sensitive | audit | `cat ~/.ssh/id_rsa`、`cat .env` |
+| process | block/warn | `kill -1`、`killall`(warn) |
+| package | warn | `npm uninstall -g`、`pip uninstall` |
+
+> 风险等级：block（阻止）> warn（允许记录）> audit（静默记录）
 
 ---
 

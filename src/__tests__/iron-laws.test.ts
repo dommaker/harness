@@ -16,8 +16,8 @@ import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
   describe('Iron Laws', () => {
-    it('should have 8 iron laws defined', () => {
-      expect(Object.keys(IRON_LAWS)).toHaveLength(8); // no_bypass_checkpoint, no_self_approval, no_completion_without_verification, no_test_simplification, incremental_progress, verify_external_capability, no_implementation_without_requirement_review, no_implementation_without_requirement
+    it('should have 12 iron laws defined', () => {
+      expect(Object.keys(IRON_LAWS)).toHaveLength(12);
     });
 
     it('should have no exceptions for iron laws', () => {
@@ -28,8 +28,8 @@ describe('Constraint System', () => {
   });
 
   describe('Guidelines', () => {
-    it('should have 13 guidelines defined', () => {
-      expect(Object.keys(GUIDELINES)).toHaveLength(13);
+    it('should have 15 guidelines defined', () => {
+      expect(Object.keys(GUIDELINES)).toHaveLength(15);
     });
 
     it('should have exceptions for some guidelines', () => {
@@ -47,11 +47,11 @@ describe('Constraint System', () => {
   describe('Helper Functions', () => {
     it('should get all constraints', () => {
       const all = getAllConstraints();
-      expect(all.length).toBe(23); // 8 iron laws + 13 guidelines + 2 tips
+      expect(all.length).toBe(29); // 12 iron laws + 15 guidelines + 2 tips
     });
 
     it('should find constraints by trigger', () => {
-      const constraints = findConstraintsByTrigger('bug_fix_attempt');
+      const constraints = findConstraintsByTrigger('code_implementation');
       expect(constraints.length).toBeGreaterThan(0);
     });
 
@@ -76,7 +76,7 @@ describe('Constraint Checker', () => {
 
   it('should find applicable constraints for context', () => {
     const context: ConstraintContext = {
-      operation: 'bug_fix_attempt',
+      operation: 'code_implementation',
     };
 
     const result = constraintChecker.findApplicableConstraints(context);
@@ -85,7 +85,7 @@ describe('Constraint Checker', () => {
 
   it('should check constraint', async () => {
     const context: ConstraintContext = {
-      operation: 'bug_fix_attempt',
+      operation: 'code_implementation',
       hasRootCauseInvestigation: false,
     };
 
@@ -95,7 +95,7 @@ describe('Constraint Checker', () => {
 
   it('should check constraint with satisfied precondition', async () => {
     const context: ConstraintContext = {
-      operation: 'bug_fix_attempt',
+      operation: 'code_implementation',
       hasRootCauseInvestigation: true,
     };
 
@@ -107,6 +107,14 @@ describe('Constraint Checker', () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
       hasRequirement: true,
+      hasWorktree: true,
+      hasTest: true,
+      hasVerificationEvidence: true,
+      taskDescription: 'Test task',
+      hasSingleTask: true,
+      hasRequirementReview: true,
+      hasTwoStageReview: true,
+      completionClaimText: '142 tests passed, coverage 87%',
     };
 
     const result = await constraintChecker.checkConstraints(context);
@@ -115,7 +123,7 @@ describe('Constraint Checker', () => {
 
   it('should fail incremental_progress when hasSingleTask is undefined', async () => {
     const context: ConstraintContext = {
-      operation: 'feature_completion_claim',
+      operation: 'code_implementation',
     };
 
     const result = await constraintChecker.check(IRON_LAWS['incremental_progress'], context);
@@ -124,7 +132,7 @@ describe('Constraint Checker', () => {
 
   it('should pass incremental_progress when hasSingleTask is true', async () => {
     const context: ConstraintContext = {
-      operation: 'feature_completion_claim',
+      operation: 'code_implementation',
       hasSingleTask: true,
     };
 
@@ -134,7 +142,7 @@ describe('Constraint Checker', () => {
 
   it('should fail verify_external_capability when hasExternalCapabilityVerification is undefined', async () => {
     const context: ConstraintContext = {
-      operation: 'external_api_design',
+      operation: 'api_change',
     };
 
     const result = await constraintChecker.check(IRON_LAWS['verify_external_capability'], context);
@@ -143,7 +151,7 @@ describe('Constraint Checker', () => {
 
   it('should pass verify_external_capability when hasExternalCapabilityVerification is true', async () => {
     const context: ConstraintContext = {
-      operation: 'external_api_design',
+      operation: 'api_change',
       hasExternalCapabilityVerification: true,
     };
 
@@ -153,7 +161,7 @@ describe('Constraint Checker', () => {
 
   it('should fail no_implementation_without_requirement_review when hasRequirementReview is undefined', async () => {
     const context: ConstraintContext = {
-      operation: 'implementation_complete',
+      operation: 'code_implementation',
     };
 
     const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement_review'], context);
@@ -162,7 +170,7 @@ describe('Constraint Checker', () => {
 
   it('should pass no_implementation_without_requirement_review when hasRequirementReview is true', async () => {
     const context: ConstraintContext = {
-      operation: 'implementation_complete',
+      operation: 'code_implementation',
       hasRequirementReview: true,
     };
 
@@ -223,7 +231,7 @@ describe('IronLawViolationError (deprecated)', () => {
         level: 'iron_law',
         rule: 'TEST',
         message: 'test',
-        trigger: 'step_execution',
+        trigger: 'code_implementation',
         enforcement: 'test',
       },
       message: 'Test error',

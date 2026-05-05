@@ -127,7 +127,7 @@ export class SessionStartup {
   }
 
   private async checkProgress(): Promise<any> {
-    const progressPath = path.join(this.workDir, '.agent', 'progress.yml');
+    const progressPath = path.join(this.workDir, '.harness', 'progress.yml');
     try {
       const content = await fs.readFile(progressPath, 'utf-8');
       return yaml.load(content) as any;
@@ -184,16 +184,15 @@ export class SessionStartup {
   }
 
   private async checkLoadContext(): Promise<any> {
-    // Load AGENTS.md, USER.md, SOUL.md if present
     const context: Record<string, string> = {};
-    const files = ['AGENTS.md', 'USER.md', 'SOUL.md', 'MEMORY.md'];
-    
+    const files = this.checkpoints.contextFiles || [];
+
     for (const file of files) {
       try {
         context[file] = await fs.readFile(path.join(this.workDir, file), 'utf-8');
       } catch {}
     }
-    
+
     return context;
   }
 

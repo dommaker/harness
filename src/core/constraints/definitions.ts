@@ -28,7 +28,7 @@ export const IRON_LAWS: Record<string, Constraint> = {
     rule: 'NO BYPASSING CHECKPOINTS',
     message: '禁止跳过检查点验证',
     level: 'iron_law',
-    trigger: 'step_execution',
+    trigger: 'code_implementation',
     enforcement: 'checkpoint-required',
     description: '所有检查点必须通过，不能跳过验证步骤。检查点是质量的最后一道防线。',
     promptInjection: '每个关键步骤后有 checkpoint 验证点，必须通过才能继续。通过标准：测试通过、类型检查无错误、lint 无新增警告。未通过时回退修复，不得跳过。',
@@ -43,7 +43,7 @@ export const IRON_LAWS: Record<string, Constraint> = {
     rule: 'NO SELF APPROVAL WITHOUT TEST EVIDENCE',
     message: '禁止自评通过，必须提供测试证据',
     level: 'iron_law',
-    trigger: 'task_completion_claim',
+    trigger: 'code_implementation',
     enforcement: 'passes-gate',
     description: '任务完成声明必须基于真实测试结果，不能由开发者自评。测试证据包括：测试报告、覆盖率数据、CI 通过记录。',
     promptInjection: '声明任务完成时，必须提供可验证的测试证据（测试报告、覆盖率数据、CI 通过记录），不得仅凭自己的判断声称完成。',
@@ -58,7 +58,7 @@ export const IRON_LAWS: Record<string, Constraint> = {
     rule: 'NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE',
     message: '禁止无验证声明完成，必须运行验证命令',
     level: 'iron_law',
-    trigger: 'task_completion_claim',
+    trigger: 'code_implementation',
     enforcement: 'verify-completion',
     description: '在声明任何任务完成之前，必须运行新鲜的、完整的验证命令。验证命令包括：npm test、npm run build、CI 流程。',
     promptInjection: '在声明任务完成前，必须重新运行完整的验证命令（npm test、npm run build、type check），使用新鲜的输出作为完成证据，不得复用旧结果。',
@@ -99,7 +99,7 @@ export const IRON_LAWS: Record<string, Constraint> = {
     rule: 'ONE TASK PER SESSION',
     message: '禁止一次做多个任务，每次只做一件事',
     level: 'iron_law',
-    trigger: 'feature_completion_claim',
+    trigger: 'code_implementation',
     enforcement: 'single-task-check',
     description: `一个 session 只处理一个任务，避免 one-shotting。
 
@@ -133,7 +133,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'VERIFY EXTERNAL CAPABILITY BEFORE IMPLEMENTATION',
     message: '外部依赖能力必须先验证',
     level: 'iron_law',
-    trigger: 'external_api_design',
+    trigger: 'api_change',
     enforcement: 'capability-verification',
     description: `实现方案依赖外部系统的未确认能力时，必须先验证。
 
@@ -172,7 +172,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'REVIEW IMPLEMENTATION AGAINST REQUIREMENTS',
     message: '实现后必须对比需求验证',
     level: 'iron_law',
-    trigger: 'implementation_complete',
+    trigger: 'code_implementation',
     enforcement: 'requirement-review',
     description: `实现完成后，必须对比原始需求进行验证。
 
@@ -215,7 +215,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'NO IMPLEMENTATION WITHOUT REQUIREMENTS',
     message: '禁止无需求就开始实现',
     level: 'iron_law',
-    trigger: ['code_implementation', 'feature_development', 'meeting_decision_check'],
+    trigger: ['code_implementation', 'design_request'],
     enforcement: 'requirement-exists',
     description: `在开始实现之前，必须有明确的需求定义。
 
@@ -248,7 +248,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'CODE CHANGES MUST BE ISOLATED IN A WORKTREE',
     message: '代码开发必须在隔离的 worktree 中进行',
     level: 'iron_law',
-    trigger: ['code_implementation', 'feature_development', 'task_completion_claim'],
+    trigger: ['code_implementation'],
     enforcement: 'check-worktree',
     description: `所有代码修改必须在隔离的 worktree 中进行，不要在原始仓库目录直接编辑。
 
@@ -273,7 +273,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'NO FUZZY COMPLETION CLAIMS WITHOUT QUANTIFIABLE EVIDENCE',
     message: '禁止模糊完成声明，必须提供可量化证据',
     level: 'iron_law',
-    trigger: ['task_completion_claim', 'meeting_decision_check'],
+    trigger: ['code_implementation', 'design_request'],
     enforcement: 'fuzzy-check',
     description: `声明任务完成时，禁止使用模糊词语。必须提供具体、可量化的验证结果。
 
@@ -299,7 +299,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'NO PERFORMATIVE AGREEMENT WITHOUT ANALYSIS',
     message: '禁止表演性同意，必须先分析再确认',
     level: 'iron_law',
-    trigger: ['design_request', 'meeting_decision_check'],
+    trigger: ['design_request'],
     enforcement: 'performative-check',
     description: `收到需求或反馈时，不能仅表示"好的"、"明白了"就直接执行。必须先分析、复述理解、确认一致。
 
@@ -326,7 +326,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     rule: 'REVIEW MUST COVER SPEC COMPLIANCE BEFORE CODE QUALITY',
     message: '审查必须两阶段：先验证规范合规，再检查代码质量',
     level: 'iron_law',
-    trigger: 'implementation_complete',
+    trigger: 'code_implementation',
     enforcement: 'two-stage-review',
     description: `代码审查必须分两阶段进行：
 
@@ -361,7 +361,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST',
     message: '复杂 bug 必须先调查根本原因',
     level: 'guideline',
-    trigger: 'bug_fix_attempt',
+    trigger: 'code_implementation',
     enforcement: 'debug-systematic',
     description: `在尝试修复 bug 之前，按复杂度区分调查要求：
 
@@ -443,7 +443,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'CHECK LOCAL/SIMPLE OPTIONS BEFORE REMOTE/COMPLEX',
     message: '先检查本地/简单方案',
     level: 'guideline',
-    trigger: ['feature_development', 'module_extension', 'code_implementation'],
+    trigger: ['code_implementation', 'module_extension'],
     enforcement: 'check-local-first',
     description: `在实现功能时，必须按顺序检查：
 1) 是否有本地数据源（内存/文件）？
@@ -468,12 +468,12 @@ export const GUIDELINES: Record<string, Constraint> = {
     message: '创建新能力前必须检查复用',
     level: 'guideline',
     trigger: [
-      'step_creation',
-      'tool_creation',
-      'workflow_creation',
+      'module_creation',
+      'module_creation',
+      'module_creation',
       'module_creation',
       'module_extension',
-      'feature_development',
+      'code_implementation',
     ],
     enforcement: 'reuse-first',
     description: `在创建新能力之前，必须先执行复用检查：
@@ -553,7 +553,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'NO SKILL WITHOUT A FAILING TEST FIRST',
     message: '创建技能前必须先定义测试场景',
     level: 'guideline',
-    trigger: 'skill_creation',
+    trigger: 'module_creation',
     enforcement: 'skill-test-scenario',
     description: `在创建新的 agent 技能之前，必须先定义测试场景：
 
@@ -577,7 +577,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'TEST COVERAGE MUST MEET REQUIREMENTS',
     message: '测试覆盖率必须达到要求',
     level: 'guideline',
-    trigger: 'task_completion_claim',
+    trigger: 'code_implementation',
     enforcement: 'check-coverage',
     description: `在提交代码前，测试覆盖率必须达到项目要求（默认 80%）。
 
@@ -599,7 +599,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'DESIGN DECISIONS MUST BE DISCUSSED BEFORE IMPLEMENTATION',
     message: '设计决策类任务需先讨论方案再实现',
     level: 'guideline',
-    trigger: ['design_request', 'architecture_change', 'feature_development'],
+    trigger: ['design_request', 'architecture_change', 'code_implementation'],
     enforcement: 'require-discussion',
     description: `当用户问"怎么实现"、"设计方案"时，应先：
 
@@ -721,7 +721,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'NO EXCUSE PATTERNS WITHOUT CONCRETE ACTION PLAN',
     message: '禁止借口模式，必须给出具体行动计划',
     level: 'guideline',
-    trigger: ['task_completion_claim', 'code_implementation', 'bug_fix_attempt'],
+    trigger: ['code_implementation'],
     enforcement: 'excuse-check',
     description: `遇到困难时，禁止使用借口搪塞，必须给出具体的解决计划。
 
@@ -754,7 +754,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     rule: 'NO SPECULATIVE GENERALIZATION WITHOUT CONCRETE USE CASE',
     message: '禁止过度设计，遵循 YAGNI 原则',
     level: 'guideline',
-    trigger: ['code_implementation', 'feature_development', 'design_request'],
+    trigger: ['code_implementation', 'design_request'],
     enforcement: 'yagni-check',
     description: `遵循 YAGNI 原则（You Aren't Gonna Need It），不要为"未来可能需要"的需求添加代码。
 

@@ -71,7 +71,7 @@ describe('check command', () => {
     it('应该通过所有约束检查', async () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,
-        ironLaws: [{ id: 'test', level: 'iron_law', satisfied: true, checkedAt: new Date(), constraint: { id: 'test', rule: 'test', message: 'test', level: 'iron_law', trigger: 'step_execution', enforcement: 'checkpoint-required' } }],
+        ironLaws: [{ id: 'test', level: 'iron_law', satisfied: true, checkedAt: new Date(), constraint: { id: 'test', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
         guidelines: [],
         tips: [],
         warningCount: 0,
@@ -85,7 +85,7 @@ describe('check command', () => {
     it('应该显示铁律违规', async () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: false,
-        ironLaws: [{ id: 'no_bypass_checkpoint', level: 'iron_law', satisfied: false, checkedAt: new Date(), constraint: { id: 'no_bypass_checkpoint', rule: 'test', message: 'test', level: 'iron_law', trigger: 'step_execution', enforcement: 'checkpoint-required' } }],
+        ironLaws: [{ id: 'no_bypass_checkpoint', level: 'iron_law', satisfied: false, checkedAt: new Date(), constraint: { id: 'no_bypass_checkpoint', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
         guidelines: [],
         tips: [],
         warningCount: 0,
@@ -103,7 +103,7 @@ describe('check command', () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: false,
         ironLaws: [],
-        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'step_execution', enforcement: 'warning' } }],
+        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
         tips: [],
         warningCount: 1,
         tipCount: 0,
@@ -117,7 +117,7 @@ describe('check command', () => {
       const mockLoader = {
         load: jest.fn(),
         hasCustomConfig: jest.fn().mockReturnValue(true),
-        mergeConstraints: jest.fn().mockReturnValue({ custom: [{ id: 'custom', rule: 'test', message: 'test', level: 'iron_law', trigger: 'step_execution', enforcement: 'checkpoint-required' }], disabled: ['disabled_constraint'] }),
+        mergeConstraints: jest.fn().mockReturnValue({ custom: [{ id: 'custom', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' }], disabled: ['disabled_constraint'] }),
       };
       (MockProjectConfigLoader as any).mockImplementation(() => mockLoader);
 
@@ -140,7 +140,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [{ id: 'test_tip', level: 'tip', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_tip', rule: 'test', message: 'test tip', level: 'tip', trigger: 'step_execution', enforcement: 'info' } }],
+        tips: [{ id: 'test_tip', level: 'tip', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_tip', rule: 'test', message: 'test tip', level: 'tip', trigger: 'code_implementation', enforcement: 'info' } }],
         warningCount: 0,
         tipCount: 1,
       });
@@ -153,7 +153,7 @@ describe('check command', () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,
         ironLaws: [],
-        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'step_execution', enforcement: 'warning' } }],
+        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
         tips: [],
         warningCount: 0,
         tipCount: 0,
@@ -298,8 +298,8 @@ describe('check command', () => {
         tipCount: 0,
       });
 
-      await check({ preset: 'default', staged: false, trigger: 'task_completion_claim' });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('task_completion_claim'));
+      await check({ preset: 'default', staged: false, trigger: 'code_implementation' });
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('code_implementation'));
     });
 
     it('应该显示铁律违规的约束详情', async () => {
@@ -316,7 +316,7 @@ describe('check command', () => {
             rule: 'NO BYPASSING CHECKPOINTS',
             message: '禁止跳过检查点验证',
             level: 'iron_law',
-            trigger: 'step_execution',
+            trigger: 'code_implementation',
             enforcement: 'checkpoint-required',
           },
         }],
@@ -348,7 +348,7 @@ describe('check command', () => {
             rule: 'PREFER COMPOSITION OVER INHERITANCE',
             message: '优先使用组合而非继承',
             level: 'guideline',
-            trigger: 'step_execution',
+            trigger: 'code_implementation',
             enforcement: 'warning',
           },
         }],
@@ -377,7 +377,7 @@ describe('check command', () => {
             rule: 'CONSIDER REUSE',
             message: '考虑复用',
             level: 'tip',
-            trigger: 'step_execution',
+            trigger: 'code_implementation',
             enforcement: 'info',
           },
         }],

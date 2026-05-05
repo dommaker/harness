@@ -4,7 +4,7 @@ LLM 适配器层 — harness 与外部 LLM 基础设施的桥梁。
 
 ## 职责
 
-定义 `LLMAdapter` 接口，供业务层（如 agent-studio）注入具体实现。harness 自身不调用 LLM。
+定义 `LLMAdapter` 接口，供业务层注入具体实现。harness 自身不调用 LLM。
 
 ## 核心导出
 
@@ -19,6 +19,6 @@ LLM 适配器层 — harness 与外部 LLM 基础设施的桥梁。
 
 ## 注意事项
 
-- **这不是死代码** — 是 transformation plan 10.5 节的设计，等待 agent-studio 注入 `HarnessLLMAdapter`
+- **这不是死代码** — 等待业务层注入自定义 `LLMAdapter` 实现
 - `summarize()` 和 `extract()` 有零 token 的 regex 实现，可在无 LLM 时使用
 - 不要在 harness 核心中直接调用 LLM，始终通过 adapter 接口

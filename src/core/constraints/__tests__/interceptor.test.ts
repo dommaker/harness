@@ -24,7 +24,7 @@ describe('ConstraintInterceptor', () => {
     rule: 'Test Iron Law',
     message: 'Test iron law message',
     level: 'iron_law',
-    trigger: 'step_execution',
+    trigger: 'code_implementation',
     enforcement: 'test-enforcement',
   };
 
@@ -33,12 +33,12 @@ describe('ConstraintInterceptor', () => {
     rule: 'Test Guideline',
     message: 'Test guideline message',
     level: 'guideline',
-    trigger: 'step_execution',
+    trigger: 'code_implementation',
     enforcement: 'guideline-enforcement',
   };
 
   const mockContext: ConstraintContext = {
-    operation: 'step_execution',
+    operation: 'code_implementation',
     projectPath: '/test',
   };
 
@@ -129,7 +129,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.setEnabled(false);
       interceptor.register('test-enforcement', mockExecutor);
 
-      const result = interceptor.intercept('step_execution', mockContext);
+      const result = interceptor.intercept('code_implementation', mockContext);
       // When disabled, should pass without checking
       expect(result).resolves.toHaveProperty('passed', true);
     });
@@ -140,7 +140,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.register('test-enforcement', mockExecutor);
       interceptor.skip(['test-enforcement']);
 
-      const result = await interceptor.intercept('step_execution', mockContext);
+      const result = await interceptor.intercept('code_implementation', mockContext);
       expect(result.constraints.some(c => c.skipped)).toBe(true);
     });
   });
@@ -152,7 +152,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.clearSkips();
 
       (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: true });
-      await interceptor.intercept('step_execution', mockContext);
+      await interceptor.intercept('code_implementation', mockContext);
       expect(mockExecutor.execute).toHaveBeenCalled();
     });
   });
@@ -164,7 +164,7 @@ describe('ConstraintInterceptor', () => {
 
       (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: true });
 
-      const result = await interceptor.intercept('step_execution', mockContext);
+      const result = await interceptor.intercept('code_implementation', mockContext);
       expect(result.passed).toBe(true);
       expect(result.violations.length).toBe(0);
     });
@@ -173,7 +173,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.register('test-enforcement', mockExecutor);
       (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: false });
 
-      await expect(interceptor.intercept('step_execution', mockContext)).rejects.toThrow();
+      await expect(interceptor.intercept('code_implementation', mockContext)).rejects.toThrow();
     });
 
     it('should record guideline violation without throwing', async () => {
@@ -184,7 +184,7 @@ describe('ConstraintInterceptor', () => {
         .mockResolvedValueOnce({ passed: true })  // iron law passes
         .mockResolvedValueOnce({ passed: false }); // guideline fails
 
-      const result = await interceptor.intercept('step_execution', mockContext);
+      const result = await interceptor.intercept('code_implementation', mockContext);
       expect(result.passed).toBe(true); // guidelines don't block
       expect(result.violations.length).toBe(1);
     });
@@ -197,7 +197,7 @@ describe('ConstraintInterceptor', () => {
         tips: {},
       });
 
-      const result = await interceptor.intercept('step_execution', mockContext);
+      const result = await interceptor.intercept('code_implementation', mockContext);
       expect(result.passed).toBe(true);
       expect(result.constraints.length).toBe(0);
     });
@@ -206,7 +206,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.register('test-enforcement', mockExecutor);
       (mockExecutor.execute as jest.Mock).mockRejectedValue(new Error('Executor error'));
 
-      await expect(interceptor.intercept('step_execution', mockContext)).rejects.toThrow();
+      await expect(interceptor.intercept('code_implementation', mockContext)).rejects.toThrow();
     });
   });
 
@@ -215,14 +215,14 @@ describe('ConstraintInterceptor', () => {
       interceptor.register('test-enforcement', mockExecutor);
       (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: true });
 
-      await expect(interceptor.claim('step_execution', mockContext)).resolves.not.toThrow();
+      await expect(interceptor.claim('code_implementation', mockContext)).resolves.not.toThrow();
     });
 
     it('should throw on violation', async () => {
       interceptor.register('test-enforcement', mockExecutor);
       (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: false });
 
-      await expect(interceptor.claim('step_execution', mockContext)).rejects.toThrow();
+      await expect(interceptor.claim('code_implementation', mockContext)).rejects.toThrow();
     });
   });
 
@@ -231,7 +231,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.register('test-enforcement', mockExecutor);
       (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: true });
 
-      const result = await interceptor.canProceed('step_execution', mockContext);
+      const result = await interceptor.canProceed('code_implementation', mockContext);
       expect(result).toBe(true);
     });
 
@@ -239,7 +239,7 @@ describe('ConstraintInterceptor', () => {
       interceptor.register('test-enforcement', mockExecutor);
       (mockExecutor.execute as jest.Mock).mockRejectedValue(new Error('Error'));
 
-      const result = await interceptor.canProceed('step_execution', mockContext);
+      const result = await interceptor.canProceed('code_implementation', mockContext);
       expect(result).toBe(false);
     });
   });

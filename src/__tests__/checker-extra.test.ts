@@ -367,7 +367,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('findApplicableConstraints', () => {
     it('应该过滤出匹配 trigger 的约束', () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
       };
 
       const result = checker.findApplicableConstraints(context);
@@ -396,10 +396,17 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('checkBeforeExecution', () => {
     it('通过检查不应该抛出异常', async () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: true,
         hasVerificationEvidence: true,
-      };
+        hasWorktree: true,
+        hasRequirement: true,
+        taskDescription: 'Test task — single focused change',
+        hasSingleTask: true,
+        hasRequirementReview: true,
+        hasTwoStageReview: true,
+        completionClaimText: 'All 142 tests passed, coverage 87.3%',
+      } as any;
 
       // 不应该抛出异常
       await expect(checkBeforeExecution(context)).resolves.not.toThrow();
@@ -407,7 +414,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
     it('违规应该抛出 ConstraintViolationError', async () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: false,
         hasVerificationEvidence: false,
       };
@@ -460,7 +467,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('getSeverity', () => {
     it('iron_law 应该返回 error', async () => {
       const context: ConstraintContext = {
-        operation: 'step_execution',
+        operation: 'code_implementation',
         hasTest: true,
       };
 
@@ -470,7 +477,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'iron_law',
           rule: 'TEST',
           message: 'test',
-          trigger: 'step_execution',
+          trigger: 'code_implementation',
           enforcement: 'test',
         },
         context
@@ -501,7 +508,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
     it('tip 应该返回 info', async () => {
       const context: ConstraintContext = {
-        operation: 'step_execution',
+        operation: 'code_implementation',
       };
 
       const result = await checker.check(
@@ -510,7 +517,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'tip',
           rule: 'TEST',
           message: 'test',
-          trigger: 'step_execution',
+          trigger: 'code_implementation',
           enforcement: 'test',
         },
         context
@@ -523,7 +530,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('checkException 例外豁免', () => {
     it('guideline 匹配例外条件应该被豁免', async () => {
       const context: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         isSimpleTypo: true,
       };
 
@@ -533,7 +540,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'guideline',
           rule: 'NO FIXES WITHOUT ROOT CAUSE',
           message: 'test',
-          trigger: 'bug_fix_attempt',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['simple_typo', 'config_value_error'],
         },
@@ -546,7 +553,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
     it('guideline 不匹配例外条件应该正常检查', async () => {
       const context: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         isSimpleTypo: false,
         isConfigValueError: false,
       };
@@ -557,7 +564,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'guideline',
           rule: 'NO FIXES WITHOUT ROOT CAUSE',
           message: 'test',
-          trigger: 'bug_fix_attempt',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['simple_typo', 'config_value_error'],
         },
@@ -569,7 +576,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
     it('iron_law 不应该检查例外条件', async () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: false,
       };
 
@@ -579,7 +586,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'iron_law',
           rule: 'NO SELF APPROVAL',
           message: 'test',
-          trigger: 'task_completion_claim',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['simple_typo'],
         },
@@ -591,7 +598,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
     it('无 exceptions 字段应该正常检查', async () => {
       const context: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         hasRootCauseInvestigation: true,
       };
 
@@ -601,7 +608,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'guideline',
           rule: 'NO FIXES WITHOUT ROOT CAUSE',
           message: 'test',
-          trigger: 'bug_fix_attempt',
+          trigger: 'code_implementation',
           enforcement: 'test',
         },
         context
@@ -618,7 +625,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       execSync('git add .', { cwd: tempDir, stdio: 'pipe' });
 
       const context: ConstraintContext = {
-        operation: 'step_execution',
+        operation: 'code_implementation',
         projectPath: tempDir,
         changedFiles: [bypassFile],
       };
@@ -629,7 +636,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'iron_law',
           rule: 'NO BYPASS',
           message: 'test',
-          trigger: 'step_execution',
+          trigger: 'code_implementation',
           enforcement: 'test',
         },
         context
@@ -647,7 +654,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       execSync('git add .', { cwd: tempDir, stdio: 'pipe' });
 
       const context: ConstraintContext = {
-        operation: 'step_execution',
+        operation: 'code_implementation',
         projectPath: tempDir,
         changedFiles: [cleanFile],
       };
@@ -658,7 +665,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
           level: 'iron_law',
           rule: 'NO BYPASS',
           message: 'test',
-          trigger: 'step_execution',
+          trigger: 'code_implementation',
           enforcement: 'test',
         },
         context
@@ -790,7 +797,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const { checkIronLaw } = await import('../core/constraints/checker');
 
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: true,
         hasVerificationEvidence: true,
       };
@@ -832,7 +839,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const { checkConstraint } = await import('../core/constraints/checker');
 
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: true,
       };
 
@@ -845,7 +852,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('checkConstraints Iron Law 违规', () => {
     it('Iron Law 违规应该抛出 ConstraintViolationError', async () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: false,
         hasVerificationEvidence: false,
       };
@@ -1160,6 +1167,229 @@ describe('ConstraintChecker - 补充覆盖', () => {
       expect(result.satisfied).toBe(false);
 
       fs.rmSync(capDir, { recursive: true, force: true });
+    });
+
+    // CLAUDE.md Domain Packages 检查
+    it('CLAUDE.md Domain Packages 包含不存在的目录应该失败', async () => {
+      const projDir = path.join(tempDir, 'claude-stale-pkg');
+      fs.mkdirSync(projDir, { recursive: true });
+      // 不创建 packages/studio-xxx 目录
+
+      fs.writeFileSync(
+        path.join(projDir, 'CLAUDE.md'),
+        '## Domain Packages\n\n- `packages/studio-ghost` — Ghost package\n'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
+    });
+
+    it('CLAUDE.md Domain Packages 与实际 packages 同步应该通过', async () => {
+      const projDir = path.join(tempDir, 'claude-synced-pkg');
+      const pkgDir = path.join(projDir, 'packages', 'studio-test');
+      fs.mkdirSync(pkgDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(projDir, 'CLAUDE.md'),
+        '## Domain Packages\n\n- `packages/studio-test` — Test package\n'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
+    });
+
+    it('实际存在包但 CLAUDE.md 未记录应该失败', async () => {
+      const projDir = path.join(tempDir, 'claude-missing-pkg');
+      const pkgDir = path.join(projDir, 'packages', 'studio-unlisted');
+      fs.mkdirSync(pkgDir, { recursive: true });
+
+      // CLAUDE.md 没有提到 studio-unlisted
+      fs.writeFileSync(
+        path.join(projDir, 'CLAUDE.md'),
+        '## Domain Packages\n\n- `packages/studio-other` — Other\n'
+      );
+      // 创建 studio-other 以通过反向检查
+      fs.mkdirSync(path.join(projDir, 'packages', 'studio-other'), { recursive: true });
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
+    });
+
+    // CLAUDE.md Key Architecture Paths 检查
+    it('CLAUDE.md Key Architecture Paths 引用不存在路径应该失败', async () => {
+      const projDir = path.join(tempDir, 'claude-stale-paths');
+      fs.mkdirSync(projDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(projDir, 'CLAUDE.md'),
+        '## Key Architecture Paths\n\n| 组件 | 路径 |\n|---|---|\n| Ghost | `apps/api/src/modules/ghost/` |\n'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
+    });
+
+    it('CLAUDE.md Key Architecture Paths 全部存在应该通过', async () => {
+      const projDir = path.join(tempDir, 'claude-valid-paths');
+      const moduleDir = path.join(projDir, 'apps', 'api', 'src', 'modules', 'goals');
+      fs.mkdirSync(moduleDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(projDir, 'CLAUDE.md'),
+        '## Key Architecture Paths\n\n| 组件 | 路径 |\n|---|---|\n| Goal | `apps/api/src/modules/goals/` |\n'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
+    });
+
+    it('无 CLAUDE.md 应该通过', async () => {
+      const projDir = path.join(tempDir, 'claude-none');
+      fs.mkdirSync(projDir, { recursive: true });
+
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
+    });
+
+    it('step_execution 触发应该生效', async () => {
+      const projDir = path.join(tempDir, 'claude-trigger');
+      fs.mkdirSync(projDir, { recursive: true });
+
+      // 创建一个有 stale Domain Packages 的 CLAUDE.md
+      fs.writeFileSync(
+        path.join(projDir, 'CLAUDE.md'),
+        '## Domain Packages\n\n- `packages/studio-ghost` — Ghost\n'
+      );
+
+      // 用 step_execution 触发
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        projectPath: projDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: ['file_modification', 'code_implementation'],
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(projDir, { recursive: true, force: true });
     });
   });
 });

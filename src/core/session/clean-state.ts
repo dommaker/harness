@@ -143,7 +143,7 @@ export class CleanStateManager {
   }
 
   private async updateProgress(workDir: string, sessionInfo: SessionInfo, cleanResult: CleanStateResult): Promise<boolean> {
-    const progressPath = path.join(workDir, '.agent', 'progress.yml');
+    const progressPath = path.join(workDir, '.harness', 'progress.yml');
     try {
       await fs.mkdir(path.dirname(progressPath), { recursive: true });
       

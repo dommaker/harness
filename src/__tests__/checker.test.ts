@@ -32,12 +32,12 @@ describe('ConstraintChecker', () => {
       writeFileSync(skipFile, 'test.skip("skipped test", () => {});');
 
       const context: ConstraintContext = {
-        operation: 'step_execution',
+        operation: 'code_implementation',
         changedFiles: [skipFile],
       };
 
       const result = await checker.check(
-        { id: 'no_bypass_checkpoint', level: 'iron_law', rule: 'NO BYPASS', message: 'test', trigger: 'step_execution', enforcement: 'test' },
+        { id: 'no_bypass_checkpoint', level: 'iron_law', rule: 'NO BYPASS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         context
       );
 
@@ -49,12 +49,12 @@ describe('ConstraintChecker', () => {
       writeFileSync(normalFile, 'test("normal test", () => { expect(true).toBe(true); });');
 
       const context: ConstraintContext = {
-        operation: 'step_execution',
+        operation: 'code_implementation',
         changedFiles: [normalFile],
       };
 
       const result = await checker.check(
-        { id: 'no_bypass_checkpoint', level: 'iron_law', rule: 'NO BYPASS', message: 'test', trigger: 'step_execution', enforcement: 'test' },
+        { id: 'no_bypass_checkpoint', level: 'iron_law', rule: 'NO BYPASS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         context
       );
 
@@ -63,22 +63,22 @@ describe('ConstraintChecker', () => {
 
     it('should check no_self_approval with test evidence', async () => {
       const contextWithTest: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: true,
       };
 
       const contextWithoutTest: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: false,
       };
 
       const resultWithTest = await checker.check(
-        { id: 'no_self_approval', level: 'iron_law', rule: 'NO SELF APPROVAL', message: 'test', trigger: 'task_completion_claim', enforcement: 'test' },
+        { id: 'no_self_approval', level: 'iron_law', rule: 'NO SELF APPROVAL', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithTest
       );
 
       const resultWithoutTest = await checker.check(
-        { id: 'no_self_approval', level: 'iron_law', rule: 'NO SELF APPROVAL', message: 'test', trigger: 'task_completion_claim', enforcement: 'test' },
+        { id: 'no_self_approval', level: 'iron_law', rule: 'NO SELF APPROVAL', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutTest
       );
 
@@ -88,22 +88,22 @@ describe('ConstraintChecker', () => {
 
     it('should check no_completion_without_verification', async () => {
       const contextWithEvidence: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasVerificationEvidence: true,
       };
 
       const contextWithoutEvidence: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasVerificationEvidence: false,
       };
 
       const resultWithEvidence = await checker.check(
-        { id: 'no_completion_without_verification', level: 'iron_law', rule: 'NO COMPLETION', message: 'test', trigger: 'task_completion_claim', enforcement: 'test' },
+        { id: 'no_completion_without_verification', level: 'iron_law', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithEvidence
       );
 
       const resultWithoutEvidence = await checker.check(
-        { id: 'no_completion_without_verification', level: 'iron_law', rule: 'NO COMPLETION', message: 'test', trigger: 'task_completion_claim', enforcement: 'test' },
+        { id: 'no_completion_without_verification', level: 'iron_law', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutEvidence
       );
 
@@ -175,22 +175,22 @@ describe('ConstraintChecker', () => {
 
     it('should check no_fix_without_root_cause', async () => {
       const contextWithInvestigation: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         hasRootCauseInvestigation: true,
       };
 
       const contextWithoutInvestigation: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         hasRootCauseInvestigation: false,
       };
 
       const resultWith = await checker.check(
-        { id: 'no_fix_without_root_cause', level: 'guideline', rule: 'NO FIX', message: 'test', trigger: 'bug_fix_attempt', enforcement: 'test' },
+        { id: 'no_fix_without_root_cause', level: 'guideline', rule: 'NO FIX', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithInvestigation
       );
 
       const resultWithout = await checker.check(
-        { id: 'no_fix_without_root_cause', level: 'guideline', rule: 'NO FIX', message: 'test', trigger: 'bug_fix_attempt', enforcement: 'test' },
+        { id: 'no_fix_without_root_cause', level: 'guideline', rule: 'NO FIX', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutInvestigation
       );
 
@@ -225,22 +225,22 @@ describe('ConstraintChecker', () => {
 
     it('should check reuse-first guidelines', async () => {
       const contextWithReuseCheck: ConstraintContext = {
-        operation: 'feature_development',
+        operation: 'code_implementation',
         hasReuseCheck: true,
       };
 
       const contextWithoutReuseCheck: ConstraintContext = {
-        operation: 'feature_development',
+        operation: 'code_implementation',
         hasReuseCheck: false,
       };
 
       const resultWith = await checker.check(
-        { id: 'no_creation_without_reuse_check', level: 'guideline', rule: 'REUSE FIRST', message: 'test', trigger: 'feature_development', enforcement: 'test' },
+        { id: 'no_creation_without_reuse_check', level: 'guideline', rule: 'REUSE FIRST', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithReuseCheck
       );
 
       const resultWithout = await checker.check(
-        { id: 'no_creation_without_reuse_check', level: 'guideline', rule: 'REUSE FIRST', message: 'test', trigger: 'feature_development', enforcement: 'test' },
+        { id: 'no_creation_without_reuse_check', level: 'guideline', rule: 'REUSE FIRST', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutReuseCheck
       );
 
@@ -252,22 +252,22 @@ describe('ConstraintChecker', () => {
   describe('New Iron Laws', () => {
     it('should check incremental_progress', async () => {
       const contextWithSingleTask: ConstraintContext = {
-        operation: 'feature_completion_claim',
+        operation: 'code_implementation',
         hasSingleTask: true,
       };
 
       const contextWithMultipleTasks: ConstraintContext = {
-        operation: 'feature_completion_claim',
+        operation: 'code_implementation',
         hasSingleTask: false,
       };
 
       const resultWith = await checker.check(
-        { id: 'incremental_progress', level: 'iron_law', rule: 'ONE TASK', message: 'test', trigger: 'feature_completion_claim', enforcement: 'test' },
+        { id: 'incremental_progress', level: 'iron_law', rule: 'ONE TASK', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithSingleTask
       );
 
       const resultWithout = await checker.check(
-        { id: 'incremental_progress', level: 'iron_law', rule: 'ONE TASK', message: 'test', trigger: 'feature_completion_claim', enforcement: 'test' },
+        { id: 'incremental_progress', level: 'iron_law', rule: 'ONE TASK', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithMultipleTasks
       );
 
@@ -277,22 +277,22 @@ describe('ConstraintChecker', () => {
 
     it('should check verify_external_capability', async () => {
       const contextVerified: ConstraintContext = {
-        operation: 'external_api_design',
+        operation: 'api_change',
         hasExternalCapabilityVerification: true,
       };
 
       const contextNotVerified: ConstraintContext = {
-        operation: 'external_api_design',
+        operation: 'api_change',
         hasExternalCapabilityVerification: false,
       };
 
       const resultVerified = await checker.check(
-        { id: 'verify_external_capability', level: 'iron_law', rule: 'VERIFY', message: 'test', trigger: 'external_api_design', enforcement: 'test' },
+        { id: 'verify_external_capability', level: 'iron_law', rule: 'VERIFY', message: 'test', trigger: 'api_change', enforcement: 'test' },
         contextVerified
       );
 
       const resultNotVerified = await checker.check(
-        { id: 'verify_external_capability', level: 'iron_law', rule: 'VERIFY', message: 'test', trigger: 'external_api_design', enforcement: 'test' },
+        { id: 'verify_external_capability', level: 'iron_law', rule: 'VERIFY', message: 'test', trigger: 'api_change', enforcement: 'test' },
         contextNotVerified
       );
 
@@ -304,7 +304,7 @@ describe('ConstraintChecker', () => {
   describe('Exception handling', () => {
     it('should apply exception for no_fix_without_root_cause with simple_typo', async () => {
       const context: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         hasRootCauseInvestigation: false,
         isSimpleTypo: true,
       };
@@ -315,7 +315,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'NO FIX',
           message: 'test',
-          trigger: 'bug_fix_attempt',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['simple_typo'],
         },
@@ -328,7 +328,7 @@ describe('ConstraintChecker', () => {
 
     it('should apply exception for scalability_required', async () => {
       const context: ConstraintContext = {
-        operation: 'feature_development',
+        operation: 'code_implementation',
         hasReuseCheck: false,
         scalabilityRequired: true,
       };
@@ -339,7 +339,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'SIMPLEST FIRST',
           message: 'test',
-          trigger: 'feature_development',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['scalability_required'],
         },
@@ -351,7 +351,7 @@ describe('ConstraintChecker', () => {
 
     it('should apply exception for security_required', async () => {
       const context: ConstraintContext = {
-        operation: 'feature_development',
+        operation: 'code_implementation',
         hasReuseCheck: false,
         securityRequired: true,
       };
@@ -362,7 +362,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'SIMPLEST FIRST',
           message: 'test',
-          trigger: 'feature_development',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['security_required'],
         },
@@ -374,7 +374,7 @@ describe('ConstraintChecker', () => {
 
     it('should apply exception for performance_required', async () => {
       const context: ConstraintContext = {
-        operation: 'feature_development',
+        operation: 'code_implementation',
         hasReuseCheck: false,
         performanceRequired: true,
       };
@@ -385,7 +385,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'SIMPLEST FIRST',
           message: 'test',
-          trigger: 'feature_development',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['performance_required'],
         },
@@ -397,7 +397,7 @@ describe('ConstraintChecker', () => {
 
     it('should apply exception for reliability_required', async () => {
       const context: ConstraintContext = {
-        operation: 'feature_development',
+        operation: 'code_implementation',
         hasReuseCheck: false,
         reliabilityRequired: true,
       };
@@ -408,7 +408,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'SIMPLEST FIRST',
           message: 'test',
-          trigger: 'feature_development',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['reliability_required'],
         },
@@ -420,7 +420,7 @@ describe('ConstraintChecker', () => {
 
     it('should apply exception for config_value_error', async () => {
       const context: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         hasRootCauseInvestigation: false,
         isConfigValueError: true,
       };
@@ -431,7 +431,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'NO FIX',
           message: 'test',
-          trigger: 'bug_fix_attempt',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['config_value_error'],
         },
@@ -443,7 +443,7 @@ describe('ConstraintChecker', () => {
 
     it('should apply exception for missing_config', async () => {
       const context: ConstraintContext = {
-        operation: 'bug_fix_attempt',
+        operation: 'code_implementation',
         hasRootCauseInvestigation: false,
         isMissingConfig: true,
       };
@@ -454,7 +454,7 @@ describe('ConstraintChecker', () => {
           level: 'guideline',
           rule: 'NO FIX',
           message: 'test',
-          trigger: 'bug_fix_attempt',
+          trigger: 'code_implementation',
           enforcement: 'test',
           exceptions: ['missing_config'],
         },
@@ -774,7 +774,7 @@ describe('ConstraintChecker', () => {
 
     it('findLawsByTrigger should work', () => {
       const { findLawsByTrigger } = require('../core/constraints/definitions');
-      const laws = findLawsByTrigger('task_completion_claim');
+      const laws = findLawsByTrigger('code_implementation');
       expect(Array.isArray(laws)).toBe(true);
     });
 
@@ -800,7 +800,7 @@ describe('ConstraintChecker', () => {
   describe('Helper functions', () => {
     it('should check single constraint via checkConstraint', async () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
         hasTest: true,
       };
 
@@ -810,7 +810,7 @@ describe('ConstraintChecker', () => {
 
     it('should return false for unknown constraint', async () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
       };
 
       const result = await checkConstraint('unknown_constraint', context);

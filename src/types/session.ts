@@ -9,6 +9,7 @@ export interface StartupCheckpoints {
   required: StartupCheckpointType[];
   optional?: StartupCheckpointType[];
   timeout?: number;          // 检查点超时（毫秒）
+  contextFiles?: string[];   // 启动时加载的上下文文件
 }
 
 export type StartupCheckpointType = 

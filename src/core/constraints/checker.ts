@@ -18,7 +18,7 @@ import {
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
 import { getTraceCollector } from '../../monitoring/traces';
-import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
+import { IRON_LAWS, GUIDELINES, TIPS, findConstraintsByTrigger } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
@@ -244,6 +244,22 @@ export class ConstraintChecker {
         // 检查是否有需求文档
         return context.hasRequirement === true;
 
+      case 'must_use_worktree':
+        // 检查是否在 worktree 中执行
+        return context.hasWorktree === true;
+
+      case 'no_fuzzy_completion_claim':
+        // 检查完成声明是否包含模糊词
+        return this.checkNoFuzzyWords(context.completionClaimText || '');
+
+      case 'no_performative_agreement':
+        // 检查是否有表演性同意（主要由 promptInjection 驱动，这里做辅助检查）
+        return this.checkNoPerformativePatterns(context.taskDescription || '');
+
+      case 'two_stage_review_required':
+        // 检查是否完成两阶段审查
+        return context.hasTwoStageReview === true;
+
       // Guidelines
       case 'no_fix_without_root_cause':
         // 检查是否有根本原因调查
@@ -287,6 +303,14 @@ export class ConstraintChecker {
       case 'docs_freshness':
         return await this.checkDocsFreshness(projectPath);
 
+      case 'no_excuse_patterns':
+        // 检查是否使用了借口模式
+        return this.checkNoExcusePatterns(context.completionClaimText || context.taskDescription || '');
+
+      case 'yagni_check':
+        // 检查是否有过度设计（主要由 promptInjection 驱动）
+        return this.checkYagni(projectPath, context.changedFiles);
+
       // Tips - 总是返回 true（仅提示）
       case 'readme_required':
         return true;
@@ -298,6 +322,118 @@ export class ConstraintChecker {
         // 未知约束，默认通过
         return true;
     }
+  }
+
+  /**
+   * 检查文本中是否包含模糊词
+   */
+  private checkNoFuzzyWords(text: string): boolean {
+    if (!text) return true; // 没有文本时默认通过（由其他检查覆盖）
+    const fuzzyPatterns = [
+      /应该没问题/,
+      /应该可以/,
+      /大概/,
+      /可能/,
+      /好像/,
+      /似乎/,
+      /差不多/,
+      /基本完成/,
+      /大部分/,
+    ];
+    return !fuzzyPatterns.some(p => p.test(text));
+  }
+
+  /**
+   * 检查文本中是否包含表演性同意模式
+   */
+  private checkNoPerformativePatterns(text: string): boolean {
+    if (!text) return true;
+    // 检查是否只有"好的/明白了"等同意词，没有后续分析
+    const performativeStart = /^(好的[，,]*\s*我[来去]做|明白了[，,]*|没问题[，,]*|ok[，,]*\s*i.?ll)/i;
+    // 如果以表演性模式开头，且总长度很短（< 50 字符），视为表演性同意
+    if (performativeStart.test(text) && text.length < 100) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 检查文本中是否包含借口模式
+   */
+  private checkNoExcusePatterns(text: string): boolean {
+    if (!text) return true;
+    const excusePatterns = [
+      /稍后修复/,
+      /小问题/,
+      /不影响功能/,
+      /以后再说/,
+      /先这样/,
+      /临时方案/,
+      /暂时这样/,
+    ];
+    return !excusePatterns.some(p => p.test(text));
+  }
+
+  /**
+   * 检查 YAGNI：过度设计信号
+   *
+   * 检查是否存在只有一个实现的 interface/abstract class。
+   * 主要由 promptInjection 驱动，这里是辅助检查。
+   */
+  private async checkYagni(
+    projectPath?: string,
+    changedFiles?: string[]
+  ): Promise<boolean> {
+    // 无上下文时默认通过（主要由 promptInjection 驱动）
+    if (!projectPath || !changedFiles || changedFiles.length === 0) return true;
+
+    try {
+      const path = await import('path');
+      const fs = await import('fs');
+
+      for (const file of changedFiles) {
+        if (!file.endsWith('.ts') && !file.endsWith('.tsx')) continue;
+
+        const filePath = path.join(projectPath, file);
+        if (!fs.existsSync(filePath)) continue;
+
+        const content = fs.readFileSync(filePath, 'utf-8');
+
+        // 检查是否有 export interface/abstract class
+        const hasInterface = /export\s+(?:default\s+)?interface\s+(\w+)/g;
+        const hasAbstract = /export\s+(?:default\s+)?abstract\s+class\s+(\w+)/g;
+
+        const interfaces = [...content.matchAll(hasInterface)].map(m => m[1]);
+        const abstracts = [...content.matchAll(hasAbstract)].map(m => m[1]);
+
+        const exportedTypes = [...interfaces, ...abstracts];
+
+        for (const typeName of exportedTypes) {
+          // 检查同一个 typeName 的 implements/extends 出现次数
+          const implPattern = new RegExp(`(?:implements|extends)\\s+${typeName}\\b`, 'g');
+          // 在整个项目中搜索（简化版：只在 changedFiles 中搜索）
+          let implCount = 0;
+          for (const f of changedFiles) {
+            if (!f.endsWith('.ts') && !f.endsWith('.tsx')) continue;
+            const fp = path.join(projectPath, f);
+            if (!fs.existsSync(fp)) continue;
+            const fc = fs.readFileSync(fp, 'utf-8');
+            const matches = fc.match(implPattern);
+            if (matches) implCount += matches.length;
+          }
+
+          // 只有一个实现者 → YAGNI 违规
+          if (implCount <= 1) {
+            return false;
+          }
+        }
+      }
+    } catch {
+      // 文件读取失败，默认通过
+      return true;
+    }
+
+    return true;
   }
 
   /**
@@ -402,49 +538,60 @@ export class ConstraintChecker {
   }
 
   /**
-   * 检查 capability_sync：检查 CAPABILITIES.md 是否更新
+   * 检查 capability_sync：检查 CAPABILITIES.md 是否与代码同步
+   *
+   * 两步验证：
+   *   1. Git diff 检查 — 当前变更的非测试文件是否在文档中有记录（增量检查）
+   *   2. 全量扫描 — src/ 下的所有源文件是否都在 CAPABILITIES.md 中（完整性检查）
    */
   private async checkCapabilitySync(projectPath: string): Promise<boolean> {
     try {
-      // 检查是否有代码变更
+      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
+      if (!existsSync(capabilitiesPath)) {
+        // 检查是否有代码变更，无变更则跳过
+        const diff = await runCommand('git diff --cached --name-only', projectPath);
+        const changedCodeFiles = diff.split('\n').filter(
+          (f: string) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
+        );
+        return changedCodeFiles.length === 0;
+      }
+
+      const listedFiles = this.parseCapabilitiesFiles(capabilitiesPath);
+
+      // ── Step 1: Git diff 增量检查 ──
       const diff = await runCommand('git diff --cached --name-only', projectPath);
       const changedCodeFiles = diff.split('\n').filter(
         (f: string) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
       );
 
-      if (changedCodeFiles.length === 0) {
-        return true; // 无代码变更
+      if (changedCodeFiles.length > 0 && listedFiles.length > 0) {
+        const significantChanges = changedCodeFiles.filter(
+          (f: string) => !f.includes('__tests__') && !f.includes('.test.') && !f.includes('.spec.')
+        );
+
+        if (significantChanges.length > 0) {
+          const covered = significantChanges.some((changed: string) =>
+            listedFiles.some((listed: string) => changed.endsWith(listed) || changed.includes(listed))
+          );
+          if (!covered) return false;
+        }
       }
 
-      // 检查 CAPABILITIES.md 是否存在
-      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
-      if (!existsSync(capabilitiesPath)) {
-        return false; // 有代码变更但没有 CAPABILITIES.md
+      // ── Step 2: 全量 src/ 扫描（T-058 修复核心）──
+      // 检查是否有 src/ 下的源文件未在 CAPABILITIES.md 中记录
+      if (listedFiles.length > 0) {
+        const srcDir = join(projectPath, 'src');
+        if (existsSync(srcDir)) {
+          const actualFiles = this.findSourceFiles(srcDir, projectPath);
+          for (const file of actualFiles) {
+            if (!listedFiles.includes(file)) {
+              return false; // 有新增文件未在 CAPABILITIES.md 中列出
+            }
+          }
+        }
       }
 
-      // 解析 CAPABILITIES.md 中的文件列表
-      const listedFiles = this.parseCapabilitiesFiles(capabilitiesPath);
-
-      // 无表格内容 → 向后兼容，存在即通过
-      if (listedFiles.length === 0) {
-        return true;
-      }
-
-      // 检查变更的非测试代码文件是否在 CAPABILITIES.md 中有记录
-      const significantChanges = changedCodeFiles.filter(
-        (f: string) => !f.includes('__tests__') && !f.includes('.test.') && !f.includes('.spec.')
-      );
-
-      if (significantChanges.length === 0) {
-        return true; // 只有测试文件变更
-      }
-
-      // 至少有一个变更文件被 CAPABILITIES.md 覆盖
-      const covered = significantChanges.some((changed: string) =>
-        listedFiles.some((listed: string) => changed.endsWith(listed) || changed.includes(listed))
-      );
-
-      return covered;
+      return true;
     } catch {
       return true; // 检查失败，默认通过
     }
@@ -557,9 +704,24 @@ export class ConstraintChecker {
   }
 
   /**
-   * 检查 docs_freshness：CAPABILITIES.md 是否与源码同步
+   * 检查 docs_freshness：CAPABILITIES.md + CLAUDE.md 是否与源码同步
    */
   private async checkDocsFreshness(projectPath: string): Promise<boolean> {
+    // 检查 CAPABILITIES.md
+    const capResult = await this.checkCapabilitiesFreshness(projectPath);
+    if (!capResult) return false;
+
+    // 检查 CLAUDE.md（Domain Packages + Key Architecture Paths）
+    const claudeResult = await this.checkClaudeMdFreshness(projectPath);
+    if (!claudeResult) return false;
+
+    return true;
+  }
+
+  /**
+   * 检查 CAPABILITIES.md 是否与源码同步
+   */
+  private async checkCapabilitiesFreshness(projectPath: string): Promise<boolean> {
     try {
       const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
       const content = readFileSync(capabilitiesPath, 'utf-8');
@@ -591,6 +753,108 @@ export class ConstraintChecker {
       return true;
     } catch {
       return true; // CAPABILITIES.md 不存在或检查失败，跳过
+    }
+  }
+
+  /**
+   * 检查 CLAUDE.md 的 Domain Packages 和 Key Architecture Paths 段落是否与实际代码结构同步
+   */
+  private async checkClaudeMdFreshness(projectPath: string): Promise<boolean> {
+    try {
+      const claudePath = join(projectPath, 'CLAUDE.md');
+      if (!existsSync(claudePath)) return true; // 无 CLAUDE.md，跳过
+
+      const content = readFileSync(claudePath, 'utf-8');
+
+      // 1. 检查 Domain Packages 段落：packages/studio-* 目录是否存在
+      const domainPkgResult = this.checkDomainPackages(projectPath, content);
+      if (!domainPkgResult) return false;
+
+      // 2. 检查 Key Architecture Paths 段落：引用的文件/目录是否存在
+      const archPathsResult = this.checkArchitecturePaths(projectPath, content);
+      if (!archPathsResult) return false;
+
+      return true;
+    } catch {
+      return true; // 检查失败，跳过
+    }
+  }
+
+  /**
+   * 检查 CLAUDE.md Domain Packages 段落中列出的 packages/studio-* 目录是否都存在
+   */
+  private checkDomainPackages(projectPath: string, claudeContent: string): boolean {
+    try {
+      // 提取 Domain Packages 段落内容（到下一个 ## 或 --- 为止）
+      const sectionMatch = claudeContent.match(/## Domain Packages\s*\n([\s\S]*?)(?=\n## |\n---|\n$)/);
+      if (!sectionMatch) return true; // 段落不存在，跳过
+
+      const section = sectionMatch[1];
+
+      // 提取 CLAUDE.md 中 packages/* 的包名
+      const pkgRegex = /packages\/([\w-]+)/g;
+      let match;
+      while ((match = pkgRegex.exec(section)) !== null) {
+        const pkgDir = join(projectPath, 'packages', match[1]);
+        if (!existsSync(pkgDir)) {
+          return false; // CLAUDE.md 引用的包目录不存在
+        }
+      }
+
+      // 反向检查：实际存在的包目录是否都在 CLAUDE.md 中被提及
+      const packagesDir = join(projectPath, 'packages');
+      if (existsSync(packagesDir)) {
+        const entries = readdirSync(packagesDir);
+        for (const entry of entries) {
+          if (entry.startsWith('.') || entry.includes('node_modules')) continue;
+          const entryStat = statSync(join(packagesDir, entry));
+          if (!entryStat.isDirectory()) continue;
+          if (!section.includes(entry)) {
+            return false; // 实际包未在 CLAUDE.md 中记录
+          }
+        }
+      }
+
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+
+  /**
+   * 检查 CLAUDE.md Key Architecture Paths 段落中引用的路径是否存在
+   */
+  private checkArchitecturePaths(projectPath: string, claudeContent: string): boolean {
+    try {
+      // 提取 Key Architecture Paths 段落
+      const sectionMatch = claudeContent.match(/## Key Architecture Paths\s*\n([\s\S]*?)(?=\n## |\n---|\n$)/);
+      if (!sectionMatch) return true; // 段落不存在，跳过
+
+      const section = sectionMatch[1];
+
+      // 从表格中提取路径（第二列，格式 `path/to/file.ts` 或 `path/to/dir/`）
+      const pathRegex = /\|\s*`([^`]+)`\s*\|/g;
+      let match;
+      while ((match = pathRegex.exec(section)) !== null) {
+        const refPath = match[1].trim();
+        // 跳过非路径内容（如命令、URL）
+        if (refPath.startsWith('http') || refPath.startsWith('搜')) continue;
+
+        const fullPath = join(projectPath, refPath);
+        // 检查文件或目录是否存在（也尝试去掉尾部 /）
+        if (!existsSync(fullPath) && !existsSync(fullPath.replace(/\/$/, ''))) {
+          // 路径可能指向模块内部（如 `src/modules/example/`），尝试去掉通配符
+          const basePath = refPath.replace(/\/?\*$/, '');
+          if (!existsSync(join(projectPath, basePath))) {
+            return false; // 引用的路径不存在
+          }
+        }
+      }
+
+      return true;
+    } catch {
+      return true;
     }
   }
 
@@ -779,6 +1043,33 @@ export async function checkConstraints(
  */
 export async function checkBeforeExecution(context: ConstraintContext): Promise<void> {
   return ConstraintChecker.getInstance().beforeExecution(context);
+}
+
+/**
+ * 构建约束注入 prompt
+ *
+ * 收集所有适用约束的 promptInjection 字段，格式化为 Agent system prompt 片段。
+ * 纯计算函数，无副作用，不调用 LLM。
+ *
+ * @param context 约束上下文（至少需要 operation 字段）
+ * @returns 格式化的约束提示文本，可直接注入 Agent system prompt；无匹配约束时返回空字符串
+ */
+export function buildConstraintPrompt(context: ConstraintContext): string {
+  const constraints = findConstraintsByTrigger(context.operation);
+  const injections = constraints
+    .filter(c => c.promptInjection)
+    .map(c => c.promptInjection!);
+
+  if (injections.length === 0) return '';
+
+  const lines: string[] = [
+    '## 行为约束（你必须遵守）',
+    '',
+    ...injections.map((text, i) => `${i + 1}. ${text}`),
+    '',
+  ];
+
+  return lines.join('\n');
 }
 
 // 导出单例

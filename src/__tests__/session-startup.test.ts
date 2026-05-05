@@ -148,9 +148,9 @@ describe('SessionStartup', () => {
 
   describe('read_progress 检查点', () => {
     it('progress.yml 存在应该解析', async () => {
-      const agentDir = path.join(tempDir, '.agent');
-      fs.mkdirSync(agentDir, { recursive: true });
-      const progressPath = path.join(agentDir, 'progress.yml');
+      const harnessDir = path.join(tempDir, '.harness');
+      fs.mkdirSync(harnessDir, { recursive: true });
+      const progressPath = path.join(harnessDir, 'progress.yml');
       fs.writeFileSync(progressPath, yaml.dump({ step: 3, total: 10 }));
 
       const startup = new SessionStartup(tempDir, { required: ['read_progress'], optional: [] });
@@ -159,7 +159,7 @@ describe('SessionStartup', () => {
       expect(result.results[0].data).toEqual({ step: 3, total: 10 });
 
       fs.unlinkSync(progressPath);
-      fs.rmdirSync(agentDir);
+      fs.rmdirSync(harnessDir);
     });
 
     it('无 progress.yml 应该返回 null', async () => {
@@ -225,7 +225,7 @@ describe('SessionStartup', () => {
       fs.writeFileSync(path.join(ctxDir, 'AGENTS.md'), '# Agents');
       fs.writeFileSync(path.join(ctxDir, 'USER.md'), '# User');
 
-      const startup = new SessionStartup(ctxDir, { required: ['load_context'], optional: [] });
+      const startup = new SessionStartup(ctxDir, { required: ['load_context'], optional: [], contextFiles: ['AGENTS.md', 'USER.md'] });
       const result = await startup.run();
       expect(result.results[0].success).toBe(true);
       expect(result.results[0].data['AGENTS.md']).toBe('# Agents');

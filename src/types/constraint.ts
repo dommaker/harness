@@ -20,36 +20,34 @@ export type ConstraintLevel = 'iron_law' | 'guideline' | 'tip';
 /**
  * 约束触发条件
  */
-export type ConstraintTrigger =
-  | 'bug_fix_attempt'
-  | 'task_completion_claim'
-  | 'feature_completion_claim'  // 🆕 功能完成声明（Long-Running）
-  | 'implementation_complete'  // 实现完成触发
-  | 'skill_creation'
-  | 'code_implementation'
-  | 'test_creation'
-  | 'workflow_execution'
-  | 'step_execution'
-  | 'step_creation'
-  | 'tool_creation'
-  | 'workflow_creation'
-  | 'module_creation'
-  | 'module_modification'
-  | 'module_deletion'
-  | 'module_extension'
-  | 'feature_development'
-  | 'api_change'
-  | 'export_change'
-  | 'file_creation'
-  | 'file_modification'
-  | 'file_deletion'
-  | 'commit'
-  | 'push'
-  | 'merge'
-  | 'design_request'
-  | 'architecture_change'
-  | 'external_api_design'  // 🆕 Iron Law #6: 外部 API 设计
-  | 'meeting_decision_check';  // 🆕 会议决策质量检查
+/**
+ * 约束触发器（开放扩展）
+ *
+ * 从硬编码 union type 改为 string，consumer 可传入任意 trigger。
+ * 无需修改 harness 即可添加领域特定 trigger。
+ *
+ * 以下为推荐的抽象 trigger 常量。领域概念（如 deploy、
+ * config_update 等）由 consumer 自行管理。
+ */
+
+export const CODE_IMPLEMENTATION = 'code_implementation' as const;
+export const FILE_MODIFICATION = 'file_modification' as const;
+export const FILE_CREATION = 'file_creation' as const;
+export const FILE_DELETION = 'file_deletion' as const;
+export const MODULE_CREATION = 'module_creation' as const;
+export const MODULE_MODIFICATION = 'module_modification' as const;
+export const MODULE_DELETION = 'module_deletion' as const;
+export const MODULE_EXTENSION = 'module_extension' as const;
+export const API_CHANGE = 'api_change' as const;
+export const EXPORT_CHANGE = 'export_change' as const;
+export const TEST_CREATION = 'test_creation' as const;
+export const COMMIT = 'commit' as const;
+export const PUSH = 'push' as const;
+export const MERGE = 'merge' as const;
+export const DESIGN_REQUEST = 'design_request' as const;
+export const ARCHITECTURE_CHANGE = 'architecture_change' as const;
+
+export type ConstraintTrigger = string;
 
 /**
  * 约束定义

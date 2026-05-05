@@ -436,7 +436,7 @@ export class PassesGate {
    * 生成测试证据
    */
   private async generateEvidence(workDir: string, output: string): Promise<string> {
-    const evidenceDir = path.join(workDir, '.agent', 'evidence');
+    const evidenceDir = path.join(workDir, '.harness', 'evidence');
     await fs.mkdir(evidenceDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

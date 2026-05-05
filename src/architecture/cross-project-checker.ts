@@ -43,20 +43,68 @@ export interface CrossProjectConfig {
   dependencies: Record<string, string[]>;
   /** 接口契约定义位置：pair name -> 文件路径列表 */
   contractLocations: Record<string, string[]>;
+  /** 依赖过滤函数：筛选哪些包参与契约检查。默认不过滤（全部参与） */
+  dependencyFilter?: (depName: string) => boolean;
+}
+
+/**
+ * 默认配置：从 monorepo 结构自动推断依赖关系
+ */
+function getDefaultConfig(): CrossProjectConfig {
+  const fs = require('fs');
+  const path = require('path');
+  const cwd = process.cwd();
+
+  // 扫描 packages/ 和 apps/ 下的 package.json 获取包名
+  const dependencies: Record<string, string[]> = {};
+  const contractLocations: Record<string, string[]> = {};
+
+  for (const dir of ['packages', 'apps']) {
+    const dirPath = path.join(cwd, dir);
+    if (!fs.existsSync(dirPath)) continue;
+
+    for (const entry of fs.readdirSync(dirPath)) {
+      const pkgJsonPath = path.join(dirPath, entry, 'package.json');
+      if (!fs.existsSync(pkgJsonPath)) continue;
+
+      try {
+        const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+        const name = pkgJson.name || entry;
+        const deps = Object.keys({
+          ...pkgJson.dependencies,
+          ...pkgJson.peerDependencies,
+        });
+        // 默认不过滤，全部参与检查。调用方可通过 CrossProjectConfig.dependencyFilter 按需筛选
+
+
+        dependencies[name] = deps;
+
+        // 约定：src/api/ 或 src/index.ts 为接口契约位置
+        const srcDir = path.join(dirPath, entry, 'src');
+        if (fs.existsSync(srcDir)) {
+          contractLocations[name] = [path.join(dir, entry, 'src')];
+        }
+      } catch {
+        // package.json 解析失败，跳过
+      }
+    }
+  }
+
+  return { dependencies, contractLocations };
 }
 
 /**
  * 检查跨工程接口一致性
  *
  * @param context 跨工程上下文
- * @param config 工程依赖关系和契约位置配置
+ * @param config 工程依赖关系和契约位置配置（可选，默认从 monorepo 自动推断）
  */
 export async function checkCrossProjectContracts(
   context: CrossProjectContext,
-  config: CrossProjectConfig
+  config?: CrossProjectConfig
 ): Promise<CrossProjectViolation[]> {
   const violations: CrossProjectViolation[] = [];
-  const cfg = config;
+  const cfg = config || getDefaultConfig();
 
   // 1. 检查 API 变更是否同步到调用方
   violations.push(...await checkApiSync(context, cfg));
@@ -243,8 +291,10 @@ export async function checkDocCodeConsistency(
 
 async function getApiChanges(project: string, baseBranch: string): Promise<ApiChange[]> {
   try {
+    const projectPath = resolveProjectPath(project);
+
     const output = await runCommand(
-      `git diff ${baseBranch}...HEAD --name-only -- "projects/${project}/src/api/**/*"`
+      `git diff ${baseBranch}...HEAD --name-only -- "${projectPath}/src/"`
     );
 
     const files = output.trim().split('\n').filter(f => f);
@@ -336,7 +386,8 @@ async function detectChangeType(file: string, baseBranch: string): Promise<ApiCh
 }
 
 function extractExportedTypes(project: string): string[] {
-  const srcDir = path.join('projects', project, 'src');
+  const projectPath = resolveProjectPath(project);
+  const srcDir = path.join(projectPath, 'src');
   const files = findTsFiles(srcDir);
   const types = new Set<string>();
 
@@ -357,7 +408,8 @@ function extractExportedTypes(project: string): string[] {
 }
 
 function extractTypeUsage(project: string, types: string[]): Record<string, { hasMismatch: boolean; expected?: string; actual?: string }> {
-  const srcDir = path.join('projects', project, 'src');
+  const projectPath = resolveProjectPath(project);
+  const srcDir = path.join(projectPath, 'src');
   const files = findTsFiles(srcDir);
   const result: Record<string, { hasMismatch: boolean; expected?: string; actual?: string }> = {};
 
@@ -433,7 +485,8 @@ function parseDocInterfaces(docPath: string): Record<string, Array<{name: string
 }
 
 function extractExportedApis(project: string): Array<{name: string, signature: string}> {
-  const srcDir = path.join('projects', project, 'src');
+  const projectPath = resolveProjectPath(project);
+  const srcDir = path.join(projectPath, 'src');
   const files = findTsFiles(srcDir);
   const apis: Array<{name: string, signature: string}> = [];
   const seen = new Set<string>();
@@ -483,4 +536,28 @@ function extractExportedApis(project: string): Array<{name: string, signature: s
 
 function isCompatible(doc: any, actual: any): boolean {
   return JSON.stringify(doc.signature) === JSON.stringify(actual.signature);
+}
+
+/**
+ * 解析项目在 monorepo 中的实际路径
+ * 支持 packages/xxx、apps/xxx、projects/xxx 三种常见结构
+ * 按优先级返回第一个存在的路径；都不存在时返回第一个候选（git 命令会优雅处理）
+ */
+function resolveProjectPath(project: string): string {
+  // 包名可能是 @scope/name 格式，取最后部分作为目录名
+  const dirName = project.includes('/') ? project.split('/').pop()! : project;
+
+  const candidates = [
+    path.join('packages', dirName),
+    path.join('apps', dirName),
+    path.join('projects', dirName),
+    path.join('packages', project),  // 完整包名
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  // 都不存在时返回第一个候选（git 命令对不存在路径返回空，不会报错）
+  return candidates[0];
 }

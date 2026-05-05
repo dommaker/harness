@@ -116,7 +116,7 @@ describe('ConstraintLifecycleRunner', () => {
       const proposal = makeProposal({
         constraintId: 'no_fix_without_root_cause',
         type: 'adjust_trigger',
-        content: { proposed: ['bug_fix_attempt', 'code_implementation'], description: '扩展触发' },
+        content: { proposed: ['code_implementation', 'code_implementation'], description: '扩展触发' },
       });
 
       const result = runner.execute(proposal);
@@ -125,7 +125,7 @@ describe('ConstraintLifecycleRunner', () => {
       expect(result.action).toBe('adjust_trigger');
 
       const constraint = registry.get('no_fix_without_root_cause');
-      expect(constraint?.trigger).toEqual(['bug_fix_attempt', 'code_implementation']);
+      expect(constraint?.trigger).toEqual(['code_implementation', 'code_implementation']);
     });
   });
 

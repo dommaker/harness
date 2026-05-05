@@ -35,7 +35,7 @@ describe('TraceCollector', () => {
       level: 'iron_law',
       timestamp: Date.now(),
       result: 'fail',
-      operation: 'bug_fix_attempt',
+      operation: 'code_implementation',
       severity: 'error',
     });
 

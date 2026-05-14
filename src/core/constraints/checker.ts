@@ -1005,6 +1005,55 @@ export class ConstraintChecker {
   }
 
   /**
+   * S11: 安全全量检查 — 全部三层约束检查，不抛异常
+   *
+   * 区别 checkConstraints(): Iron Law 违规收集在结果中而不是抛异常。
+   * 调用方通过 result.passed + result.warningCount 判断状态。
+   */
+  async checkConstraintsSafe(
+    context: ConstraintContext,
+    customConfig?: MergedConstraintsConfig | null
+  ): Promise<ConstraintCheckResult> {
+    const result: ConstraintCheckResult = {
+      ironLaws: [],
+      guidelines: [],
+      tips: [],
+      passed: true,
+      warningCount: 0,
+      tipCount: 0,
+    };
+
+    const traceCollector = getTraceCollector();
+    const constraints = this.getConstraints(customConfig);
+
+    for (const constraint of Object.values(constraints.ironLaws)) {
+      if (!this.matchesTrigger(constraint, context.operation)) continue;
+      const checkResult = await this.check(constraint, context);
+      result.ironLaws.push(checkResult);
+      this.recordTrace(traceCollector, constraint, checkResult, context);
+      if (!checkResult.satisfied) result.passed = false;
+    }
+
+    for (const constraint of Object.values(constraints.guidelines)) {
+      if (!this.matchesTrigger(constraint, context.operation)) continue;
+      const checkResult = await this.check(constraint, context);
+      result.guidelines.push(checkResult);
+      this.recordTrace(traceCollector, constraint, checkResult, context);
+      if (!checkResult.satisfied) result.warningCount++;
+    }
+
+    for (const constraint of Object.values(constraints.tips)) {
+      if (!this.matchesTrigger(constraint, context.operation)) continue;
+      const checkResult = await this.check(constraint, context);
+      result.tips.push(checkResult);
+      this.recordTrace(traceCollector, constraint, checkResult, context);
+      if (!checkResult.satisfied) result.tipCount++;
+    }
+
+    return result;
+  }
+
+  /**
    * 执行前检查（仅检查 Iron Laws）
    *
    * @param context 约束上下文
@@ -1072,6 +1121,16 @@ export async function checkConstraints(
   customConfig?: MergedConstraintsConfig | null
 ): Promise<ConstraintCheckResult> {
   return ConstraintChecker.getInstance().checkConstraints(context, customConfig);
+}
+
+/**
+ * S11: 快捷函数 — 安全全量检查（不抛异常）
+ */
+export async function checkConstraintsSafe(
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
+): Promise<ConstraintCheckResult> {
+  return ConstraintChecker.getInstance().checkConstraintsSafe(context, customConfig);
 }
 
 /**

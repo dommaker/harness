@@ -25,6 +25,7 @@ import { runCommand } from '../../utils/exec';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import * as yaml from 'js-yaml';
+import { CheckCache } from './check-cache';
 
 /**
  * 例外名称 → ConstraintContext 中布尔字段的映射
@@ -64,6 +65,9 @@ export class ConstraintChecker {
 
   /** 自定义约束配置（项目级） */
   private customConfig: MergedConstraintsConfig | null = null;
+
+  /** 检查结果缓存（S7：减少重复 git diff / src scan I/O，TTL=1s 防跨测试污染） */
+  private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
   private constructor() {}
 
@@ -588,7 +592,10 @@ export class ConstraintChecker {
       if (listedFiles.length > 0) {
         const srcDir = join(projectPath, 'src');
         if (existsSync(srcDir)) {
-          const actualFiles = this.findSourceFiles(srcDir, projectPath);
+          // S7: 缓存 src/ 递归扫描结果
+          const actualFiles = this.cache.getSync('src_scan', projectPath, () =>
+            this.findSourceFiles(srcDir, projectPath)
+          );
           for (const file of actualFiles) {
             if (!listedFiles.includes(file)) {
               return false; // 有新增文件未在 CAPABILITIES.md 中列出
@@ -745,9 +752,11 @@ export class ConstraintChecker {
         return true;
       }
 
-      // 扫描 src/ 目录中的实际文件
+      // 扫描 src/ 目录中的实际文件（S7: 缓存）
       const srcDir = join(projectPath, 'src');
-      const actualFiles = this.findSourceFiles(srcDir, projectPath);
+      const actualFiles = this.cache.getSync('src_scan', projectPath, () =>
+        this.findSourceFiles(srcDir, projectPath)
+      );
 
       // 检查是否有新增文件未列出
       for (const file of actualFiles) {

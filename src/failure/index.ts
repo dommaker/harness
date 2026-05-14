@@ -23,3 +23,13 @@ export {
   createFailureRecorder,
   type FailureRecorderConfig,
 } from './recorder';
+
+// 约束违规处理（S4：统一处理策略）
+export {
+  ConstraintViolationHandler,
+  executeWithBlock,
+  executeWithCollect,
+  executeWithSafeBoolean,
+  type ViolationStrategy,
+  type ViolationHandlingResult,
+} from './constraint-handler';

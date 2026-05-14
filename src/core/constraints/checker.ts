@@ -79,6 +79,9 @@ export class ConstraintChecker {
 
   /**
    * 设置项目级约束配置
+   *
+   * @deprecated 修改单例状态，多项目并发时存在污染风险。
+   * 请改用 checkConstraints() / beforeExecution() 的 customConfig 参数实现 per-request 隔离。
    */
   setCustomConfig(config: MergedConstraintsConfig): void {
     this.customConfig = config;
@@ -86,17 +89,20 @@ export class ConstraintChecker {
 
   /**
    * 获取当前的约束集合（内置 + 自定义）
+   *
+   * @param customConfig 可选，per-request 自定义配置（优先级高于 setCustomConfig 的单例状态）
    */
-  getConstraints(): {
+  getConstraints(customConfig?: MergedConstraintsConfig | null): {
     ironLaws: Record<string, Constraint>;
     guidelines: Record<string, Constraint>;
     tips: Record<string, Constraint>;
   } {
-    if (this.customConfig) {
+    const config = customConfig ?? this.customConfig;
+    if (config) {
       return {
-        ironLaws: this.customConfig.ironLaws,
-        guidelines: this.customConfig.guidelines,
-        tips: this.customConfig.tips,
+        ironLaws: config.ironLaws,
+        guidelines: config.guidelines,
+        tips: config.tips,
       };
     }
     return {
@@ -889,14 +895,20 @@ export class ConstraintChecker {
 
   /**
    * 查找适用于当前操作的约束
+   *
+   * @param context 约束上下文
+   * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
    */
-  findApplicableConstraints(context: ConstraintContext): {
+  findApplicableConstraints(
+    context: ConstraintContext,
+    customConfig?: MergedConstraintsConfig | null
+  ): {
     ironLaws: Constraint[];
     guidelines: Constraint[];
     tips: Constraint[];
   } {
     const trigger = context.operation;
-    const constraints = this.getConstraints();
+    const constraints = this.getConstraints(customConfig);
 
     const filterByTrigger = (constraintSet: Record<string, Constraint>): Constraint[] => {
       return Object.values(constraintSet).filter(constraint => {
@@ -916,12 +928,18 @@ export class ConstraintChecker {
 
   /**
    * 执行三层约束检查
-   * 
+   *
    * - Iron Laws：检查失败立即抛出异常
    * - Guidelines：检查失败记录警告
    * - Tips：检查失败记录提示
+   *
+   * @param context 约束上下文
+   * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
    */
-  async checkConstraints(context: ConstraintContext): Promise<ConstraintCheckResult> {
+  async checkConstraints(
+    context: ConstraintContext,
+    customConfig?: MergedConstraintsConfig | null
+  ): Promise<ConstraintCheckResult> {
     const result: ConstraintCheckResult = {
       ironLaws: [],
       guidelines: [],
@@ -932,7 +950,7 @@ export class ConstraintChecker {
     };
 
     const traceCollector = getTraceCollector();
-    const constraints = this.getConstraints();
+    const constraints = this.getConstraints(customConfig);
 
     // 1. Iron Laws: 必须全部通过
     for (const constraint of Object.values(constraints.ironLaws)) {
@@ -979,11 +997,16 @@ export class ConstraintChecker {
 
   /**
    * 执行前检查（仅检查 Iron Laws）
-   * 
+   *
+   * @param context 约束上下文
+   * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
    * @throws ConstraintViolationError 如果有铁律违规
    */
-  async beforeExecution(context: ConstraintContext): Promise<void> {
-    const constraints = this.getConstraints();
+  async beforeExecution(
+    context: ConstraintContext,
+    customConfig?: MergedConstraintsConfig | null
+  ): Promise<void> {
+    const constraints = this.getConstraints(customConfig);
     const operations = normalizeTriggers(context.operation);
 
     for (const constraint of Object.values(constraints.ironLaws)) {
@@ -1031,18 +1054,28 @@ export async function checkConstraint(
 
 /**
  * 快捷函数：执行三层检查
+ *
+ * @param context 约束上下文
+ * @param customConfig 可选，per-request 自定义配置
  */
 export async function checkConstraints(
-  context: ConstraintContext
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
 ): Promise<ConstraintCheckResult> {
-  return ConstraintChecker.getInstance().checkConstraints(context);
+  return ConstraintChecker.getInstance().checkConstraints(context, customConfig);
 }
 
 /**
  * 快捷函数：执行前检查
+ *
+ * @param context 约束上下文
+ * @param customConfig 可选，per-request 自定义配置
  */
-export async function checkBeforeExecution(context: ConstraintContext): Promise<void> {
-  return ConstraintChecker.getInstance().beforeExecution(context);
+export async function checkBeforeExecution(
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
+): Promise<void> {
+  return ConstraintChecker.getInstance().beforeExecution(context, customConfig);
 }
 
 /**

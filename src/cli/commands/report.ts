@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { executeWithCollect } from '../../failure/constraint-handler';
 import type { ConstraintContext } from '../../types/constraint';
 
 export interface ReportOptions {
@@ -55,13 +56,12 @@ export async function report(options: ReportOptions): Promise<void> {
     projectPath,
   };
 
-  let result;
-  try {
-    result = await checker.checkConstraints(context);
-  } catch {
-    // Iron Law violations throw ConstraintViolationError — catch and build report from partial data
-    result = { passed: false, ironLaws: [], guidelines: [], tips: [] };
-  }
+  // S4: 使用 COLLECT 策略 — Iron Law 违规不抛异常，收集到结果中
+  const { checkResult } = await executeWithCollect(() =>
+    checker.checkConstraints(context)
+  );
+  // COLLECT 策略始终返回 checkResult
+  const result = checkResult!;
 
   const failedIronLaws = result.ironLaws.filter(r => !r.satisfied);
   const failedGuidelines = result.guidelines.filter(r => !r.satisfied);

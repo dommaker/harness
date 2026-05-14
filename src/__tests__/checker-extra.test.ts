@@ -1359,6 +1359,162 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.rmSync(projDir, { recursive: true, force: true });
     });
 
+  // S1: per-request customConfig 隔离
+  describe('S1: per-request customConfig isolation', () => {
+    it('使用 per-request customConfig 不应污染单例状态', () => {
+      const checker = ConstraintChecker.getInstance();
+
+      // 记录原始状态
+      const defaultConstraints = checker.getConstraints();
+      const defaultIronLawKeys = Object.keys(defaultConstraints.ironLaws);
+
+      // 创建自定义配置（只有 1 个 iron law）
+      const customConfig = {
+        ironLaws: {
+          test_only: {
+            id: 'test_only',
+            level: 'iron_law' as const,
+            rule: 'TEST',
+            message: 'test',
+            trigger: 'file_modification',
+            enforcement: 'test',
+          },
+        },
+        guidelines: {},
+        tips: {},
+        disabled: [] as string[],
+        custom: [] as string[],
+      };
+
+      // 用 per-request 参数获取约束
+      const requestConstraints = checker.getConstraints(customConfig);
+      expect(Object.keys(requestConstraints.ironLaws)).toEqual(['test_only']);
+
+      // 单例状态应保持不变
+      const afterConstraints = checker.getConstraints();
+      expect(Object.keys(afterConstraints.ironLaws)).toEqual(defaultIronLawKeys);
+
+      // 用 null 也应该使用默认
+      const nullConfigConstraints = checker.getConstraints(null);
+      expect(Object.keys(nullConfigConstraints.ironLaws)).toEqual(defaultIronLawKeys);
+    });
+
+    it('并发场景：两个请求使用不同 customConfig 不应互相干扰', async () => {
+      const checker = ConstraintChecker.getInstance();
+
+      const configA = {
+        ironLaws: {
+          rule_a: {
+            id: 'rule_a',
+            level: 'iron_law' as const,
+            rule: 'A',
+            message: 'project A',
+            trigger: 'file_modification',
+            enforcement: 'test',
+          },
+        },
+        guidelines: {},
+        tips: {},
+        disabled: [] as string[],
+        custom: [] as string[],
+      };
+
+      const configB = {
+        ironLaws: {
+          rule_b: {
+            id: 'rule_b',
+            level: 'iron_law' as const,
+            rule: 'B',
+            message: 'project B',
+            trigger: 'file_modification',
+            enforcement: 'test',
+          },
+        },
+        guidelines: {},
+        tips: {},
+        disabled: [] as string[],
+        custom: [] as string[],
+      };
+
+      const context: ConstraintContext = {
+        operation: 'file_modification',
+        projectPath: process.cwd(),
+        hasTest: true,
+        hasVerificationEvidence: true,
+        hasSingleTask: true,
+        hasExternalCapabilityVerification: true,
+        hasRequirementReview: true,
+        hasRequirement: true,
+        hasWorktree: true,
+        hasTwoStageReview: true,
+      };
+
+      // 并发运行 A 和 B
+      const [resultA, resultB] = await Promise.all([
+        checker.checkConstraints(context, configA),
+        checker.checkConstraints(context, configB),
+      ]);
+
+      // A 应该只检查 rule_a
+      const ironLawIdsA = resultA.ironLaws.map(r => r.id);
+      expect(ironLawIdsA).toContain('rule_a');
+      expect(ironLawIdsA).not.toContain('rule_b');
+
+      // B 应该只检查 rule_b
+      const ironLawIdsB = resultB.ironLaws.map(r => r.id);
+      expect(ironLawIdsB).toContain('rule_b');
+      expect(ironLawIdsB).not.toContain('rule_a');
+    });
+
+    it('setCustomConfig 仍可用于兼容（但应标记 deprecated）', () => {
+      const checker = ConstraintChecker.getInstance();
+      const defaultConstraints = checker.getConstraints();
+      const defaultKeys = Object.keys(defaultConstraints.ironLaws);
+
+      const customConfig = {
+        ironLaws: { compat_test: { id: 'compat_test', level: 'iron_law' as const, rule: 'C', message: 'compat', trigger: 'file_modification', enforcement: 'test' } },
+        guidelines: {},
+        tips: {},
+        disabled: [] as string[],
+        custom: [] as string[],
+      };
+
+      checker.setCustomConfig(customConfig);
+      const modified = checker.getConstraints();
+      expect(Object.keys(modified.ironLaws)).toEqual(['compat_test']);
+
+      // 恢复默认
+      checker.setCustomConfig(null as any);
+      const restored = checker.getConstraints();
+      expect(Object.keys(restored.ironLaws)).toEqual(defaultKeys);
+    });
+
+    it('findApplicableConstraints 应接受 per-request config', () => {
+      const checker = ConstraintChecker.getInstance();
+
+      const customConfig = {
+        ironLaws: {
+          custom_rule: {
+            id: 'custom_rule',
+            level: 'iron_law' as const,
+            rule: 'CUSTOM',
+            message: 'custom',
+            trigger: 'file_modification',
+            enforcement: 'test',
+          },
+        },
+        guidelines: {},
+        tips: {},
+        disabled: [] as string[],
+        custom: [] as string[],
+      };
+
+      const context: ConstraintContext = { operation: 'file_modification' };
+      const applicable = checker.findApplicableConstraints(context, customConfig);
+      expect(applicable.ironLaws.map(c => c.id)).toEqual(['custom_rule']);
+    });
+  });
+
     it('step_execution 触发应该生效', async () => {
       const projDir = path.join(tempDir, 'claude-trigger');
       fs.mkdirSync(projDir, { recursive: true });

@@ -56,10 +56,78 @@ export class SessionManager {
   }
 
   /**
-   * 追加事件到会话
+   * 从磁盘加载已持久化的会话（S2）
+   *
+   * 跨实例恢复：当新的 SessionManager 实例创建时，内存中 sessions Map 为空，
+   * 但磁盘上可能有之前持久化的事件。此方法从 events.jsonl 重建 SessionHandle。
+   *
+   * @returns 加载成功返回 SessionHandle，磁盘无数据返回 undefined
+   */
+  loadSession(id: string): SessionHandle | undefined {
+    // 先检查内存
+    const cached = this.sessions.get(id);
+    if (cached) return cached;
+
+    // 从磁盘恢复
+    const eventsPath = path.join(this.getSessionDir(id), 'events.jsonl');
+    try {
+      if (!fs.existsSync(eventsPath)) return undefined;
+
+      const content = fs.readFileSync(eventsPath, 'utf-8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      if (lines.length === 0) return undefined;
+
+      const events: SessionEvent[] = [];
+      for (const line of lines) {
+        try {
+          events.push(JSON.parse(line) as SessionEvent);
+        } catch {
+          // 跳过损坏行
+        }
+      }
+
+      const stat = fs.statSync(eventsPath);
+      const handle: SessionHandle = {
+        id,
+        events,
+        createdAt: stat.birthtime.toISOString(),
+        lastActiveAt: stat.mtime.toISOString(),
+      };
+
+      this.sessions.set(id, handle);
+      return handle;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * 获取会话（自动从磁盘加载，S2）
+   *
+   * 先查内存缓存，未命中则从磁盘恢复。
+   */
+  getSession(id: string): SessionHandle | undefined {
+    return this.sessions.get(id) ?? this.loadSession(id);
+  }
+
+  /**
+   * 获取会话摘要信息（S2）
+   *
+   * 跨实例安全的查询接口。返回轻量级摘要，不加载完整事件列表。
+   */
+  getSessionInfo(id: string): SessionHandle {
+    const handle = this.getSession(id);
+    if (!handle) {
+      throw new Error(`会话 ${id} 不存在`);
+    }
+    return handle;
+  }
+
+  /**
+   * 追加事件到会话（自动从磁盘加载，S2）
    */
   appendToSession(id: string, event: SessionEvent): void {
-    const handle = this.sessions.get(id);
+    const handle = this.getSession(id);
     if (!handle) {
       throw new Error(`会话 ${id} 不存在`);
     }
@@ -72,12 +140,12 @@ export class SessionManager {
   }
 
   /**
-   * 获取当前轮窗口视图
+   * 获取当前轮窗口视图（自动从磁盘加载，S2）
    *
    * 将 session 事件转换为 ContextSource，通过 TokenPipeline 生成 prompt
    */
   getWindowView(id: string, budget: TokenBudgetAllocation): PipelineOutput {
-    const handle = this.sessions.get(id);
+    const handle = this.getSession(id);
     if (!handle) {
       throw new Error(`会话 ${id} 不存在`);
     }
@@ -95,10 +163,10 @@ export class SessionManager {
   }
 
   /**
-   * 生成 checkpoint
+   * 生成 checkpoint（自动从磁盘加载，S2）
    */
   checkpointSession(id: string): SessionCheckpoint {
-    const handle = this.sessions.get(id);
+    const handle = this.getSession(id);
     if (!handle) {
       throw new Error(`会话 ${id} 不存在`);
     }
@@ -165,13 +233,6 @@ export class SessionManager {
     }
 
     throw new Error(`Checkpoint ${checkpointId} 不存在`);
-  }
-
-  /**
-   * 获取会话信息
-   */
-  getSession(id: string): SessionHandle | undefined {
-    return this.sessions.get(id);
   }
 
   /**

@@ -4,7 +4,9 @@
  * 预设定义哪些约束被启用
  */
 
-import type { ConstraintLevel } from '../types/constraint';
+import type { ConstraintLevel, Constraint } from '../types/constraint';
+import type { MergedConstraintsConfig } from '../types/project-config';
+import { IRON_LAWS, GUIDELINES, TIPS } from '../core/constraints/definitions';
 
 /**
  * 预设配置
@@ -12,15 +14,68 @@ import type { ConstraintLevel } from '../types/constraint';
 export interface PresetConfig {
   /** 预设名称 */
   name: string;
-  
+
   /** 启用的铁律 ID 列表（null 表示全部启用） */
   ironLaws: string[] | null;
-  
+
   /** 启用的指导原则 ID 列表（null 表示全部启用） */
   guidelines: string[] | null;
-  
+
   /** 启用的提示 ID 列表（null 表示全部启用） */
   tips: string[] | null;
+}
+
+/**
+ * 应用预设，生成 MergedConstraintsConfig（S12）
+ *
+ * 将 PresetConfig 转换为 ConstraintChecker.checkConstraints() 所需的 customConfig。
+ * 支持 per-request 预设切换，不再局限于 CLI。
+ *
+ * @param preset 预设名称（'strict' | 'standard' | 'relaxed'）或 PresetConfig 对象
+ * @returns 可直接传入 checkConstraints() 的 merged config
+ *
+ * 用法：
+ * ```typescript
+ * const config = applyPreset('relaxed');
+ * await checker.checkConstraints(ctx, config);
+ * ```
+ */
+export function applyPreset(
+  preset: string | PresetConfig
+): MergedConstraintsConfig {
+  const cfg = typeof preset === 'string' ? getPreset(preset) : preset;
+
+  const filterByIds = (
+    source: Record<string, Constraint>,
+    ids: string[] | null,
+  ): Record<string, Constraint> => {
+    if (ids === null) return { ...source };
+    const filtered: Record<string, Constraint> = {};
+    for (const id of ids) {
+      if (source[id]) filtered[id] = source[id];
+    }
+    return filtered;
+  };
+
+  const disabled: string[] = [];
+  if (cfg.ironLaws !== null) {
+    for (const id of Object.keys(IRON_LAWS)) {
+      if (!cfg.ironLaws.includes(id)) disabled.push(id);
+    }
+  }
+  if (cfg.guidelines !== null) {
+    for (const id of Object.keys(GUIDELINES)) {
+      if (!cfg.guidelines.includes(id)) disabled.push(id);
+    }
+  }
+
+  return {
+    ironLaws: filterByIds(IRON_LAWS, cfg.ironLaws),
+    guidelines: filterByIds(GUIDELINES, cfg.guidelines),
+    tips: filterByIds(TIPS, cfg.tips),
+    disabled,
+    custom: [],
+  };
 }
 
 /**
@@ -87,7 +142,6 @@ export function getPreset(name: string): PresetConfig {
 // ========================================
 
 import type { IronLawConfig } from '../types/iron-law';
-import { IRON_LAWS } from '../core/constraints/definitions';
 
 /**
  * @deprecated 使用 PresetConfig 代替

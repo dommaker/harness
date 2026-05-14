@@ -7,6 +7,7 @@ export {
   STANDARD_PRESET,
   RELAXED_PRESET,
   getPreset,
+  applyPreset,
   // 向后兼容
   STANDARD_IRON_LAWS_CONFIG,
   getIronLawPreset,

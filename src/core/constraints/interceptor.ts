@@ -22,6 +22,7 @@ import { constraintChecker } from './checker';
 export class ConstraintInterceptor {
   private static instance: ConstraintInterceptor;
   private executors: Map<EnforcementId, EnforcementExecutor> = new Map();
+  private executorSources: Map<EnforcementId, string> = new Map();
   private enabled: boolean = true;
   private skipEnforcements: Set<EnforcementId> = new Set();
 
@@ -44,6 +45,7 @@ export class ConstraintInterceptor {
     source?: string
   ): void {
     this.executors.set(enforcementId, executor);
+    if (source) this.executorSources.set(enforcementId, source);
   }
 
   registerBatch(
@@ -74,7 +76,7 @@ export class ConstraintInterceptor {
       id,
       executor,
       registeredAt: new Date(),
-      source: undefined,
+      source: this.executorSources.get(id),
     }));
   }
 
@@ -133,7 +135,22 @@ export class ConstraintInterceptor {
 
       const executor = this.executors.get(enforcementId);
       if (!executor) {
-        result.constraints.push({ constraint, skipped: true, skipReason: `no executor for '${enforcementId}'` });
+        // Fallback: no registered executor → delegate to ConstraintChecker
+        const checkResult = await constraintChecker.check(constraint, context);
+        result.constraints.push({ constraint, enforcementResult: { passed: checkResult.satisfied, message: checkResult.message } });
+        if (!checkResult.satisfied) {
+          if (constraint.level === 'iron_law') {
+            result.passed = false;
+            result.violations.push(constraint);
+            throw new ConstraintViolationError({
+              id: constraint.id, level: constraint.level, satisfied: false,
+              constraint, message: constraint.message, requiredAction: constraint.enforcement, checkedAt: new Date(),
+            });
+          }
+          if (constraint.level === 'guideline') {
+            result.violations.push(constraint);
+          }
+        }
         continue;
       }
 

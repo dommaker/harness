@@ -11,6 +11,7 @@ import type { EnforcementExecutor, EnforcementResult } from '../../../types/enfo
 jest.mock('../checker', () => ({
   constraintChecker: {
     getConstraints: jest.fn(),
+    check: jest.fn().mockResolvedValue({ satisfied: true }),
   },
 }));
 

@@ -781,7 +781,7 @@ export const GUIDELINES: Record<string, Constraint> = {
 
   /**
    * 禁止无验证完成声明
-   * 原因：2026-05-18 审计发现 5 个遗漏项，根源都是"口头 done = 实际 done"
+   * 原因：口头声明"done"与实际情况不符，需要可复现的证据
    */
   no_claim_without_evidence: {
     id: 'no_claim_without_evidence',
@@ -800,7 +800,7 @@ export const GUIDELINES: Record<string, Constraint> = {
 
   /**
    * 禁止无上下文删除
-   * 原因：D1/D2/D3 删除前未进行"吸收分析"
+   * 原因：删除代码前应评估是否有可吸收的功能，避免丢弃有用设计
    */
   no_delete_without_context: {
     id: 'no_delete_without_context',

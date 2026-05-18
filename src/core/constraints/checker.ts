@@ -97,23 +97,23 @@ export class ConstraintChecker {
    * @param customConfig 可选，per-request 自定义配置（优先级高于 setCustomConfig 的单例状态）
    */
   getConstraints(customConfig?: MergedConstraintsConfig | null): {
-    ironLaws: Record<string, Constraint>;
-    guidelines: Record<string, Constraint>;
-    tips: Record<string, Constraint>;
+    ironLaws: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
+    guidelines: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
+    tips: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
   } {
     const config = customConfig ?? this.customConfig;
-    if (config) {
-      return {
-        ironLaws: config.ironLaws,
-        guidelines: config.guidelines,
-        tips: config.tips,
-      };
-    }
-    return {
-      ironLaws: IRON_LAWS,
-      guidelines: GUIDELINES,
-      tips: TIPS,
+    const source = config
+      ? { ironLaws: config.ironLaws, guidelines: config.guidelines, tips: config.tips }
+      : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, tips: TIPS };
+
+    // Wire unified check() method on every constraint
+    const wire = (constraints: Record<string, Constraint>) => {
+      for (const c of Object.values(constraints)) {
+        (c as any).check = (ctx: ConstraintContext) => this.check(c, ctx);
+      }
+      return constraints as Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     };
+    return { ironLaws: wire(source.ironLaws), guidelines: wire(source.guidelines), tips: wire(source.tips) };
   }
 
   /**
@@ -1176,16 +1176,19 @@ export async function checkBeforeExecution(
  */
 export function buildConstraintPrompt(context: ConstraintContext): string {
   const constraints = findConstraintsByTrigger(context.operation);
-  const injections = constraints
-    .filter(c => c.promptInjection)
+  // Only iron_laws get prompt-injected (they're blocking — Agent must know before acting)
+  // Guidelines are post-check only (harness check at commit time, no prompt needed)
+  const ironInjects = constraints
+    .filter(c => c.level === 'iron_law' && c.promptInjection)
     .map(c => c.promptInjection!);
 
-  if (injections.length === 0) return '';
+  if (ironInjects.length === 0) return '';
 
+  // Compressed one-liners — ~4 tokens each instead of ~25
   const lines: string[] = [
-    '## 行为约束（你必须遵守）',
+    '## 铁律（违反将阻断执行）',
     '',
-    ...injections.map((text, i) => `${i + 1}. ${text}`),
+    ...ironInjects.map(text => `- ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`),
     '',
   ];
 

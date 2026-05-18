@@ -20,22 +20,26 @@ const mockChecker = constraintChecker as jest.Mocked<typeof constraintChecker>;
 describe('ConstraintInterceptor', () => {
   let interceptor: ConstraintInterceptor;
 
-  const mockIronLaw: Constraint = {
+  const mockCheck = jest.fn().mockResolvedValue({ satisfied: true });
+
+  const mockIronLaw = {
     id: 'test_iron_law',
     rule: 'Test Iron Law',
     message: 'Test iron law message',
-    level: 'iron_law',
+    level: 'iron_law' as const,
     trigger: 'code_implementation',
     enforcement: 'test-enforcement',
+    check: mockCheck,
   };
 
-  const mockGuideline: Constraint = {
+  const mockGuideline = {
     id: 'test_guideline',
     rule: 'Test Guideline',
     message: 'Test guideline message',
-    level: 'guideline',
+    level: 'guideline' as const,
     trigger: 'code_implementation',
     enforcement: 'guideline-enforcement',
+    check: mockCheck,
   };
 
   const mockContext: ConstraintContext = {

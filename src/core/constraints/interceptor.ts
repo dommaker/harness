@@ -7,6 +7,7 @@ import type {
   ConstraintTrigger,
   ConstraintContext,
   ConstraintLevel,
+  ConstraintResult,
 } from '../../types/constraint';
 import { ConstraintViolationError } from '../../types/constraint';
 import { normalizeTriggers } from '../../utils/exec';
@@ -126,75 +127,48 @@ export class ConstraintInterceptor {
     const ordered = applicableConstraints.sort((a, b) => order[a.level] - order[b.level]);
 
     for (const constraint of ordered) {
-      const enforcementId = constraint.enforcement;
-
-      if (this.skipEnforcements.has(enforcementId)) {
+      if (this.skipEnforcements.has(constraint.enforcement)) {
         result.constraints.push({ constraint, skipped: true, skipReason: 'configured to skip' });
         continue;
       }
 
-      const executor = this.executors.get(enforcementId);
-      if (!executor) {
-        // Fallback: no registered executor → delegate to ConstraintChecker
-        const checkResult = await constraintChecker.check(constraint, context);
-        result.constraints.push({ constraint, enforcementResult: { passed: checkResult.satisfied, message: checkResult.message } });
-        if (!checkResult.satisfied) {
-          if (constraint.level === 'iron_law') {
-            result.passed = false;
-            result.violations.push(constraint);
-            throw new ConstraintViolationError({
-              id: constraint.id, level: constraint.level, satisfied: false,
-              constraint, message: constraint.message, requiredAction: constraint.enforcement, checkedAt: new Date(),
-            });
-          }
-          if (constraint.level === 'guideline') {
-            result.violations.push(constraint);
-          }
+      // Custom executor overrides built-in check
+      const executor = this.executors.get(constraint.enforcement);
+      let checkResult: ConstraintResult;
+
+      if (executor) {
+        const enforcementContext: EnforcementContext = { ...context, enforcementId: constraint.enforcement, constraint };
+        const start = Date.now();
+        try {
+          const enforcementResult = await executor.execute(enforcementContext);
+          enforcementResult.duration = Date.now() - start;
+          result.constraints.push({ constraint, enforcementResult });
+          checkResult = {
+            id: constraint.id, level: constraint.level,
+            satisfied: enforcementResult.passed,
+            message: enforcementResult.message,
+            checkedAt: new Date(),
+            constraint,
+          };
+        } catch (error) {
+          if (error instanceof ConstraintViolationError) throw error;
+          result.constraints.push({ constraint, enforcementResult: { passed: false, error: (error as Error).message, duration: Date.now() - start } });
+          checkResult = { id: constraint.id, level: constraint.level, satisfied: false, message: (error as Error).message, checkedAt: new Date(), constraint };
         }
-        continue;
+      } else {
+        // Unified: constraint.check(context) delegates to checker
+        checkResult = await (constraint as any).check(context);
+        result.constraints.push({ constraint, enforcementResult: { passed: checkResult.satisfied, message: checkResult.message } });
       }
 
-      const enforcementContext: EnforcementContext = { ...context, enforcementId, constraint };
-      const start = Date.now();
-
-      try {
-        const enforcementResult = await executor.execute(enforcementContext);
-        enforcementResult.duration = Date.now() - start;
-        result.constraints.push({ constraint, enforcementResult });
-
-        if (!enforcementResult.passed) {
-          if (constraint.level === 'iron_law') {
-            result.passed = false;
-            result.violations.push(constraint);
-            throw new ConstraintViolationError({
-              id: constraint.id,
-              level: constraint.level,
-              satisfied: false,
-              constraint,
-              message: constraint.message,
-              requiredAction: constraint.enforcement,
-              checkedAt: new Date(),
-            });
-          }
-          if (constraint.level === 'guideline') {
-            result.violations.push(constraint);
-          }
-        }
-      } catch (error) {
-        if (error instanceof ConstraintViolationError) throw error;
-        result.constraints.push({ constraint, enforcementResult: { passed: false, error: (error as Error).message, duration: Date.now() - start } });
+      if (!checkResult.satisfied) {
         if (constraint.level === 'iron_law') {
           result.passed = false;
           result.violations.push(constraint);
-          throw new ConstraintViolationError({
-            id: constraint.id,
-            level: constraint.level,
-            satisfied: false,
-            constraint,
-            message: `Enforcement failed: ${(error as Error).message}`,
-            requiredAction: constraint.enforcement,
-            checkedAt: new Date(),
-          });
+          throw new ConstraintViolationError(checkResult);
+        }
+        if (constraint.level === 'guideline') {
+          result.violations.push(constraint);
         }
       }
     }

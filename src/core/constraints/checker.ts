@@ -259,8 +259,20 @@ export class ConstraintChecker {
         return context.hasWorktree === true;
 
       case 'no_fuzzy_completion_claim':
-        // 检查完成声明是否包含模糊词
+        // 检查完成声明是否包含模糊词（含"我记得""之前说""大部分"等无验证模式）
         return this.checkNoFuzzyWords(context.completionClaimText || '');
+
+      case 'no_claim_without_evidence':
+        // 检查是否提供了验证证据（test output / file check / spec AC matrix）
+        return context.hasVerificationEvidence === true ||
+               (context.taskDescription || '').includes('test') ||
+               context.hasTest === true;
+
+      case 'no_delete_without_context':
+        // 检查删除前是否审查了设计文档
+        return context.hasRequirementReview === true ||
+               context.hasRequirement === true ||
+               context.isExistingDesign === true;
 
       case 'no_performative_agreement':
         // 检查是否有表演性同意（主要由 promptInjection 驱动，这里做辅助检查）
@@ -349,6 +361,13 @@ export class ConstraintChecker {
       /差不多/,
       /基本完成/,
       /大部分/,
+      // audit-learned (2026-05-18): unverified completion claims
+      /我记得删[过掉]了/,
+      /之前说删了/,
+      /已删除.*但/,
+      /大部分实现/,
+      /大部分完成/,
+      /已修复.*但/,
     ];
     return !fuzzyPatterns.some(p => p.test(text));
   }

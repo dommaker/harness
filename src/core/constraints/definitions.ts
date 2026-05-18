@@ -281,12 +281,16 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 - "应该没问题"、"大概完成了"、"可能可以了"
 - "好像通过了"、"似乎工作正常"、"应该能跑"
 - "基本完成"、"差不多"、"大部分功能可用"
+- "我记得删过了"、"之前说删了"、"已删除"（未经 ls/grep 验证）
+- "大部分实现"（未经逐 AC 对照 spec）
+- "已修复"（未经 test 验证）
 
 【必须提供】
 - 测试通过的精确数量（如 "142 tests passed"）
-- 覆盖率数据（如 "coverage: 87.3%"）
-- 验证命令输出（如 "npm test 全部通过"）`,
-    promptInjection: '声明任务完成时，禁止使用模糊词语（应该、可能、大概、希望、好像、似乎、应该没问题、基本完成）。必须提供具体的测试通过数量、覆盖率数据和验证命令输出来证明任务真的完成了。',
+- 验证命令输出（如 "npm test 全部通过"）
+- 删除操作后 ls 确认（如 "ls packages/dead-pkg → No such file"）
+- Spec AC 对照表（逐项标注 pass/fail）`,
+    promptInjection: '声明任务完成时，禁止使用模糊词语。必须提供具体的测试通过数量、覆盖率数据和验证命令输出来证明任务真的完成了。声明"已删除"前必须用 ls 确认文件不存在。声明 spec 完成前必须逐 AC 对照。',
   },
 
   /**
@@ -773,6 +777,43 @@ export const GUIDELINES: Record<string, Constraint> = {
 如果一个抽象只有一个实现者 → 删除这个抽象`,
     promptInjection: '遵循 YAGNI 原则（You Aren\'t Gonna Need It）。不要为"未来可能需要"的需求添加抽象层、接口、配置项或插件系统。如果一个 interface/abstract class 只有一个实现者，删除这个抽象。只实现当前明确需要的功能。',
     exceptions: ['planned_extension', 'multi_platform', 'security_abstraction'],
+  },
+
+  /**
+   * 禁止无验证完成声明
+   * 原因：2026-05-18 审计发现 5 个遗漏项，根源都是"口头 done = 实际 done"
+   */
+  no_claim_without_evidence: {
+    id: 'no_claim_without_evidence',
+    rule: 'NO "DONE" CLAIM WITHOUT VERIFIABLE EVIDENCE',
+    message: '禁止无验证的完成声明，必须提供可复现的验证证据',
+    level: 'guideline',
+    trigger: ['code_implementation', 'file_deletion', 'module_modification'],
+    enforcement: 'evidence-check',
+    description: `声称任何任务"完成"前，必须提供验证证据：
+【代码完成】提供 test 输出（如 "142 passed, 0 failed"）
+【文件删除】提供 ls 确认（如 "ls pkg/ → No such file"）
+【Spec 完成】提供逐 AC 对照表（每项 pass/fail）
+【文档更新】提供 grep 确认（如 "grep '遗留' CLAUDE.md → no match"）`,
+    promptInjection: '声称任务"完成"前，必须提供可复现的验证证据：test 输出数字、ls 文件确认、grep 文档确认、spec AC 逐项对照。禁止"我记得""之前说""大部分"等无验证声明。',
+  },
+
+  /**
+   * 禁止无上下文删除
+   * 原因：D1/D2/D3 删除前未进行"吸收分析"
+   */
+  no_delete_without_context: {
+    id: 'no_delete_without_context',
+    rule: 'NO DELETION WITHOUT DESIGN DOCUMENT REVIEW',
+    message: '禁止删除代码前未审查设计文档和吸收价值',
+    level: 'guideline',
+    trigger: ['file_deletion', 'module_deletion'],
+    enforcement: 'context-check',
+    description: `删除任何代码（包/模块/文件）前，必须：
+1. 查设计文档（CLAUDE.md / roadmap / specs）
+2. 分析是否有可吸收的功能
+3. 记录分析结论（有/无吸收价值，原因）`,
+    promptInjection: '删除任何代码包或模块前，必须先查 CLAUDE.md 和相关设计文档，分析是否有可吸收的功能，并记录分析结论。',
   },
 };
 

@@ -333,6 +333,15 @@ export class ConstraintChecker {
         // 检查是否有过度设计（主要由 promptInjection 驱动）
         return this.checkYagni(projectPath, context.changedFiles);
 
+      // Mnilax guidelines (injectPrompt=true, behavior-level, always pass — post-checked)
+      case 'surgical_changes_only':
+      case 'no_model_for_deterministic':
+      case 'no_conflict_blending':
+      case 'read_before_write':
+      case 'follow_conventions':
+        // Guideline: behavior constraints, enforced via promptInjection + post-check
+        return true;
+
       // Tips - 总是返回 true（仅提示）
       case 'readme_required':
         return true;
@@ -1176,21 +1185,32 @@ export async function checkBeforeExecution(
  */
 export function buildConstraintPrompt(context: ConstraintContext): string {
   const constraints = findConstraintsByTrigger(context.operation);
-  // Only iron_laws get prompt-injected (they're blocking — Agent must know before acting)
-  // Guidelines are post-check only (harness check at commit time, no prompt needed)
-  const ironInjects = constraints
-    .filter(c => c.level === 'iron_law' && c.promptInjection)
-    .map(c => c.promptInjection!);
+  // Iron laws: always injected (blocking — Agent must know)
+  // Guidelines: only injected if explicitly marked injectPrompt: true
+  const injected = constraints
+    .filter(c => c.promptInjection && (
+      c.level === 'iron_law' || c.injectPrompt === true
+    ))
+    .map(c => ({ level: c.level, text: c.promptInjection! }));
 
-  if (ironInjects.length === 0) return '';
+  if (injected.length === 0) return '';
 
-  // Compressed one-liners — ~4 tokens each instead of ~25
-  const lines: string[] = [
-    '## 铁律（违反将阻断执行）',
-    '',
-    ...ironInjects.map(text => `- ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`),
-    '',
-  ];
+  const ironLaws = injected.filter(i => i.level === 'iron_law');
+  const guidelines = injected.filter(i => i.level === 'guideline');
+
+  const lines: string[] = [];
+  // Iron laws section
+  if (ironLaws.length > 0) {
+    lines.push('## 铁律（违反将阻断执行）', '');
+    ironLaws.forEach(i => lines.push(`- ${i.text.slice(0, 80)}${i.text.length > 80 ? '...' : ''}`));
+    lines.push('');
+  }
+  // Behavior guidelines section
+  if (guidelines.length > 0) {
+    lines.push('## 行为准则', '');
+    guidelines.forEach(i => lines.push(`- ${i.text.slice(0, 80)}${i.text.length > 80 ? '...' : ''}`));
+    lines.push('');
+  }
 
   return lines.join('\n');
 }

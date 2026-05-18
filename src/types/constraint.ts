@@ -77,6 +77,9 @@ export interface Constraint {
   /** 软约束 prompt 注入（引导 Agent 行为的提示文本） */
   promptInjection?: string;
 
+  /** 是否注入 Agent prompt（默认 iron_law=true, guideline=false） */
+  injectPrompt?: boolean;
+
   /** 是否启用 */
   enabled?: boolean;
 

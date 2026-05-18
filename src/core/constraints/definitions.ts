@@ -317,7 +317,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 2. 提出潜在的疑问或边界情况
 3. 说明你的实现方案
 4. 确认理解一致后再行动`,
-    promptInjection: '收到需求或反馈时，先分析再回应。不要只回复"好的"、"明白了"然后直接执行。必须：① 复述你对需求的理解；② 提出潜在的疑问或边界情况；③ 说明你的实现方案。确认理解一致后再开始写代码。',
+    promptInjection: '先思后码。明确声明前提假设。遇不确定先提问而非猜测。存在歧义时列出多种理解路径。若存在更简方案应果断提出异议。收到需求时：①复述理解 ②提出疑问 ③说明方案 ④确认一致。',
   },
 
   /**
@@ -460,6 +460,8 @@ export const GUIDELINES: Record<string, Constraint> = {
 - performance_required: 本地方案性能不足
 - reliability_required: 需要持久化/高可用`,
     exceptions: ['scalability_required', 'security_required', 'performance_required', 'reliability_required'],
+    promptInjection: '简单至上：仅用最少代码解决问题。不添加"以防万一"的冗余功能。不为仅用一次的代码强行设计抽象。自检：资深工程师是否会认为此实现过度复杂？若是，立即简化。',
+    injectPrompt: true,
   },
 
   /**
@@ -814,6 +816,86 @@ export const GUIDELINES: Record<string, Constraint> = {
 2. 分析是否有可吸收的功能
 3. 记录分析结论（有/无吸收价值，原因）`,
     promptInjection: '删除任何代码包或模块前，必须先查 CLAUDE.md 和相关设计文档，分析是否有可吸收的功能，并记录分析结论。',
+  },
+
+  /**
+   * 外科手术式修改 — Mnilax Rule 3
+   * 原因：只改必要部分，不顺手改相邻代码
+   */
+  surgical_changes_only: {
+    id: 'surgical_changes_only',
+    rule: 'ONLY CHANGE WHAT IS ABSOLUTELY NECESSARY',
+    message: '只改必要部分，不顺手改相邻代码和格式',
+    level: 'guideline',
+    trigger: ['code_implementation', 'file_modification'],
+    enforcement: 'surgical-check',
+    description: `仅改动绝对必要的部分。不"顺手优化"相邻代码、注释或排版格式。未出问题的代码不重构。严格贴合项目既有风格。`,
+    promptInjection: '外科手术式修改：仅改动绝对必要的部分。不顺手"优化"相邻代码、注释或格式。未出问题的代码不重构。',
+    injectPrompt: true,
+  },
+
+  /**
+   * 模型只做判断 — Mnilax Rule 5
+   * 原因：路由/重试/状态码用代码比 LLM 可靠
+   */
+  no_model_for_deterministic: {
+    id: 'no_model_for_deterministic',
+    rule: 'USE MODEL ONLY FOR JUDGMENT CALLS, NOT DETERMINISTIC LOGIC',
+    message: '路由/重试/状态码处理→代码，不要调 LLM 决策',
+    level: 'guideline',
+    trigger: ['code_implementation'],
+    enforcement: 'deterministic-check',
+    description: `仅将模型用于需要判断与裁量的场景：分类、内容起草、摘要、信息提取。切勿将模型用于：路由分发、重试机制、状态码处理、确定性数据转换。若常规代码能给出答案，就由代码处理。`,
+    promptInjection: '模型只做判断不做决策：路由、重试、状态码处理→用代码，不调 LLM。若常规代码能给出答案，就由代码处理。',
+    injectPrompt: true,
+  },
+
+  /**
+   * 暴露冲突 — Mnilax Rule 7
+   * 原因：两种模式冲突时不要折中
+   */
+  no_conflict_blending: {
+    id: 'no_conflict_blending',
+    rule: 'SURFACE CONFLICTS, DO NOT BLEND THEM',
+    message: '两种模式冲突→选其一+说明理由，不折中',
+    level: 'guideline',
+    trigger: ['code_implementation', 'module_extension'],
+    enforcement: 'conflict-check',
+    description: `若代码库中既有的两种模式相互矛盾，明确选择其一（优先更新或更经测试的版本），阐明选择理由，将另一种标记为待清理项。试图同时迎合两套规则的中庸代码往往是最糟的。`,
+    promptInjection: '暴露冲突不折中：若两种模式冲突→选其一（优先更经测试的版本）+说明理由+标记另一种为待清理。',
+    injectPrompt: true,
+  },
+
+  /**
+   * 先读后写 — Mnilax Rule 8
+   * 原因：加代码前必须理解上下文
+   */
+  read_before_write: {
+    id: 'read_before_write',
+    rule: 'READ IMPORTS AND CALLERS BEFORE ADDING CODE',
+    message: '加代码前先读文件的导入、调用方、工具函数',
+    level: 'guideline',
+    trigger: ['code_implementation', 'file_modification'],
+    enforcement: 'read-check',
+    description: `在文件中添加代码前，必须通读该文件的导出接口、直接调用方以及任何显而易见的公共工具函数。"看似互不干涉"是最危险的判断。若不理解现有代码为何采用当前结构，在动手添加前必须先提问确认。`,
+    promptInjection: '先读后写：加代码前读 imports/callers/工具函数。"看似互不干涉"是最危险的判断。不理解现有结构时先提问。',
+    injectPrompt: true,
+  },
+
+  /**
+   * 约定胜于新奇 — Mnilax Rule 11
+   * 原因：规范一致性 > 技术偏好
+   */
+  follow_conventions: {
+    id: 'follow_conventions',
+    rule: 'MATCH CODEBASE CONVENTIONS, EVEN IF YOU DISAGREE',
+    message: '规范一致性 > 技术偏好，有异议显式提出不暗中背离',
+    level: 'guideline',
+    trigger: ['code_implementation', 'module_extension'],
+    enforcement: 'convention-check',
+    description: `在代码库内部：规范一致性 > 个人技术偏好。若项目用 snake_case 而你偏好 camelCase：用 snake_case。若项目用 class 组件而你偏好 hooks：用 class。若确信某规范存在实质危害，请显式提出。切勿暗中背离规范另起范式。`,
+    promptInjection: '约定胜于新奇：规范一致性 > 技术偏好。项目用 snake_case 就用 snake_case。有异议显式提出，不暗中另起范式。',
+    injectPrompt: true,
   },
 };
 

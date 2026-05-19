@@ -680,9 +680,7 @@ class ConstraintChecker {
         const capResult = await this.checkCapabilitiesFreshness(projectPath);
         if (!capResult)
             return false;
-        // TODO: 检查 CLAUDE.md/CONTEXT.md — sync-docs 尚未支持 CONTEXT.md 自动更新，暂 skip
-        // const claudeResult = await this.checkClaudeMdFreshness(projectPath);
-        // if (!claudeResult) return false;
+        // CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md 的 Key Subsystems 表中。不再检查。
         return true;
     }
     /**
@@ -706,9 +704,13 @@ class ConstraintChecker {
             // 扫描 src/ 目录中的实际文件（S7: 缓存）
             const srcDir = (0, path_1.join)(projectPath, 'src');
             const actualFiles = this.cache.getSync('src_scan', projectPath, () => this.findSourceFiles(srcDir, projectPath));
+            // 标准化路径: 去掉 src/ 前缀（sync-docs 和 scanner 可能用不同格式）
+            const normalize = (f) => f.replace(/^src\//, '');
+            const normalizedListed = listedFiles.map(normalize);
+            const normalizedActual = actualFiles.map(normalize);
             // 检查是否有新增文件未列出
-            for (const file of actualFiles) {
-                if (!listedFiles.includes(file)) {
+            for (const file of normalizedActual) {
+                if (!normalizedListed.includes(file)) {
                     return false; // 有新增文件未列出
                 }
             }

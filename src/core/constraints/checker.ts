@@ -780,25 +780,23 @@ export class ConstraintChecker {
         return true;
       }
 
-      // 扫描 src/ 目录中的实际文件（S7: 缓存）
-      const srcDir = join(projectPath, 'src');
-      const actualFiles = this.cache.getSync('src_scan', projectPath, () =>
-        this.findSourceFiles(srcDir, projectPath)
-      );
-
-      // 标准化路径: 去掉 src/ 前缀（sync-docs 和 scanner 可能用不同格式）
-      const normalize = (f: string) => f.replace(/^src\//, '');
-      const normalizedListed = new Set(listedFiles.map(normalize));
+      // 多根查找：不同项目有不同的源码根（harness=src/, agent-studio=apps/api/src/ 等）
+      const sourceRoots = this.findSourceRoots(projectPath);
+      const fileExists = (file: string): boolean => {
+        if (existsSync(join(projectPath, file))) return true;
+        for (const root of sourceRoots) {
+          if (existsSync(join(projectPath, root, file))) return true;
+        }
+        return false;
+      };
 
       // 检查 CAPABILITIES 中列出的文件是否还存在（防过期引用）
-      for (const file of normalizedListed) {
-        if (!existsSync(join(projectPath, 'src', file))) {
-          return false; // 列出的文件已删除
+      for (const file of listedFiles) {
+        if (!fileExists(file)) {
+          return false;
         }
       }
 
-      // TODO: 检查新增文件是否未列出 — 等 sync-docs 支持全量自动同步后再启用
-      // 当前 sync-docs 只维护 CONTEXT.md，不维护 CAPABILITIES 表
       return true;
     } catch {
       return true; // CAPABILITIES.md 不存在或检查失败，跳过
@@ -934,6 +932,35 @@ export class ConstraintChecker {
       }
     }
     return results;
+  }
+
+  /**
+   * 发现项目的源码根目录。
+   * 不硬编码 src/——不同项目有不同的布局（harness=src/, agent-studio=apps/api/src/ 等）。
+   */
+  private findSourceRoots(projectPath: string): string[] {
+    const roots: string[] = [];
+    const candidates = ['src', 'apps/api/src', 'apps/web/src', 'packages'];
+    for (const c of candidates) {
+      if (existsSync(join(projectPath, c, 'package.json')) || existsSync(join(projectPath, c))) {
+        roots.push(c);
+      }
+    }
+    // 检查 packages/* 子目录
+    try {
+      const packagesDir = join(projectPath, 'packages');
+      if (existsSync(packagesDir)) {
+        const entries = readdirSync(packagesDir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isDirectory() && existsSync(join(packagesDir, e.name, 'src'))) {
+            roots.push(`packages/${e.name}/src`);
+          }
+        }
+      }
+    } catch { /* skip */ }
+    // fallback: always include src/
+    if (!roots.includes('src')) roots.push('src');
+    return roots;
   }
 
   /**

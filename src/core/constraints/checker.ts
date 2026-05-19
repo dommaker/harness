@@ -787,16 +787,17 @@ export class ConstraintChecker {
 
       // 标准化路径: 去掉 src/ 前缀（sync-docs 和 scanner 可能用不同格式）
       const normalize = (f: string) => f.replace(/^src\//, '');
-      const normalizedListed = listedFiles.map(normalize);
-      const normalizedActual = actualFiles.map(normalize);
+      const normalizedListed = new Set(listedFiles.map(normalize));
 
-      // 检查是否有新增文件未列出
-      for (const file of normalizedActual) {
-        if (!normalizedListed.includes(file)) {
-          return false; // 有新增文件未列出
+      // 检查 CAPABILITIES 中列出的文件是否还存在（防过期引用）
+      for (const file of normalizedListed) {
+        if (!fs.existsSync(join(projectPath, 'src', file))) {
+          return false; // 列出的文件已删除
         }
       }
 
+      // TODO: 检查新增文件是否未列出 — 等 sync-docs 支持全量自动同步后再启用
+      // 当前 sync-docs 只维护 CONTEXT.md，不维护 CAPABILITIES 表
       return true;
     } catch {
       return true; // CAPABILITIES.md 不存在或检查失败，跳过

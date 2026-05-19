@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.12.2] - 2026-05-19
+
+### Added
+- **fix_the_problem_not_the_gate guideline**: 质量门阻断时修复代码，不修复门禁
+
 ## [0.12.1] - 2026-05-19
 
 ### Added

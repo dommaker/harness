@@ -53,7 +53,7 @@ const constraints = buildConstraintPrompt({
 | 层级 | 严重性 | 数量 | 行为 |
 |------|:--:|:--:|------|
 | **Iron Law** | error | 13 | 阻断执行。拦截率 <5% 时自动降为 guideline |
-| **Guideline** | warning | 13 | 注入 Agent context。拦截率 <30% 时降为 tip |
+| **Guideline** | warning | 14 | 注入 Agent context。拦截率 <30% 时降为 tip |
 | **Tip** | info | 2 | 信息性提示。拦截率 <10% 时标记废弃 |
 
 完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。

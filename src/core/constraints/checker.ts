@@ -791,7 +791,7 @@ export class ConstraintChecker {
 
       // 检查 CAPABILITIES 中列出的文件是否还存在（防过期引用）
       for (const file of normalizedListed) {
-        if (!fs.existsSync(join(projectPath, 'src', file))) {
+        if (!existsSync(join(projectPath, 'src', file))) {
           return false; // 列出的文件已删除
         }
       }

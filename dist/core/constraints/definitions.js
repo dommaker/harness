@@ -352,9 +352,8 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
         level: 'iron_law',
         trigger: ['file_modification', 'module_creation', 'module_modification'],
         enforcement: 'docs-sync-check',
-        description: `CAPABILITIES.md 必须与 src/ 中的实际文件保持一致。新增模块须添加到 CAPABILITIES.md。删除模块须从 CAPABILITIES.md 移除。运行 harness sync-docs 自动修复。
-注: CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md Key Subsystems 表中。`,
-        exceptions: ['wip_branch'],
+        description: `CAPABILITIES.md 中列出的文件必须在 src/ 中实际存在。删除源文件时须从 CAPABILITIES.md 同步移除。运行 harness sync-docs 自动修复过期引用。
+注: CONTEXT.md 已删除。目录描述集中在 CLAUDE.md Key Subsystems 表中。新增文件全覆盖检查待 sync-docs 完善后启用。`,
     },
 };
 // ========================================

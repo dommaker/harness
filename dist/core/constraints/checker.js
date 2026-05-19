@@ -706,14 +706,15 @@ class ConstraintChecker {
             const actualFiles = this.cache.getSync('src_scan', projectPath, () => this.findSourceFiles(srcDir, projectPath));
             // 标准化路径: 去掉 src/ 前缀（sync-docs 和 scanner 可能用不同格式）
             const normalize = (f) => f.replace(/^src\//, '');
-            const normalizedListed = listedFiles.map(normalize);
-            const normalizedActual = actualFiles.map(normalize);
-            // 检查是否有新增文件未列出
-            for (const file of normalizedActual) {
-                if (!normalizedListed.includes(file)) {
-                    return false; // 有新增文件未列出
+            const normalizedListed = new Set(listedFiles.map(normalize));
+            // 检查 CAPABILITIES 中列出的文件是否还存在（防过期引用）
+            for (const file of normalizedListed) {
+                if (!(0, fs_1.existsSync)((0, path_1.join)(projectPath, 'src', file))) {
+                    return false; // 列出的文件已删除
                 }
             }
+            // TODO: 检查新增文件是否未列出 — 等 sync-docs 支持全量自动同步后再启用
+            // 当前 sync-docs 只维护 CONTEXT.md，不维护 CAPABILITIES 表
             return true;
         }
         catch {

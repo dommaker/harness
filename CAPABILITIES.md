@@ -1,6 +1,6 @@
 # harness 功能清单
 
-> 最后更新: 2026-05-05
+> 最后更新: 2026-05-19
 > 铁律：代码变更必须同步更新此文件
 
 ---
@@ -11,7 +11,7 @@
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 约束定义 | core/constraints/definitions.ts | 29 条内置约束（12 Iron Laws + 15 Guidelines + 2 Tips），含 promptInjection 软约束 |
+| 约束定义 | core/constraints/definitions.ts | 28 条内置约束（12 Iron Laws + 14 Guidelines + 2 Tips），含 promptInjection 软约束 |
 | 约束检查 | core/constraints/checker.ts | 三层约束检查引擎 + buildConstraintPrompt() + checkBeforeExecution() + 渐进前置检查 |
 | 约束注入 | core/constraints/checker.ts | buildConstraintPrompt() — 收集约束 promptInjection 格式化为 Agent system prompt |
 | 拦截器 | core/constraints/interceptor.ts | 自动 enforcement 执行，拦截操作并记录 |

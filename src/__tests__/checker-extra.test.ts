@@ -1036,7 +1036,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false); // 缺少 CONTEXT.md → 检测失败
+      expect(result.satisfied).toBe(true); // enabled: false → 跳过检查
 
       fs.rmSync(configDir, { recursive: true, force: true });
     });
@@ -1132,8 +1132,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.rmSync(capDir, { recursive: true, force: true });
     });
 
-    it('CAPABILITIES.md 表格缺少新文件应该失败', async () => {
-      const capDir = path.join(tempDir, 'cap-stale');
+    it('CAPABILITIES.md 列出的文件存在应该通过', async () => {
+      const capDir = path.join(tempDir, 'cap-valid');
       const srcDir = path.join(capDir, 'src');
       fs.mkdirSync(srcDir, { recursive: true });
 
@@ -1141,10 +1141,10 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.writeFileSync(path.join(srcDir, 'old.ts'), 'export const x = 1;');
       fs.writeFileSync(path.join(srcDir, 'new.ts'), 'export const y = 2;');
 
-      // CAPABILITIES.md 只包含 old.ts
+      // CAPABILITIES.md 包含 old.ts（存在）和 new.ts（也存在）
       fs.writeFileSync(
         path.join(capDir, 'CAPABILITIES.md'),
-        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |\n| new | src/new.ts | new |'
       );
 
       const context: ConstraintContext = {
@@ -1164,7 +1164,43 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true); // 列出的文件都存在 → 通过
+
+      fs.rmSync(capDir, { recursive: true, force: true });
+    });
+
+    it('CAPABILITIES.md 列出的文件已删除应该失败', async () => {
+      const capDir = path.join(tempDir, 'cap-ghost');
+      const srcDir = path.join(capDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // 只创建 old.ts，不创建 deleted.ts
+      fs.writeFileSync(path.join(srcDir, 'old.ts'), 'export const x = 1;');
+
+      // CAPABILITIES.md 列出了已删除的 deleted.ts
+      fs.writeFileSync(
+        path.join(capDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |\n| deleted | src/deleted.ts | deleted |'
+      );
+
+      const context: ConstraintContext = {
+        operation: 'file_modification',
+        projectPath: capDir,
+      };
+
+      const result = await checker.check(
+        {
+          id: 'docs_freshness',
+          level: 'guideline',
+          rule: 'DOCS FRESHNESS',
+          message: 'test',
+          trigger: 'file_modification',
+          enforcement: 'test',
+        },
+        context
+      );
+
+      expect(result.satisfied).toBe(false); // deleted.ts 不存在 → 失败
 
       fs.rmSync(capDir, { recursive: true, force: true });
     });

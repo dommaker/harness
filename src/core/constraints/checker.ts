@@ -753,9 +753,7 @@ export class ConstraintChecker {
     const capResult = await this.checkCapabilitiesFreshness(projectPath);
     if (!capResult) return false;
 
-    // CONTEXT.md 新鲜度不由纯代码机械判断。
-    // 时间戳对比无法区分"内容正确但旧"和"内容过时但新"。需 LLM 语义对比。
-    // 由 Auditor Agent 周期性检查，作为 guideline 警告，不做 iron law 阻断。
+    // CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md 的 Key Subsystems 表中。不再检查。
 
     return true;
   }

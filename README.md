@@ -72,6 +72,27 @@ const prompt = buildConstraintPrompt({ operation: 'code_implementation', taskDes
 
 ---
 
+## 约束生命周期
+
+约束不是永久的。quality 层（guideline/tip）支持自动退化和回滚：
+
+```
+active → intercept 率低于阈值 → scheduled → degrade → deprecated
+                                                      ← rollback
+```
+
+| 层级 | 永久？ | 可退化？ | 说明 |
+|------|:--:|:--:|------|
+| Iron Law (safety) | ✅ | ❌ | 绝对约束，永不退化 |
+| Guideline (quality) | ❌ | ✅ | 拦截率低于阈值时自动降为 tip |
+| Tip (quality) | ❌ | ✅ | 可进一步降为 info 或废弃 |
+
+**退化规则**：同类型 guideline 跟踪最近 100 次拦截。拦截率 < 30% → 降级；连续 30 天 0 拦截 → 标记废弃。
+
+**回滚**：退化后可手动回滚，恢复原级别。
+
+---
+
 ## 配置
 
 ### .harness/config.yml

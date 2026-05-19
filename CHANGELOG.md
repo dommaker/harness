@@ -10,13 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **first_principles_first guideline**：第一性优先分析方法论。分析设计问题从本质出发，不从当前代码推导。injectPrompt=true。
 - **5 Mnilax guidelines**：surgical_changes_only / no_model_for_deterministic / no_conflict_blending / read_before_write / follow_conventions。全部 injectPrompt=true，行为级约束。
 - **2 增强 promptInjection**：no_performative_agreement / simplest_solution_first 补充详细 prompt 注入文本
-- **interceptor 收敛**：ConstraintInterceptor with executor fallback (constraint.check(ctx) when no executor registered)
-- **promptInjection 优化**：357→80 tokens，75% 缩减
+- **interceptor 收敛**：ConstraintInterceptor with executor fallback (constraint.check(ctx))
 
 ### Changed
-- 约束总数：12 Iron Laws + 14 Guidelines + 2 Tips = 28 条（Guidelines 15→14，Mnilax 5 条新 + 1 条吸收后 net 变化）
+- **docs_freshness 升级为 iron_law**：guideline → iron_law (blocking)。CAPABILITIES.md 与源码不同步则阻断提交。
+- **CONTEXT.md 删除**：17 个文件删除。目录描述集中在 CLAUDE.md Key Subsystems 表。
+- 约束总数：13 Iron Laws + 13 Guidelines + 2 Tips = 28 条
 - Guidelines 中 injectPrompt: true 的条目增加（优化 token 消耗）
-- Interceptor 修复：无 executor 时 fallback 到 constraint.check(context) 而非静默跳过
+- promptInjection 优化：357→80 tokens，75% 缩减
 
 ## [0.11.0] - 2026-05-03
 

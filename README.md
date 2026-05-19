@@ -1,123 +1,108 @@
 # @dommaker/harness
 
-通用 AI Agent 工程约束框架 — 铁律系统 + 知识引擎 + 安全护栏
+通用 AI Agent 工程约束框架。
+
+让 AI Agent 在边界内稳定工作：铁律不可破，指南可演化，一切可追溯。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 安装
+---
+
+## 为什么需要
+
+Agent 能力强但不可靠。它会跳过测试、声称完成、反复循环、调用危险工具。传统做法是写更长的 Prompt——但 Prompt 只是建议，Agent 可以忽略。
+
+Harness 是 Agent 的"操作系统"——它在 Agent 行动前做检查，在 Agent 完成后做验证，在约束过时时自动退化。它是代码级约束，不是 Prompt 级建议。
+
+---
+
+## 快速开始
 
 ```bash
 npm install @dommaker/harness
+npx harness init --preset standard
+npx harness check
 ```
 
-### CLI
-
-```bash
-harness check                    # 约束检查
-harness init --preset standard   # 初始化 .harness/
-harness status                   # 状态查看
-harness report                   # 报告生成
-harness validate                 # 检查点验证
-harness sync-docs                # 文档新鲜度同步
-```
-
-### 作为库使用
+**作为库使用**：
 
 ```typescript
-import {
-  checkConstraints,
-  checkBeforeExecution,
-  buildConstraintPrompt,
-  ConstraintChecker,
-  ConstraintInterceptor,
-  KnowledgeStore,
-  KnowledgeIngest,
-  KnowledgeQuery,
-  TraceCollector,
-} from '@dommaker/harness';
+import { checkBeforeExecution, buildConstraintPrompt } from '@dommaker/harness';
 
-// 约束检查
-const result = await checkConstraints({ operation: 'code_implementation', taskDescription: 'add login page' });
+// Agent 启动前检查
+await checkBeforeExecution({
+  operation: 'code_implementation',
+  taskDescription: '重构用户认证模块',
+  projectPath: '/path/to/project',
+  hasWorktree: true,
+});
 
-// Agent prompt 注入
-const prompt = buildConstraintPrompt({ operation: 'code_implementation', taskDescription: 'add login page' });
+// Agent prompt 注入约束
+const constraints = buildConstraintPrompt({
+  operation: 'code_implementation',
+  taskDescription: '重构用户认证模块',
+});
 ```
 
 ---
 
 ## 三层约束体系
 
-| 层级 | 严重性 | 数量 | 说明 |
+| 层级 | 严重性 | 数量 | 行为 |
 |------|:--:|:--:|------|
-| **Iron Law** | error | 12 | 绝对禁止，触发抛 `ConstraintViolationError` |
-| **Guideline** | warning | 14 | 推荐遵守，`injectPrompt: true` 注入 Agent context |
+| **Iron Law** | error | 13 | 违反抛 `ConstraintViolationError`，阻断执行 |
+| **Guideline** | warning | 13 | 记录警告，`injectPrompt` 注入 Agent context |
 | **Tip** | info | 2 | 信息性提示 |
 
-新增 (2026-05-19): `first_principles_first` — 第一性优先分析方法论
-
----
-
-## 子系统
-
-| 模块 | 说明 |
-|------|------|
-| 约束引擎 | 三层约束检查 + 拦截器 + 自定义约束 |
-| 知识引擎 | KnowledgeStore/Query/Ingest/Linter + 生命周期 |
-| 门禁系统 | 8 种门禁: 测试/验收/性能/安全/契约/审查/命令/检查点 |
-| 上下文管理 | Token 预算 + 会话压缩 + 知识注入 |
-| 安全护栏 | Input/Output/Tool Guardrail + Sandbox (L1-L4) |
-| 监控 | Trace 收集/诊断/约束进化 |
-| 架构约束 | 跨项目依赖检查 + API 同步 |
-| 失败处理 | 错误分类 + 失败记录 |
+完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 
 ## 约束生命周期
 
-约束不是永久的。quality 层（guideline/tip）支持自动退化和回滚：
+约束不是永久的。quality 层支持自动退化：
 
 ```
 active → intercept 率低于阈值 → scheduled → degrade → deprecated
                                                       ← rollback
 ```
 
-| 层级 | 永久？ | 可退化？ | 说明 |
-|------|:--:|:--:|------|
-| Iron Law (safety) | ✅ | ❌ | 绝对约束，永不退化 |
-| Guideline (quality) | ❌ | ✅ | 拦截率低于阈值时自动降为 tip |
-| Tip (quality) | ❌ | ✅ | 可进一步降为 info 或废弃 |
+- Iron Law 永久，不退化
+- Guideline 拦截率 < 30% → 自动降为 tip
+- 连续 30 天 0 拦截 → 标记废弃
+- 退化后可手动回滚
 
-**退化规则**：同类型 guideline 跟踪最近 100 次拦截。拦截率 < 30% → 降级；连续 30 天 0 拦截 → 标记废弃。
+---
 
-**回滚**：退化后可手动回滚，恢复原级别。
+## CLI
+
+```bash
+harness check        # 约束检查（pre-commit hook 用）
+harness init         # 初始化项目 .harness/ 目录
+harness sync-docs    # 同步 CAPABILITIES.md
+harness validate     # 检查点验证
+harness status       # 项目状态
+harness report       # 报告生成
+```
 
 ---
 
 ## 配置
 
-### .harness/config.yml
-
 ```yaml
+# .harness/config.yml
 preset: standard  # strict | standard | relaxed
 ```
 
-### Presets
-
-| Preset | 说明 |
-|--------|------|
-| `strict` | 全部约束启用 |
-| `standard` | Iron Laws + Guidelines（默认） |
-| `relaxed` | 仅 Iron Laws |
-
 ---
 
-## 开发
+## 文档
 
-```bash
-npm install
-npm run build
-npm test
-```
+| 文档 | 内容 |
+|------|------|
+| [CAPABILITIES.md](CAPABILITIES.md) | 完整功能清单（模块、文件、约束） |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更历史 |
+| [CLAUDE.md](CLAUDE.md) | 开发指南 |
 
 ## 许可证
 

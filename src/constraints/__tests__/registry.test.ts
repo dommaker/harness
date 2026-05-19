@@ -20,7 +20,7 @@ describe('ConstraintRegistry', () => {
       const constraint = registry.get('no_bypass_checkpoint');
       expect(constraint).toBeDefined();
       expect(constraint?.layer).toBe('safety');
-      expect(constraint?.permanent).toBe(true);
+      expect(constraint?.permanent).toBe(false); // 所有层级均可退化
     });
 
     it('应该获取质量层约束', () => {
@@ -83,9 +83,9 @@ describe('ConstraintRegistry', () => {
       expect(constraint?.deprecationStatus).toBe('deprecated');
     });
 
-    it('不应该退化安全层约束', () => {
+    it('安全层约束也可以退化（Iron Law <5% 高阈值）', () => {
       const result = registry.degrade('no_bypass_checkpoint');
-      expect(result).toBe(false);
+      expect(result).toBe(true);
     });
 
     it('不应该退化非 active 约束', () => {

@@ -347,13 +347,13 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
      */
     docs_freshness: {
         id: 'docs_freshness',
-        rule: 'DOCS MUST BE IN SYNC WITH CODE — NO COMMIT WITHOUT SYNCED DOCS',
-        message: '文档与代码不同步，运行 harness sync-docs 更新后重新提交',
+        rule: 'CAPABILITIES.MD MUST BE IN SYNC WITH CODE',
+        message: 'CAPABILITIES.md 与源码不同步，运行 harness sync-docs 更新后重新提交',
         level: 'iron_law',
         trigger: ['file_modification', 'module_creation', 'module_modification'],
         enforcement: 'docs-sync-check',
-        description: `CAPABILITIES.md 等文档必须与源码保持同步。代码变更后必须更新文档才能提交。
-[要求] CAPABILITIES.md 中列出的文件应与 src/ 中的实际文件一致。新增模块须添加到 CAPABILITIES.md。删除模块须从 CAPABILITIES.md 移除。`,
+        description: `CAPABILITIES.md 必须与 src/ 中的实际文件保持一致。新增模块须添加到 CAPABILITIES.md。删除模块须从 CAPABILITIES.md 移除。运行 harness sync-docs 自动修复。
+注: CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md Key Subsystems 表中。`,
         exceptions: ['wip_branch'],
     },
 };

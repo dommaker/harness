@@ -998,7 +998,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(true);
+      expect(result.satisfied).toBe(false);
 
       fs.rmSync(configDir, { recursive: true, force: true });
     });

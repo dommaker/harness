@@ -217,7 +217,7 @@ detectDiffs() → 输出差异 → LLM 自行修复
 | 模块 | 文件 | 功能 |
 |------|------|------|
 | 注解检查 | spec/annotation-checker.ts | 代码注解中的 Spec 验证 |
-| Spec 验证器 | spec/validator.ts | Spec 验证逻辑 |
+| Spec 验证器 | core/spec/validator.ts | Spec 验证逻辑 |
 
 ---
 
@@ -247,23 +247,23 @@ detectDiffs() → 输出差异 → LLM 自行修复
 
 | 命令 | 文件 | 功能 |
 |------|------|------|
-| `check` | check.ts | 约束检查 |
-| `passes-gate` | passes-gate.ts | 测试门控 |
-| `acceptance` | acceptance.ts | 验收标准 |
-| `performance` | performance.ts | 性能门控 |
-| `security` | security.ts | 安全门控 |
-| `contract` | contract.ts | API 契约验证 |
-| `review` | review.ts | PR 审查检查 |
-| `command` | command.ts | 命令黑名单 |
-| `validate` | validate.ts | 检查点验证 |
-| `spec` | spec.ts | Spec 验证 |
-| `status` | status.ts | 状态查看 + 异常检测 |
-| `flow` | flow.ts | 一键诊断 + 提案 |
-| `report` | report.ts | 报告生成 |
-| `init` | init.ts | 项目初始化（支持 `--governance` 治理级别） |
-| `sync-docs` | sync-docs.ts | 文档同步（CAPABILITIES.md + CONTEXT.md 缺失/过时 + CHANGELOG），支持 `--json` 输出 |
-| `knowledge` | knowledge.ts | 知识库管理（list/search/import/decay/stats），支持 `--json` 输出 |
-| `failure` | failure.ts | 失败记录管理（list/stats/clear），支持 `--json` 输出 |
+| `check` | cli/commands/check.ts | 约束检查 |
+| `passes-gate` | cli/commands/passes-gate.ts | 测试门控 |
+| `acceptance` | cli/commands/acceptance.ts | 验收标准 |
+| `performance` | cli/commands/performance.ts | 性能门控 |
+| `security` | cli/commands/security.ts | 安全门控 |
+| `contract` | cli/commands/contract.ts | API 契约验证 |
+| `review` | cli/commands/review.ts | PR 审查检查 |
+| `command` | cli/commands/command.ts | 命令黑名单 |
+| `validate` | cli/commands/validate.ts | 检查点验证 |
+| `spec` | cli/commands/spec.ts | Spec 验证 |
+| `status` | cli/commands/status.ts | 状态查看 + 异常检测 |
+| `flow` | cli/commands/flow.ts | 一键诊断 + 提案 |
+| `report` | cli/commands/report.ts | 报告生成 |
+| `init` | cli/commands/init.ts | 项目初始化 |
+| `sync-docs` | cli/commands/sync-docs.ts | 文档同步 |
+| `knowledge` | cli/commands/knowledge.ts | 知识库管理 |
+| `failure` | cli/commands/failure.ts | 失败记录管理 |
 
 ---
 

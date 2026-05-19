@@ -2,7 +2,8 @@
  * 约束注册表
  *
  * 基于 core/constraints/definitions 构建，附加分层和退化元数据。
- * 分层规则：iron_law → safety（永久），guideline/tip → quality（可退化）
+ * 分层规则：iron_law → safety（高阈值），guideline/tip → quality（低阈值）
+ * 所有层级均可退化，区别仅在于退化阈值。
  */
 
 import type { Constraint, ConstraintLevel, ConstraintTrigger } from '../types/constraint';
@@ -11,16 +12,15 @@ import { IRON_LAWS, GUIDELINES, TIPS } from '../core/constraints/definitions';
 
 function toLayered(constraint: Constraint): LayeredConstraint {
   const layer: ConstraintLayer = constraint.level === 'iron_law' ? 'safety' : 'quality';
+  const schedule: DeprecationSchedule = layer === 'safety'
+    ? { targetLevel: 'guideline' as ConstraintLevel, reason: '退化：拦截率持续低于 5%', rollbackable: true }
+    : { targetLevel: (constraint.level === 'guideline' ? 'tip' : 'info') as ConstraintLevel, reason: '退化：拦截率持续低于 30%', rollbackable: true };
   return {
     ...constraint,
     layer,
     deprecationStatus: 'active' as DeprecationStatus,
-    permanent: layer === 'safety',
-    deprecationSchedule: layer === 'quality' ? {
-      targetLevel: (constraint.level === 'guideline' ? 'tip' : 'info') as ConstraintLevel,
-      reason: '自动退化：拦截率持续低于阈值',
-      rollbackable: true,
-    } : undefined,
+    permanent: false,
+    deprecationSchedule: schedule,
   };
 }
 

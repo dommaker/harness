@@ -60,17 +60,22 @@ const constraints = buildConstraintPrompt({
 
 ## 约束生命周期
 
-约束不是永久的。quality 层根据拦截率自动演化：
+约束是知识，不是教条。随着模型能力提升，约束会自动降级为知识沉淀：
 
 ```
-active → 拦截率低于阈值 → degrade → deprecated
-                                ← rollback
+active → 拦截率低于阈值 → degrade → deprecated → 写入 KnowledgeStore
+                                ← rollback (可回滚)
 ```
 
-- Iron Law 永久，不退化
-- Guideline：最近 ≥10 次检查中拦截率 < 30% → 降为 tip
-- 降级后可手动回滚恢复原级别
-- 退化基于拦截率，不基于日历时间（项目暂停不会触发退化）
+| 层级 | 退化阈值 | 退化目标 |
+|------|---------|---------|
+| Iron Law | 拦截率 < 5%（≥100 次检查） | → guideline |
+| Guideline | 拦截率 < 30%（≥10 次检查） | → tip |
+| Tip | 拦截率 < 10%（≥10 次检查） | → info → deprecated |
+
+- 降级时自动写入知识引擎：保留规则内容 + 退化原因 + 历史拦截数据
+- 退化基于拦截率，不基于日历时间
+- 可手动回滚恢复原级别
 
 ---
 

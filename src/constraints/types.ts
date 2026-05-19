@@ -32,9 +32,9 @@ export interface LayeredConstraint extends Constraint {
   layer: ConstraintLayer;
   /** 退化状态 */
   deprecationStatus: DeprecationStatus;
-  /** 退化计划（quality 层才有） */
+  /** 退化计划（所有层均有，iron_law 高阈值，guideline/tip 低阈值） */
   deprecationSchedule?: DeprecationSchedule;
-  /** 是否永久保留（safety 层） */
+  /** 是否永久保留（false = 所有层均可退化，区别仅在于阈值） */
   permanent?: boolean;
 }
 

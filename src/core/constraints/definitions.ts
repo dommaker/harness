@@ -347,6 +347,22 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 - 类型安全（type check、lint）`,
     promptInjection: '代码审查必须分两阶段：① 规范合规审查 — 逐条对照验收标准(AC)验证实现是否满足需求，重新运行测试，审计测试质量并补写边界用例；② 代码质量审查 — 仅在 Stage 1 全部通过后，检查安全性、可读性、类型安全。Stage 1 不通过则不得进入 Stage 2。',
   },
+
+  /**
+   * 文档新鲜度 — 升级为 Iron Law (2026-05-19)
+   * 原因：guideline 只警告不阻断，导致文档持续腐烂。
+   */
+  docs_freshness: {
+    id: 'docs_freshness',
+    rule: 'DOCS MUST BE IN SYNC WITH CODE — NO COMMIT WITHOUT SYNCED DOCS',
+    message: '文档与代码不同步，运行 harness sync-docs 更新后重新提交',
+    level: 'iron_law',
+    trigger: ['file_modification', 'module_creation', 'module_modification'],
+    enforcement: 'docs-sync-check',
+    description: `CAPABILITIES.md 等文档必须与源码保持同步。代码变更后必须更新文档才能提交。
+[要求] CAPABILITIES.md 中列出的文件应与 src/ 中的实际文件一致。新增模块须添加到 CAPABILITIES.md。删除模块须从 CAPABILITIES.md 移除。`,
+    exceptions: ['wip_branch'],
+  },
 };
 
 // ========================================
@@ -693,30 +709,6 @@ export const GUIDELINES: Record<string, Constraint> = {
    * 文档应与代码同步
    * 例外：WIP 分支、实验性修改
    */
-  docs_freshness: {
-    id: 'docs_freshness',
-    rule: 'DOCS SHOULD BE IN SYNC WITH CODE',
-    message: '文档与代码不同步，运行 harness sync-docs --json 查看详情并修复',
-    level: 'guideline',
-    trigger: 'file_modification',
-    enforcement: 'docs-sync-check',
-    description: `CAPABILITIES.md 等文档应与源码保持同步。
-
-[触发条件]
-- src/ 下有文件新增或删除
-- harness sync-docs --check 检测到差异
-
-[要求]
-- CAPABILITIES.md 中列出的文件应与 src/ 中的实际文件一致
-- 新增模块应添加到 CAPABILITIES.md
-- 删除模块应从 CAPABILITIES.md 移除
-
-[例外]
-- WIP 分支（未完成的功能）
-- 实验性修改（可后续同步）`,
-    exceptions: ['wip_branch', 'experimental_change'],
-  },
-
   /**
    * 禁止借口模式
    * 例外：已有明确修复计划

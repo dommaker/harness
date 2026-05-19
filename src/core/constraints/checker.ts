@@ -333,12 +333,13 @@ export class ConstraintChecker {
         // 检查是否有过度设计（主要由 promptInjection 驱动）
         return this.checkYagni(projectPath, context.changedFiles);
 
-      // Mnilax guidelines (injectPrompt=true, behavior-level, always pass — post-checked)
+      // Mnilax guidelines + first-principles (injectPrompt=true, behavior-level, always pass — post-checked)
       case 'surgical_changes_only':
       case 'no_model_for_deterministic':
       case 'no_conflict_blending':
       case 'read_before_write':
       case 'follow_conventions':
+      case 'first_principles_first':
         // Guideline: behavior constraints, enforced via promptInjection + post-check
         return true;
 

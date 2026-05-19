@@ -897,6 +897,22 @@ export const GUIDELINES: Record<string, Constraint> = {
     promptInjection: '约定胜于新奇：规范一致性 > 技术偏好。项目用 snake_case 就用 snake_case。有异议显式提出，不暗中另起范式。',
     injectPrompt: true,
   },
+
+  /**
+   * 第一性优先 — Mnilax extension
+   * 原因：从当前状态推导结论会自我证明。正确顺序：第一性→事实校验→结论。
+   */
+  first_principles_first: {
+    id: 'first_principles_first',
+    rule: 'ANALYZE FROM FIRST PRINCIPLES, NOT FROM CURRENT STATE',
+    message: '分析顺序: 第一性→事实校验→结论。禁止"代码就是这样"作为理由',
+    level: 'guideline',
+    trigger: ['code_implementation', 'module_modification', 'file_modification'],
+    enforcement: 'principle-check',
+    description: `架构分析与设计决策必须从第一性原理出发，而非从当前实现状态推导。禁止的模式: "当前代码这样写的所以应该保持这样"——这是自我证明的错误逻辑。`,
+    promptInjection: '第一性优先: 分析设计问题从本质出发，不从当前代码推导。正确设计是什么→当前实现匹配吗→差距决定行动。禁止"代码就是这样"作为理由。',
+    injectPrompt: true,
+  },
 };
 
 // ========================================

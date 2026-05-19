@@ -27,36 +27,40 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          # 检查覆盖率是否达标
           node -e "
-            const summary = require('./coverage/coverage-summary.json');
-            const total = summary.total.lines.pct;
-            if (total < 80) {
-              console.error('❌ Coverage ' + total + '% is below threshold 80%');
+            const data = require('./coverage/coverage-final.json');
+            let total = 0, covered = 0;
+            for (const info of Object.values(data)) {
+              const s = info.s || {};
+              const hits = Object.values(s);
+              total += hits.length;
+              covered += hits.filter(v => v > 0).length;
+            }
+            const pct = (covered / total * 100).toFixed(1);
+            if (parseFloat(pct) < 80) {
+              console.error('❌ Coverage ' + pct + '% is below threshold 80%');
               process.exit(1);
             }
-            console.log('✅ Coverage: ' + total + '%');
+            console.log('✅ Coverage: ' + pct + '% (' + covered + '/' + total + ' statements)');
           "
 
       - name: Check coverage not decreased (PR only)
         if: github.event_name == 'pull_request'
         run: |
-          # 获取基准分支覆盖率
+          cov() { node -e "
+            const data = require('./coverage/coverage-final.json');
+            let t=0,c=0;
+            for(const i of Object.values(data)){const s=i.s||{};const h=Object.values(s);t+=h.length;c+=h.filter(v=>v>0).length;}
+            console.log((c/t*100).toFixed(1));
+          "; }
           git checkout ${{ github.base_ref }}
-          npm ci
-          npm test -- --coverage
-          BASE_COVERAGE=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
-          
-          # 切回 PR 分支
+          npm ci && npm test -- --coverage
+          BASE_COVERAGE=$(cov)
           git checkout -
-          npm ci
-          npm test -- --coverage
-          PR_COVERAGE=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
-          
+          npm ci && npm test -- --coverage
+          PR_COVERAGE=$(cov)
           echo "Base coverage: $BASE_COVERAGE%"
           echo "PR coverage: $PR_COVERAGE%"
-          
-          # 检查是否下降超过 1%
           DECREASE=$(echo "$BASE_COVERAGE - $PR_COVERAGE" | bc)
           if (( $(echo "$DECREASE > 1" | bc -l) )); then
             echo "❌ Coverage decreased by $DECREASE%"

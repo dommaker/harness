@@ -19,10 +19,8 @@
 | 检查点验证 | core/validators/checkpoint.ts | 步骤结果验证 |
 | CSO 验证 | core/validators/cso.ts | CSO 验证逻辑 |
 | 测试门控 | core/validators/passes-gate.ts | 测试证据验证 |
-
 | 启动检查 | core/session/startup.ts | 启动检查点验证 |
 | 状态清理 | core/session/clean-state.ts | 结束状态管理 + 自动提交 |
-
 | 默认执行器 | core/constraints/default-executors.ts | architecture-check + cross-project-check 执行器 |
 
 ### 约束分层 (src/constraints/)

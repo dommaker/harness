@@ -875,18 +875,18 @@ exports.GUIDELINES = {
         injectPrompt: true,
     },
     /**
-     * 禁止绕过约束 — Agent Studio 方法论
-     * 原因：约束阻断时修复违规，不修改约束本身。
+    /**
+     * 原因：质量门阻断是信号，不是障碍。调整门禁而非修复违规是自我欺骗。
      */
-    no_constraint_bypass: {
-        id: 'no_constraint_bypass',
-        rule: 'FIX VIOLATIONS, NOT CONSTRAINTS',
-        message: '约束阻断时修复违规行为，不降阈值、不弱化检查、不改测试让 CI 通过',
+    fix_the_problem_not_the_gate: {
+        id: 'fix_the_problem_not_the_gate',
+        rule: 'FIX THE PROBLEM THAT TRIGGERED THE GATE, NOT THE GATE ITSELF',
+        message: '修复触发门禁的问题，不降低门禁本身',
         level: 'guideline',
         trigger: ['code_implementation', 'module_modification', 'file_modification'],
         enforcement: 'principle-check',
-        description: `约束（CI / test / lint）阻断时，必须修复导致阻断的违规行为，而非降低约束本身的门槛。反例: 降低覆盖率阈值、弱化检查逻辑、将测试断言从 "应为 false" 改为 "应为 true" 以通过 CI。如果阈值确实因功能删除等正当原因需要调整，须在 commit message 中显式论证。`,
-        promptInjection: '勿绕过约束: CI/测试/lint 阻断时，修复违规行为，不修改约束本身。阈值调整须在 commit 中显式论证。',
+        description: `质量门禁（测试失败、lint 报错、覆盖率不足、约束违规）阻断时，修复导致阻断的代码，而非调整门禁门槛。降低阈值、删除测试、关闭 lint 规则是对质量信号的压制，不是质量改进。`,
+        promptInjection: '质量门禁阻断时修复代码，不修复门禁。不降阈值、不删测试、不关 lint、不改断言让 CI 通过。',
         injectPrompt: true,
     },
 };

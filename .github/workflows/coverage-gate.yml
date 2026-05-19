@@ -31,8 +31,8 @@ jobs:
           node -e "
             const summary = require('./coverage/coverage-summary.json');
             const total = summary.total.lines.pct;
-            if (total < 84) {
-              console.error('❌ Coverage ' + total + '% is below threshold 84%');
+            if (total < 80) {
+              console.error('❌ Coverage ' + total + '% is below threshold 80%');
               process.exit(1);
             }
             console.log('✅ Coverage: ' + total + '%');

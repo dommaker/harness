@@ -361,7 +361,6 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
     enforcement: 'docs-sync-check',
     description: `CAPABILITIES.md 必须与 src/ 中的实际文件保持一致。新增模块须添加到 CAPABILITIES.md。删除模块须从 CAPABILITIES.md 移除。运行 harness sync-docs 自动修复。
 注: CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md Key Subsystems 表中。`,
-    exceptions: ['wip_branch'],
   },
 };
 

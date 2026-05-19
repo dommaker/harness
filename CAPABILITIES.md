@@ -293,11 +293,22 @@ detectDiffs() → 输出差异 → LLM 自行修复
 |------|------|------|
 | 命令执行 | utils/exec.ts | 统一 execAsync，替代各处重复定义 |
 
-| check-cache | src/core/constraints/check-cache.ts | CheckCache — 约束检查缓存（S7） |
-| constraint-handler | src/failure/constraint-handler.ts | ConstraintViolationHandler — 约束违规统一处理（S4） |
-| bootstrap | src/hooks/bootstrap.ts | Harness Bootstrap — 统一初始化入口（Phase 1） |
-| pipeline | src/hooks/pipeline.ts | HookPipeline — hook 有序执行、错误隔离、采样 |
-| standard | src/presets/standard.ts | 约束预设 |
+---
+
+## Hook 系统 (src/hooks/)
+
+| 模块 | 文件 | 功能 |
+|------|------|------|
+| 启动引导 | hooks/bootstrap.ts | Harness Bootstrap — 统一初始化入口 |
+| Hook 管线 | hooks/pipeline.ts | HookPipeline — 有序执行、错误隔离、采样 |
+
+### 核心补充
+
+| 模块 | 文件 | 功能 |
+|------|------|------|
+| 检查缓存 | core/constraints/check-cache.ts | CheckCache — 约束检查缓存 |
+| 违规处理 | failure/constraint-handler.ts | ConstraintViolationHandler — 违规统一处理 |
+| 预设定义 | presets/standard.ts | Standard 预设配置 |
 ---
 
 ## 设计原则

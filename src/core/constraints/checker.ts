@@ -753,9 +753,9 @@ export class ConstraintChecker {
     const capResult = await this.checkCapabilitiesFreshness(projectPath);
     if (!capResult) return false;
 
-    // TODO: 检查 CLAUDE.md/CONTEXT.md — sync-docs 尚未支持 CONTEXT.md 自动更新，暂 skip
-    // const claudeResult = await this.checkClaudeMdFreshness(projectPath);
-    // if (!claudeResult) return false;
+    // CONTEXT.md 新鲜度不由纯代码机械判断。
+    // 时间戳对比无法区分"内容正确但旧"和"内容过时但新"。需 LLM 语义对比。
+    // 由 Auditor Agent 周期性检查，作为 guideline 警告，不做 iron law 阻断。
 
     return true;
   }

@@ -60,17 +60,17 @@ const constraints = buildConstraintPrompt({
 
 ## 约束生命周期
 
-约束不是永久的。quality 层支持自动退化：
+约束不是永久的。quality 层根据拦截率自动演化：
 
 ```
-active → intercept 率低于阈值 → scheduled → degrade → deprecated
-                                                      ← rollback
+active → 拦截率低于阈值 → degrade → deprecated
+                                ← rollback
 ```
 
 - Iron Law 永久，不退化
-- Guideline 拦截率 < 30% → 自动降为 tip
-- 连续 30 天 0 拦截 → 标记废弃
-- 退化后可手动回滚
+- Guideline：最近 ≥10 次检查中拦截率 < 30% → 降为 tip
+- 降级后可手动回滚恢复原级别
+- 退化基于拦截率，不基于日历时间（项目暂停不会触发退化）
 
 ---
 

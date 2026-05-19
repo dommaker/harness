@@ -22,12 +22,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.11.0] - 2026-05-03
 
 ### Added
-- `autoEvolve()` 纯计算 API：接收 traces + anomalies，返回进化结果（诊断→提案→审核→执行）
-- `evolution/auto-evolve.ts` 新模块：约束自动进化流水线
-- `checkConstraints()` 新增 `onTrace` 回调参数：每条约束检查后通知调用方
+- **6 条新约束**：must_use_worktree / no_fuzzy_completion_claim / no_performative_agreement / two_stage_review_required（Iron Law）+ no_excuse_patterns / yagni_check（Guideline）
+- **meeting_decision_check trigger**：会议决策质量检查
+- **buildConstraintPrompt()**：收集约束 promptInjection 格式化为 Agent system prompt 片段
+- **knowledge/failure CLI**：harness knowledge / harness failure 命令
+- **sync-docs 命令**：文档新鲜度检查 + JSON 输出
 
 ### Changed
-- CAPABILITIES.md 同步更新：新增自动进化模块
+- 约束总数：8 Iron Laws → 12，13 Guidelines → 15，共 29 条
+- AI 治理简化：移除冗余 hook/apply，harness 只检测不修复
+- interceptor 修复 + 覆盖率 85.4% + JSDoc
+- `autoEvolve()` 纯计算 API + `evolution/auto-evolve.ts` 新模块
+- `checkConstraints()` 新增 `onTrace` 回调参数
 
 ## [0.9.0] - 2026-05-01
 

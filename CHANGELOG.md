@@ -4,11 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.12.0] - 2026-05-19
+## [0.12.1] - 2026-05-19
 
 ### Added
 - **first_principles_first guideline**：第一性优先分析方法论。injectPrompt=true。
-- **5 Mnilax guidelines**：surgical_changes_only / no_model_for_deterministic / no_conflict_blending / read_before_write / follow_conventions。全部 injectPrompt=true。
+- **5 behavioral guidelines**：surgical_changes_only / no_model_for_deterministic / no_conflict_blending / read_before_write / follow_conventions。全部 injectPrompt=true。
 - **2 增强 promptInjection**：no_performative_agreement / simplest_solution_first 补充 prompt 注入文本。
 - **interceptor 收敛**：无 executor 时 fallback 到 constraint.check(ctx)。
 

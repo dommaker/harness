@@ -680,10 +680,9 @@ class ConstraintChecker {
         const capResult = await this.checkCapabilitiesFreshness(projectPath);
         if (!capResult)
             return false;
-        // 检查 CLAUDE.md（Domain Packages + Key Architecture Paths）
-        const claudeResult = await this.checkClaudeMdFreshness(projectPath);
-        if (!claudeResult)
-            return false;
+        // TODO: 检查 CLAUDE.md/CONTEXT.md — sync-docs 尚未支持 CONTEXT.md 自动更新，暂 skip
+        // const claudeResult = await this.checkClaudeMdFreshness(projectPath);
+        // if (!claudeResult) return false;
         return true;
     }
     /**

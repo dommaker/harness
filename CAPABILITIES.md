@@ -19,10 +19,10 @@
 | 检查点验证 | core/validators/checkpoint.ts | 步骤结果验证 |
 | CSO 验证 | core/validators/cso.ts | CSO 验证逻辑 |
 | 测试门控 | core/validators/passes-gate.ts | 测试证据验证 |
-| Session 管理 | core/session/ | 启动检查点 + 干净状态管理 |
+
 | 启动检查 | core/session/startup.ts | 启动检查点验证 |
 | 状态清理 | core/session/clean-state.ts | 结束状态管理 + 自动提交 |
-| Spec 验证 | core/spec/ | 代码注解中的 Spec 验证 |
+
 | 默认执行器 | core/constraints/default-executors.ts | architecture-check + cross-project-check 执行器 |
 
 ### 约束分层 (src/constraints/)
@@ -238,7 +238,7 @@ detectDiffs() → 输出差异 → LLM 自行修复
 | 模块 | 文件 | 功能 |
 |------|------|------|
 | 工具注册 | tools/registry.ts | 工具注册表 |
-| 核心工具 | tools/core/ | 内置工具集 |
+
 | 工具加载 | tools/loader.ts | 工具 YAML 加载 |
 | 工具路径 | tools/paths.ts | 工具目录路径解析 |
 | 类型定义 | tools/types.ts | ToolDefinition, ToolResult 等 |
@@ -293,6 +293,11 @@ detectDiffs() → 输出差异 → LLM 自行修复
 |------|------|------|
 | 命令执行 | utils/exec.ts | 统一 execAsync，替代各处重复定义 |
 
+| check-cache | src/core/constraints/check-cache.ts | CheckCache — 约束检查缓存（S7） |
+| constraint-handler | src/failure/constraint-handler.ts | ConstraintViolationHandler — 约束违规统一处理（S4） |
+| bootstrap | src/hooks/bootstrap.ts | Harness Bootstrap — 统一初始化入口（Phase 1） |
+| pipeline | src/hooks/pipeline.ts | HookPipeline — hook 有序执行、错误隔离、采样 |
+| standard | src/presets/standard.ts | 约束预设 |
 ---
 
 ## 设计原则

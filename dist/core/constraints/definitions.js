@@ -874,6 +874,21 @@ exports.GUIDELINES = {
         promptInjection: '第一性优先: 分析设计问题从本质出发，不从当前代码推导。正确设计是什么→当前实现匹配吗→差距决定行动。禁止"代码就是这样"作为理由。',
         injectPrompt: true,
     },
+    /**
+     * 禁止绕过约束 — Agent Studio 方法论
+     * 原因：约束阻断时修复违规，不修改约束本身。
+     */
+    no_constraint_bypass: {
+        id: 'no_constraint_bypass',
+        rule: 'FIX VIOLATIONS, NOT CONSTRAINTS',
+        message: '约束阻断时修复违规行为，不降阈值、不弱化检查、不改测试让 CI 通过',
+        level: 'guideline',
+        trigger: ['code_implementation', 'module_modification', 'file_modification'],
+        enforcement: 'principle-check',
+        description: `约束（CI / test / lint）阻断时，必须修复导致阻断的违规行为，而非降低约束本身的门槛。反例: 降低覆盖率阈值、弱化检查逻辑、将测试断言从 "应为 false" 改为 "应为 true" 以通过 CI。如果阈值确实因功能删除等正当原因需要调整，须在 commit message 中显式论证。`,
+        promptInjection: '勿绕过约束: CI/测试/lint 阻断时，修复违规行为，不修改约束本身。阈值调整须在 commit 中显式论证。',
+        injectPrompt: true,
+    },
 };
 // ========================================
 // TIPS（提示）

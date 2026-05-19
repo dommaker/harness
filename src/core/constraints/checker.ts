@@ -340,6 +340,7 @@ export class ConstraintChecker {
       case 'read_before_write':
       case 'follow_conventions':
       case 'first_principles_first':
+      case 'no_constraint_bypass':
         // Guideline: behavior constraints, enforced via promptInjection + post-check
         return true;
 

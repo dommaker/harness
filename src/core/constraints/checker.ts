@@ -785,9 +785,14 @@ export class ConstraintChecker {
         this.findSourceFiles(srcDir, projectPath)
       );
 
+      // 标准化路径: 去掉 src/ 前缀（sync-docs 和 scanner 可能用不同格式）
+      const normalize = (f: string) => f.replace(/^src\//, '');
+      const normalizedListed = listedFiles.map(normalize);
+      const normalizedActual = actualFiles.map(normalize);
+
       // 检查是否有新增文件未列出
-      for (const file of actualFiles) {
-        if (!listedFiles.includes(file)) {
+      for (const file of normalizedActual) {
+        if (!normalizedListed.includes(file)) {
           return false; // 有新增文件未列出
         }
       }

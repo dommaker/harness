@@ -998,7 +998,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true);
 
       fs.rmSync(configDir, { recursive: true, force: true });
     });
@@ -1197,7 +1197,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true);
 
       fs.rmSync(projDir, { recursive: true, force: true });
     });
@@ -1264,7 +1264,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true);
 
       fs.rmSync(projDir, { recursive: true, force: true });
     });
@@ -1296,7 +1296,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true);
 
       fs.rmSync(projDir, { recursive: true, force: true });
     });
@@ -1543,7 +1543,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true);
 
       fs.rmSync(projDir, { recursive: true, force: true });
     });

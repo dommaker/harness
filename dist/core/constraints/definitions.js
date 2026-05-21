@@ -889,6 +889,21 @@ exports.GUIDELINES = {
         promptInjection: '质量门禁阻断时修复代码，不修复门禁。不降阈值、不删测试、不关 lint、不改断言让 CI 通过。',
         injectPrompt: true,
     },
+    /**
+     * 禁止下游兼容掩盖上游根因 — 狗粮分析 (2026-05-21)
+     * 原因：Agent 执行卡住 → 连续 2 次用 fallback 兜底 → 第三次才找到根因（Markdown parser 错把实现步骤当 AC 组）
+     */
+    no_fallback_without_root_cause: {
+        id: 'no_fallback_without_root_cause',
+        rule: 'BEFORE ADDING FALLBACK, TRACE UPSTREAM FIRST',
+        message: '禁止用兼容/兜底掩盖上游数据异常。先追根因——谁产生的？为什么是空？',
+        level: 'guideline',
+        trigger: ['code_implementation', 'module_modification', 'file_modification'],
+        enforcement: 'principle-check',
+        description: `遇到空值/异常/不完整数据时，禁止直接用 fallback/default/兜底值掩盖。必须先追踪数据来源——哪个上游产生的？为什么异常？修复上游 OR 添加防御性兜底——选择后者时必须在代码注释中说明根因。重复 fallback 同一问题 2+ 次是 sign of upstream bug。`,
+        promptInjection: '改动前先问: 数据从哪来？为什么是空的？fix upstream first, fallback second。连续 2+ 次相同错误 → 停止修下游,追踪源头。',
+        injectPrompt: true,
+    },
 };
 // ========================================
 // TIPS（提示）

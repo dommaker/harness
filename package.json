@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/harness",
-  "version": "0.12.3",
+  "version": "0.12.5",
   "description": "通用工程约束框架 - 铁律系统、检查点验证、测试门控、拦截器",
   "keywords": [
     "harness",
@@ -31,6 +31,11 @@
       "types": "./dist/presets/index.d.ts",
       "require": "./dist/presets/index.js",
       "import": "./dist/presets/index.js"
+    },
+    "./context": {
+      "types": "./dist/context/index.d.ts",
+      "require": "./dist/context/index.js",
+      "import": "./dist/context/index.js"
     }
   },
   "files": [

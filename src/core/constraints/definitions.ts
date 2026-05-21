@@ -936,6 +936,20 @@ export const GUIDELINES: Record<string, Constraint> = {
     promptInjection: '改动前先问: 数据从哪来？为什么是空的？fix upstream first, fallback second。连续 2+ 次相同错误 → 停止修下游,追踪源头。',
     injectPrompt: true,
   },
+
+  /**
+   * 禁止硬编码凭证
+   * 原因：密码/token/密钥泄露是最严重的安全漏洞，一旦提交到版本控制即不可逆
+   */
+  no_hardcoded_credentials: {
+    id: 'no_hardcoded_credentials',
+    rule: 'NO HARDCODED PASSWORDS, TOKENS, SECRETS, OR CREDENTIALS IN ANY SOURCE FILE',
+    message: '禁止在代码/文档/配置文件中硬编码密码、token、密钥、API key',
+    level: 'guideline',
+    trigger: ['code_implementation', 'doc_update', 'config_change', 'commit'],
+    enforcement: 'credential-scan',
+    description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、Markdown 文档、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。建议配合 pre-commit hook 做自动扫描。`,
+  },
 };
 
 // ========================================

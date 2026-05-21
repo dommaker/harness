@@ -922,8 +922,8 @@ export const GUIDELINES: Record<string, Constraint> = {
   },
 
   /**
-   * 禁止下游兼容掩盖上游根因 — 狗粮分析 (2026-05-21)
-   * 原因：Agent 执行卡住 → 连续 2 次用 fallback 兜底 → 第三次才找到根因（Markdown parser 错把实现步骤当 AC 组）
+   * 下游修复前先诊断上游
+   * 原因：兼容/兜底是掩盖，不是修复。连续 fallback 同一位置 2+ 次是上游 bug 信号。
    */
   no_fallback_without_root_cause: {
     id: 'no_fallback_without_root_cause',

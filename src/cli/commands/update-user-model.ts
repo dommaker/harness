@@ -59,17 +59,20 @@ export async function updateUserModel(options: UpdateUserModelOptions): Promise<
   // 3. Extract signals from new data
   const signals = extractSignals(newSessions);
 
-  // 4. Diff against previous state → find changes
-  const changes = diffState(state, signals);
+  // 4. Build concept clusters (semantic dedup)
+  const mergedConcepts = buildMergedConcepts(signals);
 
-  // 5. Update state
+  // 5. Diff against previous state → find changes
+  const changes = diffState(state, mergedConcepts, signals);
+
+  // 6. Update state
   if (!options.dryRun) {
     for (const sid of newSessions.map(s => s.id)) {
       if (!state.sessionsProcessed.includes(sid)) {
         state.sessionsProcessed.push(sid);
       }
     }
-    applySignals(state, signals);
+    applySignals(state, signals, mergedConcepts);
     state.lastUpdated = new Date().toISOString();
 
     if (state.sessionsProcessed.length > 200) {
@@ -224,6 +227,55 @@ function extractCorrectionConcepts(userText: string): string[] {
   return [...new Set(concepts)];
 }
 
+// ── Semantic clustering ──
+
+function clusterConcepts(
+  agg: Record<string, { count: number; sessions: string[] }>
+): Record<string, { count: number; sessions: string[] }> {
+  const entries = Object.entries(agg).filter(([k]) => k.length >= 4);
+  if (entries.length <= 1) return agg;
+
+  const merged: Record<string, { count: number; sessions: string[] }> = {};
+  const used = new Set<number>();
+
+  for (let i = 0; i < entries.length; i++) {
+    if (used.has(i)) continue;
+    const [concept, data] = entries[i];
+    let clusterName = concept;
+    let clusterCount = data.count;
+    const clusterSessions = new Set(data.sessions);
+    used.add(i);
+
+    for (let j = i + 1; j < entries.length; j++) {
+      if (used.has(j)) continue;
+      const [other, otherData] = entries[j];
+      const sim = jaccardChinese(concept, other);
+      if (sim > 0.5) {
+        clusterCount += otherData.count;
+        for (const s of otherData.sessions) clusterSessions.add(s);
+        // Use the shorter name as cluster label
+        if (other.length < clusterName.length) clusterName = other;
+        used.add(j);
+      }
+    }
+
+    merged[clusterName] = { count: clusterCount, sessions: [...clusterSessions] };
+  }
+
+  return merged;
+}
+
+function jaccardChinese(a: string, b: string): number {
+  const charsA = new Set(a.split('').filter(c => /[\u4e00-\u9fff]/.test(c)));
+  const charsB = new Set(b.split('').filter(c => /[\u4e00-\u9fff]/.test(c)));
+  if (charsA.size === 0 || charsB.size === 0) return 0;
+  const intersection = new Set([...charsA].filter(x => charsB.has(x)));
+  const union = new Set([...charsA, ...charsB]);
+  return intersection.size / union.size;
+}
+
+// ── Old ──
+
 function extractSignals(sessions: SimpleSession[]): SessionSignals[] {
   return sessions.map(s => {
     const correctionPhrases = extractCorrectionConcepts(s.userText);
@@ -268,6 +320,32 @@ function extractSignals(sessions: SimpleSession[]): SessionSignals[] {
   });
 }
 
+// ── Concept aggregation ──
+
+type ConceptMap = Record<string, { count: number; sessions: string[] }>;
+
+function buildMergedConcepts(signals: SessionSignals[]): ConceptMap {
+  const agg: ConceptMap = {};
+  for (const sig of signals) {
+    for (const [concept, count] of Object.entries(sig.concepts)) {
+      if (!agg[concept]) agg[concept] = { count: 0, sessions: [] };
+      agg[concept].count += count;
+      if (!agg[concept].sessions.includes(sig.sessionId)) {
+        agg[concept].sessions.push(sig.sessionId);
+      }
+    }
+    for (const phrase of sig.correctionPhrases) {
+      if (phrase.length < 4) continue;
+      if (!agg[phrase]) agg[phrase] = { count: 0, sessions: [] };
+      agg[phrase].count += 3;
+      if (!agg[phrase].sessions.includes(sig.sessionId)) {
+        agg[phrase].sessions.push(sig.sessionId);
+      }
+    }
+  }
+  return clusterConcepts(agg);
+}
+
 // ── Diff & Apply ──
 
 interface Change {
@@ -276,32 +354,11 @@ interface Change {
   detail: string;
 }
 
-function diffState(state: ModelState, signals: SessionSignals[]): Change[] {
+function diffState(state: ModelState, mergedConcepts: ConceptMap, signals: SessionSignals[]): Change[] {
   const changes: Change[] = [];
 
-  // Aggregate concepts + correction concepts across all new sessions
-  const conceptAgg: Record<string, { count: number; sessions: string[] }> = {};
-  for (const sig of signals) {
-    for (const [concept, count] of Object.entries(sig.concepts)) {
-      if (!conceptAgg[concept]) conceptAgg[concept] = { count: 0, sessions: [] };
-      conceptAgg[concept].count += count;
-      if (!conceptAgg[concept].sessions.includes(sig.sessionId)) {
-        conceptAgg[concept].sessions.push(sig.sessionId);
-      }
-    }
-    // Also aggregate correction concepts (higher weight)
-    for (const phrase of sig.correctionPhrases) {
-      if (phrase.length < 4) continue;
-      if (!conceptAgg[phrase]) conceptAgg[phrase] = { count: 0, sessions: [] };
-      conceptAgg[phrase].count += 3; // correction = 3x weight of normal concept
-      if (!conceptAgg[phrase].sessions.includes(sig.sessionId)) {
-        conceptAgg[phrase].sessions.push(sig.sessionId);
-      }
-    }
-  }
-
-  // Detect new/rising/falling/gone concepts
-  for (const [concept, agg] of Object.entries(conceptAgg)) {
+  // Detect new/rising/falling/gone concepts (from merged clusters)
+  for (const [concept, agg] of Object.entries(mergedConcepts)) {
     const existing = state.patterns[concept];
     if (!existing) {
       if (agg.sessions.length >= 2) {
@@ -322,10 +379,26 @@ function diffState(state: ModelState, signals: SessionSignals[]): Change[] {
   return changes;
 }
 
-function applySignals(state: ModelState, signals: SessionSignals[]): void {
+function applySignals(state: ModelState, signals: SessionSignals[], mergedConcepts: ConceptMap): void {
   const now = new Date().toISOString().slice(0, 10);
 
-  // Update patterns from concepts
+  // Update patterns from merged concept clusters
+  for (const [concept, agg] of Object.entries(mergedConcepts)) {
+    if (!state.patterns[concept]) {
+      state.patterns[concept] = {
+        firstSeen: now, occurrences: 0, sessions: [], trend: 'new', lastSeen: now,
+      };
+    }
+    const p = state.patterns[concept];
+    p.occurrences += agg.count;
+    for (const sid of agg.sessions) {
+      if (!p.sessions.includes(sid)) p.sessions.push(sid);
+    }
+    p.lastSeen = now;
+    p.trend = p.occurrences >= 5 ? 'stable' : 'rising';
+  }
+
+  // Also track per-session concepts
   for (const sig of signals) {
     for (const [concept, count] of Object.entries(sig.concepts)) {
       if (!state.patterns[concept]) {

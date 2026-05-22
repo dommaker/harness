@@ -123,21 +123,17 @@ export async function release(options: ReleaseOptions): Promise<void> {
   const origRegistry = await run('npm config get registry', pkgPath);
   await run('npm config set registry https://registry.npmjs.org/', pkgPath);
   console.log(chalk.cyan('📤 Publishing to npm...'));
-  // Redirect stderr→stdout. npm prints tarball to stdout, warnings to stderr.
-  const pub = await run('npm publish 2>&1', pkgPath, 180_000);
-  // Restore original registry before any error handling
+  // npm publish to npmjs.org (the write registry — npmmirror is read-only)
+  const pub = await run('npm publish --registry https://registry.npmjs.org/', pkgPath, 180_000);
+  // Restore original registry
   await run(`npm config set registry ${origRegistry.stdout}`, pkgPath);
-  // Detect actual failures: "npm error" (npm v10+) or "ERR! code E" (older npm)
-  const pubOutput = pub.stdout;
-  const isFailure = pubOutput.includes('npm error') || pubOutput.includes('ERR! code E');
-  if (isFailure) {
-    if (!pubOutput.includes('previously published') && !pubOutput.includes('EPUBLISHCONFLICT')) {
-      console.error(chalk.red('❌ npm publish failed:'), pubOutput.slice(0, 500));
-      process.exit(1);
-    }
-    console.log(chalk.yellow(`⚠️  npm: ${pkgName}@${newVersion} already published (skipping)`));
-  } else {
+  // Don't string-match npm output — verify by querying the registry
+  const verify = await run(`npm view ${pkgName} version --registry https://registry.npmjs.org/`, pkgPath);
+  if (verify.stdout.trim() === newVersion) {
     console.log(chalk.green(`✅ npm: published ${pkgName}@${newVersion}`));
+  } else {
+    console.log(chalk.red(`❌ npm publish verification failed. Expected ${newVersion}, registry has ${verify.stdout.trim() || '???'}`));
+    process.exit(1);
   }
 
   // ── 9. GitHub Release ──

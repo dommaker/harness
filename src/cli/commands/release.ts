@@ -128,14 +128,16 @@ export async function release(options: ReleaseOptions): Promise<void> {
   const origRegistry = await run('npm config get registry', pkgPath);
   await run('npm config set registry https://registry.npmjs.org/', pkgPath);
   console.log(chalk.cyan('📤 Publishing to npm...'));
-  const pub = await run('npm publish', pkgPath, 180_000);
-  // Restore original registry
+  // Redirect stderr→stdout. npm prints tarball to stdout, warnings to stderr.
+  const pub = await run('npm publish 2>&1', pkgPath, 180_000);
+  // Restore original registry before any error handling
   await run(`npm config set registry ${origRegistry.stdout}`, pkgPath);
-  // npm publish prints tarball listing to stderr as informational — only reject on actual errors
-  const isFailure = pub.stderr.includes('npm error') || pub.stderr.includes('ERR! code');
+  // Detect actual failures: "npm error" (npm v10+) or "ERR! code E" (older npm)
+  const pubOutput = pub.stdout;
+  const isFailure = pubOutput.includes('npm error') || pubOutput.includes('ERR! code E');
   if (isFailure) {
-    if (!pub.stderr.includes('previously published') && !pub.stderr.includes('EPUBLISHCONFLICT')) {
-      console.error(chalk.red('❌ npm publish failed:'), pub.stderr.slice(0, 500));
+    if (!pubOutput.includes('previously published') && !pubOutput.includes('EPUBLISHCONFLICT')) {
+      console.error(chalk.red('❌ npm publish failed:'), pubOutput.slice(0, 500));
       process.exit(1);
     }
     console.log(chalk.yellow(`⚠️  npm: ${pkgName}@${newVersion} already published (skipping)`));

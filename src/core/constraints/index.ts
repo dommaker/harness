@@ -57,6 +57,12 @@ export {
 } from '../../types/constraint';
 
 // 约束拦截器
+// 约束 Prompt 注入
+export {
+  formatConstraintsForPrompt,
+  type AgentRole,
+} from './prompt-injection';
+
 export {
   ConstraintInterceptor,
   constraintInterceptor,

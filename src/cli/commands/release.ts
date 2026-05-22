@@ -43,7 +43,7 @@ export async function release(options: ReleaseOptions): Promise<void> {
   console.log(chalk.cyan(`   bump: ${bumpType}${dryRun ? ' (dry-run)' : ''}`));
 
   // ── 2. Check clean working tree ──
-  const stat = await run('git status --porcelain', pkgPath);
+  const stat = await run('git status --porcelain -uno', pkgPath);
   if (stat.stdout.length > 0) {
     console.error(chalk.red('❌ Uncommitted changes. Commit or stash before releasing.'));
     console.error(chalk.gray(stat.stdout.slice(0, 500)));

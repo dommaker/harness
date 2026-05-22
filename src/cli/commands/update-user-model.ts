@@ -193,25 +193,42 @@ interface SessionSignals {
   knowledgeCaptured: boolean;         // Write to knowledge-docs
 }
 
+// ── Correction clustering (from analyze-sessions) ──
+
+function extractCorrectionConcepts(userText: string): string[] {
+  const correctionPatterns = [
+    /你(?:又|还是)(?:在)?(?:犯|忘|没|不).{0,30}?[了]?/g,
+    /我不是(?:说|让|让做|讲)[了过]?.{0,50}?[了吗?？]?/g,
+    /怎么(?:又|还|老)(?:是|在)?.{0,30}?[了]?/g,
+    /我(?:一直|反复|总是)(?:在|说|强调)?.{0,30}?[了]?/g,
+    /老(?:是|在|犯|忘)(?:了)?.{0,20}?[了]?/g,
+    /这(?:个|种)(?:问题|模式|错误).{0,20}?/g,
+    /(?:补上|加上|记上|修复).{0,10}?[了吗?？]?/g,
+    /(?:沉淀|监控|日志|记录).{0,5}?[了吗?？]?/g,
+  ];
+  const concepts: string[] = [];
+  for (const pat of correctionPatterns) {
+    pat.lastIndex = 0;
+    let m;
+    while ((m = pat.exec(userText)) !== null) {
+      const cleaned = m[0]
+        .replace(/你(?:又|还是)(?:在)?(?:犯|忘|没|不)/g, '')
+        .replace(/我不是(?:说|让|让做|讲)[了过]?/g, '')
+        .replace(/怎么(?:又|还|老)(?:是|在)?/g, '')
+        .replace(/我(?:一直|反复|总是)(?:在|说|强调)?/g, '')
+        .replace(/[，。！？、；：""''（）\s]+/g, '')
+        .trim();
+      if (cleaned.length >= 4 && cleaned.length <= 60) concepts.push(cleaned);
+    }
+  }
+  return [...new Set(concepts)];
+}
+
 function extractSignals(sessions: SimpleSession[]): SessionSignals[] {
   return sessions.map(s => {
-    // Correction detection
-    const correctionPatterns = [
-      /你(?:又|还是)(?:在)?(?:犯|忘|没|不).{0,30}?[了]?/g,
-      /我不是(?:说|让|让做|讲)[了过]?.{0,50}?[了吗?？]?/g,
-      /怎么(?:又|还|老)(?:是|在)?.{0,30}?[了]?/g,
-      /我(?:一直|反复|总是)(?:在|说|强调)?.{0,30}?[了]?/g,
-    ];
-    const correctionPhrases: string[] = [];
-    for (const pat of correctionPatterns) {
-      pat.lastIndex = 0;
-      let m;
-      while ((m = pat.exec(s.userText)) !== null) {
-        correctionPhrases.push(m[0].trim());
-      }
-    }
+    const correctionPhrases = extractCorrectionConcepts(s.userText);
 
-    // Concept extraction (Chinese char N-grams, ≥4 char)
+    // Concept extraction (Chinese char N-grams, etc.)
     const concepts: Record<string, number> = {};
     const cleanText = s.userText
       .replace(/```[\s\S]*?```/g, '')
@@ -262,7 +279,7 @@ interface Change {
 function diffState(state: ModelState, signals: SessionSignals[]): Change[] {
   const changes: Change[] = [];
 
-  // Aggregate concepts across all new sessions
+  // Aggregate concepts + correction concepts across all new sessions
   const conceptAgg: Record<string, { count: number; sessions: string[] }> = {};
   for (const sig of signals) {
     for (const [concept, count] of Object.entries(sig.concepts)) {
@@ -270,6 +287,15 @@ function diffState(state: ModelState, signals: SessionSignals[]): Change[] {
       conceptAgg[concept].count += count;
       if (!conceptAgg[concept].sessions.includes(sig.sessionId)) {
         conceptAgg[concept].sessions.push(sig.sessionId);
+      }
+    }
+    // Also aggregate correction concepts (higher weight)
+    for (const phrase of sig.correctionPhrases) {
+      if (phrase.length < 4) continue;
+      if (!conceptAgg[phrase]) conceptAgg[phrase] = { count: 0, sessions: [] };
+      conceptAgg[phrase].count += 3; // correction = 3x weight of normal concept
+      if (!conceptAgg[phrase].sessions.includes(sig.sessionId)) {
+        conceptAgg[phrase].sessions.push(sig.sessionId);
       }
     }
   }

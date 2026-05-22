@@ -250,6 +250,93 @@ export class KnowledgeLinter {
   }
 
   /**
+   * P2.5: Validate a single entry before ingestion.
+   * Returns a list of issues (empty = valid, ready to ingest).
+   *
+   * Checks:
+   * - Content too short (< 20 chars) → reject
+   * - Title too vague (common stop words only) → flag
+   * - Contradicts a proven entry with same tags → reject
+   * - Near-duplicate of existing entry (title similarity > 80%) → flag merge
+   */
+  validateEntry(entry: { title: string; content: string; tags: string[]; type: string }): LintIssue[] {
+    const issues: LintIssue[] = [];
+
+    // Content too short
+    if ((entry.content || '').length < 20) {
+      issues.push({
+        type: 'orphan',
+        severity: 'high',
+        description: `Content too short (${entry.content.length} chars). LLM may have hallucinated.`,
+        suggestion: 'Reject — re-extract with better prompt or discard.',
+      });
+    }
+
+    // Title too vague
+    const vaguePatterns = /^(错误|失败|问题|异常|bug|error|fail|issue|problem|unknown|untitled)$/i;
+    if (vaguePatterns.test(entry.title.trim())) {
+      issues.push({
+        type: 'contradiction',
+        severity: 'medium',
+        description: `Title "${entry.title}" is too vague to be useful.`,
+        suggestion: 'Re-extract with root cause in title, not symptom.',
+      });
+    }
+
+    // Contradicts proven entry with same tags
+    if (entry.tags.length > 0) {
+      const allEntries = this.store.list({ excludeArchived: false });
+      for (const existing of allEntries) {
+        if (existing.maturity !== 'proven') continue;
+        if (existing.type !== entry.type) continue;
+        const sharedTags = entry.tags.filter(t => existing.tags.includes(t));
+        if (sharedTags.length >= 2) {
+          issues.push({
+            type: 'contradiction',
+            entryId: existing.id,
+            severity: 'high',
+            description: `New entry "${entry.title}" shares tags [${sharedTags.join(', ')}] with proven entry "${existing.title}" (${existing.id}). Contradiction risk.`,
+            suggestion: `Review against ${existing.id}. If aligned, merge. If contradictory, flag for human review.`,
+          });
+        }
+      }
+    }
+
+    // Near-duplicate title check (simple: case-insensitive substring match)
+    if (entry.title.length > 10) {
+      const allEntries = this.store.list({ excludeArchived: false });
+      for (const existing of allEntries) {
+        if (existing.id === entry.title) continue; // not same entry (entry doesn't have id yet)
+        const existingTitle = existing.title.toLowerCase();
+        const newTitle = entry.title.toLowerCase();
+        if (existingTitle === newTitle) {
+          issues.push({
+            type: 'duplicate',
+            entryId: existing.id,
+            severity: 'medium',
+            description: `Exact title match with existing entry "${existing.title}" (${existing.id}).`,
+            suggestion: `Merge into ${existing.id} instead of creating duplicate.`,
+          });
+          break;
+        }
+        // Check high similarity (either title contains the other)
+        if (existingTitle.includes(newTitle) || newTitle.includes(existingTitle)) {
+          issues.push({
+            type: 'duplicate',
+            entryId: existing.id,
+            severity: 'low',
+            description: `Title similarity with existing "${existing.title}" (${existing.id}).`,
+            suggestion: `Consider merging with ${existing.id}.`,
+          });
+          break;
+        }
+      }
+    }
+
+    return issues;
+  }
+
+  /**
    * 自动修复可修复的问题
    */
   private autoFix(issues: LintIssue[]): number {

@@ -262,12 +262,18 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 覆盖率检查（仅检查变更文件）
-if command -v npm &> /dev/null; then
-  npm test -- --coverage --coverageThreshold='{"global":{"lines":85}}' --passWithNoTests
-  if [ $? -ne 0 ]; then
-    echo "❌ Coverage below 85% threshold"
-    exit 1
+# Plan coverage check (via PostEval)
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+if command -v npx > /dev/null 2>&1; then
+  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\.md$|\.plan\.md$' || true)
+  if [ -n "$PLAN_FILES" ]; then
+    echo "📋 Checking plan coverage..."
+    for plan in $PLAN_FILES; do
+      npx harness posteval-plan "$plan" || {
+        echo "🛑 Plan coverage incomplete. See above for missed items."
+        exit 1
+      }
+    done
   fi
 fi
 `;
@@ -320,11 +326,27 @@ async function setupGitHooks(projectPath: string): Promise<void> {
 
 echo "🔍 Running harness checks..."
 
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+
 # 铁律检查
 npx harness check --staged
 if [ $? -ne 0 ]; then
   echo "❌ Iron law check failed"
   exit 1
+fi
+
+# Plan coverage check (via PostEval)
+if command -v npx > /dev/null 2>&1; then
+  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
+  if [ -n "$PLAN_FILES" ]; then
+    echo "📋 Checking plan coverage..."
+    for plan in $PLAN_FILES; do
+      npx harness posteval-plan "$plan" || {
+        echo "🛑 Plan coverage incomplete. See above for missed items."
+        exit 1
+      }
+    done
+  fi
 fi
 
 echo "✅ All checks passed"

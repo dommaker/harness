@@ -36,9 +36,15 @@ const {
   knowledgeImport,
   knowledgeDecay,
   knowledgeStats,
+  knowledgeUpsert,
+  knowledgeSyncStatus,
+  knowledgeSyncRag,
   failureList,
   failureStats,
   failureClear,
+  postevalPlan,
+  analyzeSessions,
+  updateUserModel,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -353,6 +359,11 @@ program
   .option('--sources <sources>', '导入源（逗号分隔: code,git,docs）')
   .option('--limit <n>', '结果数量限制', '20')
   .option('--reset', '重置导入状态', false)
+  .option('--scope <scope>', '知识范围（用于 upsert 去重）')
+  .option('--title <title>', '知识标题（用于 upsert）')
+  .option('--content <content>', '知识内容 Markdown（用于 upsert）')
+  .option('--file <path>', '从文件读取内容（用于 upsert）')
+  .option('--source <source>', '知识来源 (analyst/cli/design)', 'cli')
   .option('--json', 'JSON 格式输出', false)
   .action(async (subcommand, arg, options) => {
     const opts = { projectPath: options.projectPath, json: options.json };
@@ -377,6 +388,24 @@ program
       case 'stats':
       case 'st':
         await knowledgeStats(opts);
+        break;
+      case 'sync-rag':
+        await knowledgeSyncRag(opts);
+        break;
+      case 'sync-status':
+      case 'sync':
+        await knowledgeSyncStatus(opts);
+        break;
+      case 'upsert':
+      case 'up':
+        await knowledgeUpsert({
+          scope: options.scope || '',
+          title: options.title || '',
+          content: options.content || '',
+          file: options.file || '',
+          type: options.type || 'architecture',
+          source: options.source || 'cli',
+        });
         break;
       default:
         // 无子命令时显示帮助
@@ -422,6 +451,45 @@ program
           process.exit(1);
         }
     }
+  });
+
+// ========================================
+// harness posteval-plan
+// ========================================
+program
+  .command('posteval-plan <planPath>')
+  .description('验证 plan 文件的 checklist items 是否都有对应的 staged diff')
+  .action(async (planPath) => {
+    await postevalPlan({ planPath });
+  });
+
+// ========================================
+// harness update-user-model
+// ========================================
+program
+  .command('update-user-model')
+  .description('从新对话中提取信号，更新用户思维模型（增量演化）')
+  .alias('uum')
+  .option('--json', 'JSON 格式输出', false)
+  .option('--dry-run', '只显示变化，不更新状态', false)
+  .action(async (options) => {
+    await updateUserModel({ json: options.json, dryRun: options.dryRun });
+  });
+
+// ========================================
+// harness analyze-sessions
+// ========================================
+program
+  .command('analyze-sessions')
+  .description('分析 Claude Code 对话，挖掘纠正模式和高频概念，生成规则候选')
+  .alias('analyze')
+  .option('-d, --days <n>', '分析最近 N 天的会话', '7')
+  .option('--json', 'JSON 格式输出', false)
+  .action(async (options) => {
+    await analyzeSessions({
+      days: parseInt(options.days, 10),
+      json: options.json,
+    });
   });
 
 // 解析命令行参数

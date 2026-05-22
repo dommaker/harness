@@ -74,7 +74,7 @@ export class KnowledgeIngest {
       maturity: options.maturity || partial.maturity || 'draft',
       layer: options.layer,
       created: partial.created || now,
-      lastReferenced: partial.lastReferenced || '',
+      lastReferenced: partial.lastReferenced || now,
       contributors: partial.contributors || [],
       projects: partial.projects || options.projects || [],
       tags: [...new Set([...(partial.tags || []), ...(options.tags || [])])],

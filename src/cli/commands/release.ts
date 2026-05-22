@@ -18,10 +18,12 @@ export interface ReleaseOptions {
 
 async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout: string; stderr: string }> {
   try {
-    const stdout = execSync(cmd, { cwd, encoding: 'utf-8', stdio: 'pipe', timeout });
+    const stdout = execSync(cmd, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
     return { stdout: stdout.trim(), stderr: '' };
   } catch (e: any) {
-    return { stdout: e.stdout?.trim() || '', stderr: e.stderr?.trim() || e.message || String(e) };
+    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() || '';
+    const stdout = typeof e.stdout === 'string' ? e.stdout : e.stdout?.toString() || '';
+    return { stdout: stdout.trim(), stderr: stderr.trim() || e.message || String(e) };
   }
 }
 
@@ -122,8 +124,13 @@ export async function release(options: ReleaseOptions): Promise<void> {
   console.log(chalk.green('✅ git: pushed'));
 
   // ── 8. npm publish ──
+  // Switch to npmjs.org for publishing (npmmirror is read-only mirror)
+  const origRegistry = await run('npm config get registry', pkgPath);
+  await run('npm config set registry https://registry.npmjs.org/', pkgPath);
   console.log(chalk.cyan('📤 Publishing to npm...'));
   const pub = await run('npm publish', pkgPath, 180_000);
+  // Restore original registry
+  await run(`npm config set registry ${origRegistry.stdout}`, pkgPath);
   // npm publish prints tarball listing to stderr as informational — only reject on actual errors
   const isFailure = pub.stderr.includes('npm error') || pub.stderr.includes('ERR! code');
   if (isFailure) {

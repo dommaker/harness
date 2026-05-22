@@ -95,22 +95,17 @@ export async function release(options: ReleaseOptions): Promise<void> {
     process.exit(0);
   }
 
-  // ── 5. Bump version ──
+  // ── 5. Bump version (npm version creates git commit + tag atomically,
+  //     including package-lock.json — no desync possible) ──
   console.log(chalk.cyan('🔢 Bumping version...'));
-  const bump = await run(`npm version ${bumpType} --no-git-tag-version`, pkgPath);
+  const bump = await run(`npm version ${bumpType} -m "release: %s"`, pkgPath);
   if (bump.stderr && !bump.stdout) {
     console.error(chalk.red('❌ npm version failed:'), bump.stderr);
     process.exit(1);
   }
-  const updatedPkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
-  const newVersion = updatedPkg.version;
+  const newVersion = bump.stdout.trim().replace(/^v/, '');
   const tag = `v${newVersion}`;
-  console.log(chalk.green(`✅ version: ${oldVersion} → ${newVersion}`));
-
-  // ── 6. Git commit + tag ──
-  await run(`git add package.json && git commit -m "release: ${tag}"`, pkgPath);
-  await run(`git tag ${tag}`, pkgPath);
-  console.log(chalk.green(`✅ git: committed + tagged ${tag}`));
+  console.log(chalk.green(`✅ version: ${oldVersion} → ${newVersion} (committed + tagged)`));
 
   // ── 7. Push ──
   console.log(chalk.cyan('⬆️  Pushing...'));

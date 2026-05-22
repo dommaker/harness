@@ -110,8 +110,9 @@ export async function release(options: ReleaseOptions): Promise<void> {
   // ── 8. npm publish ──
   console.log(chalk.cyan('📤 Publishing to npm...'));
   const pub = await run('npm publish', pkgPath, 180_000);
-  if (pub.stderr && (pub.stderr.includes('error') || pub.stderr.includes('ERR!'))) {
-    // "previously published" is not an error — already published is fine
+  // npm publish prints tarball listing to stderr as informational — only reject on actual errors
+  const isFailure = pub.stderr.includes('npm error') || pub.stderr.includes('ERR! code');
+  if (isFailure) {
     if (!pub.stderr.includes('previously published') && !pub.stderr.includes('EPUBLISHCONFLICT')) {
       console.error(chalk.red('❌ npm publish failed:'), pub.stderr.slice(0, 500));
       process.exit(1);

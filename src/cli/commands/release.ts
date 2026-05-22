@@ -61,7 +61,21 @@ export async function release(options: ReleaseOptions): Promise<void> {
   console.log(chalk.green('✅ tsc: built'));
 
   // ── 4. Verify dist ──
-  const criticalFiles = ['dist/index.js'];
+  const criticalFiles = [
+    'dist/index.js',
+    'dist/knowledge/index.js',
+    'dist/knowledge/store.js',
+    'dist/knowledge/ingest.js',
+    'dist/knowledge/query.js',
+    'dist/knowledge/lifecycle.js',
+    'dist/knowledge/lint.js',
+    'dist/knowledge/types.js',
+    'dist/knowledge/import.js',
+    'dist/knowledge/reference-tracker.js',
+    'dist/knowledge/lifecycle-hooks.js',
+    'dist/knowledge/doctor.js',
+    'dist/core/constraints/prompt-injection.js',
+  ];
   const missing = criticalFiles.filter(f => !fs.existsSync(path.join(pkgPath, f)));
   if (missing.length > 0) {
     console.error(chalk.red(`❌ dist missing critical files: ${missing.join(', ')}`));

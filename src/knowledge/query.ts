@@ -16,6 +16,7 @@ import type {
   IndexEntry,
 } from './types';
 import { KnowledgeStore } from './store';
+import { KnowledgeLifecycle } from './lifecycle';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -38,10 +39,12 @@ interface CacheEntry {
 
 export class KnowledgeQuery {
   private store: KnowledgeStore;
+  private lifecycle: KnowledgeLifecycle;
   private cache = new Map<string, CacheEntry>();
 
-  constructor(store: KnowledgeStore) {
+  constructor(store: KnowledgeStore, lifecycle?: KnowledgeLifecycle) {
     this.store = store;
+    this.lifecycle = lifecycle || new KnowledgeLifecycle(store);
   }
 
   /**
@@ -72,6 +75,14 @@ export class KnowledgeQuery {
 
     const result: QueryResult = { entries, tokensUsed, truncated, fromCache: false };
     this.cache.set(cacheKey, { result, timestamp: Date.now() });
+
+    // P2a: Record references for all returned entries (drives maturity ladder)
+    for (const entry of entries) {
+      try {
+        this.lifecycle.recordReference(entry.id);
+      } catch { /* non-blocking */ }
+    }
+
     return result;
   }
 

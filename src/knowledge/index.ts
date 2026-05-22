@@ -12,4 +12,5 @@ export { KnowledgeIngest } from './ingest';
 export { ReferenceTracker } from './reference-tracker';
 export { KnowledgeLinter } from './lint';
 export { ColdStartImporter } from './import';
+export { KnowledgeHealthScorer } from './doctor';
 export { KnowledgeLifecycleHooks } from './lifecycle-hooks';

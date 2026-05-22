@@ -45,6 +45,7 @@ const {
   postevalPlan,
   analyzeSessions,
   updateUserModel,
+  release,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -474,6 +475,18 @@ program
   .option('--dry-run', '只显示变化，不更新状态', false)
   .action(async (options) => {
     await updateUserModel({ json: options.json, dryRun: options.dryRun });
+  });
+
+// ========================================
+// harness release
+// ========================================
+program
+  .command('release')
+  .description('npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。不依赖 Studio API。')
+  .option('--bump <type>', '版本递增类型', 'patch')
+  .option('--dry-run <bool>', '仅模拟执行', 'false')
+  .action(async (options) => {
+    await release({ bumpType: options.bump, dryRun: options.dryRun });
   });
 
 // ========================================

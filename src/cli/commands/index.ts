@@ -20,5 +20,6 @@ export { syncDocs, type SyncDocsOptions } from './sync-docs';
 export { knowledgeList, knowledgeSearch, knowledgeImport, knowledgeDecay, knowledgeStats, knowledgeUpsert, knowledgeSyncStatus, knowledgeSyncRag, type KnowledgeOptions, type KnowledgeUpsertOptions } from './knowledge';
 export { failureList, failureStats, failureClear, type FailureOptions } from './failure';
 export { postevalPlan, type PostEvalPlanOptions } from './posteval-plan';
+export { release, type ReleaseOptions } from './release';
 export { analyzeSessions, type AnalyzeSessionsOptions } from './analyze-sessions';
 export { updateUserModel, type UpdateUserModelOptions } from './update-user-model';

@@ -27,7 +27,7 @@ export class KnowledgeLifecycle {
 
   /**
    * Record that an entry was referenced.
-   * Updates lastReferenced timestamp and contributors.
+   * Updates lastReferenced timestamp, contributors, and referencedBy.
    */
   recordReference(entryId: string, contributor?: string): KnowledgeEntry | undefined {
     const entry = this.store.get(entryId);
@@ -38,9 +38,15 @@ export class KnowledgeLifecycle {
       ? [...entry.contributors, contributor]
       : entry.contributors;
 
+    const refKey = `${contributor || 'unknown'}:${now.slice(0, 10)}`;
+    const referencedBy = entry.referencedBy.includes(refKey)
+      ? entry.referencedBy
+      : [...entry.referencedBy, refKey];
+
     return this.store.update(entryId, {
       lastReferenced: now,
       contributors,
+      referencedBy,
     });
   }
 
@@ -50,7 +56,9 @@ export class KnowledgeLifecycle {
    *
    * Rules:
    * - draft → verified: lastReferenced is set (referenced at least once)
-   * - verified → proven: referenced ≥3 times (contributors count as proxy) + ≥2 projects
+   * - verified → proven: two paths
+   *   A) Multi-project: contributors >= 3 AND projects >= 2
+   *   B) Single-project: referencedBy >= 3 AND sourceReferences from 2+ distinct workflows
    */
   checkPromotion(entryId: string): MaturityLevel | undefined {
     const entry = this.store.get(entryId);
@@ -61,11 +69,19 @@ export class KnowledgeLifecycle {
         if (entry.lastReferenced) return 'verified';
         return undefined;
 
-      case 'verified':
+      case 'verified': {
+        // Path A: multi-project validation
         if (entry.contributors.length >= 3 && entry.projects.length >= 2) {
           return 'proven';
         }
+        // Path B: single-project — multiple independent references from different sources
+        const refCount = entry.referencedBy?.length || 0;
+        const distinctSources = new Set(entry.sourceReferences?.map(s => s.workflow).filter(Boolean) || []);
+        if (refCount >= 3 && distinctSources.size >= 2) {
+          return 'proven';
+        }
         return undefined;
+      }
 
       case 'proven':
       case 'archived':

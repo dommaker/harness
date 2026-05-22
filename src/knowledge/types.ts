@@ -9,11 +9,11 @@
 
 // ── Dimensions ──────────────────────────────────────────────
 
-export type KnowledgeType = 'model' | 'decision' | 'guideline' | 'pitfall' | 'process';
+export type KnowledgeType = 'model' | 'decision' | 'guideline' | 'pitfall' | 'process' | 'architecture';
 
 export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived';
 
-export type StorageLayer = 'personal' | 'team' | 'tech' | 'domain' | 'project';
+export type StorageLayer = 'personal' | 'team' | 'tech' | 'domain' | 'project' | 'system';
 
 // ── Core Entry ──────────────────────────────────────────────
 

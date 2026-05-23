@@ -10,8 +10,11 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const STATE_FILE = '/tmp/claude-knowledge-capture-state.json';
 const LOG_FILE = '/tmp/claude-knowledge-hooks.log';
+const EVENTS_FILE = path.join(os.homedir(), 'events', 'studio.jsonl');
 const UNIQUE_DIR_THRESHOLD = 10;
 
 function log(level, message, data) {
@@ -76,6 +79,25 @@ try {
 
     console.log(JSON.stringify({ systemMessage: message }));
   }
+  // Emit session summary event → events-daemon → knowledge extraction pipeline
+  try {
+    const event = {
+      type: 'session:summary',
+      sessionType: 'development',
+      timestamp: new Date().toISOString(),
+      deepAnalysis: state.planned || state.explored || state.readDirs.length >= UNIQUE_DIR_THRESHOLD,
+      knowledgeCaptured: !!state.captured,
+      readDirsCount: state.readDirs.length,
+      planned: state.planned || false,
+      explored: state.explored || false,
+      sensitiveOpsCount: (state.sensitiveOps || []).filter(op => !op.verified).length,
+      turnCount: state.turnCount || 0,
+    };
+    const dir = path.dirname(EVENTS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(EVENTS_FILE, JSON.stringify(event) + '\n', 'utf-8');
+    log('info', 'session-summary-emitted', event);
+  } catch {}
 } catch (e) {
   // Silently ignore errors
 } finally {

@@ -41,6 +41,7 @@ jest.mock('chalk', () => ({
 // Mock validate module
 jest.mock('../validate', () => ({
   createExampleCheckpoint: jest.fn(),
+  createExampleResolutions: jest.fn(),
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;

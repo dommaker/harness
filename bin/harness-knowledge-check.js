@@ -34,6 +34,7 @@ try {
     deepAnalysis, missingCapture,
   });
 
+  // Check 1: deep analysis without knowledge capture
   if (deepAnalysis && missingCapture) {
     const signals = [];
     if (state.planned) signals.push('EnterPlanMode called');
@@ -51,6 +52,26 @@ try {
       '   2. npx harness knowledge upsert --scope <scope> --file <file> --source claude',
       '',
       '   Or run `harness knowledge sync-status` to check staleness.',
+    ].join('\n');
+
+    console.log(JSON.stringify({ systemMessage: message }));
+  }
+
+  // Check 2: sensitive file operations without prior Read
+  const sensitiveOps = (state.sensitiveOps || []).filter(op => !op.verified);
+  if (sensitiveOps.length > 0) {
+    log('warn', 'unverified-sensitive-ops', { sensitiveOps });
+
+    const opsList = sensitiveOps.map(op => `   - ${op.tool}: ${op.file}`).join('\n');
+    const message = [
+      '⚠️  File operations on sensitive paths without prior verification.',
+      `   Operations:`,
+      opsList,
+      '',
+      '   These files were moved/edited/written without being Read first.',
+      '   Verify the changes were intentional and correct.',
+      '',
+      '   📋 Rule: feedback_verify_before_move.md — Read before acting on file classification.',
     ].join('\n');
 
     console.log(JSON.stringify({ systemMessage: message }));

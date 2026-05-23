@@ -335,11 +335,6 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# bin/ purity check (prevents business logic leakage via npm publish)
-if [ -f scripts/bin-purity-check.sh ]; then
-  sh scripts/bin-purity-check.sh || exit 1
-fi
-
 # Plan coverage check (via PostEval)
 if command -v npx > /dev/null 2>&1; then
   PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)

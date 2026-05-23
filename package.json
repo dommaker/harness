@@ -40,7 +40,7 @@
   },
   "files": [
     "dist",
-    "bin",
+    "bin/harness.js",
     "templates",
     "github-actions"
   ],

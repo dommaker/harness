@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { createExampleCheckpoint } from './validate';
+import { createExampleCheckpoint, createExampleResolutions } from './validate';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -186,6 +186,9 @@ export async function init(options: InitOptions): Promise<void> {
 
   // 创建检查点示例
   await createExampleCheckpoint(projectPath);
+
+  // 创建 Resolutions（RKB 狗粮 — 约束 → 已知解法映射）
+  await createExampleResolutions(projectPath);
 
   // 创建自定义约束示例
   await createCustomConstraintsExample(projectPath);

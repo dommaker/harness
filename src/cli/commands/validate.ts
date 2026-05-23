@@ -162,3 +162,40 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
 
   console.log(chalk.green(`✅ 已创建示例检查点文件: ${filePath}`));
 }
+
+/**
+ * 默认 Resolutions（RKB — 约束 → 已知解法映射）
+ */
+const DEFAULT_RESOLUTIONS = {
+  no_claim_without_evidence: {
+    title: 'commit message 缺少验证证据',
+    fix: '在 commit message body 中附上验证输出:\n`npx harness check --staged` | `npx harness validate` | `npm test -- --coverage`\n确认全部通过后重新 commit。',
+  },
+  capability_sync: {
+    title: '缺少 CAPABILITIES.md',
+    fix: '在项目根目录创建 CAPABILITIES.md，列出所有模块能力清单。运行 `npx harness sync-docs` 可自动生成模板。',
+  },
+  context_doc_sync: {
+    title: '关键目录缺少 CONTEXT.md',
+    fix: '在 required_dirs 目录下创建 CONTEXT.md。运行 `npx harness sync-docs` 可自动生成模板。',
+  },
+  no_coverage_decrease: {
+    title: '测试覆盖率下降',
+    fix: '运行 `npm test -- --coverage` 查看当前覆盖率。新增文件必须有对应的测试文件。',
+  },
+};
+
+/**
+ * 创建示例 Resolutions 文件（RKB dogfood）
+ */
+export async function createExampleResolutions(projectPath: string): Promise<void> {
+  const harnessDir = path.join(projectPath, '.harness');
+  const filePath = path.join(harnessDir, 'resolutions.json');
+
+  await fs.mkdir(harnessDir, { recursive: true });
+
+  const content = JSON.stringify(DEFAULT_RESOLUTIONS, null, 2);
+  await fs.writeFile(filePath, content, 'utf-8');
+
+  console.log(chalk.green(`✅ 已创建 Resolutions 文件: ${filePath}`));
+}

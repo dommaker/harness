@@ -100,6 +100,29 @@ describe('FileBudget', () => {
       expect(result.truncated).toBe(true);
       expect(result.continuationHint).toBeUndefined();
     });
+
+    it('should truncate by byte count', () => {
+      const content = 'x'.repeat(20000);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue(content);
+      const budget = new FileBudget({ maxBytes: 500, maxLines: 50000, maxTokenEstimate: 100000 });
+      const result = budget.readWithBudget('/test/big-bytes.ts');
+      expect(result.truncated).toBe(true);
+      expect(result.content.length).toBeLessThan(20000);
+    });
+
+    it('should include continuation hint when byte truncated', () => {
+      const content = 'y'.repeat(20000);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue(content);
+      const budget = new FileBudget({
+        maxBytes: 500,
+        maxLines: 50000,
+        maxTokenEstimate: 100000,
+        continuationHint: true,
+      });
+      const result = budget.readWithBudget('/test/big-bytes-hint.ts');
+      expect(result.truncated).toBe(true);
+      expect(result.continuationHint).toContain('字节');
+    });
   });
 
   describe('getConfig', () => {

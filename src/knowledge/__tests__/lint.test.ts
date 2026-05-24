@@ -159,6 +159,17 @@ describe('KnowledgeLinter', () => {
       const issues = linter.checkOutdated(store.list({ excludeArchived: false }));
       expect(issues.filter(i => i.entryId === 'old-proven').length).toBe(0);
     });
+
+    it('应该跳过 archived 条目', () => {
+      saveEntry({
+        id: 'archived-outdated',
+        maturity: 'archived',
+        created: '2020-01-01T00:00:00.000Z',
+        lastReferenced: '',
+      });
+      const issues = linter.checkOutdated(store.list({ excludeArchived: false }));
+      expect(issues.filter(i => i.entryId === 'archived-outdated').length).toBe(0);
+    });
   });
 
   describe('checkDuplicates', () => {
@@ -182,6 +193,13 @@ describe('KnowledgeLinter', () => {
       const issues = linter.checkDuplicates(store.list({ excludeArchived: false }));
       expect(issues.filter(i => i.type === 'duplicate').length).toBe(2);
     });
+
+    it('应该跳过 archived 条目', () => {
+      saveEntry({ id: 'd-1', title: 'Archived Dup', type: 'decision', maturity: 'archived' });
+      saveEntry({ id: 'd-2', title: 'Archived Dup', type: 'decision', maturity: 'archived' });
+      const issues = linter.checkDuplicates(store.list({ excludeArchived: false }));
+      expect(issues.filter(i => i.type === 'duplicate').length).toBe(0);
+    });
   });
 
   describe('checkContradictions', () => {
@@ -204,6 +222,13 @@ describe('KnowledgeLinter', () => {
       saveEntry({ id: 'no-tag-2', maturity: 'draft', tags: [] });
       const issues = linter.checkContradictions(store.list({ excludeArchived: false }));
       expect(issues.filter(i => i.type === 'contradiction').length).toBe(0);
+    });
+
+    it('应该跳过 archived 条目', () => {
+      saveEntry({ id: 'archived-contra', maturity: 'archived', tags: ['auth'], type: 'decision' });
+      saveEntry({ id: 'active-contra', maturity: 'proven', tags: ['auth'], type: 'decision' });
+      const issues = linter.checkContradictions(store.list({ excludeArchived: false }));
+      expect(issues.filter(i => i.entryId === 'archived-contra').length).toBe(0);
     });
   });
 
@@ -292,6 +317,43 @@ describe('KnowledgeLinter', () => {
         type: 'decision',
       });
       expect(issues.filter(i => i.type === 'duplicate')).toHaveLength(1);
+    });
+
+    it('skips non-proven entries in contradiction check', () => {
+      saveEntry({ id: 'non-proven', title: 'Non Proven', maturity: 'draft', tags: ['auth'] });
+
+      const issues = linter.validateEntry({
+        title: 'New Claim Check',
+        content: 'This is a sufficiently long content for testing here.',
+        tags: ['auth'],
+        type: 'decision',
+      });
+      expect(issues.filter(i => i.type === 'contradiction')).toHaveLength(0);
+    });
+
+    it('skips different type in contradiction check', () => {
+      saveEntry({ id: 'proven-diff-type', title: 'Proven Fact', maturity: 'proven', tags: ['database'], type: 'guideline' });
+
+      const issues = linter.validateEntry({
+        title: 'New Database Claim',
+        content: 'This is a sufficiently long content for testing purposes here.',
+        tags: ['database'],
+        type: 'decision',
+      });
+      expect(issues.filter(i => i.type === 'contradiction')).toHaveLength(0);
+    });
+
+    it('skips entry when title matches existing id', () => {
+      saveEntry({ id: 'New Feature Implementation', title: 'Existing Feature', maturity: 'verified' });
+
+      const issues = linter.validateEntry({
+        title: 'New Feature Implementation',
+        content: 'This is a sufficiently long content for testing purposes here.',
+        tags: [],
+        type: 'decision',
+      });
+      // Should not produce duplicate issue by matching against itself via id
+      expect(issues.filter(i => i.type === 'duplicate')).toHaveLength(0);
     });
 
     it('detects title containment similarity', () => {

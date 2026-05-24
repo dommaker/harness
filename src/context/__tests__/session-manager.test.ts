@@ -230,10 +230,23 @@ describe('SessionManager', () => {
     });
   });
 
-  describe.skip('loadSession (disk loading via getSession)', () => {
+  describe('loadSession (disk loading via getSession)', () => {
     it('loads session from disk when events.jsonl exists', () => {
-      const h = manager.getSession('disk-loaded');
-      expect(h).toBeUndefined();
+      (mockFs.existsSync as jest.Mock).mockImplementation((p: any) => {
+        if (typeof p === 'string' && p.includes('events.jsonl')) return true;
+        return false;
+      });
+      (mockFs.readFileSync as jest.Mock).mockImplementation((p: any) => {
+        if (typeof p === 'string' && p.includes('events.jsonl')) {
+          return JSON.stringify({ type: 'user_message', id: '1', content: 'hello', timestamp: 't1' }) + '\n';
+        }
+        return '';
+      });
+
+      const handle = manager.getSession('disk-loaded');
+      expect(handle).toBeDefined();
+      expect(handle!.events).toHaveLength(1);
+      expect(handle!.events[0].content).toBe('hello');
     });
   });
 

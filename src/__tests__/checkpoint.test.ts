@@ -10,16 +10,25 @@ import { join } from 'path';
 describe('CheckpointValidator', () => {
   const tempDir = join(process.cwd(), 'temp-test-checkpoint');
   let validator: CheckpointValidator;
+  // 网络检查（共享），避免每个 describe 重复探测 httpbin
+  let httpbinOk = false;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     mkdirSync(tempDir, { recursive: true });
     validator = CheckpointValidator.getInstance();
-    
     // 创建测试文件
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');
     writeFileSync(join(tempDir, 'empty.txt'), '');
     writeFileSync(join(tempDir, 'data.json'), JSON.stringify({ name: 'test', value: 42 }));
-  });
+    // 探测 httpbin 是否可达（共享给 HTTP 测试用）
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 4000);
+    try {
+      const res = await fetch('https://httpbin.org/get', { signal: ac.signal });
+      clearTimeout(t);
+      httpbinOk = res.ok;
+    } catch { clearTimeout(t); httpbinOk = false; }
+  }, 15_000);
 
   afterAll(() => {
     try {
@@ -359,7 +368,7 @@ describe('CheckpointValidator', () => {
 
   describe('http_status', () => {
     it('HTTP 状态码匹配应该通过', async () => {
-      // 使用 httpbin.org 进行测试（公共测试服务）
+      if (!httpbinOk) return;
       const result = await validateCheckpoint(
         {
           id: 'cp-22',
@@ -367,11 +376,12 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      
-      expect(result.passed).toBe(true);
-    });
 
-    it.skip('HTTP 状态码不匹配应该失败', async () => {
+      expect(result.passed).toBe(true);
+    }, 15_000);
+
+    it('HTTP 状态码不匹配应该失败', async () => {
+      if (!httpbinOk) return;
       const result = await validateCheckpoint(
         {
           id: 'cp-23',
@@ -379,17 +389,18 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      
+
       expect(result.passed).toBe(false);
       expect(result.checks[0].message).toContain('不匹配');
-    });
+    }, 15_000);
   });
 
   describe('http_body', () => {
-    // 需要外网访问 httpbin.org，增加超时 + 网络不可用时跳过
+    // 需要外网访问 httpbin.org，网络不可用时跳过
     const HTTP_TIMEOUT = 15_000;
 
     it('HTTP 响应体包含内容应该通过', async () => {
+      if (!httpbinOk) return;
       const result = await validateCheckpoint(
         {
           id: 'cp-24',
@@ -401,6 +412,7 @@ describe('CheckpointValidator', () => {
     }, HTTP_TIMEOUT);
 
     it('HTTP 响应体不包含内容应该失败', async () => {
+      if (!httpbinOk) return;
       const result = await validateCheckpoint(
         {
           id: 'cp-25',

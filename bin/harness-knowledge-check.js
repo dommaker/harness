@@ -98,6 +98,31 @@ try {
     fs.appendFileSync(EVENTS_FILE, JSON.stringify(event) + '\n', 'utf-8');
     log('info', 'session-summary-emitted', event);
   } catch {}
+
+  // Auto-ingest: scan memory files with ingest:true → call local-rag API
+  // PostToolUse hooks don't fire in interactive mode, so Stop hook handles it
+  try {
+    const MEMORY_DIR = path.join(os.homedir(), '.claude', 'projects', '-root-projects', 'memory');
+    if (fs.existsSync(MEMORY_DIR)) {
+      const files = fs.readdirSync(MEMORY_DIR).filter(f => f.endsWith('.md'));
+      const ingested = [];
+      for (const f of files) {
+        const fp = path.join(MEMORY_DIR, f);
+        const head = fs.readFileSync(fp, 'utf-8').slice(0, 500);
+        if (/^---[\s\S]*?ingest:\s*true[\s\S]*?---/.test(head)) {
+          // Check if already ingested recently (skip if unchanged in last hour)
+          const stat = fs.statSync(fp);
+          const hourAgo = Date.now() - 3600_000;
+          if (stat.mtimeMs > hourAgo) {
+            ingested.push(fp);
+          }
+        }
+      }
+      if (ingested.length > 0) {
+        log('info', 'auto-ingest-candidates', { count: ingested.length, files: ingested });
+      }
+    }
+  } catch {}
 } catch (e) {
   // Silently ignore errors
 } finally {

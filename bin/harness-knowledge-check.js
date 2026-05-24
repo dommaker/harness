@@ -125,7 +125,19 @@ try {
         }
       }
       if (ingested.length > 0) {
-        log('info', 'auto-ingest-candidates', { count: ingested.length, files: ingested });
+        log('info', 'auto-ingest-start', { count: ingested.length, files: ingested });
+        const { execSync } = require('child_process');
+        const syncScript = '/root/projects/studio/bin/memory-knowledge-sync.js';
+        let successCount = 0;
+        for (const fp of ingested) {
+          try {
+            execSync(`node "${syncScript}" "${fp}"`, { timeout: 10_000, stdio: 'pipe' });
+            successCount++;
+          } catch (e) {
+            log('warn', 'auto-ingest-failed', { file: fp, error: (e.message || String(e)).slice(0, 100) });
+          }
+        }
+        log('info', 'auto-ingest-done', { success: successCount, total: ingested.length });
       }
     }
   } catch {}

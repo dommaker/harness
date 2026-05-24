@@ -312,6 +312,7 @@ class ConstraintChecker {
             case 'follow_conventions':
             case 'first_principles_first':
             case 'fix_the_problem_not_the_gate':
+            case 'diagnosis_to_fix_gate':
                 // Guideline: behavior constraints, enforced via promptInjection + post-check
                 return true;
             // Tips - 总是返回 true（仅提示）

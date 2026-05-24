@@ -905,6 +905,21 @@ exports.GUIDELINES = {
         injectPrompt: true,
     },
     /**
+     * 诊断→修复闸门：必须先呈现确认的根因+方案才能编辑，禁止 Read→Edit 直跳
+     * 原因：读代码定位问题后直接改，不查设计意图、不验证假设，是"凭猜测修 bug"
+     */
+    diagnosis_to_fix_gate: {
+        id: 'diagnosis_to_fix_gate',
+        rule: 'PRESENT ROOT CAUSE + FIX PLAN BEFORE EDITING CODE',
+        message: '诊断出根因后，必须先呈现方案+设计原型对照，禁止从 Read 直接跳到 Edit',
+        level: 'guideline',
+        trigger: ['code_implementation', 'module_modification', 'file_modification'],
+        enforcement: 'principle-check',
+        description: `用 Read/Grep 定位问题后，禁止立即 Edit 修改。必须先：① 确认根因（不止是"哪里出错"，而是"为什么设计成这样"）；② 检查设计原型/文档（CLAUDE.md、类型定义、commit message），确认原设计意图；③ 提出方案草案。满足以上三条后才能 Edit。违反此约束会导致"改了但不对"——因为根本没理解代码为什么那么写。`,
+        promptInjection: '诊断→修复闸门: 读代码定位根因后，必须先查设计原型（为什么这么写？CLAUDE.md/类型定义/commit message），呈现确认的根因+方案草案，然后才能 Edit。禁止 Read→Edit 直跳，禁止对现有设计做未经原型对照的语义变更。',
+        injectPrompt: true,
+    },
+    /**
      * 禁止硬编码凭证
      * 原因：密码/token/密钥泄露是最严重的安全漏洞，一旦提交到版本控制即不可逆
      */

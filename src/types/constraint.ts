@@ -185,7 +185,10 @@ export interface ConstraintContext {
   
   /** 是否有根本原因调查 */
   hasRootCauseInvestigation?: boolean;
-  
+
+  /** 是否已通过诊断→修复闸门（设计方案已确认） */
+  hasPlanApproval?: boolean;
+
   /** 是否有验证证据 */
   hasVerificationEvidence?: boolean;
   

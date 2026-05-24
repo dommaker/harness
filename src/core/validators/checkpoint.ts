@@ -392,7 +392,7 @@ export class CheckpointValidator {
     const expected = check.config.expectedStatus || check.config.expected || 200;
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
       const actual = response.status;
       const matches = actual === expected;
 
@@ -427,6 +427,7 @@ export class CheckpointValidator {
         method: check.config.method || 'GET',
         headers: check.config.headers,
         body: check.config.body ? JSON.stringify(check.config.body) : undefined,
+        signal: AbortSignal.timeout(5000),
       });
       const actual = await response.text();
       const contains = actual.includes(expected);

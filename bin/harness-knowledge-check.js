@@ -81,10 +81,16 @@ try {
   }
   // Emit session summary event → events-daemon → knowledge extraction pipeline
   try {
+    const now = Date.now();
+    const durationMs = state.startTime ? now - state.startTime : 0;
+    const durationMin = Math.round(durationMs / 60000);
     const event = {
       type: 'session:summary',
       sessionType: 'development',
+      tool: state.tool || 'unknown',        // claude | codex | opencode | etc
       timestamp: new Date().toISOString(),
+      durationMs,
+      durationMin,
       deepAnalysis: state.planned || state.explored || state.readDirs.length >= UNIQUE_DIR_THRESHOLD,
       knowledgeCaptured: !!state.captured,
       readDirsCount: state.readDirs.length,

@@ -28,7 +28,7 @@ describe('CheckpointValidator', () => {
       clearTimeout(t);
       httpbinOk = res.ok;
     } catch { clearTimeout(t); httpbinOk = false; }
-  }, 15_000);
+  }, 30_000);
 
   afterAll(() => {
     try {

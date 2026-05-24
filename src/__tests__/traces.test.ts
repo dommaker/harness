@@ -116,6 +116,76 @@ describe('TraceCollector', () => {
     expect(stats.fileExists).toBe(true);
     expect(stats.totalLines).toBe(10);
   });
+
+  test('should filter traces by result', () => {
+    collector.recordFail('constraint_a', 'guideline');
+    collector.recordPass('constraint_b', 'guideline');
+
+    const traces = collector.read({ result: 'fail' });
+    expect(traces).toHaveLength(1);
+    expect(traces[0].constraintId).toBe('constraint_a');
+  });
+
+  test('should filter traces by projectPath', () => {
+    collector.record({
+      constraintId: 'c1', level: 'guideline', timestamp: Date.now(),
+      result: 'pass', projectPath: '/project/a', severity: 'info',
+    });
+    collector.record({
+      constraintId: 'c2', level: 'guideline', timestamp: Date.now(),
+      result: 'pass', projectPath: '/project/b', severity: 'info',
+    });
+
+    const traces = collector.read({ projectPath: '/project/a' });
+    expect(traces).toHaveLength(1);
+    expect(traces[0].constraintId).toBe('c1');
+  });
+
+  test('should filter traces by sessionId', () => {
+    collector.record({
+      constraintId: 'c1', level: 'guideline', timestamp: Date.now(),
+      result: 'pass', sessionId: 'session-1', severity: 'info',
+    });
+    collector.record({
+      constraintId: 'c2', level: 'guideline', timestamp: Date.now(),
+      result: 'pass', sessionId: 'session-2', severity: 'info',
+    });
+
+    const traces = collector.read({ sessionId: 'session-2' });
+    expect(traces).toHaveLength(1);
+    expect(traces[0].constraintId).toBe('c2');
+  });
+
+  test('should clean up old backup files', () => {
+    // Create old backup files
+    const dir = path.dirname(collector['traceFile']);
+    const oldFile = path.join(dir, 'execution-old.log');
+    fs.writeFileSync(oldFile, 'old content', 'utf-8');
+    // Set mtime to 2 years ago
+    const oldDate = new Date(Date.now() - 2 * 365 * 24 * 3600 * 1000);
+    fs.utimesSync(oldFile, oldDate, oldDate);
+
+    // Create recent backup file (not cleaned)
+    const recentFile = path.join(dir, 'execution-recent.log');
+    fs.writeFileSync(recentFile, 'recent content', 'utf-8');
+
+    // Cleanup files older than 365 days
+    const deletedCount = collector.cleanupOldFiles(365);
+    expect(deletedCount).toBe(1);
+  });
+
+  test('should return 0 when backup dir does not exist', () => {
+    const result = collector.cleanupOldFiles(30);
+    // Dir exists (created by constructor), so this won't hit line 259.
+    // Create a collector with a path in non-existent dir to test that branch.
+    const tmpRoot = path.join(os.tmpdir(), `harness-traces-nonexistent-${Date.now()}`);
+    const c = new (require('../monitoring/traces').TraceCollector)({
+      traceFile: path.join(tmpRoot, 'deep', 'traces.log'),
+    });
+    // Delete the directory the collector just created
+    require('fs').rmSync(tmpRoot, { recursive: true, force: true });
+    expect(c.cleanupOldFiles(30)).toBe(0);
+  });
 });
 
 describe('TraceAnalyzer', () => {

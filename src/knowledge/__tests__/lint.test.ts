@@ -207,6 +207,106 @@ describe('KnowledgeLinter', () => {
     });
   });
 
+  describe('validateEntry', () => {
+    it('rejects content shorter than 20 characters', () => {
+      const issues = linter.validateEntry({ title: 'Short', content: 'tiny', tags: [], type: 'decision' });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe('orphan');
+      expect(issues[0].severity).toBe('high');
+    });
+
+    it('flags vague Chinese titles', () => {
+      const issues = linter.validateEntry({
+        title: '错误',
+        content: 'This is a sufficiently long content for the test.',
+        tags: [],
+        type: 'decision',
+      });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe('contradiction');
+    });
+
+    it('flags vague English titles', () => {
+      const issues = linter.validateEntry({
+        title: 'bug',
+        content: 'This is a sufficiently long content for the test to pass length check.',
+        tags: [],
+        type: 'decision',
+      });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].severity).toBe('medium');
+    });
+
+    it('passes valid entries without issues', () => {
+      const issues = linter.validateEntry({
+        title: 'Specific Root Cause Analysis for performance',
+        content: 'This is a sufficiently long content for the test to pass all checks.',
+        tags: ['performance'],
+        type: 'decision',
+      });
+      expect(issues).toHaveLength(0);
+    });
+
+    it('detects contradictions with proven entries sharing 2+ tags', () => {
+      saveEntry({
+        id: 'proven-validate',
+        title: 'Proven Fact',
+        maturity: 'proven',
+        tags: ['database', 'performance', 'optimization'],
+      });
+
+      const issues = linter.validateEntry({
+        title: 'New Claim',
+        content: 'This is a valid length content for testing purposes here.',
+        tags: ['database', 'performance', 'indexing'],
+        type: 'decision',
+      });
+      expect(issues).toHaveLength(1);
+      expect(issues[0].type).toBe('contradiction');
+    });
+
+    it('does not detect contradiction when sharing only 1 tag', () => {
+      saveEntry({
+        id: 'proven-single-tag',
+        title: 'Proven',
+        maturity: 'proven',
+        tags: ['database'],
+      });
+
+      const issues = linter.validateEntry({
+        title: 'New Claim',
+        content: 'This is a valid length content for testing purposes.',
+        tags: ['database', 'caching'],
+        type: 'decision',
+      });
+      expect(issues.filter(i => i.type === 'contradiction')).toHaveLength(0);
+    });
+
+    it('detects exact title duplicates', () => {
+      saveEntry({ id: 'existing-entry', title: 'Unique Title', maturity: 'verified' });
+
+      const issues = linter.validateEntry({
+        title: 'Unique Title',
+        content: 'This is a sufficiently long content for the duplicate check test case.',
+        tags: [],
+        type: 'decision',
+      });
+      expect(issues.filter(i => i.type === 'duplicate')).toHaveLength(1);
+    });
+
+    it('detects title containment similarity', () => {
+      saveEntry({ id: 'base-entry', title: 'My Feature', maturity: 'verified' });
+
+      const issues = linter.validateEntry({
+        title: 'Add My Feature Implementation',
+        content: 'This is a sufficiently long content for the containment check test case.',
+        tags: [],
+        type: 'decision',
+      });
+      expect(issues.some(i => i.type === 'duplicate')).toBe(true);
+    });
+  });
+
   describe('autoFix', () => {
     it('应该修复索引不一致', () => {
       saveEntry({ id: 'entry-1' });

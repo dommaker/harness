@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { runCommand, isCommandAvailable } from '../utils/exec';
+import { runCommand, isCommandAvailable, normalizeTriggers, delay } from '../utils/exec';
 
 describe('exec utils', () => {
   describe('runCommand', () => {
@@ -43,6 +43,41 @@ describe('exec utils', () => {
     it('常见命令应该可用', async () => {
       expect(await isCommandAvailable('cat')).toBe(true);
       expect(await isCommandAvailable('grep')).toBe(true);
+    });
+  });
+
+  describe('normalizeTriggers', () => {
+    it('应该返回 fallback 当值为 null', () => {
+      const result = normalizeTriggers(null, ['default']);
+      expect(result).toEqual(['default']);
+    });
+
+    it('应该返回 fallback 当值为 undefined', () => {
+      const result = normalizeTriggers(undefined, ['default']);
+      expect(result).toEqual(['default']);
+    });
+
+    it('应该将单值包装为数组', () => {
+      const result = normalizeTriggers('single');
+      expect(result).toEqual(['single']);
+    });
+
+    it('应该直接返回数组', () => {
+      const result = normalizeTriggers(['a', 'b']);
+      expect(result).toEqual(['a', 'b']);
+    });
+
+    it('应该使用空数组作为默认 fallback', () => {
+      const result = normalizeTriggers(undefined);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('delay', () => {
+    it('应该延迟指定时间', async () => {
+      const start = Date.now();
+      await delay(10);
+      expect(Date.now() - start).toBeGreaterThanOrEqual(8);
     });
   });
 });

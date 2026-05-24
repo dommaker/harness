@@ -166,4 +166,41 @@ describe('CommandGate', () => {
       expect(ids.length).toBe(uniqueIds.size);
     });
   });
+
+  describe('additional blocked patterns', () => {
+    let gate: CommandGate;
+    beforeEach(() => { gate = new CommandGate(); });
+
+    it('should block rm -rf ~', async () => {
+      const r = await gate.check('rm -rf /home/user/.cache');
+      expect(r.passed).toBe(false);
+      expect(r.details?.blocked.some((b: any) => b.id === 'rm-rf-home')).toBe(true);
+    });
+
+    it('should block rm -rf .', async () => {
+      const r = await gate.check('rm -rf .');
+      expect(r.passed).toBe(false);
+    });
+
+    it('should block chmod 777', async () => {
+      const r = await gate.check('chmod 777 /var/www');
+      expect(r.passed).toBe(false);
+    });
+
+    it('should block chmod -R 777', async () => {
+      const r = await gate.check('chmod -R 777 /home');
+      expect(r.passed).toBe(false);
+      expect(r.details?.blocked.some((b: any) => b.category === 'permission')).toBe(true);
+    });
+
+    it('should warn on chown root', async () => {
+      const r = await gate.check('chown root:root /etc/config');
+      expect(r.details?.warnings.some((w: any) => w.id === 'chown-root')).toBe(true);
+    });
+
+    it('should allow safe uninstall commands', async () => {
+      const r = await gate.check('npm uninstall lodash');
+      expect(r.passed).toBe(true);
+    });
+  });
 });

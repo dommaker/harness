@@ -32,6 +32,157 @@ describe('sync-docs command', () => {
     consoleSpy.mockRestore();
   });
 
+  describe('generateModuleTable', () => {
+    it('空模块列表应该跳过表格生成', async () => {
+      const testDir = path.join(tempDir, 'empty-table');
+      fs.mkdirSync(testDir, { recursive: true });
+
+      // No src dir → no modules → nothing to report
+      const result = await syncDocs({ projectPath: testDir });
+
+      expect(result).toBe(true);
+      // When no modules and no changes, all docs are current
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('所有文档'));
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('有模块时应该生成完整表格', async () => {
+      const testDir = path.join(tempDir, 'with-table');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // Create a source file with JSDoc comment
+      fs.writeFileSync(path.join(srcDir, 'mymodule.ts'), '/**\n * My test module\n */\nexport const x = 1;');
+
+      await syncDocs({ projectPath: testDir });
+
+      const capPath = path.join(testDir, 'CAPABILITIES.md');
+      const content = fs.readFileSync(capPath, 'utf-8');
+      expect(content).toContain('| 模块 | 文件 | 说明 |');
+      expect(content).toContain('mymodule');
+      expect(content).toContain('My test module');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('extractFirstComment', () => {
+    it('JSDoc 注释应该被提取为模块描述', async () => {
+      const testDir = path.join(tempDir, 'jsdoc-extract');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(path.join(srcDir, 'jsdoc-mod.ts'), '/**\n * JSDoc module description\n */\nexport const y = 2;');
+
+      await syncDocs({ projectPath: testDir });
+
+      const capPath = path.join(testDir, 'CAPABILITIES.md');
+      const content = fs.readFileSync(capPath, 'utf-8');
+      expect(content).toContain('JSDoc module description');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('单行 // 注释应该被提取为模块描述', async () => {
+      const testDir = path.join(tempDir, 'linecomment-extract');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // Create a file with // style comment
+      const filePath = path.join(srcDir, 'line-mod.ts');
+      fs.writeFileSync(filePath, '// Line comment module\nexport const z = 3;');
+
+      await syncDocs({ projectPath: testDir });
+
+      const capPath = path.join(testDir, 'CAPABILITIES.md');
+      const content = fs.readFileSync(capPath, 'utf-8');
+      expect(content).toContain('Line comment module');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('无注释文件应该使用文件名作为描述', async () => {
+      const testDir = path.join(tempDir, 'no-comment');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(path.join(srcDir, 'bare.ts'), 'export const a = 1;');
+
+      await syncDocs({ projectPath: testDir });
+
+      const capPath = path.join(testDir, 'CAPABILITIES.md');
+      const content = fs.readFileSync(capPath, 'utf-8');
+      // Should use file basename as description when no comment
+      expect(content).toContain('bare');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('generateChangelogEntry', () => {
+    it('CHANGELOG.md 不存在时应该跳过不报错', async () => {
+      const testDir = path.join(tempDir, 'no-changelog');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(path.join(srcDir, 'foo.ts'), 'export const x = 1;');
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
+      );
+
+      // With changelog option but no CHANGELOG.md
+      await syncDocs({ projectPath: testDir, changelog: true });
+
+      // Should log the warning but not crash
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('CHANGELOG.md 不存在'));
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('[Unreleased] 头部存在时应该在其后插入新条目', async () => {
+      const testDir = path.join(tempDir, 'changelog-unreleased');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(path.join(testDir, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n- Something\n');
+      fs.writeFileSync(path.join(srcDir, 'bar.ts'), 'export const x = 1;');
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
+      );
+
+      await syncDocs({ projectPath: testDir, changelog: true });
+
+      const changelogContent = fs.readFileSync(path.join(testDir, 'CHANGELOG.md'), 'utf-8');
+      expect(changelogContent).toContain('bar.ts');
+      expect(changelogContent).toContain('## [Unreleased]');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('无 [Unreleased] 时应该追加到末尾', async () => {
+      const testDir = path.join(tempDir, 'changelog-append');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(path.join(testDir, 'CHANGELOG.md'), '# Changelog\n\n## [1.0.0]\n\n- Initial\n');
+      fs.writeFileSync(path.join(srcDir, 'baz.ts'), 'export const x = 1;');
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
+      );
+
+      await syncDocs({ projectPath: testDir, changelog: true });
+
+      const changelogContent = fs.readFileSync(path.join(testDir, 'CHANGELOG.md'), 'utf-8');
+      expect(changelogContent).toContain('baz.ts');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
+
   describe('syncDocs', () => {
     it('无 src/ 目录应该跳过模块扫描', async () => {
       const emptyDir = path.join(tempDir, 'empty');

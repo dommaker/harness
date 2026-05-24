@@ -818,4 +818,451 @@ describe('ConstraintChecker', () => {
       expect(result.message).toContain('未知的约束');
     });
   });
+
+  describe('Text pattern constraints', () => {
+    it('no_fuzzy_completion_claim should detect Chinese fuzzy words', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        completionClaimText: '应该没问题，大概完成了',
+      };
+
+      const result = await checker.check(
+        { id: 'no_fuzzy_completion_claim', level: 'iron_law', rule: 'NO FUZZY', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('no_fuzzy_completion_claim should pass clean text', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        completionClaimText: '142 tests passed, coverage 87.3%',
+      };
+
+      const result = await checker.check(
+        { id: 'no_fuzzy_completion_claim', level: 'iron_law', rule: 'NO FUZZY', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_fuzzy_completion_claim should pass with empty text', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        completionClaimText: '',
+      };
+
+      const result = await checker.check(
+        { id: 'no_fuzzy_completion_claim', level: 'iron_law', rule: 'NO FUZZY', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_performative_agreement should detect performative patterns', async () => {
+      const context: ConstraintContext = {
+        operation: 'design_request',
+        taskDescription: '好的，我来做',
+      };
+
+      const result = await checker.check(
+        { id: 'no_performative_agreement', level: 'iron_law', rule: 'NO PERFORMATIVE', message: 'test', trigger: 'design_request', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('no_performative_agreement should pass with analysis', async () => {
+      const context: ConstraintContext = {
+        operation: 'design_request',
+        taskDescription: 'This is a detailed analysis of the problem with multiple considerations and proposed solutions.',
+      };
+
+      const result = await checker.check(
+        { id: 'no_performative_agreement', level: 'iron_law', rule: 'NO PERFORMATIVE', message: 'test', trigger: 'design_request', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_claim_without_evidence should pass with verification evidence', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        hasVerificationEvidence: true,
+      };
+
+      const result = await checker.check(
+        { id: 'no_claim_without_evidence', level: 'guideline', rule: 'NO CLAIM', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_claim_without_evidence should pass with taskDescription containing test', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        hasVerificationEvidence: false,
+        taskDescription: 'Need to run the test suite to verify',
+      };
+
+      const result = await checker.check(
+        { id: 'no_claim_without_evidence', level: 'guideline', rule: 'NO CLAIM', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_claim_without_evidence should fail without evidence', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        hasVerificationEvidence: false,
+        hasTest: false,
+        taskDescription: 'Did some work',
+      };
+
+      const result = await checker.check(
+        { id: 'no_claim_without_evidence', level: 'guideline', rule: 'NO CLAIM', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('no_delete_without_context should pass with requirement review', async () => {
+      const context: ConstraintContext = {
+        operation: 'file_deletion',
+        hasRequirementReview: true,
+      };
+
+      const result = await checker.check(
+        { id: 'no_delete_without_context', level: 'guideline', rule: 'NO DELETE', message: 'test', trigger: 'file_deletion', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_delete_without_context should pass with existing design', async () => {
+      const context: ConstraintContext = {
+        operation: 'file_deletion',
+        hasRequirementReview: false,
+        hasRequirement: false,
+        isExistingDesign: true,
+      };
+
+      const result = await checker.check(
+        { id: 'no_delete_without_context', level: 'guideline', rule: 'NO DELETE', message: 'test', trigger: 'file_deletion', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_delete_without_context should fail without any context', async () => {
+      const context: ConstraintContext = {
+        operation: 'file_deletion',
+        hasRequirementReview: false,
+        hasRequirement: false,
+        isExistingDesign: false,
+      };
+
+      const result = await checker.check(
+        { id: 'no_delete_without_context', level: 'guideline', rule: 'NO DELETE', message: 'test', trigger: 'file_deletion', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+  });
+
+  describe('Behavior guidelines (always true)', () => {
+    it('surgical_changes_only should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'surgical_changes_only', level: 'guideline', rule: 'SURGICAL', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_model_for_deterministic should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'no_model_for_deterministic', level: 'guideline', rule: 'NO MODEL', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_conflict_blending should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'no_conflict_blending', level: 'guideline', rule: 'NO BLEND', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('read_before_write should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'read_before_write', level: 'guideline', rule: 'READ FIRST', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('first_principles_first should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'first_principles_first', level: 'guideline', rule: 'PRINCIPLES', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('fix_the_problem_not_the_gate should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'fix_the_problem_not_the_gate', level: 'guideline', rule: 'FIX PROBLEM', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('diagnosis_to_fix_gate should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'diagnosis_to_fix_gate', level: 'guideline', rule: 'DIAGNOSIS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('follow_conventions should return true', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'follow_conventions', level: 'guideline', rule: 'CONVENTIONS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+  });
+
+  describe('Default guideline constraints', () => {
+    it('no_hardcoded_credentials should pass by default', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'no_hardcoded_credentials', level: 'guideline', rule: 'NO CREDENTIALS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('design_decision_requires_discussion should pass by default', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation' };
+      const result = await checker.check(
+        { id: 'design_decision_requires_discussion', level: 'guideline', rule: 'DISCUSS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+  });
+
+  describe('Additional Iron Laws (pure context)', () => {
+    it('no_implementation_without_requirement_review should pass with review', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasRequirementReview: true };
+      const result = await checker.check(
+        { id: 'no_implementation_without_requirement_review', level: 'iron_law', rule: 'REVIEW REQ', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_implementation_without_requirement_review should fail without review', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasRequirementReview: false };
+      const result = await checker.check(
+        { id: 'no_implementation_without_requirement_review', level: 'iron_law', rule: 'REVIEW REQ', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('no_implementation_without_requirement should pass with requirement', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasRequirement: true };
+      const result = await checker.check(
+        { id: 'no_implementation_without_requirement', level: 'iron_law', rule: 'REQ EXISTS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_implementation_without_requirement should fail without requirement', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasRequirement: false };
+      const result = await checker.check(
+        { id: 'no_implementation_without_requirement', level: 'iron_law', rule: 'REQ EXISTS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('must_use_worktree should pass with worktree', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasWorktree: true };
+      const result = await checker.check(
+        { id: 'must_use_worktree', level: 'iron_law', rule: 'WORKTREE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('must_use_worktree should fail without worktree', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasWorktree: false };
+      const result = await checker.check(
+        { id: 'must_use_worktree', level: 'iron_law', rule: 'WORKTREE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('two_stage_review_required should pass with two-stage review', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasTwoStageReview: true };
+      const result = await checker.check(
+        { id: 'two_stage_review_required', level: 'iron_law', rule: 'TWO STAGE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('two_stage_review_required should fail without two-stage review', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasTwoStageReview: false };
+      const result = await checker.check(
+        { id: 'two_stage_review_required', level: 'iron_law', rule: 'TWO STAGE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(false);
+    });
+  });
+
+  describe('Additional guidelines (pure context)', () => {
+    it('no_skill_without_test should pass with test', async () => {
+      const context: ConstraintContext = { operation: 'module_creation', hasTest: true };
+      const result = await checker.check(
+        { id: 'no_skill_without_test', level: 'guideline', rule: 'SKILL TEST', message: 'test', trigger: 'module_creation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('no_skill_without_test should fail without test', async () => {
+      const context: ConstraintContext = { operation: 'module_creation', hasTest: false };
+      const result = await checker.check(
+        { id: 'no_skill_without_test', level: 'guideline', rule: 'SKILL TEST', message: 'test', trigger: 'module_creation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('simplest_solution_first should pass with reuse check', async () => {
+      // matches trigger code_implementation
+      const context: ConstraintContext = { operation: 'code_implementation', hasReuseCheck: true };
+      const result = await checker.check(
+        { id: 'simplest_solution_first', level: 'guideline', rule: 'SIMPLEST', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('simplest_solution_first should fail without reuse check', async () => {
+      const context: ConstraintContext = { operation: 'code_implementation', hasReuseCheck: false };
+      const result = await checker.check(
+        { id: 'simplest_solution_first', level: 'guideline', rule: 'SIMPLEST', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(false);
+    });
+  });
+
+  describe('Tip constraints', () => {
+    it('readme_required should always pass', async () => {
+      const context: ConstraintContext = { operation: 'module_creation' };
+      const result = await checker.check(
+        { id: 'readme_required', level: 'tip', rule: 'README', message: 'test', trigger: 'module_creation', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('doc_required_for_public_api should always pass', async () => {
+      const context: ConstraintContext = { operation: 'export_change' };
+      const result = await checker.check(
+        { id: 'doc_required_for_public_api', level: 'tip', rule: 'DOC', message: 'test', trigger: 'export_change', enforcement: 'test' },
+        context
+      );
+      expect(result.satisfied).toBe(true);
+    });
+  });
+
+  describe('no_excuse_patterns', () => {
+    it('should detect excuse patterns in completion claim', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        completionClaimText: '稍后修复这个bug',
+      };
+
+      const result = await checker.check(
+        { id: 'no_excuse_patterns', level: 'guideline', rule: 'NO EXCUSE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('should detect excuse patterns in task description', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        taskDescription: '这是个临时方案，先这样',
+      };
+
+      const result = await checker.check(
+        { id: 'no_excuse_patterns', level: 'guideline', rule: 'NO EXCUSE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(false);
+    });
+
+    it('should pass with clean text', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        completionClaimText: 'Fixed by refactoring the validation logic in checker.ts',
+      };
+
+      const result = await checker.check(
+        { id: 'no_excuse_patterns', level: 'guideline', rule: 'NO EXCUSE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+
+    it('should pass with empty text', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+      };
+
+      const result = await checker.check(
+        { id: 'no_excuse_patterns', level: 'guideline', rule: 'NO EXCUSE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        context
+      );
+
+      expect(result.satisfied).toBe(true);
+    });
+  });
 });

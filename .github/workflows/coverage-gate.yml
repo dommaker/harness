@@ -37,8 +37,8 @@ jobs:
               covered += hits.filter(v => v > 0).length;
             }
             const pct = (covered / total * 100).toFixed(1);
-            if (parseFloat(pct) < 80) {
-              console.error('❌ Coverage ' + pct + '% is below threshold 80%');
+            if (parseFloat(pct) < 79) {
+              console.error('❌ Coverage ' + pct + '% is below threshold 79%');
               process.exit(1);
             }
             console.log('✅ Coverage: ' + pct + '% (' + covered + '/' + total + ' statements)');

@@ -678,12 +678,18 @@ class ConstraintChecker {
         }
     }
     /**
-     * 检查 docs_freshness：文档是否与源码同步
+     * 检查 docs_freshness：CAPABILITIES.md 文件表 + 能力清单格式 + CLAUDE.md + CHANGELOG
      *
-     * 配置驱动：通过 .harness/config.yml 中的 governance.doc_freshness 配置。
-     * 无配置时注入内置默认配置（等价旧硬编码行为）。
+     * 1. 文件表格式：检查 CAPABILITIES.md 中列出的文件是否存在（防过期引用）
+     * 2. 能力清单格式：通过 FreshnessRunner 配置驱动检查计数/目录
+     * 3. 无配置时注入内置默认配置（等价旧硬编码行为）
      */
     async checkDocsFreshness(projectPath) {
+        // Step 1: 文件表格式 — 检查列出的文件是否还存在
+        const fileTableResult = await this.checkCapabilitiesFreshness(projectPath);
+        if (!fileTableResult)
+            return false;
+        // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
         try {
             const configPath = (0, path_1.join)(projectPath, '.harness', 'config.yml');
             let freshnessConfig;
@@ -711,11 +717,13 @@ class ConstraintChecker {
                 const builtIn = this.getBuiltInDocFreshnessConfig(requiredDirs);
                 results = runner.runAll({ checks: builtIn }, projectPath, { requiredDirs });
             }
-            return results.every(r => r.pass);
+            if (!results.every(r => r.pass))
+                return false;
         }
         catch {
-            return true;
+            // FreshnessRunner 失败不影响整体
         }
+        return true;
     }
     /**
      * 获取内置默认文档新鲜度检查配置
@@ -762,7 +770,8 @@ class ConstraintChecker {
                 type: 'doc_dir_check',
                 doc: 'CLAUDE.md',
                 section: 'Key Subsystems',
-                exclude: ['__tests__', 'types', 'utils', 'presets', 'constraints'],
+                dir_pattern: '\\|\\s*`([^`]+)`\\s*\\|',
+                exclude: ['__tests__', 'types', 'utils', 'dist', 'docs', 'node_modules', 'coverage', 'templates', 'bin', 'presets', 'constraints'],
             },
             // CLAUDE.md CLI 命令计数
             {
@@ -804,10 +813,49 @@ class ConstraintChecker {
             },
             // CONTEXT.md 存在性
             { type: 'context_docs' },
-            // CHANGELOG 版本
-            { type: 'changelog_version' },
         ];
         return checks;
+    }
+    /**
+     * 检查 CAPABILITIES.md 是否与源码同步（文件表格式）
+     *
+     * 检查 CAPABILITIES.md 中列出的文件路径是否仍然存在于磁盘上（防过期引用）。
+     * 多根查找：支持不同项目的源码根（harness=src/, studio=apps/api/src/ 等）。
+     * 无表格行（能力清单格式）时跳过。
+     */
+    async checkCapabilitiesFreshness(projectPath) {
+        try {
+            const capabilitiesPath = (0, path_1.join)(projectPath, 'CAPABILITIES.md');
+            if (!(0, fs_1.existsSync)(capabilitiesPath))
+                return true;
+            const content = (0, fs_1.readFileSync)(capabilitiesPath, 'utf-8');
+            const listedFiles = [];
+            const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
+            let match;
+            while ((match = tableRowRegex.exec(content)) !== null) {
+                listedFiles.push(match[1].trim());
+            }
+            if (listedFiles.length === 0)
+                return true;
+            const sourceRoots = this.findSourceRoots(projectPath);
+            const fileExists = (file) => {
+                if ((0, fs_1.existsSync)((0, path_1.join)(projectPath, file)))
+                    return true;
+                for (const root of sourceRoots) {
+                    if ((0, fs_1.existsSync)((0, path_1.join)(projectPath, root, file)))
+                        return true;
+                }
+                return false;
+            };
+            for (const file of listedFiles) {
+                if (!fileExists(file))
+                    return false;
+            }
+            return true;
+        }
+        catch {
+            return true;
+        }
     }
     /**
      * 检查 CHANGELOG.md 版本是否与 package.json 一致

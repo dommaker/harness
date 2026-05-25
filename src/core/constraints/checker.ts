@@ -19,7 +19,8 @@ import {
 import type { ExecutionTrace } from '../../types/trace';
 import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, TIPS, findConstraintsByTrigger } from './definitions';
-import type { MergedConstraintsConfig } from '../../types/project-config';
+import type { MergedConstraintsConfig, DocFreshnessConfig, DocFreshnessCheck } from '../../types/project-config';
+import { FreshnessRunner, type FreshnessCheckResult } from './doc-freshness/runner';
 import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
@@ -324,6 +325,9 @@ export class ConstraintChecker {
 
       case 'docs_freshness':
         return await this.checkDocsFreshness(projectPath);
+
+      case 'changelog_freshness':
+        return await this.checkChangelogFreshness(projectPath);
 
       case 'no_excuse_patterns':
         // 检查是否使用了借口模式
@@ -748,159 +752,168 @@ export class ConstraintChecker {
   }
 
   /**
-   * 检查 docs_freshness：CAPABILITIES.md + CLAUDE.md 是否与源码同步
+   * 检查 docs_freshness：文档是否与源码同步
+   *
+   * 配置驱动：通过 .harness/config.yml 中的 governance.doc_freshness 配置。
+   * 无配置时注入内置默认配置（等价旧硬编码行为）。
    */
   private async checkDocsFreshness(projectPath: string): Promise<boolean> {
-    // 检查 CAPABILITIES.md
-    const capResult = await this.checkCapabilitiesFreshness(projectPath);
-    if (!capResult) return false;
-
-    // CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md 的 Key Subsystems 表中。不再检查。
-
-    return true;
-  }
-
-  /**
-   * 检查 CAPABILITIES.md 是否与源码同步
-   */
-  private async checkCapabilitiesFreshness(projectPath: string): Promise<boolean> {
     try {
-      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
-      const content = readFileSync(capabilitiesPath, 'utf-8');
+      const configPath = join(projectPath, '.harness', 'config.yml');
+      let freshnessConfig: DocFreshnessConfig | undefined;
+      let requiredDirs: string[] | undefined;
 
-      // 解析 CAPABILITIES.md 中的文件路径
-      const listedFiles: string[] = [];
-      const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
-      let match;
-      while ((match = tableRowRegex.exec(content)) !== null) {
-        listedFiles.push(match[1].trim());
-      }
+      if (existsSync(configPath)) {
+        try {
+          const raw = yaml.load(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+          const governance = raw.governance as Record<string, unknown> | undefined;
+          freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
 
-      // 如果没有表格行，跳过检查
-      if (listedFiles.length === 0) {
-        return true;
-      }
-
-      // 多根查找：不同项目有不同的源码根（harness=src/, agent-studio=apps/api/src/ 等）
-      const sourceRoots = this.findSourceRoots(projectPath);
-      const fileExists = (file: string): boolean => {
-        if (existsSync(join(projectPath, file))) return true;
-        for (const root of sourceRoots) {
-          if (existsSync(join(projectPath, root, file))) return true;
-        }
-        return false;
-      };
-
-      // 检查 CAPABILITIES 中列出的文件是否还存在（防过期引用）
-      for (const file of listedFiles) {
-        if (!fileExists(file)) {
-          return false;
-        }
-      }
-
-      return true;
-    } catch {
-      return true; // CAPABILITIES.md 不存在或检查失败，跳过
-    }
-  }
-
-  /**
-   * 检查 CLAUDE.md 的 Domain Packages 和 Key Architecture Paths 段落是否与实际代码结构同步
-   */
-  private async checkClaudeMdFreshness(projectPath: string): Promise<boolean> {
-    try {
-      const claudePath = join(projectPath, 'CLAUDE.md');
-      if (!existsSync(claudePath)) return true; // 无 CLAUDE.md，跳过
-
-      const content = readFileSync(claudePath, 'utf-8');
-
-      // 1. 检查 Domain Packages 段落：packages/studio-* 目录是否存在
-      const domainPkgResult = this.checkDomainPackages(projectPath, content);
-      if (!domainPkgResult) return false;
-
-      // 2. 检查 Key Architecture Paths 段落：引用的文件/目录是否存在
-      const archPathsResult = this.checkArchitecturePaths(projectPath, content);
-      if (!archPathsResult) return false;
-
-      return true;
-    } catch {
-      return true; // 检查失败，跳过
-    }
-  }
-
-  /**
-   * 检查 CLAUDE.md Domain Packages 段落中列出的 packages/studio-* 目录是否都存在
-   */
-  private checkDomainPackages(projectPath: string, claudeContent: string): boolean {
-    try {
-      // 提取 Domain Packages 段落内容（到下一个 ## 或 --- 为止）
-      const sectionMatch = claudeContent.match(/## Domain Packages\s*\n([\s\S]*?)(?=\n## |\n---|\n$)/);
-      if (!sectionMatch) return true; // 段落不存在，跳过
-
-      const section = sectionMatch[1];
-
-      // 提取 CLAUDE.md 中 packages/* 的包名
-      const pkgRegex = /packages\/([\w-]+)/g;
-      let match;
-      while ((match = pkgRegex.exec(section)) !== null) {
-        const pkgDir = join(projectPath, 'packages', match[1]);
-        if (!existsSync(pkgDir)) {
-          return false; // CLAUDE.md 引用的包目录不存在
-        }
-      }
-
-      // 反向检查：实际存在的包目录是否都在 CLAUDE.md 中被提及
-      const packagesDir = join(projectPath, 'packages');
-      if (existsSync(packagesDir)) {
-        const entries = readdirSync(packagesDir);
-        for (const entry of entries) {
-          if (entry.startsWith('.') || entry.includes('node_modules')) continue;
-          const entryStat = statSync(join(packagesDir, entry));
-          if (!entryStat.isDirectory()) continue;
-          if (!section.includes(entry)) {
-            return false; // 实际包未在 CLAUDE.md 中记录
+          const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
+          if (contextFiles?.enabled && Array.isArray(contextFiles.required_dirs)) {
+            requiredDirs = contextFiles.required_dirs as string[];
           }
+        } catch {
+          // 配置解析失败，使用默认
         }
       }
 
-      return true;
+      const runner = new FreshnessRunner();
+      let results: FreshnessCheckResult[];
+
+      if (freshnessConfig?.checks && freshnessConfig.checks.length > 0) {
+        results = runner.runAll(freshnessConfig, projectPath, { requiredDirs });
+      } else {
+        const builtIn = this.getBuiltInDocFreshnessConfig(requiredDirs);
+        results = runner.runAll({ checks: builtIn }, projectPath, { requiredDirs });
+      }
+
+      return results.every(r => r.pass);
     } catch {
       return true;
     }
   }
 
+  /**
+   * 获取内置默认文档新鲜度检查配置
+   *
+   * 等价旧硬编码的 checkCapabilitiesFreshness + checkClaudeMdFreshness 行为。
+   * 仅当项目未提供 governance.doc_freshness 配置时使用。
+   */
+  private getBuiltInDocFreshnessConfig(requiredDirs?: string[]): DocFreshnessCheck[] {
+    const ironCount = Object.keys(IRON_LAWS).length;
+    const guideCount = Object.keys(GUIDELINES).length;
+    const tipsCount = Object.keys(TIPS).length;
+
+    const checks: DocFreshnessCheck[] = [
+      // CAPABILITIES.md 计数
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'CLI Commands',
+        pattern: 'CLI Commands\\s*\\((\\d+)\\)',
+        actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'Iron Laws',
+        pattern: '\\*{0,2}Iron Laws?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: ironCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'Guidelines',
+        pattern: '\\*{0,2}Guidelines?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: guideCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'Tips',
+        pattern: '\\*{0,2}Tips?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: tipsCount },
+      },
+      // CLAUDE.md Key Subsystems
+      {
+        type: 'doc_dir_check',
+        doc: 'CLAUDE.md',
+        section: 'Key Subsystems',
+        dir_pattern: '\\|\\s*`([^`]+)`\\s*\\|',
+        exclude: ['__tests__', 'types', 'utils', 'dist', 'docs', 'node_modules', 'coverage', 'templates', 'bin', 'presets', 'constraints'],
+      },
+      // CLAUDE.md CLI 命令计数
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'CLI subcommands',
+        pattern: '(\\d+)\\s*CLI\\s*(?:sub)?commands?',
+        actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
+      },
+      // CLAUDE.md 约束总数
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'total constraints',
+        pattern: '\\((\\d+)\\s*total\\)',
+        actual: { kind: 'const_count', value: ironCount + guideCount + tipsCount },
+      },
+      // CLAUDE.md 分层计数量
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'Iron Laws (in CLAUDE.md)',
+        pattern: '\\*{0,2}Iron Laws?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: ironCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'Guidelines (in CLAUDE.md)',
+        pattern: '\\*{0,2}Guidelines?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: guideCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'Tips (in CLAUDE.md)',
+        pattern: '\\*{0,2}Tips?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: tipsCount },
+      },
+      // CONTEXT.md 存在性
+      { type: 'context_docs' },
+      // CHANGELOG 版本
+      { type: 'changelog_version' },
+    ];
+
+    return checks;
+  }
 
   /**
-   * 检查 CLAUDE.md Key Architecture Paths 段落中引用的路径是否存在
+   * 检查 CHANGELOG.md 版本是否与 package.json 一致
    */
-  private checkArchitecturePaths(projectPath: string, claudeContent: string): boolean {
+  private async checkChangelogFreshness(projectPath: string): Promise<boolean> {
     try {
-      // 提取 Key Architecture Paths 段落
-      const sectionMatch = claudeContent.match(/## Key Architecture Paths\s*\n([\s\S]*?)(?=\n## |\n---|\n$)/);
-      if (!sectionMatch) return true; // 段落不存在，跳过
+      const changelogPath = join(projectPath, 'CHANGELOG.md');
+      if (!existsSync(changelogPath)) return true;
 
-      const section = sectionMatch[1];
+      const content = readFileSync(changelogPath, 'utf-8');
 
-      // 从表格中提取路径（第二列，格式 `path/to/file.ts` 或 `path/to/dir/`）
-      const pathRegex = /\|\s*`([^`]+)`\s*\|/g;
-      let match;
-      while ((match = pathRegex.exec(section)) !== null) {
-        const refPath = match[1].trim();
-        // 跳过非路径内容（如命令、URL）
-        if (refPath.startsWith('http') || refPath.startsWith('搜')) continue;
+      // 解析最新版本号
+      const versionMatch = content.match(/##\s*\[(\d+\.\d+\.\d+)\]/);
+      if (!versionMatch) return true; // 无版本条目，跳过
 
-        const fullPath = join(projectPath, refPath);
-        // 检查文件或目录是否存在（也尝试去掉尾部 /）
-        if (!existsSync(fullPath) && !existsSync(fullPath.replace(/\/$/, ''))) {
-          // 路径可能指向模块内部（如 `src/modules/example/`），尝试去掉通配符
-          const basePath = refPath.replace(/\/?\*$/, '');
-          if (!existsSync(join(projectPath, basePath))) {
-            return false; // 引用的路径不存在
-          }
-        }
-      }
+      const changelogVersion = versionMatch[1];
 
-      return true;
+      // 读取 package.json version
+      const pkgPath = join(projectPath, 'package.json');
+      if (!existsSync(pkgPath)) return true;
+
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      const pkgVersion = pkg.version as string;
+
+      return changelogVersion === pkgVersion;
     } catch {
       return true;
     }

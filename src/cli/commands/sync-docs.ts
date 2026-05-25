@@ -7,8 +7,13 @@
 
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { FreshnessRunner } from '../../core/constraints/doc-freshness/runner';
+import { FreshnessAutoFix } from '../../core/constraints/doc-freshness/auto-fix';
+import type { DocFreshnessCheck } from '../../types/project-config';
 
 export interface SyncDocsOptions {
   /** 项目路径 */
@@ -71,23 +76,40 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     }
   }
 
-  // 2. 解析现有 CAPABILITIES.md
+  // 2. 解析现有 CAPABILITIES.md，检测格式
   const capabilitiesPath = path.join(projectPath, 'CAPABILITIES.md');
   let existingFiles: string[] = [];
+  let capsContent = '';
+  let capsIsCapabilityListing = false;
   try {
-    existingFiles = await parseCapabilitiesFiles(capabilitiesPath);
+    capsContent = await fs.readFile(capabilitiesPath, 'utf-8');
+    if (isCapabilityListingFormat(capsContent)) {
+      capsIsCapabilityListing = true;
+    } else {
+      existingFiles = await parseCapabilitiesFiles(capabilitiesPath);
+    }
   } catch {
-    // CAPABILITIES.md 不存在，所有模块都是新增
+    // CAPABILITIES.md 不存在，将创建
   }
 
-  // 3. 对比差异（基于文件名模糊匹配：CAPABILITIES.md 各章节路径格式不一致）
-  const getBasename = (f: string) => {
-    const clean = f.endsWith('/') ? f.slice(0, -1) : f;
-    return clean.split('/').pop()!;
-  };
-  const currentBasenames = currentModules.map(m => getBasename(m.file));
-  result.added = currentBasenames.filter(f => !existingFiles.includes(f));
-  result.removed = existingFiles.filter(f => !currentBasenames.includes(f));
+  // 3. 对比差异（分两种格式）
+  let capCountMismatches: string[] = [];
+
+  if (capsIsCapabilityListing) {
+    // 能力清单格式：委托 FreshnessRunner 对比计数
+    const countCheck = checkCapabilityCounts(projectPath);
+    capCountMismatches = countCheck.mismatches;
+    // 不填充 result.added/removed（文件级对比不适用于此格式）
+  } else {
+    // 传统的文件表格格式
+    const getBasename = (f: string) => {
+      const clean = f.endsWith('/') ? f.slice(0, -1) : f;
+      return clean.split('/').pop()!;
+    };
+    const currentBasenames = currentModules.map(m => getBasename(m.file));
+    result.added = currentBasenames.filter(f => !existingFiles.includes(f));
+    result.removed = existingFiles.filter(f => !currentBasenames.includes(f));
+  }
 
   // 4. 检查 CONTEXT.md（缺失 + 过时）
   // 4a. 配置中要求的目录：检查缺失
@@ -117,22 +139,23 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     }
   }
 
+  const hasTableIssues = result.added.length > 0 || result.removed.length > 0;
+  const hasCapIssues = capCountMismatches.length > 0;
+  const hasContextIssues = result.contextMissing.length > 0 || result.contextStale.length > 0;
+  const hasIssues = hasTableIssues || hasCapIssues || hasContextIssues;
+
   // 5. JSON 输出模式：结构化输出供 LLM 消费
   if (isJson) {
-    const hasChanges = result.added.length > 0 || result.removed.length > 0 || result.contextMissing.length > 0 || result.contextStale.length > 0;
-    const jsonOutput = {
-      stale: hasChanges,
+    const jsonOutput: Record<string, unknown> = {
+      stale: hasIssues,
+      format: capsIsCapabilityListing ? 'capability-listing' : 'file-table',
       summary: {
         added: result.added.length,
         removed: result.removed.length,
+        capCountMismatches: capCountMismatches.length,
         contextMissing: result.contextMissing.length,
         contextStale: result.contextStale.length,
       },
-      added: result.added.map(f => ({
-        file: f,
-        module: currentModules.find(m => getBasename(m.file) === f),
-      })),
-      removed: result.removed.map(f => ({ file: f })),
       contextMissing: result.contextMissing.map(d => ({
         dir: d,
         file: `${d}/CONTEXT.md`,
@@ -141,45 +164,70 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
         dir: d,
         file: `${d}/CONTEXT.md`,
       })),
-      resolution: [
-        ...(result.added.length > 0 || result.removed.length > 0
-          ? [{ action: 'sync-capabilities', command: 'harness sync-docs' }]
-          : []),
+      resolution: [] as Array<Record<string, unknown>>,
+    };
+
+    if (capsIsCapabilityListing && hasCapIssues) {
+      jsonOutput.capCountMismatches = capCountMismatches.map(m => ({ mismatch: m }));
+      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
+        action: 'sync-capability-counts',
+        command: 'harness sync-docs',
+        details: 'CAPABILITIES.md 计数与代码不一致，运行 harness sync-docs 自动更新',
+      });
+    }
+
+    if (!capsIsCapabilityListing && hasTableIssues) {
+      jsonOutput.added = result.added.map(f => {
+        const getBasenameLocal = (s: string) => s.split('/').pop()!;
+        return {
+          file: f,
+          module: currentModules.find(m => getBasenameLocal(m.file) === f),
+        };
+      });
+      jsonOutput.removed = result.removed.map(f => ({ file: f }));
+      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
+        action: 'sync-capabilities',
+        command: 'harness sync-docs',
+      });
+    }
+
+    if (hasContextIssues) {
+      (jsonOutput.resolution as Array<Record<string, unknown>>).push(
         ...(result.contextMissing.length > 0
           ? [{ action: 'create-context-md', command: 'harness sync-docs', dirs: result.contextMissing }]
           : []),
         ...(result.contextStale.length > 0
           ? [{ action: 'update-context-md', command: 'harness sync-docs', dirs: result.contextStale }]
           : []),
-      ],
-    };
+      );
+    }
+
     console.log(JSON.stringify(jsonOutput, null, 2));
-    return !hasChanges;
+    return !hasIssues;
   }
 
   // 6. 人读输出模式
-  let hasIssues = false;
+  if (capsIsCapabilityListing && hasCapIssues) {
+    console.log(chalk.yellow(`\n📊 CAPABILITIES.md 计数不一致:`));
+    capCountMismatches.forEach(m => console.log(chalk.gray(`  - ${m}`)));
+  }
 
   if (result.added.length > 0) {
-    hasIssues = true;
     console.log(chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
     result.added.forEach(f => console.log(chalk.gray(`  + ${f}`)));
   }
 
   if (result.removed.length > 0) {
-    hasIssues = true;
     console.log(chalk.yellow(`\n📄 CAPABILITIES.md 包含已删除的模块:`));
     result.removed.forEach(f => console.log(chalk.gray(`  - ${f}`)));
   }
 
   if (result.contextMissing.length > 0) {
-    hasIssues = true;
     console.log(chalk.yellow(`\n📋 缺少 CONTEXT.md:`));
     result.contextMissing.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
   if (result.contextStale.length > 0) {
-    hasIssues = true;
     console.log(chalk.yellow(`\n📋 CONTEXT.md 可能过时（源码比文档新）:`));
     result.contextStale.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
@@ -195,8 +243,14 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     return false;
   }
 
-  // 8. 基础模式：直接更新
-  if (result.added.length > 0 || result.removed.length > 0) {
+  // 8. 写入模式：更新文档
+  if (capsIsCapabilityListing && hasCapIssues) {
+    capsContent = updateCapabilityCounts(capsContent, projectPath);
+    await fs.writeFile(capabilitiesPath, capsContent, 'utf-8');
+    console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md 计数`));
+  }
+
+  if (!capsIsCapabilityListing && hasTableIssues) {
     await updateCapabilitiesFile(capabilitiesPath, currentModules, existingFiles, result);
     console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md`));
   }
@@ -561,6 +615,131 @@ async function createContextMd(projectPath: string, dir: string): Promise<void> 
 
   await fs.mkdir(path.join(projectPath, dir), { recursive: true });
   await fs.writeFile(contextPath, content, 'utf-8');
+}
+
+// ========================================
+// 能力清单格式支持 (capability-listing)
+// ========================================
+
+/**
+ * 检测 CAPABILITIES.md 是否使用能力清单格式（计数行），而非文件表格格式
+ */
+function isCapabilityListingFormat(content: string): boolean {
+  // 能力清单格式特征：包含 "CLI Commands (N)" / "Iron Laws (N)" 等计数行
+  return /CLI Commands\s*\(\d+\)/.test(content) ||
+    /Iron Laws?\s*\(\d+\)/.test(content) ||
+    /Guidelines?\s*\(\d+\)/.test(content);
+}
+
+/**
+ * 从文件表格格式中提取文件路径
+ */
+function extractTableFiles(content: string): string[] {
+  const files: string[] = [];
+  const tableRowRegex = /\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/g;
+  let match;
+  while ((match = tableRowRegex.exec(content)) !== null) {
+    const raw = match[1].trim();
+    const basename = raw.split('/').pop()!;
+    if (!files.includes(basename)) {
+      files.push(basename);
+    }
+  }
+  return files;
+}
+
+/**
+ * 构建 CAPABILITIES.md 能力清单格式的检查配置
+ */
+function buildCapabilityChecks(): DocFreshnessCheck[] {
+  return [
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'CLI Commands',
+      pattern: 'CLI Commands\\s*\\((\\d+)\\)',
+      actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Quality Gates',
+      pattern: 'Quality Gates?\\s*\\((\\d+)\\)',
+      actual: { kind: 'dir_count', path: 'src/gates', extension: '.ts', exclude: ['index.ts', 'types.ts'] },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Iron Laws',
+      pattern: 'Iron Laws?\\s*\\((\\d+)\\)',
+      actual: { kind: 'const_count', value: Object.keys(IRON_LAWS).length },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Guidelines',
+      pattern: 'Guidelines?\\s*\\((\\d+)\\)',
+      actual: { kind: 'const_count', value: Object.keys(GUIDELINES).length },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Tips',
+      pattern: 'Tips?\\s*\\((\\d+)\\)',
+      actual: { kind: 'const_count', value: Object.keys(TIPS).length },
+    },
+  ];
+}
+
+/**
+ * 使用 FreshnessRunner 检查能力清单计数是否与代码一致（--check 模式）
+ */
+function checkCapabilityCounts(
+  projectPath: string
+): { match: boolean; mismatches: string[] } {
+  const runner = new FreshnessRunner();
+  const checks = buildCapabilityChecks();
+  const results = runner.runAll({ checks }, projectPath);
+
+  const mismatches: string[] = [];
+  for (const r of results) {
+    if (!r.pass && r.message) {
+      mismatches.push(r.message);
+    }
+  }
+
+  return { match: mismatches.length === 0, mismatches };
+}
+
+/**
+ * 更新 CAPABILITIES.md 中的能力清单计数（write 模式）
+ *
+ * 使用 FreshnessRunner 获取实际计数，然后 regex 替换文档计数行。
+ */
+function updateCapabilityCounts(content: string, projectPath: string): string {
+  const runner = new FreshnessRunner();
+
+  const cliCount = runner.countFromDir('src/cli/commands', '.ts', ['index.ts'], projectPath);
+  const gateCount = runner.countFromDir('src/gates', '.ts', ['index.ts', 'types.ts'], projectPath);
+  const ironCount = Object.keys(IRON_LAWS).length;
+  const guideCount = Object.keys(GUIDELINES).length;
+  const tipsCount = Object.keys(TIPS).length;
+
+  const replacements: [RegExp, string][] = [
+    [/CLI Commands\s*\(\d+\)/, `CLI Commands (${cliCount})`],
+    [/Quality Gates?\s*\(\d+\)/, `Quality Gates (${gateCount})`],
+    [/Iron Laws?\s*\(\d+\)/, `Iron Laws (${ironCount})`],
+    [/Guidelines?\s*\(\d+\)/, `Guidelines (${guideCount})`],
+    [/Tips?\s*\(\d+\)/, `Tips (${tipsCount})`],
+  ];
+
+  for (const [regex, replacement] of replacements) {
+    if (regex.test(content)) {
+      content = content.replace(regex, replacement);
+    }
+  }
+
+  return content;
 }
 
 /**

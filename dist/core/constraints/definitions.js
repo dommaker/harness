@@ -350,7 +350,7 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
         rule: 'CAPABILITIES.MD MUST BE IN SYNC WITH CODE',
         message: 'CAPABILITIES.md 与源码不同步，运行 harness sync-docs 更新后重新提交',
         level: 'iron_law',
-        trigger: ['file_modification', 'module_creation', 'module_modification'],
+        trigger: ['code_implementation', 'file_modification', 'module_creation', 'module_modification'],
         enforcement: 'docs-sync-check',
         description: `CAPABILITIES.md 中列出的文件必须在 src/ 中实际存在。删除源文件时须从 CAPABILITIES.md 同步移除。运行 harness sync-docs 自动修复过期引用。
 注: CONTEXT.md 已删除。目录描述集中在 CLAUDE.md Key Subsystems 表中。新增文件全覆盖检查待 sync-docs 完善后启用。`,
@@ -665,7 +665,7 @@ exports.GUIDELINES = {
         rule: 'KEY DIRECTORIES SHOULD HAVE CONTEXT.MD',
         message: '关键目录缺少 CONTEXT.md，运行 harness sync-docs 创建模板后填写实际内容',
         level: 'guideline',
-        trigger: 'module_modification',
+        trigger: ['code_implementation', 'module_modification'],
         enforcement: 'context-check',
         description: `项目的关键目录应包含 CONTEXT.md 文件，描述目录职责和上下文。
 
@@ -687,6 +687,29 @@ exports.GUIDELINES = {
      * 文档应与代码同步
      * 例外：WIP 分支、实验性修改
      */
+    /**
+     * CHANGELOG 版本新鲜度检查
+     * 例外：WIP 分支、实验性修改
+     */
+    changelog_freshness: {
+        id: 'changelog_freshness',
+        rule: 'CHANGELOG.MD VERSION MUST MATCH PACKAGE.JSON',
+        message: 'CHANGELOG.md 版本号与 package.json 不一致，更新 CHANGELOG.md',
+        level: 'guideline',
+        trigger: 'code_implementation',
+        enforcement: 'changelog-check',
+        description: `CHANGELOG.md 中的最新版本号必须与 package.json 一致。
+
+[检查方式]
+- 解析 CHANGELOG.md 最新版本号（正则 \\[(\d+\.\d+\.\d+)\\]）
+- 与 package.json version 对比
+- 不匹配时报告警告
+
+[例外]
+- WIP 分支
+- 实验性修改`,
+        exceptions: ['internal_refactor', 'bug_fix_only'],
+    },
     /**
      * 禁止借口模式
      * 例外：已有明确修复计划

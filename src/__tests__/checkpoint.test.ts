@@ -357,8 +357,7 @@ describe('CheckpointValidator', () => {
   });
 
   describe('http_status', () => {
-    // 每测试自己设 mock，避免泄漏到下一个测试
-    const realFetch = globalThis.fetch.bind(globalThis);
+    afterEach(() => { globalThis.fetch = fetch; });
 
     it('HTTP 状态码匹配应该通过', async () => {
       globalThis.fetch = (async () => new Response(null, { status: 200 })) as any;
@@ -369,7 +368,6 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      globalThis.fetch = realFetch;
       expect(result.passed).toBe(true);
     });
 
@@ -382,14 +380,13 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      globalThis.fetch = realFetch;
       expect(result.passed).toBe(false);
       expect(result.checks[0].message).toContain('不匹配');
     });
   });
 
   describe('http_body', () => {
-    const realFetch = globalThis.fetch.bind(globalThis);
+    afterEach(() => { globalThis.fetch = fetch; });
 
     it('HTTP 响应体包含内容应该通过', async () => {
       globalThis.fetch = (async () => new Response('{"args": "test"}', { status: 200 })) as any;
@@ -400,7 +397,6 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      globalThis.fetch = realFetch;
       expect(result.passed).toBe(true);
     });
 
@@ -413,7 +409,6 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-      globalThis.fetch = realFetch;
       expect(result.passed).toBe(false);
       expect(result.checks[0].message).toContain('不包含');
     });
@@ -570,30 +565,34 @@ describe('CheckpointValidator', () => {
     });
 
     describe('http_status 请求失败', () => {
-      it('无效 URL 应该失败', async () => {
+      afterEach(() => { globalThis.fetch = fetch; });
+
+      it('fetch 网络错误应该返回失败', async () => {
+        globalThis.fetch = (() => Promise.reject(new Error('Network error'))) as any;
         const result = await validateCheckpoint(
           {
             id: 'cp-hs-fail',
-            checks: [{ id: 'c-hs-fail', type: 'http_status', config: { url: 'https://invalid.domain.that.does.not.exist/test', expectedStatus: 200 } }],
+            checks: [{ id: 'c-hs-fail', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
           },
           { workdir: tempDir, projectPath: tempDir }
         );
-        
         expect(result.passed).toBe(false);
         expect(result.checks[0].message).toContain('请求失败');
       });
     });
 
     describe('http_body 请求失败', () => {
-      it('无效 URL 应该失败', async () => {
+      afterEach(() => { globalThis.fetch = fetch; });
+
+      it('fetch 网络错误应该返回失败', async () => {
+        globalThis.fetch = (() => Promise.reject(new Error('Network error'))) as any;
         const result = await validateCheckpoint(
           {
             id: 'cp-hb-fail',
-            checks: [{ id: 'c-hb-fail', type: 'http_body', config: { url: 'https://invalid.domain.that.does.not.exist/test', expected: 'test' } }],
+            checks: [{ id: 'c-hb-fail', type: 'http_body', config: { url: 'https://example.com', expected: 'test' } }],
           },
           { workdir: tempDir, projectPath: tempDir }
         );
-        
         expect(result.passed).toBe(false);
         expect(result.checks[0].message).toContain('请求失败');
       });

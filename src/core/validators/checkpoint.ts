@@ -385,6 +385,28 @@ export class CheckpointValidator {
   }
 
   /**
+   * HTTP 调用重试（处理 httpbin rate-limit 503/429）
+   */
+  private async fetchWithRetry(url: string, init?: RequestInit, retries = 2): Promise<Response> {
+    let lastError: unknown;
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(url, init);
+        // 503/429 → 重试
+        if ((response.status === 503 || response.status === 429) && i < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+          continue;
+        }
+        return response;
+      } catch (e) {
+        lastError = e;
+        if (i < retries) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+    throw lastError;
+  }
+
+  /**
    * 检查 HTTP 状态码
    */
   private async checkHttpStatus(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
@@ -392,7 +414,7 @@ export class CheckpointValidator {
     const expected = check.config.expectedStatus || check.config.expected || 200;
 
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      const response = await this.fetchWithRetry(url, { signal: AbortSignal.timeout(10000) });
       const actual = response.status;
       const matches = actual === expected;
 
@@ -423,7 +445,7 @@ export class CheckpointValidator {
     const expected = String(check.config.expected || '');
 
     try {
-      const response = await fetch(url, {
+      const response = await this.fetchWithRetry(url, {
         method: check.config.method || 'GET',
         headers: check.config.headers,
         body: check.config.body ? JSON.stringify(check.config.body) : undefined,

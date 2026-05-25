@@ -21,13 +21,20 @@ describe('CheckpointValidator', () => {
     writeFileSync(join(tempDir, 'empty.txt'), '');
     writeFileSync(join(tempDir, 'data.json'), JSON.stringify({ name: 'test', value: 42 }));
     // 探测 httpbin 是否可达（共享给 HTTP 测试用）
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 4000);
+    // 同时验证 /get 和 /status/200，避免 rate-limit 导致个别 endpoint 不可用
     try {
-      const res = await fetch('https://httpbin.org/get', { signal: ac.signal });
-      clearTimeout(t);
-      httpbinOk = res.ok;
-    } catch { clearTimeout(t); httpbinOk = false; }
+      const ac1 = new AbortController();
+      const t1 = setTimeout(() => ac1.abort(), 5000);
+      const r1 = await fetch('https://httpbin.org/get', { signal: ac1.signal });
+      clearTimeout(t1);
+
+      const ac2 = new AbortController();
+      const t2 = setTimeout(() => ac2.abort(), 5000);
+      const r2 = await fetch('https://httpbin.org/status/200', { signal: ac2.signal });
+      clearTimeout(t2);
+
+      httpbinOk = r1.ok && r2.ok;
+    } catch { httpbinOk = false; }
   }, 30_000);
 
   afterAll(() => {

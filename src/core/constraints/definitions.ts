@@ -954,6 +954,22 @@ export const GUIDELINES: Record<string, Constraint> = {
   },
 
   /**
+   * 分析闸门：从数据到结论之间，必须先验证关键假设的含义和量纲
+   * 原因：看到可疑数字直接跳结论而跳过验证是诊断错误的第一来源（累积 vs 单次、正常 vs 异常、相关 vs 因果）
+   */
+  analysis_verification_gate: {
+    id: 'analysis_verification_gate',
+    rule: 'VERIFY KEY ASSUMPTIONS BEFORE DRAWING CONCLUSIONS FROM DATA',
+    message: '从数据到结论之间，必须先验证关键假设的含义和量纲',
+    level: 'guideline',
+    trigger: ['code_implementation', 'design_request', 'module_modification', 'file_modification', 'diagnosis', 'monitoring', 'triage', 'audit'],
+    enforcement: 'principle-check',
+    description: `从代码/日志/指标中发现异常数据时，禁止直接从"数字异常"跳到"根因结论"。必须先验证：① 数字的含义（累积/单次？量纲是什么？）；② 正常范围（这个数值在健康状态下是多少？）；③ 对比验证（同类场景下是什么值？有无反例？）。验证完关键假设后，再进行因果推断和方案设计。违反此约束导致"翻烧饼"——因为结论建立在未经验证的假设上。`,
+    promptInjection: '分析闸门: 从数据到结论必须验证关键假设。一个异常数字≠根因——先确认含义（累积/单次？量纲？正常范围？同类对比？），再推断因果。禁止"数字A太大→一定是B导致的→应该改C"这种跳级推理。',
+    injectPrompt: true,
+  },
+
+  /**
    * 禁止硬编码凭证
    * 原因：密码/token/密钥泄露是最严重的安全漏洞，一旦提交到版本控制即不可逆
    */

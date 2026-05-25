@@ -15,9 +15,9 @@ const ROLE_TRIGGERS: Record<AgentRole, ConstraintTrigger[]> = {
   executor: ['code_implementation', 'task_completion_claim', 'test_creation', 'api_change', 'file_modification', 'module_modification', 'module_creation'],
   integration: ['code_implementation'],
   reviewer: ['code_implementation'],
-  deploy: [],
-  monitor: [],
-  triage: [],
+  deploy: ['diagnosis'],
+  monitor: ['monitoring', 'diagnosis'],
+  triage: ['triage', 'diagnosis'],
 };
 
 /**

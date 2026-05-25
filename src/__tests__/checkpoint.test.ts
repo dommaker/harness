@@ -356,13 +356,10 @@ describe('CheckpointValidator', () => {
     });
   });
 
-  // HTTP 测试用 mock fetch，避免依赖外部 httpbin.org
-  const originalFetch = globalThis.fetch;
-  afterAll(() => {
-    globalThis.fetch = originalFetch;
-  });
-
   describe('http_status', () => {
+    // 每测试自己设 mock，避免泄漏到下一个测试
+    const realFetch = globalThis.fetch.bind(globalThis);
+
     it('HTTP 状态码匹配应该通过', async () => {
       globalThis.fetch = (async () => new Response(null, { status: 200 })) as any;
       const result = await validateCheckpoint(
@@ -372,7 +369,7 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-
+      globalThis.fetch = realFetch;
       expect(result.passed).toBe(true);
     });
 
@@ -385,13 +382,15 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
-
+      globalThis.fetch = realFetch;
       expect(result.passed).toBe(false);
       expect(result.checks[0].message).toContain('不匹配');
     });
   });
 
   describe('http_body', () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+
     it('HTTP 响应体包含内容应该通过', async () => {
       globalThis.fetch = (async () => new Response('{"args": "test"}', { status: 200 })) as any;
       const result = await validateCheckpoint(
@@ -401,6 +400,7 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
+      globalThis.fetch = realFetch;
       expect(result.passed).toBe(true);
     });
 
@@ -413,6 +413,7 @@ describe('CheckpointValidator', () => {
         },
         { workdir: tempDir, projectPath: tempDir }
       );
+      globalThis.fetch = realFetch;
       expect(result.passed).toBe(false);
       expect(result.checks[0].message).toContain('不包含');
     });

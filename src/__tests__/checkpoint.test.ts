@@ -578,7 +578,7 @@ describe('CheckpointValidator', () => {
         );
         expect(result.passed).toBe(false);
         expect(result.checks[0].message).toContain('请求失败');
-      });
+      }, 20_000); // retry logic adds 2+4+6s delay
     });
 
     describe('http_body 请求失败', () => {
@@ -595,7 +595,7 @@ describe('CheckpointValidator', () => {
         );
         expect(result.passed).toBe(false);
         expect(result.checks[0].message).toContain('请求失败');
-      });
+      }, 20_000);
     });
 
     describe('output_contains JSON 输出', () => {

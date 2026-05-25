@@ -10,8 +10,6 @@ import { join } from 'path';
 describe('CheckpointValidator', () => {
   const tempDir = join(process.cwd(), 'temp-test-checkpoint');
   let validator: CheckpointValidator;
-  // 网络检查（共享），避免每个 describe 重复探测 httpbin
-  let httpbinOk = false;
 
   beforeAll(async () => {
     mkdirSync(tempDir, { recursive: true });
@@ -20,22 +18,7 @@ describe('CheckpointValidator', () => {
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');
     writeFileSync(join(tempDir, 'empty.txt'), '');
     writeFileSync(join(tempDir, 'data.json'), JSON.stringify({ name: 'test', value: 42 }));
-    // 探测 httpbin 是否可达（共享给 HTTP 测试用）
-    // 同时验证 /get 和 /status/200，避免 rate-limit 导致个别 endpoint 不可用
-    try {
-      const ac1 = new AbortController();
-      const t1 = setTimeout(() => ac1.abort(), 5000);
-      const r1 = await fetch('https://httpbin.org/get', { signal: ac1.signal });
-      clearTimeout(t1);
-
-      const ac2 = new AbortController();
-      const t2 = setTimeout(() => ac2.abort(), 5000);
-      const r2 = await fetch('https://httpbin.org/status/200', { signal: ac2.signal });
-      clearTimeout(t2);
-
-      httpbinOk = r1.ok && r2.ok;
-    } catch { httpbinOk = false; }
-  }, 30_000);
+  });
 
   afterAll(() => {
     try {
@@ -373,62 +356,66 @@ describe('CheckpointValidator', () => {
     });
   });
 
+  // HTTP 测试用 mock fetch，避免依赖外部 httpbin.org
+  const originalFetch = globalThis.fetch;
+  afterAll(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   describe('http_status', () => {
     it('HTTP 状态码匹配应该通过', async () => {
-      if (!httpbinOk) return;
+      globalThis.fetch = (async () => new Response(null, { status: 200 })) as any;
       const result = await validateCheckpoint(
         {
           id: 'cp-22',
-          checks: [{ id: 'c-22', type: 'http_status', config: { url: 'https://httpbin.org/status/200', expectedStatus: 200 } }],
+          checks: [{ id: 'c-22', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
         },
         { workdir: tempDir, projectPath: tempDir }
       );
 
       expect(result.passed).toBe(true);
-    }, 15_000);
+    });
 
     it('HTTP 状态码不匹配应该失败', async () => {
-      if (!httpbinOk) return;
+      globalThis.fetch = (async () => new Response(null, { status: 404 })) as any;
       const result = await validateCheckpoint(
         {
           id: 'cp-23',
-          checks: [{ id: 'c-23', type: 'http_status', config: { url: 'https://httpbin.org/status/404', expectedStatus: 200 } }],
+          checks: [{ id: 'c-23', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
         },
         { workdir: tempDir, projectPath: tempDir }
       );
 
       expect(result.passed).toBe(false);
       expect(result.checks[0].message).toContain('不匹配');
-    }, 15_000);
+    });
   });
 
   describe('http_body', () => {
-    // 需要外网访问 httpbin.org，网络不可用时跳过
-    const HTTP_TIMEOUT = 15_000;
-
     it('HTTP 响应体包含内容应该通过', async () => {
-      if (!httpbinOk) return;
+      globalThis.fetch = (async () => new Response('{"args": "test"}', { status: 200 })) as any;
       const result = await validateCheckpoint(
         {
           id: 'cp-24',
-          checks: [{ id: 'c-24', type: 'http_body', config: { url: 'https://httpbin.org/get', expected: 'args' } }],
+          checks: [{ id: 'c-24', type: 'http_body', config: { url: 'https://example.com', expected: 'args' } }],
         },
         { workdir: tempDir, projectPath: tempDir }
       );
       expect(result.passed).toBe(true);
-    }, HTTP_TIMEOUT);
+    });
 
     it('HTTP 响应体不包含内容应该失败', async () => {
-      if (!httpbinOk) return;
+      globalThis.fetch = (async () => new Response('{"data": "test"}', { status: 200 })) as any;
       const result = await validateCheckpoint(
         {
           id: 'cp-25',
-          checks: [{ id: 'c-25', type: 'http_body', config: { url: 'https://httpbin.org/get', expected: 'nonexistent_content_xyz' } }],
+          checks: [{ id: 'c-25', type: 'http_body', config: { url: 'https://example.com', expected: 'NONEXISTENT' } }],
         },
         { workdir: tempDir, projectPath: tempDir }
       );
       expect(result.passed).toBe(false);
-    }, HTTP_TIMEOUT);
+      expect(result.checks[0].message).toContain('不包含');
+    });
   });
 
   describe('custom', () => {

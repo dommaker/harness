@@ -387,20 +387,20 @@ export class CheckpointValidator {
   /**
    * HTTP 调用重试（处理 httpbin rate-limit 503/429）
    */
-  private async fetchWithRetry(url: string, init?: RequestInit, retries = 2): Promise<Response> {
+  private async fetchWithRetry(url: string, init?: RequestInit, retries = 3): Promise<Response> {
     let lastError: unknown;
     for (let i = 0; i <= retries; i++) {
       try {
         const response = await fetch(url, init);
-        // 503/429 → 重试
-        if ((response.status === 503 || response.status === 429) && i < retries) {
-          await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        // 5xx / 429 → 重试，指数退避
+        if (!response.ok && i < retries && (response.status >= 500 || response.status === 429)) {
+          await new Promise(r => setTimeout(r, 2000 * (i + 1)));
           continue;
         }
         return response;
       } catch (e) {
         lastError = e;
-        if (i < retries) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        if (i < retries) await new Promise(r => setTimeout(r, 2000 * (i + 1)));
       }
     }
     throw lastError;

@@ -19,7 +19,8 @@ import {
 import type { ExecutionTrace } from '../../types/trace';
 import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, TIPS, findConstraintsByTrigger } from './definitions';
-import type { MergedConstraintsConfig } from '../../types/project-config';
+import type { MergedConstraintsConfig, DocFreshnessConfig, DocFreshnessCheck } from '../../types/project-config';
+import { FreshnessRunner, type FreshnessCheckResult } from './doc-freshness/runner';
 import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
@@ -748,16 +749,149 @@ export class ConstraintChecker {
   }
 
   /**
-   * 检查 docs_freshness：CAPABILITIES.md + CLAUDE.md 是否与源码同步
+   * 检查 docs_freshness：CAPABILITIES.md 文件表 + 能力清单格式 + CLAUDE.md + CHANGELOG
+   *
+   * 1. 文件表格式：检查 CAPABILITIES.md 中列出的文件是否存在（防过期引用）
+   * 2. 能力清单格式：通过 FreshnessRunner 配置驱动检查计数/目录
+   * 3. 无配置时注入内置默认配置（等价旧硬编码行为）
    */
   private async checkDocsFreshness(projectPath: string): Promise<boolean> {
-    // 检查 CAPABILITIES.md
-    const capResult = await this.checkCapabilitiesFreshness(projectPath);
-    if (!capResult) return false;
+    // Step 1: 文件表格式 — 检查列出的文件是否还存在
+    const fileTableResult = await this.checkCapabilitiesFreshness(projectPath);
+    if (!fileTableResult) return false;
 
-    // CONTEXT.md 已删除。harness 的目录描述集中在 CLAUDE.md 的 Key Subsystems 表中。不再检查。
+    // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
+    try {
+      const configPath = join(projectPath, '.harness', 'config.yml');
+      let freshnessConfig: DocFreshnessConfig | undefined;
+      let requiredDirs: string[] | undefined;
+
+      if (existsSync(configPath)) {
+        try {
+          const raw = yaml.load(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+          const governance = raw.governance as Record<string, unknown> | undefined;
+          freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
+
+          const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
+          if (contextFiles?.enabled && Array.isArray(contextFiles.required_dirs)) {
+            requiredDirs = contextFiles.required_dirs as string[];
+          }
+        } catch {
+          // 配置解析失败，使用默认
+        }
+      }
+
+      const runner = new FreshnessRunner();
+      let results: FreshnessCheckResult[];
+
+      if (freshnessConfig?.checks && freshnessConfig.checks.length > 0) {
+        results = runner.runAll(freshnessConfig, projectPath, { requiredDirs });
+      } else {
+        const builtIn = this.getBuiltInDocFreshnessConfig(requiredDirs);
+        results = runner.runAll({ checks: builtIn }, projectPath, { requiredDirs });
+      }
+
+      if (!results.every(r => r.pass)) return false;
+    } catch {
+      // FreshnessRunner 失败不影响整体
+    }
 
     return true;
+  }
+
+  /**
+   * 获取内置默认文档新鲜度检查配置
+   *
+   * 仅当项目未提供 governance.doc_freshness 配置时使用。
+   */
+  private getBuiltInDocFreshnessConfig(requiredDirs?: string[]): DocFreshnessCheck[] {
+    const ironCount = Object.keys(IRON_LAWS).length;
+    const guideCount = Object.keys(GUIDELINES).length;
+    const tipsCount = Object.keys(TIPS).length;
+
+    const checks: DocFreshnessCheck[] = [
+      // CAPABILITIES.md 能力清单计数
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'CLI Commands',
+        pattern: 'CLI Commands\\s*\\((\\d+)\\)',
+        actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'Iron Laws',
+        pattern: '\\*{0,2}Iron Laws?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: ironCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'Guidelines',
+        pattern: '\\*{0,2}Guidelines?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: guideCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CAPABILITIES.md',
+        label: 'Tips',
+        pattern: '\\*{0,2}Tips?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: tipsCount },
+      },
+      // CLAUDE.md Key Subsystems
+      {
+        type: 'doc_dir_check',
+        doc: 'CLAUDE.md',
+        section: 'Key Subsystems',
+        dir_pattern: '\\|\\s*`([^`]+)`\\s*\\|',
+        exclude: ['__tests__', 'types', 'utils', 'dist', 'docs', 'node_modules', 'coverage', 'templates', 'bin', 'presets', 'constraints'],
+      },
+      // CLAUDE.md CLI 命令计数
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'CLI subcommands',
+        pattern: '(\\d+)\\s*CLI\\s*(?:sub)?commands?',
+        actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
+      },
+      // CLAUDE.md 约束总数
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'total constraints',
+        pattern: '\\((\\d+)\\s*total\\)',
+        actual: { kind: 'const_count', value: ironCount + guideCount + tipsCount },
+      },
+      // CLAUDE.md 分层计数量
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'Iron Laws (in CLAUDE.md)',
+        pattern: '\\*{0,2}Iron Laws?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: ironCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'Guidelines (in CLAUDE.md)',
+        pattern: '\\*{0,2}Guidelines?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: guideCount },
+      },
+      {
+        type: 'doc_regex_count',
+        doc: 'CLAUDE.md',
+        label: 'Tips (in CLAUDE.md)',
+        pattern: '\\*{0,2}Tips?\\*{0,2}\\s*\\((\\d+)\\)',
+        actual: { kind: 'const_count', value: tipsCount },
+      },
+      // CONTEXT.md 存在性
+      { type: 'context_docs' },
+      // CHANGELOG 版本
+      { type: 'changelog_version' },
+    ];
+
+    return checks;
   }
 
   /**

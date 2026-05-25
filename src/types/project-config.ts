@@ -71,6 +71,71 @@ export interface ChangelogConfig {
 }
 
 /**
+ * 文档新鲜度配置
+ *
+ * 配置驱动的文档新鲜度检查。每个检查类型是纯文件系统操作，零 LLM 调用。
+ */
+export interface DocFreshnessConfig {
+  /** 是否启用文档新鲜度检查 */
+  enabled?: boolean;
+  /** 检查列表 */
+  checks?: DocFreshnessCheck[];
+}
+
+export type DocFreshnessCheck =
+  | ChangelogVersionCheck
+  | ContextDocsCheck
+  | DocDirCheck
+  | DocRegexCountCheck;
+
+export interface ChangelogVersionCheck {
+  type: 'changelog_version';
+  changelog?: string;
+  package_json?: string;
+}
+
+export interface ContextDocsCheck {
+  type: 'context_docs';
+  dirs?: string[];
+  doc_name?: string;
+}
+
+export interface DocDirCheck {
+  type: 'doc_dir_check';
+  doc: string;
+  section: string;
+  dir_pattern?: string;
+  exclude?: string[];
+  skip_reverse_check?: boolean;
+}
+
+export interface DocRegexCountCheck {
+  type: 'doc_regex_count';
+  doc: string;
+  label: string;
+  pattern: string;
+  actual: DirCountActual | GrepCountActual | ConstCountActual;
+}
+
+export interface DirCountActual {
+  kind: 'dir_count';
+  path: string;
+  extension?: string;
+  exclude?: string[];
+}
+
+export interface GrepCountActual {
+  kind: 'grep_count';
+  glob: string;
+  pattern: string;
+}
+
+export interface ConstCountActual {
+  kind: 'const_count';
+  value: number;
+}
+
+/**
  * 测试治理配置
  */
 export interface TestingGovernanceConfig {
@@ -97,6 +162,9 @@ export interface GovernanceConfig {
 
   /** CHANGELOG 配置 */
   changelog?: ChangelogConfig;
+
+  /** 文档新鲜度检查配置 */
+  doc_freshness?: DocFreshnessConfig;
 
   /** 测试治理 */
   testing?: TestingGovernanceConfig;

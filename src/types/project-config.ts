@@ -88,48 +88,73 @@ export type DocFreshnessCheck =
   | DocDirCheck
   | DocRegexCountCheck;
 
+/** CHANGELOG 版本 vs package.json 版本一致性 */
 export interface ChangelogVersionCheck {
   type: 'changelog_version';
+  /** CHANGELOG 文件路径（默认: CHANGELOG.md） */
   changelog?: string;
+  /** package.json 路径（默认: package.json） */
   package_json?: string;
 }
 
+/** 关键目录是否有 CONTEXT.md */
 export interface ContextDocsCheck {
   type: 'context_docs';
+  /** 需要检查的目录列表（默认: governance.context_files.required_dirs） */
   dirs?: string[];
+  /** 文档名称（默认: CONTEXT.md） */
   doc_name?: string;
 }
 
+/** 文档中的目录表 vs 实际目录双向检查 */
 export interface DocDirCheck {
   type: 'doc_dir_check';
+  /** 文档文件路径 */
   doc: string;
+  /** 章节标题（如 "Key Subsystems"） */
   section: string;
+  /** 目录提取正则（默认: `([^`]+)`，匹配反引号内的目录路径） */
   dir_pattern?: string;
+  /** 反向检查时要跳过的目录 */
   exclude?: string[];
+  /** 跳过反向检查（fs→doc），仅做 doc→fs */
   skip_reverse_check?: boolean;
 }
 
+/** 文档中正则计数 vs 文件系统实际计数 */
 export interface DocRegexCountCheck {
   type: 'doc_regex_count';
+  /** 文档文件路径 */
   doc: string;
+  /** 人类可读标签（错误消息用） */
   label: string;
+  /** 正则模式，需包含 (\d+) 捕获组 */
   pattern: string;
+  /** 实际计数的获取方式 */
   actual: DirCountActual | GrepCountActual | ConstCountActual;
 }
 
+/** 通过扫描目录获取实际计数 */
 export interface DirCountActual {
   kind: 'dir_count';
+  /** 目录路径 */
   path: string;
+  /** 文件扩展名过滤（如 ".ts"） */
   extension?: string;
+  /** 排除的文件/目录名 */
   exclude?: string[];
 }
 
+/** 通过 grep 匹配获取实际计数 */
 export interface GrepCountActual {
   kind: 'grep_count';
+  /** glob 模式匹配文件 */
   glob: string;
+  /** 在每个匹配文件中计数的正则 */
   pattern: string;
 }
 
+/** 通过常量值获取实际计数（用于内存中的对象计数，如约束数量） */
 export interface ConstCountActual {
   kind: 'const_count';
   value: number;

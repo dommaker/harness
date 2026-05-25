@@ -7,19 +7,25 @@
 import { formatConstraintsForPrompt } from '../prompt-injection';
 
 describe('formatConstraintsForPrompt', () => {
-  it('returns empty string for roles with no triggers (deploy)', () => {
+  it('returns constraints with injectPrompt for deploy role', () => {
     const result = formatConstraintsForPrompt('deploy');
-    expect(result).toBe('');
+    // deploy maps to ['diagnosis'], analysis_verification_gate has diagnosis trigger
+    expect(result).toContain('## 行为约束（前置声明）');
+    expect(result).toContain('analysis_verification_gate');
   });
 
-  it('returns empty string for roles with no triggers (monitor)', () => {
+  it('returns constraints with injectPrompt for monitor role', () => {
     const result = formatConstraintsForPrompt('monitor');
-    expect(result).toBe('');
+    // monitor maps to ['monitoring', 'diagnosis']
+    expect(result).toContain('## 行为约束（前置声明）');
+    expect(result).toContain('analysis_verification_gate');
   });
 
-  it('returns empty string for roles with no triggers (triage)', () => {
+  it('returns constraints with injectPrompt for triage role', () => {
     const result = formatConstraintsForPrompt('triage');
-    expect(result).toBe('');
+    // triage maps to ['triage', 'diagnosis'], analysis_verification_gate has diagnosis trigger
+    expect(result).toContain('## 行为约束（前置声明）');
+    expect(result).toContain('analysis_verification_gate');
   });
 
   it('returns formatted constraints for analyst role', () => {

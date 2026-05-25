@@ -8,7 +8,7 @@ AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, Security
 
 ## Constraint Layers
 - Iron Laws (13): 绝对禁止，无例外
-- Guidelines (28): 优先建议，有例外
+- Guidelines (27): 优先建议，有例外
 - Tips (2): 信息性提示
 
 ## Monitoring

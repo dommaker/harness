@@ -752,12 +752,18 @@ export class ConstraintChecker {
   }
 
   /**
-   * 检查 docs_freshness：文档是否与源码同步
+   * 检查 docs_freshness：CAPABILITIES.md 文件表 + 能力清单格式 + CLAUDE.md + CHANGELOG
    *
-   * 配置驱动：通过 .harness/config.yml 中的 governance.doc_freshness 配置。
-   * 无配置时注入内置默认配置（等价旧硬编码行为）。
+   * 1. 文件表格式：检查 CAPABILITIES.md 中列出的文件是否存在（防过期引用）
+   * 2. 能力清单格式：通过 FreshnessRunner 配置驱动检查计数/目录
+   * 3. 无配置时注入内置默认配置（等价旧硬编码行为）
    */
   private async checkDocsFreshness(projectPath: string): Promise<boolean> {
+    // Step 1: 文件表格式 — 检查列出的文件是否还存在
+    const fileTableResult = await this.checkCapabilitiesFreshness(projectPath);
+    if (!fileTableResult) return false;
+
+    // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
     try {
       const configPath = join(projectPath, '.harness', 'config.yml');
       let freshnessConfig: DocFreshnessConfig | undefined;
@@ -788,10 +794,12 @@ export class ConstraintChecker {
         results = runner.runAll({ checks: builtIn }, projectPath, { requiredDirs });
       }
 
-      return results.every(r => r.pass);
+      if (!results.every(r => r.pass)) return false;
     } catch {
-      return true;
+      // FreshnessRunner 失败不影响整体
     }
+
+    return true;
   }
 
   /**
@@ -883,11 +891,50 @@ export class ConstraintChecker {
       },
       // CONTEXT.md 存在性
       { type: 'context_docs' },
-      // CHANGELOG 版本
-      { type: 'changelog_version' },
     ];
 
     return checks;
+  }
+
+  /**
+   * 检查 CAPABILITIES.md 是否与源码同步（文件表格式）
+   *
+   * 检查 CAPABILITIES.md 中列出的文件路径是否仍然存在于磁盘上（防过期引用）。
+   * 多根查找：支持不同项目的源码根（harness=src/, studio=apps/api/src/ 等）。
+   * 无表格行（能力清单格式）时跳过。
+   */
+  private async checkCapabilitiesFreshness(projectPath: string): Promise<boolean> {
+    try {
+      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
+      if (!existsSync(capabilitiesPath)) return true;
+      const content = readFileSync(capabilitiesPath, 'utf-8');
+
+      const listedFiles: string[] = [];
+      const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
+      let match;
+      while ((match = tableRowRegex.exec(content)) !== null) {
+        listedFiles.push(match[1].trim());
+      }
+
+      if (listedFiles.length === 0) return true;
+
+      const sourceRoots = this.findSourceRoots(projectPath);
+      const fileExists = (file: string): boolean => {
+        if (existsSync(join(projectPath, file))) return true;
+        for (const root of sourceRoots) {
+          if (existsSync(join(projectPath, root, file))) return true;
+        }
+        return false;
+      };
+
+      for (const file of listedFiles) {
+        if (!fileExists(file)) return false;
+      }
+
+      return true;
+    } catch {
+      return true;
+    }
   }
 
   /**

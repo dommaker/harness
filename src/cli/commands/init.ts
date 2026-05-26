@@ -513,6 +513,36 @@ custom_constraints:
  * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
  * - 如果不存在标记，在文件末尾追加约束段
  *
+/**
+ * 在 CLAUDE.md 顶部写入 Output Style 段（仅首次创建，后续不覆盖）
+ */
+const OUTPUT_STYLE_SECTION = [
+  '## Output Style',
+  '',
+  'Terse like caveman. Technical substance exact. Only fluff die.',
+  'Drop: articles, filler (just/really/basically), pleasantries (sure/certainly/happy to), hedging.',
+  'Fragments OK. Short synonyms. Code blocks unchanged. Error messages quoted exact.',
+  'Pattern: [thing] [action] [reason]. [next step].',
+  'No sycophantic openers/closing fluff. No emojis or em-dashes.',
+  'Read existing files before writing. Don\'t re-read unless changed.',
+  'Skip files over 100KB unless required.',
+  'Don\'t guess APIs, versions, flags, commit SHAs, or package names. Verify before asserting.',
+  '',
+].join('\n');
+
+async function setupClaudeMdOutputStyle(projectPath: string): Promise<void> {
+  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+  try {
+    const content = await fs.readFile(claudeMdPath, 'utf-8');
+    if (content.includes('## Output Style')) return; // 已存在，不覆盖
+    const newContent = OUTPUT_STYLE_SECTION + '\n' + content;
+    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+  } catch {
+    // CLAUDE.md 不存在——setupClaudeMdConstraints 会创建它
+  }
+}
+
+/**
  * 只写入包含 promptInjection 文本的约束
  */
 async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
@@ -618,10 +648,13 @@ async function setupGovernance(projectPath: string, level: string): Promise<void
   // 1. 生成 CHANGELOG.md
   await createChangelog(projectPath, governance);
 
-  // 2. 在 CLAUDE.md 中写入/更新 Governance Rules 约束段
+  // 2. 在 CLAUDE.md 中写入 Output Style 段（仅在不存在时创建）
+  await setupClaudeMdOutputStyle(projectPath);
+
+  // 3. 在 CLAUDE.md 中写入/更新 Governance Rules 约束段
   await setupClaudeMdConstraints(projectPath);
 
-  // 3. 生成 CONTEXT.md 文件
+  // 4. 生成 CONTEXT.md 文件
   const contextConfig = governance.context_files as Record<string, unknown> | undefined;
   if (contextConfig?.enabled) {
     let requiredDirs = (contextConfig.required_dirs as string[]) || [];

@@ -7,10 +7,12 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { exec, execSync } from 'child_process';
 import { execAsync } from '../../utils/exec';
 import { constraintChecker } from '../../core/constraints/checker';
 import { getAllConstraints, IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
 import type { ConstraintTrigger, ConstraintContext, ConstraintResult } from '../../types/constraint';
 
 export interface CheckOptions {
@@ -38,6 +40,19 @@ async function getChangedFiles(staged: boolean): Promise<string[]> {
 }
 
 /**
+ * 检查文件所在目录是否在 git HEAD 中不存在（即新目录）
+ */
+function isNewDirectory(projectPath: string, filePath: string): boolean {
+  const dir = path.dirname(filePath);
+  try {
+    const output = execSync(`git ls-tree HEAD -- "${dir}"`, { cwd: projectPath, stdio: 'pipe', encoding: 'utf-8' });
+    return String(output).trim().length === 0; // empty output = directory doesn't exist in HEAD
+  } catch {
+    return true; // command failed = assume new
+  }
+}
+
+/**
  * 检测触发条件
  */
 function detectTrigger(changedFiles: string[], options: CheckOptions): ConstraintTrigger {
@@ -49,11 +64,18 @@ function detectTrigger(changedFiles: string[], options: CheckOptions): Constrain
   const hasTestChange = changedFiles.some(f =>
     f.includes('.test.') || f.includes('.spec.') || f.includes('__tests__')
   );
+  const sourceRoots = detectSourceRoots(options.projectPath || process.cwd());
   const hasModuleChange = changedFiles.some(f =>
-    f.includes('src/') && !f.includes('__tests__')
+    sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) && !f.includes('__tests__')
+  );
+  const projectPath = options.projectPath || process.cwd();
+  const hasModuleCreation = changedFiles.some(f =>
+    sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) &&
+    isNewDirectory(projectPath, f)
   );
 
   if (hasTestChange && !hasModuleChange) return 'test_creation';
+  if (hasModuleCreation) return 'module_creation';
   if (hasModuleChange) return 'module_modification';
 
   return 'file_modification';
@@ -262,8 +284,20 @@ async function detectVerificationEvidence(projectPath: string): Promise<boolean>
  * 检查 CLAUDE.md、README.md、specs/、docs/specs/ 等
  */
 function detectRequirement(projectPath: string): boolean {
+  // Check for CLAUDE.md with HARNESS_CONSTRAINTS section
+  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+  if (fs.existsSync(claudeMdPath)) {
+    try {
+      const content = fs.readFileSync(claudeMdPath, 'utf-8');
+      if (content.includes('HARNESS_CONSTRAINTS')) {
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const indicators = [
-    'CLAUDE.md',
     'README.md',
     'specs',
     'docs/specs',

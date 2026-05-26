@@ -13,8 +13,7 @@ export type DiffType =
   | 'context_missing'    // 缺少 CONTEXT.md
   | 'context_outdated'   // CONTEXT.md 内容过时
   | 'test_gap'           // 新代码缺少测试
-  | 'constraint_violation' // 约束违规
-  | 'changelog_missing'; // 变更未记录到 CHANGELOG
+  | 'constraint_violation'; // 约束违规
 
 /**
  * 治理检查结果（harness 检测到的差异）

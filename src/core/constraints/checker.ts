@@ -18,7 +18,7 @@ import {
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
 import { getTraceCollector } from '../../monitoring/traces';
-import { IRON_LAWS, GUIDELINES, TIPS, findConstraintsByTrigger } from './definitions';
+import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
 import type { MergedConstraintsConfig, DocFreshnessConfig, DocFreshnessCheck } from '../../types/project-config';
 import { FreshnessRunner, type FreshnessCheckResult } from './doc-freshness/runner';
 import { normalizeTriggers } from '../../utils/exec';
@@ -27,6 +27,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import * as yaml from 'js-yaml';
 import { CheckCache } from './check-cache';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
 
 /**
  * 例外名称 → ConstraintContext 中布尔字段的映射
@@ -326,9 +327,6 @@ export class ConstraintChecker {
       case 'docs_freshness':
         return await this.checkDocsFreshness(projectPath);
 
-      case 'changelog_freshness':
-        return await this.checkChangelogFreshness(projectPath);
-
       case 'no_excuse_patterns':
         // 检查是否使用了借口模式
         return this.checkNoExcusePatterns(context.completionClaimText || context.taskDescription || '');
@@ -625,15 +623,17 @@ export class ConstraintChecker {
       // ── Step 2: 全量 src/ 扫描（T-058 修复核心）──
       // 检查是否有 src/ 下的源文件未在 CAPABILITIES.md 中记录
       if (listedFiles.length > 0) {
-        const srcDir = join(projectPath, 'src');
-        if (existsSync(srcDir)) {
-          // S7: 缓存 src/ 递归扫描结果
-          const actualFiles = this.cache.getSync('src_scan', projectPath, () =>
-            this.findSourceFiles(srcDir, projectPath)
-          );
-          for (const file of actualFiles) {
-            if (!listedFiles.includes(file)) {
-              return false; // 有新增文件未在 CAPABILITIES.md 中列出
+        const sourceRoots = detectSourceRoots(projectPath);
+        for (const root of sourceRoots) {
+          const srcDir = join(projectPath, root);
+          if (existsSync(srcDir)) {
+            const actualFiles = this.cache.getSync(`src_scan_${root}`, projectPath, () =>
+              this.findSourceFiles(srcDir, projectPath)
+            );
+            for (const file of actualFiles) {
+              if (!listedFiles.includes(file)) {
+                return false;
+              }
             }
           }
         }
@@ -808,92 +808,13 @@ export class ConstraintChecker {
    * 等价旧硬编码的 checkCapabilitiesFreshness + checkClaudeMdFreshness 行为。
    * 仅当项目未提供 governance.doc_freshness 配置时使用。
    */
-  private getBuiltInDocFreshnessConfig(requiredDirs?: string[]): DocFreshnessCheck[] {
-    const ironCount = Object.keys(IRON_LAWS).length;
-    const guideCount = Object.keys(GUIDELINES).length;
-    const tipsCount = Object.keys(TIPS).length;
-
-    const checks: DocFreshnessCheck[] = [
-      // CAPABILITIES.md 计数
-      {
-        type: 'doc_regex_count',
-        doc: 'CAPABILITIES.md',
-        label: 'CLI Commands',
-        pattern: 'CLI Commands\\s*\\((\\d+)\\)',
-        actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
-      },
-      {
-        type: 'doc_regex_count',
-        doc: 'CAPABILITIES.md',
-        label: 'Iron Laws',
-        pattern: '\\*{0,2}Iron Laws?\\*{0,2}\\s*\\((\\d+)\\)',
-        actual: { kind: 'const_count', value: ironCount },
-      },
-      {
-        type: 'doc_regex_count',
-        doc: 'CAPABILITIES.md',
-        label: 'Guidelines',
-        pattern: '\\*{0,2}Guidelines?\\*{0,2}\\s*\\((\\d+)\\)',
-        actual: { kind: 'const_count', value: guideCount },
-      },
-      {
-        type: 'doc_regex_count',
-        doc: 'CAPABILITIES.md',
-        label: 'Tips',
-        pattern: '\\*{0,2}Tips?\\*{0,2}\\s*\\((\\d+)\\)',
-        actual: { kind: 'const_count', value: tipsCount },
-      },
-      // CLAUDE.md Key Subsystems
-      {
-        type: 'doc_dir_check',
-        doc: 'CLAUDE.md',
-        section: 'Key Subsystems',
-        dir_pattern: '\\|\\s*`([^`]+)`\\s*\\|',
-        exclude: ['__tests__', 'types', 'utils', 'dist', 'docs', 'node_modules', 'coverage', 'templates', 'bin', 'presets', 'constraints'],
-      },
-      // CLAUDE.md CLI 命令计数
-      {
-        type: 'doc_regex_count',
-        doc: 'CLAUDE.md',
-        label: 'CLI subcommands',
-        pattern: '(\\d+)\\s*CLI\\s*(?:sub)?commands?',
-        actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
-      },
-      // CLAUDE.md 约束总数
-      {
-        type: 'doc_regex_count',
-        doc: 'CLAUDE.md',
-        label: 'total constraints',
-        pattern: '\\((\\d+)\\s*total\\)',
-        actual: { kind: 'const_count', value: ironCount + guideCount + tipsCount },
-      },
-      // CLAUDE.md 分层计数量
-      {
-        type: 'doc_regex_count',
-        doc: 'CLAUDE.md',
-        label: 'Iron Laws (in CLAUDE.md)',
-        pattern: '\\*{0,2}Iron Laws?\\*{0,2}\\s*\\((\\d+)\\)',
-        actual: { kind: 'const_count', value: ironCount },
-      },
-      {
-        type: 'doc_regex_count',
-        doc: 'CLAUDE.md',
-        label: 'Guidelines (in CLAUDE.md)',
-        pattern: '\\*{0,2}Guidelines?\\*{0,2}\\s*\\((\\d+)\\)',
-        actual: { kind: 'const_count', value: guideCount },
-      },
-      {
-        type: 'doc_regex_count',
-        doc: 'CLAUDE.md',
-        label: 'Tips (in CLAUDE.md)',
-        pattern: '\\*{0,2}Tips?\\*{0,2}\\s*\\((\\d+)\\)',
-        actual: { kind: 'const_count', value: tipsCount },
-      },
-      // CONTEXT.md 存在性
+  private getBuiltInDocFreshnessConfig(_requiredDirs?: string[]): DocFreshnessCheck[] {
+    return [
+      // CONTEXT.md 存在性 — key directories must have CONTEXT.md
       { type: 'context_docs' },
+      // CHANGELOG 版本 vs package.json 版本 — prevents version drift
+      { type: 'changelog_version' },
     ];
-
-    return checks;
   }
 
   /**
@@ -918,7 +839,7 @@ export class ConstraintChecker {
 
       if (listedFiles.length === 0) return true;
 
-      const sourceRoots = this.findSourceRoots(projectPath);
+      const sourceRoots = detectSourceRoots(projectPath);
       const fileExists = (file: string): boolean => {
         if (existsSync(join(projectPath, file))) return true;
         for (const root of sourceRoots) {
@@ -932,35 +853,6 @@ export class ConstraintChecker {
       }
 
       return true;
-    } catch {
-      return true;
-    }
-  }
-
-  /**
-   * 检查 CHANGELOG.md 版本是否与 package.json 一致
-   */
-  private async checkChangelogFreshness(projectPath: string): Promise<boolean> {
-    try {
-      const changelogPath = join(projectPath, 'CHANGELOG.md');
-      if (!existsSync(changelogPath)) return true;
-
-      const content = readFileSync(changelogPath, 'utf-8');
-
-      // 解析最新版本号
-      const versionMatch = content.match(/##\s*\[(\d+\.\d+\.\d+)\]/);
-      if (!versionMatch) return true; // 无版本条目，跳过
-
-      const changelogVersion = versionMatch[1];
-
-      // 读取 package.json version
-      const pkgPath = join(projectPath, 'package.json');
-      if (!existsSync(pkgPath)) return true;
-
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      const pkgVersion = pkg.version as string;
-
-      return changelogVersion === pkgVersion;
     } catch {
       return true;
     }
@@ -985,7 +877,7 @@ export class ConstraintChecker {
         const stat = statSync(entryPath);
         if (stat.isDirectory()) {
           results.push(...this.findSourceFiles(entryPath, projectPath));
-        } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
+        } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts') && entry !== 'index.ts') {
           results.push(relative(projectPath, entryPath));
         }
       } catch {
@@ -993,35 +885,6 @@ export class ConstraintChecker {
       }
     }
     return results;
-  }
-
-  /**
-   * 发现项目的源码根目录。
-   * 不硬编码 src/——不同项目有不同的布局（harness=src/, agent-studio=apps/api/src/ 等）。
-   */
-  private findSourceRoots(projectPath: string): string[] {
-    const roots: string[] = [];
-    const candidates = ['src', 'apps/api/src', 'apps/web/src', 'packages'];
-    for (const c of candidates) {
-      if (existsSync(join(projectPath, c, 'package.json')) || existsSync(join(projectPath, c))) {
-        roots.push(c);
-      }
-    }
-    // 检查 packages/* 子目录
-    try {
-      const packagesDir = join(projectPath, 'packages');
-      if (existsSync(packagesDir)) {
-        const entries = readdirSync(packagesDir, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.isDirectory() && existsSync(join(packagesDir, e.name, 'src'))) {
-            roots.push(`packages/${e.name}/src`);
-          }
-        }
-      }
-    } catch { /* skip */ }
-    // fallback: always include src/
-    if (!roots.includes('src')) roots.push('src');
-    return roots;
   }
 
   /**
@@ -1266,47 +1129,6 @@ export async function checkBeforeExecution(
   customConfig?: MergedConstraintsConfig | null
 ): Promise<void> {
   return ConstraintChecker.getInstance().beforeExecution(context, customConfig);
-}
-
-/**
- * 构建约束注入 prompt
- *
- * 收集所有适用约束的 promptInjection 字段，格式化为 Agent system prompt 片段。
- * 纯计算函数，无副作用，不调用 LLM。
- *
- * @param context 约束上下文（至少需要 operation 字段）
- * @returns 格式化的约束提示文本，可直接注入 Agent system prompt；无匹配约束时返回空字符串
- */
-export function buildConstraintPrompt(context: ConstraintContext): string {
-  const constraints = findConstraintsByTrigger(context.operation);
-  // Iron laws: always injected (blocking — Agent must know)
-  // Guidelines: only injected if explicitly marked injectPrompt: true
-  const injected = constraints
-    .filter(c => c.promptInjection && (
-      c.level === 'iron_law' || c.injectPrompt === true
-    ))
-    .map(c => ({ level: c.level, text: c.promptInjection! }));
-
-  if (injected.length === 0) return '';
-
-  const ironLaws = injected.filter(i => i.level === 'iron_law');
-  const guidelines = injected.filter(i => i.level === 'guideline');
-
-  const lines: string[] = [];
-  // Iron laws section
-  if (ironLaws.length > 0) {
-    lines.push('## 铁律（违反将阻断执行）', '');
-    ironLaws.forEach(i => lines.push(`- ${i.text.slice(0, 80)}${i.text.length > 80 ? '...' : ''}`));
-    lines.push('');
-  }
-  // Behavior guidelines section
-  if (guidelines.length > 0) {
-    lines.push('## 行为准则', '');
-    guidelines.forEach(i => lines.push(`- ${i.text.slice(0, 80)}${i.text.length > 80 ? '...' : ''}`));
-    lines.push('');
-  }
-
-  return lines.join('\n');
 }
 
 // 导出单例

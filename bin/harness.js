@@ -46,6 +46,7 @@ const {
   analyzeSessions,
   updateUserModel,
   release,
+  constraints,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -334,10 +335,9 @@ program
 // ========================================
 program
   .command('sync-docs')
-  .description('同步项目文档（CAPABILITIES.md、CONTEXT.md、CHANGELOG.md）')
+  .description('同步项目文档（CAPABILITIES.md、CONTEXT.md）')
   .option('-p, --project-path <path>', '项目路径')
   .option('-c, --check', '只检查不修改（CI 模式）', false)
-  .option('--changelog', '生成 CHANGELOG 条目', false)
   .option('--json', '输出 JSON 格式（供 LLM 消费）', false)
   .action(async (options) => {
     const ok = await syncDocs(options);
@@ -503,6 +503,17 @@ program
       days: parseInt(options.days, 10),
       json: options.json,
     });
+  });
+
+// ========================================
+// harness constraints
+// ========================================
+program
+  .command('constraints')
+  .description('输出约束集合元数据（版本、hash、计数、文本大小）')
+  .option('--json', '输出 JSON 格式', false)
+  .action(async (options) => {
+    await constraints(options);
   });
 
 // 解析命令行参数

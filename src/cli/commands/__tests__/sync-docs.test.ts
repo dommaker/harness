@@ -120,68 +120,6 @@ describe('sync-docs command', () => {
     });
   });
 
-  describe('generateChangelogEntry', () => {
-    it('CHANGELOG.md 不存在时应该跳过不报错', async () => {
-      const testDir = path.join(tempDir, 'no-changelog');
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-
-      fs.writeFileSync(path.join(srcDir, 'foo.ts'), 'export const x = 1;');
-      fs.writeFileSync(
-        path.join(testDir, 'CAPABILITIES.md'),
-        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
-      );
-
-      // With changelog option but no CHANGELOG.md
-      await syncDocs({ projectPath: testDir, changelog: true });
-
-      // Should log the warning but not crash
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('CHANGELOG.md 不存在'));
-
-      fs.rmSync(testDir, { recursive: true, force: true });
-    });
-
-    it('[Unreleased] 头部存在时应该在其后插入新条目', async () => {
-      const testDir = path.join(tempDir, 'changelog-unreleased');
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-
-      fs.writeFileSync(path.join(testDir, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n- Something\n');
-      fs.writeFileSync(path.join(srcDir, 'bar.ts'), 'export const x = 1;');
-      fs.writeFileSync(
-        path.join(testDir, 'CAPABILITIES.md'),
-        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
-      );
-
-      await syncDocs({ projectPath: testDir, changelog: true });
-
-      const changelogContent = fs.readFileSync(path.join(testDir, 'CHANGELOG.md'), 'utf-8');
-      expect(changelogContent).toContain('bar.ts');
-      expect(changelogContent).toContain('## [Unreleased]');
-
-      fs.rmSync(testDir, { recursive: true, force: true });
-    });
-
-    it('无 [Unreleased] 时应该追加到末尾', async () => {
-      const testDir = path.join(tempDir, 'changelog-append');
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-
-      fs.writeFileSync(path.join(testDir, 'CHANGELOG.md'), '# Changelog\n\n## [1.0.0]\n\n- Initial\n');
-      fs.writeFileSync(path.join(srcDir, 'baz.ts'), 'export const x = 1;');
-      fs.writeFileSync(
-        path.join(testDir, 'CAPABILITIES.md'),
-        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
-      );
-
-      await syncDocs({ projectPath: testDir, changelog: true });
-
-      const changelogContent = fs.readFileSync(path.join(testDir, 'CHANGELOG.md'), 'utf-8');
-      expect(changelogContent).toContain('baz.ts');
-
-      fs.rmSync(testDir, { recursive: true, force: true });
-    });
-  });
 
   describe('syncDocs', () => {
     it('无 src/ 目录应该跳过模块扫描', async () => {

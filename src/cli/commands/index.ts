@@ -23,3 +23,4 @@ export { postevalPlan, type PostEvalPlanOptions } from './posteval-plan';
 export { release, type ReleaseOptions } from './release';
 export { analyzeSessions, type AnalyzeSessionsOptions } from './analyze-sessions';
 export { updateUserModel, type UpdateUserModelOptions } from './update-user-model';
+export { constraints, getConstraintsMeta, type ConstraintsMeta } from './constraints';

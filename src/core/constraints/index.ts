@@ -23,7 +23,6 @@ export {
   checkConstraint,
   checkConstraints,
   checkBeforeExecution,
-  buildConstraintPrompt,
   constraintChecker,
   // 向后兼容
   IronLawChecker,

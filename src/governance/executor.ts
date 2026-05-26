@@ -8,6 +8,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { detectSourceRoots } from '../utils/detect-source-roots';
 import type {
   GovernanceDiff,
   GovernanceResult,
@@ -68,9 +69,14 @@ export class GovernanceExecutor {
     // 如果没有表格，跳过
     if (listedFiles.length === 0) return [];
 
-    // 扫描 src/ 中的实际文件
-    const srcDir = path.join(projectPath, 'src');
-    const actualFiles = await this.findSourceFiles(srcDir, projectPath);
+    // 扫描所有源码目录中的实际文件
+    const sourceRoots = detectSourceRoots(projectPath);
+    const actualFiles: string[] = [];
+    for (const root of sourceRoots) {
+      const rootDir = path.join(projectPath, root);
+      const files = await this.findSourceFiles(rootDir, projectPath);
+      actualFiles.push(...files);
+    }
 
     // 找出新增但未列出的文件
     const missing = actualFiles.filter(f => !listedFiles.includes(f));
@@ -206,7 +212,7 @@ export class GovernanceExecutor {
         const stat = await fs.stat(entryPath);
         if (stat.isDirectory()) {
           results.push(...await this.findSourceFiles(entryPath, projectPath));
-        } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
+        } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts') && entry !== 'index.ts') {
           results.push(path.relative(projectPath, entryPath));
         }
       } catch {

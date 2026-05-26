@@ -66,8 +66,6 @@ export interface ContextFilesConfig {
 export interface ChangelogConfig {
   /** 格式 */
   format?: 'keep-a-changelog' | 'conventional';
-  /** 是否自动生成条目（sync-docs 辅助） */
-  auto_append?: boolean;
 }
 
 /**

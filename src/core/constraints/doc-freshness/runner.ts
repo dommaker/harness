@@ -7,6 +7,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename, relative } from 'path';
+import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import type {
   DocFreshnessCheck,
   DocFreshnessConfig,
@@ -314,7 +315,7 @@ export class FreshnessRunner {
       }
     }
 
-    return merged.size > 0 ? [...merged] : ['src'];
+    return merged.size > 0 ? [...merged] : detectSourceRoots(projectPath);
   }
 
   // ── doc_regex_count ──────────────────────────────────────────────

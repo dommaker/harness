@@ -1,8 +1,9 @@
 /**
- * Constraint Prompt Injection — 将 harness 约束的前置声明注入 Agent prompt
+ * @deprecated 本模块已迁至 @dommaker/studio-shared。
+ *   从 harness v0.13 起，请改为 import { formatConstraintsForPrompt, AgentRole, ROLE_TRIGGERS } from '@dommaker/studio-shared';
+ *   本 re-export 将在下一个大版本移除。
  *
- * Agent prompt 已有的 promptInjection 字段但从未被消费。
- * 此处将其按 agent role 路由，让 Agent 在行动前就知道约束。
+ * Constraint Prompt Injection — 将 harness 约束的前置声明注入 Agent prompt
  */
 
 import { getAllConstraints } from './definitions';
@@ -20,9 +21,10 @@ const ROLE_TRIGGERS: Record<AgentRole, ConstraintTrigger[]> = {
   triage: ['triage', 'diagnosis'],
 };
 
+export { ROLE_TRIGGERS };
+
 /**
- * Format all applicable constraints as a prompt injection section for a given agent role.
- * Uses the existing promptInjection field from each constraint definition.
+ * @deprecated 请使用 @dommaker/studio-shared 中的同名函数
  */
 export function formatConstraintsForPrompt(role: AgentRole): string {
   const allConstraints = getAllConstraints();

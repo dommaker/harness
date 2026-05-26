@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { CheckpointValidator } from '../../core/validators/checkpoint';
 import type { Checkpoint, CheckpointContext } from '../../types/checkpoint';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
 
 export interface ValidateOptions {
   /** 检查点文件路径 */
@@ -157,7 +158,27 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
 
   await fs.mkdir(dir, { recursive: true });
 
-  const content = yaml.dump({ checkpoints: DEFAULT_CHECKPOINTS }, { indent: 2 });
+  // 动态替换 no-console 检查点的源目录
+  const roots = detectSourceRoots(projectPath);
+  let checkpoints = DEFAULT_CHECKPOINTS;
+  if (roots.length > 0) {
+    checkpoints = DEFAULT_CHECKPOINTS.map(cp => {
+      if (cp.id === 'no-console') {
+        return {
+          ...cp,
+          checks: cp.checks.map(c => {
+            if (c.id === 'check-console') {
+              return { ...c, config: { command: `grep -r "console.log" ${roots.join(' ')} || true` } };
+            }
+            return c;
+          }),
+        };
+      }
+      return cp;
+    });
+  }
+
+  const content = yaml.dump({ checkpoints }, { indent: 2 });
   await fs.writeFile(filePath, content, 'utf-8');
 
   console.log(chalk.green(`✅ 已创建示例检查点文件: ${filePath}`));

@@ -5,10 +5,13 @@
  */
 
 import chalk from 'chalk';
+import { readFileSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { createExampleCheckpoint, createExampleResolutions } from './validate';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { IRON_LAWS, GUIDELINES, TIPS, getAllConstraints } from '../../core/constraints/definitions';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -92,7 +95,6 @@ const GOVERNANCE_PRESETS: Record<string, Record<string, unknown>> = {
     },
     changelog: {
       format: 'keep-a-changelog',
-      auto_append: false,
     },
     testing: {
       test_first: true,
@@ -109,11 +111,10 @@ const GOVERNANCE_PRESETS: Record<string, Record<string, unknown>> = {
     },
     context_files: {
       enabled: true,
-      required_dirs: ['src'],
+      required_dirs: [],
     },
     changelog: {
       format: 'keep-a-changelog',
-      auto_append: false,
     },
     testing: {
       test_first: true,
@@ -130,11 +131,10 @@ const GOVERNANCE_PRESETS: Record<string, Record<string, unknown>> = {
     },
     context_files: {
       enabled: true,
-      required_dirs: ['src'],
+      required_dirs: [],
     },
     changelog: {
       format: 'keep-a-changelog',
-      auto_append: true,
     },
     testing: {
       test_first: true,
@@ -507,6 +507,105 @@ custom_constraints:
 }
 
 /**
+ * 在 CLAUDE.md 中写入/更新 Governance Rules 约束段
+ *
+ * - 如果 CLAUDE.md 不存在，创建并写入完整约束段
+ * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
+ * - 如果不存在标记，在文件末尾追加约束段
+ *
+ * 只写入包含 promptInjection 文本的约束
+ */
+async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
+  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+
+  // 读取 harness 版本
+  let version = 'unknown';
+  try {
+    const pkgPath = path.join(__dirname, '../../../package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    version = pkg.version;
+  } catch {
+    // fallback to 'unknown'
+  }
+
+  // 构建约束段正文（不含 ## Governance Rules 标题，因为替换时标题已在外部）
+  const bodyLines: string[] = [];
+  bodyLines.push('<!-- HARNESS_CONSTRAINTS_START -->');
+  bodyLines.push(`<!-- version: ${version} -->`);
+
+  // Iron Laws
+  const ironLawItems = Object.entries(IRON_LAWS).filter(([, c]) => c.promptInjection);
+  if (ironLawItems.length > 0) {
+    bodyLines.push('### Iron Laws (违反将阻断)');
+    for (const [id, c] of ironLawItems) {
+      bodyLines.push(`- **${id}**: ${c.promptInjection}`);
+    }
+  }
+
+  // Guidelines
+  const guidelineItems = Object.entries(GUIDELINES).filter(([, c]) => c.promptInjection);
+  if (guidelineItems.length > 0) {
+    bodyLines.push('');
+    bodyLines.push('### Guidelines (应遵循)');
+    for (const [id, c] of guidelineItems) {
+      bodyLines.push(`- **${id}**: ${c.promptInjection}`);
+    }
+  }
+
+  // Tips
+  const tipItems = Object.entries(TIPS).filter(([, c]) => c.promptInjection);
+  if (tipItems.length > 0) {
+    bodyLines.push('');
+    bodyLines.push('### Tips');
+    for (const [id, c] of tipItems) {
+      bodyLines.push(`- **${id}**: ${c.promptInjection}`);
+    }
+  }
+
+  bodyLines.push('<!-- HARNESS_CONSTRAINTS_END -->');
+
+  const fullSection = '## Governance Rules\n' + bodyLines.join('\n') + '\n';
+  const bodyOnly = bodyLines.join('\n') + '\n';
+
+  // 检查 CLAUDE.md 是否存在
+  let existingContent: string;
+  let fileExists = false;
+  try {
+    existingContent = await fs.readFile(claudeMdPath, 'utf-8');
+    fileExists = true;
+  } catch {
+    existingContent = '';
+  }
+
+  const startMarker = '<!-- HARNESS_CONSTRAINTS_START -->';
+  const endMarker = '<!-- HARNESS_CONSTRAINTS_END -->';
+
+  if (!fileExists) {
+    // 创建新文件
+    await fs.writeFile(claudeMdPath, fullSection, 'utf-8');
+    console.log(chalk.green(`✅ 已创建 CLAUDE.md 并写入治理约束 (v${version})`));
+    return;
+  }
+
+  const startIdx = existingContent.indexOf(startMarker);
+  const endIdx = existingContent.indexOf(endMarker);
+
+  if (startIdx !== -1 && endIdx !== -1) {
+    // 替换标记间内容（标记本身也替换，保持包括最新版本号）
+    const before = existingContent.slice(0, startIdx);
+    const after = existingContent.slice(endIdx + endMarker.length);
+    const newContent = before + bodyOnly + after;
+    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+    console.log(chalk.green(`✅ 已更新 CLAUDE.md 治理约束 (v${version})`));
+  } else {
+    // 在文件末尾追加完整段
+    const newContent = existingContent.trimEnd() + '\n\n' + fullSection;
+    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+    console.log(chalk.green(`✅ 已追加治理约束到 CLAUDE.md (v${version})`));
+  }
+}
+
+/**
  * 设置治理相关文件
  */
 async function setupGovernance(projectPath: string, level: string): Promise<void> {
@@ -519,16 +618,22 @@ async function setupGovernance(projectPath: string, level: string): Promise<void
   // 1. 生成 CHANGELOG.md
   await createChangelog(projectPath, governance);
 
-  // 2. 生成 CONTEXT.md 文件
+  // 2. 在 CLAUDE.md 中写入/更新 Governance Rules 约束段
+  await setupClaudeMdConstraints(projectPath);
+
+  // 3. 生成 CONTEXT.md 文件
   const contextConfig = governance.context_files as Record<string, unknown> | undefined;
   if (contextConfig?.enabled) {
-    const requiredDirs = (contextConfig.required_dirs as string[]) || [];
+    let requiredDirs = (contextConfig.required_dirs as string[]) || [];
+    if (requiredDirs.length === 0) {
+      requiredDirs = detectSourceRoots(projectPath);
+    }
     for (const dir of requiredDirs) {
       await createContextMd(projectPath, dir);
     }
   }
 
-  // 3. 生成治理 CI workflow
+  // 4. 生成治理 CI workflow
   await setupGovernanceWorkflow(projectPath, level);
 }
 

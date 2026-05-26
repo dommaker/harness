@@ -13,6 +13,7 @@ import * as yaml from 'js-yaml';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { FreshnessRunner } from '../../core/constraints/doc-freshness/runner';
 import { FreshnessAutoFix } from '../../core/constraints/doc-freshness/auto-fix';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
 import type { DocFreshnessCheck } from '../../types/project-config';
 
 export interface SyncDocsOptions {
@@ -67,7 +68,7 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   let currentModules: ModuleInfo[] = [];
   for (const srcDir of srcDirs) {
     try {
-      const modules = await scanSourceModules(path.join(projectPath, srcDir));
+      const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);
       currentModules.push(...modules);
     } catch {
       if (!isJson) {
@@ -260,18 +261,13 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     console.log(chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
   }
 
-  // 9. CHANGELOG 辅助
-  if (options.changelog) {
-    await generateChangelogEntry(projectPath, result);
-  }
-
   return !hasIssues;
 }
 
 /**
- * 扫描 src/ 目录，提取模块信息
+ * 扫描源码目录，提取模块信息
  */
-async function scanSourceModules(srcDir: string): Promise<ModuleInfo[]> {
+async function scanSourceModules(srcDir: string, projectPath: string): Promise<ModuleInfo[]> {
   const modules: ModuleInfo[] = [];
 
   let entries: string[];
@@ -292,17 +288,16 @@ async function scanSourceModules(srcDir: string): Promise<ModuleInfo[]> {
       // 子目录：递归扫描 .ts 文件（不报告目录条目本身）
       const subFiles = await findTsFiles(entryPath);
       for (const f of subFiles) {
-        const relPath = path.relative(path.dirname(srcDir), f);
         modules.push({
           name: path.basename(f, '.ts'),
-          file: relPath,
+          file: path.relative(projectPath, f),
           description: await extractFileDescription(f),
         });
       }
     } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts') && entry !== 'index.ts') {
       modules.push({
         name: path.basename(entry, '.ts'),
-        file: `src/${entry}`,
+        file: path.relative(projectPath, entryPath),
         description: await extractFileDescription(entryPath),
       });
     }
@@ -472,8 +467,12 @@ async function getRequiredContextDirs(projectPath: string): Promise<string[]> {
     const config = yaml.load(content) as Record<string, unknown>;
     const governance = config.governance as Record<string, unknown> | undefined;
     const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
-    if (contextFiles?.enabled && Array.isArray(contextFiles.required_dirs)) {
-      return contextFiles.required_dirs as string[];
+    if (contextFiles?.enabled) {
+      if (Array.isArray(contextFiles.required_dirs) && contextFiles.required_dirs.length > 0) {
+        return contextFiles.required_dirs as string[];
+      }
+      // Fallback: auto-discover from source roots
+      return detectSourceRoots(projectPath);
     }
   } catch {
     // 配置不存在或无法解析
@@ -488,7 +487,7 @@ async function getRequiredContextDirs(projectPath: string): Promise<string[]> {
 async function getSourceDirs(projectPath: string): Promise<string[]> {
   const requiredDirs = await getRequiredContextDirs(projectPath);
   if (requiredDirs.length > 0) return requiredDirs;
-  return ['src'];
+  return detectSourceRoots(projectPath);
 }
 
 /**
@@ -742,49 +741,3 @@ function updateCapabilityCounts(content: string, projectPath: string): string {
   return content;
 }
 
-/**
- * 生成 CHANGELOG 条目
- */
-async function generateChangelogEntry(projectPath: string, result: SyncResult): Promise<void> {
-  const changelogPath = path.join(projectPath, 'CHANGELOG.md');
-
-  let changelogExists = false;
-  try {
-    await fs.access(changelogPath);
-    changelogExists = true;
-  } catch {
-    // CHANGELOG.md 不存在
-  }
-
-  if (!changelogExists) {
-    console.log(chalk.yellow('⚠️  CHANGELOG.md 不存在，跳过 changelog 生成'));
-    return;
-  }
-
-  const changes: string[] = [];
-  if (result.added.length > 0) {
-    changes.push(`### Added\n${result.added.map(f => `- ${f}`).join('\n')}`);
-  }
-  if (result.removed.length > 0) {
-    changes.push(`### Removed\n${result.removed.map(f => `- ${f}`).join('\n')}`);
-  }
-
-  if (changes.length === 0) return;
-
-  const now = new Date().toISOString().split('T')[0];
-  const entry = `\n## [${now}]\n\n${changes.join('\n\n')}\n`;
-
-  const content = await fs.readFile(changelogPath, 'utf-8');
-  // 在 ## [Unreleased] 之后插入
-  const unreleasedIndex = content.indexOf('## [Unreleased]');
-  if (unreleasedIndex !== -1) {
-    const insertPos = content.indexOf('\n', unreleasedIndex + 1);
-    const newContent = content.slice(0, insertPos) + entry + content.slice(insertPos);
-    await fs.writeFile(changelogPath, newContent, 'utf-8');
-    console.log(chalk.green('✅ 已更新 CHANGELOG.md'));
-  } else {
-    // 追加到末尾
-    await fs.appendFile(changelogPath, entry, 'utf-8');
-    console.log(chalk.green('✅ 已追加 CHANGELOG.md 条目'));
-  }
-}

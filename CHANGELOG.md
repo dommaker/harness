@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.13.0] - 2026-05-26
+
+### Breaking
+- **prompt-injection 迁移**: `formatConstraintsForPrompt()` + `AgentRole` + `ROLE_TRIGGERS` 迁至 `@dommaker/studio-shared`。harness 保留 deprecated re-export。
+- **`buildConstraintPrompt()` 移除**: 孤儿函数从未消费，且截断 80 字符。已删除。
+- **死亡代码清理**: `changelog_freshness` 孤儿约束、`changelog_missing` DiffType、`sync-docs --changelog`、`auto_append` config。
+
+### Added
+- **`detectSourceRoots()`**: 统一源码目录发现。支持 monorepo (packages/*, apps/*) 和单 repo (src/, lib/)。替代 5 种分散硬编码。
+- **`harness constraints --json`**: 约束元数据导出（version, hash, counts, textSize）。
+- **`harness init` → CLAUDE.md**: 写入标记段（HARNESS_CONSTRAINTS），含约束列表和版本号。
+- **`module_creation` 触发**: `detectTrigger()` 识别新目录文件变更。
+- **11 条约束补 `promptInjection`**: `no_code_without_test` 等从不可见变为 CLAUDE.md + Agent prompt 可见。
+
+### Changed
+- **内置 Freshness 泛化**: 10 项 harness 特化 → 2 项通用（CONTEXT.md + CHANGELOG 版本）。
+- **`findSourceFiles` 跳过 `index.ts`**: 与 `scanSourceModules` 一致。
+- **管线运行时去重**: CLAUDE.md 已有约束段时注入引用而非全量文本。
+- **预设 `required_dirs` 自动发现**: 不硬编码 `['src']`。
+
+### Fixed
+- `@jest/globals` 缺失 → 安装后 119/119 测试通过。
+- monorepo 工程 `harness init` 后全部检测盲过。
+- `index.ts` 导致 `docs_freshness` 误报。
+
 ## [0.12.2] - 2026-05-19
 
 ### Added

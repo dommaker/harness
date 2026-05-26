@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/harness",
-  "version": "0.12.16",
+  "version": "0.13.0",
   "description": "通用工程约束框架 - 铁律系统、检查点验证、测试门控、拦截器",
   "keywords": [
     "harness",
@@ -59,6 +59,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/glob": "^8.1.0",
     "@types/jest": "^29.5.0",
     "@types/js-yaml": "^4.0.9",

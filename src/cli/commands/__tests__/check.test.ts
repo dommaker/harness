@@ -15,11 +15,26 @@ jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   mkdirSync: jest.fn(),
   writeFileSync: jest.fn(),
+  readdirSync: jest.fn(),
 }));
 
 // Mock execAsync
 jest.mock('../../../utils/exec', () => ({
   execAsync: jest.fn(),
+}));
+
+// Mock child_process.execSync (used by isNewDirectory + getChangedFiles in check.ts)
+jest.mock('child_process', () => ({
+  exec: jest.fn(),
+  execSync: jest.fn((cmd: string) => {
+    if (cmd.includes('git ls-tree')) {
+      return Buffer.from('040000 tree abc123\tsrc\n'); // directory exists in HEAD
+    }
+    if (cmd.includes('git diff')) {
+      return Buffer.from('src/test.ts\nsrc/legacy.js');
+    }
+    return Buffer.from('');
+  }),
 }));
 
 // Mock constraintChecker
@@ -48,7 +63,7 @@ jest.mock('chalk', () => ({
   red: jest.fn((str: string) => str),
 }));
 
-const mockFs = fs as jest.Mocked<typeof fs>;
+const mockFs = fs as jest.Mocked<typeof fs> & { readdirSync: jest.Mock };
 const mockChecker = constraintChecker as jest.Mocked<typeof constraintChecker>;
 const MockProjectConfigLoader = ProjectConfigLoader as jest.MockedClass<typeof ProjectConfigLoader>;
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
@@ -231,7 +246,20 @@ describe('check command', () => {
         passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
+      // Mock filesystem so detectSourceRoots finds src/ as a source root
+      const mockProjectPath = '/mock-project';
+      mockFs.existsSync.mockImplementation((p: any) => {
+        if (p === `${mockProjectPath}/src`) return true;
+        return false;
+      });
+      mockFs.readdirSync.mockImplementation((dir: any) => {
+        if (dir === `${mockProjectPath}/src`) {
+          return [{ name: 'foo.ts', isFile: () => true, isDirectory: () => false }] as any;
+        }
+        return [];
+      });
+
+      await check({ preset: 'default', staged: false, projectPath: mockProjectPath });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
     });
 
@@ -241,7 +269,20 @@ describe('check command', () => {
         passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
+      // Mock filesystem so detectSourceRoots finds src/ as a source root
+      const mockProjectPath = '/mock-project';
+      mockFs.existsSync.mockImplementation((p: any) => {
+        if (p === `${mockProjectPath}/src`) return true;
+        return false;
+      });
+      mockFs.readdirSync.mockImplementation((dir: any) => {
+        if (dir === `${mockProjectPath}/src`) {
+          return [{ name: 'foo.ts', isFile: () => true, isDirectory: () => false }] as any;
+        }
+        return [];
+      });
+
+      await check({ preset: 'default', staged: false, projectPath: mockProjectPath });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
     });
 
@@ -267,7 +308,20 @@ describe('check command', () => {
         tipCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
+      // Mock filesystem so detectSourceRoots finds src/ as a source root
+      const mockProjectPath = '/mock-project';
+      mockFs.existsSync.mockImplementation((p: any) => {
+        if (p === `${mockProjectPath}/src`) return true;
+        return false;
+      });
+      mockFs.readdirSync.mockImplementation((dir: any) => {
+        if (dir === `${mockProjectPath}/src`) {
+          return [{ name: 'module.ts', isFile: () => true, isDirectory: () => false }] as any;
+        }
+        return [];
+      });
+
+      await check({ preset: 'default', staged: false, projectPath: mockProjectPath });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
     });
 

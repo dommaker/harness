@@ -390,6 +390,7 @@ exports.GUIDELINES = {
 - 没有任何调查就直接猜测修复
 - 看到 error 就直接 try-catch 掩盖`,
         exceptions: ['simple_typo', 'config_value_error', 'missing_config'],
+        promptInjection: '修复问题时必须先定位根因。不绕过问题、不遮掩症状、不用临时方案代替根本修复。在分析文档中记录根因分析过程。',
     },
     /**
      * 业务逻辑代码必须先写测试
@@ -416,6 +417,7 @@ exports.GUIDELINES = {
 - 简单 getter/setter
 - 纯展示 UI 组件（无交互逻辑）`,
         exceptions: ['config_file', 'type_definition', 'simple_accessor', 'pure_display_component'],
+        promptInjection: '新代码必须同时编写测试。实现功能前先写测试用例（RED），然后实现让测试通过（GREEN）。不得提交无测试覆盖的实现代码。',
     },
     /**
      * 避免 any 类型
@@ -440,6 +442,7 @@ exports.GUIDELINES = {
 - 第三方库无类型定义
 - 迁移遗留代码临时使用`,
         exceptions: ['json_parse_result', 'third_party_no_types', 'legacy_migration'],
+        promptInjection: '禁止使用 TypeScript any 类型。使用具体类型、泛型或 unknown 代替。any 绕过类型检查带来运行时风险。',
     },
     /**
      * 简单方案优先
@@ -499,6 +502,7 @@ exports.GUIDELINES = {
 
 例外情况下可跳过，但必须记录跳过原因。`,
         exceptions: ['emergency_fix', 'hotfix', 'security_patch'],
+        promptInjection: '创建新模块/文件前，先检查项目中是否已有类似实现可以复用。优先扩展现有模块，避免引入重复代码和功能。',
     },
     /**
      * 功能清单同步
@@ -548,6 +552,7 @@ exports.GUIDELINES = {
 - 用更简洁的实现达到相同效果
 - 删除不再使用的遗留代码`,
         exceptions: ['redundant_code_cleanup', 'same_effect_refactor', 'unused_code_removal'],
+        promptInjection: '不得擅自简化或删除测试、lint 规则、类型检查或约束。如需降低检查标准，必须先提案并获明确批准。',
     },
     /**
      * 技能需要测试
@@ -571,6 +576,7 @@ exports.GUIDELINES = {
 - 明确技能的功能边界
 - 验证技能的正确性
 - 防止回归`,
+        promptInjection: '新创建的 Skill 模块必须有对应的测试文件。测试应覆盖正常路径、边界情况和错误处理。',
     },
     /**
      * 测试覆盖率要求
@@ -625,6 +631,7 @@ exports.GUIDELINES = {
 - 紧急修复
 - 已有明确设计文档`,
         exceptions: ['explicit_instruction', 'emergency_fix', 'existing_design'],
+        promptInjection: '涉及架构变更、新增依赖、API 设计等重大决策时，必须先提出讨论获得确认，再开始实现。不要凭单方面判断做架构决策。',
     },
     /**
      * 覆盖率不能下降
@@ -655,6 +662,7 @@ exports.GUIDELINES = {
 - 重构核心逻辑（需评审）
 - 紧急修复（需后续补测）`,
         exceptions: ['deprecated_removal', 'core_refactor_with_review', 'emergency_fix_pending_test'],
+        promptInjection: '代码覆盖率不得下降。新增代码必须有对应的测试覆盖。运行 npm test -- --coverage 验证覆盖率。',
     },
     /**
      * 关键目录需要 CONTEXT.md
@@ -946,6 +954,7 @@ exports.GUIDELINES = {
         trigger: ['code_implementation', 'doc_update', 'config_change', 'commit'],
         enforcement: 'credential-scan',
         description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、Markdown 文档、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。建议配合 pre-commit hook 做自动扫描。`,
+        promptInjection: '禁止在代码中硬编码密码、API 密钥、Token 等凭证。使用环境变量或安全的凭证管理方案存储敏感信息。',
     },
 };
 // ========================================
@@ -972,6 +981,7 @@ exports.TIPS = {
 - 示例代码
 
 README 帮助其他开发者快速了解模块。`,
+        promptInjection: '创建新模块时，同时创建 README.md 说明模块用途、使用方法和 API 文档，帮助其他开发者快速了解模块。',
     },
     /**
      * 建议写 API 文档
@@ -998,6 +1008,7 @@ export function add(a: number, b: number): number {
 \`\`\`
 
 文档注释帮助 IDE 提供智能提示。`,
+        promptInjection: '公共 API（导出的函数、类、接口）必须有 JSDoc 文档注释，说明参数、返回值和用法示例。',
     },
 };
 // ========================================

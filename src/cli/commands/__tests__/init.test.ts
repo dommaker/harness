@@ -9,10 +9,21 @@ import * as fs from 'fs/promises';
 const mockReaddir = jest.fn().mockResolvedValue([]);
 const existingFiles = new Set<string>();
 
+// Mock fs (sync) for detectSourceRoots and setupClaudeMdConstraints
+const mockExistsSync = jest.fn().mockReturnValue(false);
+const mockReaddirSync = jest.fn().mockReturnValue([]);
+
+jest.mock('fs', () => ({
+  existsSync: (...args: any[]) => mockExistsSync(...args),
+  readdirSync: (...args: any[]) => mockReaddirSync(...args),
+  statSync: jest.fn(),
+  readFileSync: jest.fn().mockReturnValue('{"version": "1.0.0"}'),
+}));
+
 jest.mock('fs/promises', () => ({
   mkdir: jest.fn(),
   writeFile: jest.fn(),
-  readFile: jest.fn(),
+  readFile: jest.fn().mockRejectedValue(new Error('ENOENT')),
   access: jest.fn((path: string) => {
     if (existingFiles.has(path)) return Promise.resolve(undefined);
     return Promise.reject(new Error(`ENOENT: ${path}`));
@@ -55,6 +66,8 @@ describe('init command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     existingFiles.clear();
+    mockExistsSync.mockReturnValue(false);
+    mockReaddirSync.mockReturnValue([]);
     consoleSpy = jest.spyOn(console, 'log').mockImplementation();
   });
 
@@ -200,6 +213,14 @@ describe('init command', () => {
       mockFs.writeFile.mockResolvedValue(undefined);
       existingFiles.add(`${PROJECT}/src`);
 
+      mockExistsSync.mockImplementation((path: string) => path === `${PROJECT}/src`);
+      mockReaddirSync.mockImplementation((dir: string) => {
+        if (dir === `${PROJECT}/src`) {
+          return [{ name: 'index.ts', isFile: () => true, isDirectory: () => false }];
+        }
+        return [];
+      });
+
       await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
       const writeCalls = mockFs.writeFile.mock.calls;
       const contextCall = writeCalls.find((c: any[]) => String(c[0]).includes('CONTEXT.md'));
@@ -212,7 +233,9 @@ describe('init command', () => {
       mockFs.writeFile.mockResolvedValue(undefined);
 
       await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('目录 src 不存在'));
+      const writeCalls = mockFs.writeFile.mock.calls;
+      const contextCall = writeCalls.find((c: any[]) => String(c[0]).includes('CONTEXT.md'));
+      expect(contextCall).toBeUndefined();
     });
 
     it('minimal 治理不应创建 CONTEXT.md', async () => {

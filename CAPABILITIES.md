@@ -1,6 +1,6 @@
 # Harness Capabilities
 
-## CLI Commands (21)
+## CLI Commands (22)
 check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model
 
 ## Quality Gates (6)

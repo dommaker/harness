@@ -1395,33 +1395,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.rmSync(projDir, { recursive: true, force: true });
     });
 
-  describe('buildConstraintPrompt', () => {
-    it('should build prompt for code_implementation trigger', async () => {
-      const { buildConstraintPrompt } = await import('../core/constraints/checker');
-      const result = buildConstraintPrompt({ operation: 'code_implementation' });
-      expect(result).toContain('## 铁律');
-      expect(result).toContain('## 行为准则');
-    });
-
-    it('should return empty string for design_request with no matching constraints', async () => {
-      const { buildConstraintPrompt } = await import('../core/constraints/checker');
-      const result = buildConstraintPrompt({ operation: 'push' });
-      // push has no iron_law or injectPrompt guidelines
-      expect(result).toBe('');
-    });
-
-    it('should include iron laws and inject-prompt guidelines only', async () => {
-      const { buildConstraintPrompt } = await import('../core/constraints/checker');
-      const result = buildConstraintPrompt({ operation: 'code_implementation' });
-      // Should contain iron law section
-      expect(result).toContain('铁律');
-      // Should contain behavior guidelines section
-      expect(result).toContain('行为准则');
-      // Should not contain guidelines that lack injectPrompt flag
-      // no_code_without_test has promptInjection but injectPrompt is not set
-      // so it should not appear in the output
-    });
-  });
 
   describe('checkConstraintsSafe', () => {
     it('should not throw even with iron law violations', async () => {

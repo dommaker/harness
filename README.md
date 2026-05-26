@@ -29,7 +29,7 @@ npx harness check
 **作为库使用**：
 
 ```typescript
-import { checkBeforeExecution, buildConstraintPrompt } from '@dommaker/harness';
+import { checkBeforeExecution, getAllConstraints } from '@dommaker/harness';
 
 // Agent 启动前检查
 await checkBeforeExecution({
@@ -39,12 +39,14 @@ await checkBeforeExecution({
   hasWorktree: true,
 });
 
-// Agent prompt 注入约束
-const constraints = buildConstraintPrompt({
-  operation: 'code_implementation',
-  taskDescription: '重构用户认证模块',
-});
+// 获取约束元数据
+const meta = await import('child_process').then(cp =>
+  JSON.parse(cp.execSync('npx harness constraints --json', { encoding: 'utf-8' }))
+);
+// { version, hash, counts: { ironLaws, guidelines, tips }, textSize }
 ```
+
+> Agent prompt 注入约束由 `@dommaker/studio-shared` 提供（`formatConstraintsForPrompt(role)`）。
 
 ---
 
@@ -53,7 +55,7 @@ const constraints = buildConstraintPrompt({
 | 层级 | 严重性 | 数量 | 行为 |
 |------|:--:|:--:|------|
 | **Iron Law** | error | 13 | 阻断执行。拦截率 <5% 时自动降为 guideline |
-| **Guideline** | warning | 14 | 注入 Agent context。拦截率 <30% 时降为 tip |
+| **Guideline** | warning | 27 | 注入 Agent context。拦截率 <30% 时降为 tip |
 | **Tip** | info | 2 | 信息性提示。拦截率 <10% 时标记废弃 |
 
 完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
@@ -85,7 +87,8 @@ active → 拦截率低于阈值 → degrade → deprecated → 写入 Knowledge
 ```bash
 harness check        # 约束检查（pre-commit hook 用）
 harness init         # 初始化 .harness/ 目录
-harness sync-docs    # 同步 CAPABILITIES.md
+harness sync-docs    # 同步 CAPABILITIES.md + CONTEXT.md
+harness constraints  # 约束元数据（版本/hash/计数）
 harness status       # 项目健康状态
 harness validate     # 检查点验证
 harness report       # 报告生成

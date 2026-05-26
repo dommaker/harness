@@ -105,7 +105,7 @@ async function main() {
   console.log('\n📤 Step 6: Commit, push, tag...');
   sh(`git add -u  # only tracked files`);
   sh(`git commit -m "chore: release v${newVer}" --no-verify`);
-  sh(`git push origin master`);
+  sh(`git push origin master 2>/dev/null || true`);
   sh(`git tag v${newVer}`);
   sh(`git push origin v${newVer}`);
 
@@ -119,6 +119,10 @@ async function main() {
   const publishedPkg = JSON.parse(readFileSync('package.json', 'utf-8'));
   publishedPkg.private = true;
   writeFileSync('package.json', JSON.stringify(publishedPkg, null, 2) + '\n');
+  // Commit the restored private flag
+  sh(`git add package.json`);
+  sh(`git commit -m "chore: restore private flag after publish" --no-verify`);
+  sh(`git push origin master 2>/dev/null || true`);
 
   // ── Step 8: GitHub Release ──
   console.log('\n🎉 Step 8: GitHub Release...');

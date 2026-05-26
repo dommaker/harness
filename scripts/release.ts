@@ -103,7 +103,7 @@ async function main() {
 
   // ── Step 6: Commit + push + tag ──
   console.log('\n📤 Step 6: Commit, push, tag...');
-  sh(`git add -A`);
+  sh(`git add -u  # only tracked files`);
   sh(`git commit -m "chore: release v${newVer}" --no-verify`);
   sh(`git push origin master`);
   sh(`git tag v${newVer}`);

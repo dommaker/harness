@@ -115,9 +115,10 @@ async function main() {
   shQuiet('rm -rf src/tools/core/node_modules');
   sh(`npm publish --registry ${NPM_REGISTRY} --ignore-scripts`);
 
-  // Restore private flag
-  pkg.private = true;
-  writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+  // Restore private flag — read fresh package.json (version was bumped)
+  const publishedPkg = JSON.parse(readFileSync('package.json', 'utf-8'));
+  publishedPkg.private = true;
+  writeFileSync('package.json', JSON.stringify(publishedPkg, null, 2) + '\n');
 
   // ── Step 8: GitHub Release ──
   console.log('\n🎉 Step 8: GitHub Release...');

@@ -40,9 +40,12 @@
   },
   "files": [
     "dist",
-    "bin/harness.js",
+    "bin",
+    "src",
     "templates",
-    "github-actions"
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc && cp -r src/tools/definitions dist/tools/definitions",
@@ -81,5 +84,6 @@
   "bugs": {
     "url": "https://github.com/kww/harness/issues"
   },
-  "homepage": "https://github.com/kww/harness#readme"
+  "homepage": "https://github.com/kww/harness#readme",
+  "private": true
 }

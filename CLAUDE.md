@@ -56,7 +56,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/llm/` | LLM adapter layer: unified interface for multi-model switching |
 | `src/tools/` | Tool registry, core tools, loader, path management |
 | `src/verification/` | Rules-based verification engine + loop verification |
-| `src/cli/commands/` | 21 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model) |
+| `src/cli/commands/` | 22 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints) |
 
 ### Entry Points
 

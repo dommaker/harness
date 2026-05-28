@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PostToolUse hook — track deep analysis signals
+ * PostToolUse hook — track deep analysis signals + collect AgentEvents
  *
  * Updates state file with:
  *   - planned: EnterPlanMode was called
@@ -8,8 +8,9 @@
  *   - readDirs: Set of unique directories Read was called on
  *   - captured: Write to .harness/knowledge-docs/ or .harness/knowledge/
  *   - turnCount: session turn counter
+ *   - events: AgentEvent[] (B9-016) — buffered for batch POST on session:end
  *
- * Usage: PostToolUse hook with matcher "EnterPlanMode|Agent|Read|Write|Write"
+ * Usage: PostToolUse hook with matcher "EnterPlanMode|Agent|Read|Write|Edit|Bash"
  */
 
 const fs = require('fs');
@@ -47,7 +48,9 @@ function loadState() {
       return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
     }
   } catch {}
-  return { planned: false, explored: false, readDirs: [], captured: false };
+  // B9-016: generate sessionId for this Claude Code session
+  const sessionId = 'cc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  return { planned: false, explored: false, readDirs: [], captured: false, sessionId, events: [], startTime: Date.now() };
 }
 
 function updateState(state, event) {
@@ -75,13 +78,36 @@ function updateState(state, event) {
     }
   }
 
-  if (toolName === 'Write') {
+  if (toolName === 'Write' || toolName === 'Edit') {
     const input = event.tool_input || {};
     const filePath = input.file_path || '';
     if (filePath.includes('.harness/knowledge-docs/') || filePath.includes('.harness/knowledge/')) {
       state.captured = true;
       log('info', 'captured', { file: filePath });
     }
+    // B9-016: collect file:change event
+    if (filePath && !filePath.includes('.harness/')) {
+      state.events.push({
+        sessionId: state.sessionId,
+        agentId: 'claude-code',
+        timestamp: Date.now(),
+        type: 'file:change',
+        payload: { path: filePath, action: toolName === 'Write' ? 'create' : 'modify' },
+      });
+    }
+  }
+
+  if (toolName === 'Bash') {
+    const input = event.tool_input || {};
+    const command = input.command || '';
+    // B9-016: collect tool:call event
+    state.events.push({
+      sessionId: state.sessionId,
+      agentId: 'claude-code',
+      timestamp: Date.now(),
+      type: 'tool:call',
+      payload: { tool: 'Bash', command: command.slice(0, 200) },
+    });
   }
 }
 

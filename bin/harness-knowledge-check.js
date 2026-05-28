@@ -14,7 +14,6 @@ const path = require('path');
 const os = require('os');
 const STATE_FILE = '/tmp/claude-knowledge-capture-state.json';
 const LOG_FILE = '/tmp/claude-knowledge-hooks.log';
-const EVENTS_FILE = path.join(os.homedir(), 'events', 'studio.jsonl');
 const UNIQUE_DIR_THRESHOLD = 10;
 
 function log(level, message, data) {
@@ -79,30 +78,46 @@ try {
 
     console.log(JSON.stringify({ systemMessage: message }));
   }
-  // Emit session summary event → events-daemon → knowledge extraction pipeline
+  // B9-016: POST agent events to Studio API
   try {
+    const events = state.events || [];
+    const sessionId = state.sessionId || ('cc-' + Date.now());
     const now = Date.now();
-    const durationMs = state.startTime ? now - state.startTime : 0;
-    const durationMin = Math.round(durationMs / 60000);
-    const event = {
-      type: 'session:summary',
-      sessionType: 'development',
-      tool: state.tool || 'unknown',        // claude | codex | opencode | etc
-      timestamp: new Date().toISOString(),
-      durationMs,
-      durationMin,
-      deepAnalysis: state.planned || state.explored || state.readDirs.length >= UNIQUE_DIR_THRESHOLD,
-      knowledgeCaptured: !!state.captured,
-      readDirsCount: state.readDirs.length,
-      planned: state.planned || false,
-      explored: state.explored || false,
-      sensitiveOpsCount: (state.sensitiveOps || []).filter(op => !op.verified).length,
-      turnCount: state.turnCount || 0,
-    };
-    const dir = path.dirname(EVENTS_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(EVENTS_FILE, JSON.stringify(event) + '\n', 'utf-8');
-    log('info', 'session-summary-emitted', event);
+
+    // Append session:end event
+    events.push({
+      sessionId,
+      agentId: 'claude-code',
+      timestamp: now,
+      type: 'session:end',
+      payload: {
+        success: true,
+        durationMs: state.startTime ? now - state.startTime : 0,
+      },
+    });
+
+    // Read Studio API URL from env or default
+    const studioUrl = process.env.STUDIO_API_URL || 'http://127.0.0.1:13101';
+    const token = process.env.STUDIO_API_TOKEN || '';
+
+    if (events.length > 0 && token) {
+      const { execSync } = require('child_process');
+      const body = JSON.stringify(events);
+      try {
+        execSync(
+          `curl -s -X POST "${studioUrl}/api/v1/events/agent-events" ` +
+          `-H "Content-Type: application/json" ` +
+          `-H "Authorization: Bearer ${token}" ` +
+          `-d '${body.replace(/'/g, "'\\''")}'`,
+          { timeout: 10000, stdio: 'pipe' }
+        );
+        log('info', 'agent-events-posted', { count: events.length, sessionId });
+      } catch (e) {
+        log('warn', 'agent-events-post-failed', { error: (e.message || String(e)).slice(0, 200) });
+      }
+    } else if (events.length > 0 && !token) {
+      log('info', 'agent-events-skipped-no-token', { count: events.length });
+    }
   } catch {}
 
   // Auto-ingest: scan memory files with ingest:true → call local-rag API

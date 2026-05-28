@@ -221,8 +221,8 @@ export class KnowledgeStore {
     if (filter.types && filter.types.length > 0 && !filter.types.includes(entry.type)) return false;
     if (filter.maturity && filter.maturity.length > 0 && !filter.maturity.includes(entry.maturity)) return false;
     if (filter.layers && filter.layers.length > 0 && !filter.layers.includes(entry.layer)) return false;
-    if (filter.tags && filter.tags.length > 0 && !filter.tags.some(t => entry.tags.includes(t))) return false;
-    if (filter.applicablePhases && filter.applicablePhases.length > 0 && !filter.applicablePhases.some(p => entry.applicablePhases.includes(p))) return false;
+    if (filter.tags && filter.tags.length > 0 && !filter.tags.some(t => (entry.tags ?? []).includes(t))) return false;
+    if (filter.applicablePhases && filter.applicablePhases.length > 0 && !filter.applicablePhases.some(p => (entry.applicablePhases ?? []).includes(p))) return false;
     if (filter.excludeArchived !== false && entry.maturity === 'archived') return false;
     return true;
   }

@@ -165,6 +165,14 @@ export class KnowledgeLifecycle {
     return change;
   }
 
+  /**
+   * Check if a source should auto-promote to verified on ingest.
+   * Used by KnowledgeBus to decide initial maturity level.
+   */
+  shouldAutoPromote(source: string): boolean {
+    return this.config.autoPromoteSources.some(s => source.includes(s));
+  }
+
   // ── Internal ───────────────────────────────────────────────
 
   private monthsSince(dateStr: string): number {

@@ -170,6 +170,106 @@ describe('KnowledgeIngest', () => {
     });
   });
 
+  describe('pitfall dedup (#3)', () => {
+    it('should detect duplicate pitfall by content window containment', () => {
+      // Same root cause, different titles — like real PIT-002 / PIT-mppq8n44-1829
+      // Content is body text only (no frontmatter) — same format as system-produced entries
+      store.save({
+        id: 'PIT-001', type: 'pitfall', title: 'events-daemon 与 API 端口不匹配',
+        content: '根因：events-daemon 默认使用 3001 端口连接 API，但实际 API 运行在 13101 端口，导致 session:archive 事件无法被正确接收和处理。责任归属：开发流程缺乏端口一致性校验机制。',
+        maturity: 'verified', layer: 'system',
+        created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [],
+      });
+
+      // Different title, same root cause content → should merge
+      const merged = ingest.ingestEntry(
+        {
+          title: '端口不匹配导致事件处理失败',
+          content: '根因：events-daemon 默认使用 3001 端口连接 API，但实际 API 运行在 13101 端口。责任：启动配置未显式指定 API_PORT 环境变量。',
+          type: 'pitfall',
+        },
+        { source: 'test', layer: 'system' },
+      );
+      expect(store.list({ types: ['pitfall'] })).toHaveLength(1);
+      expect(merged.id).toBe('PIT-001');
+    });
+
+    it('should detect duplicate pitfall by title substring after normalization', () => {
+      store.save({
+        id: 'PIT-010', type: 'pitfall', title: '[Analyst] API 超时导致请求失败',
+        content: 'some content here that is long enough for prefix comparison purposes and more',
+        maturity: 'draft', layer: 'system',
+        created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [],
+      });
+
+      // After stripping [prefix], normalizing: "api超时导致请求失败" contains "api超时导致"
+      const merged = ingest.ingestEntry(
+        { title: '[Triage Fix] API 超时导致', content: 'different content but same issue', type: 'pitfall' },
+        { source: 'test', layer: 'system' },
+      );
+      expect(store.list({ types: ['pitfall'] })).toHaveLength(1);
+    });
+
+    it('should NOT merge pitfall entries with different root causes', () => {
+      store.save({
+        id: 'PIT-020', type: 'pitfall', title: '端口不匹配导致事件处理失败',
+        content: '根因：events-daemon 默认使用 3001 端口连接 API，但实际 API 运行在 13101 端口。',
+        maturity: 'draft', layer: 'system',
+        created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [],
+      });
+
+      // Completely different root cause → should NOT merge
+      ingest.ingestEntry(
+        { title: '数据库连接池耗尽', content: '根因：连接池大小为 10，高并发时全部占满。', type: 'pitfall' },
+        { source: 'test', layer: 'system' },
+      );
+      expect(store.list({ types: ['pitfall'] })).toHaveLength(2);
+    });
+
+    it('should detect duplicate by title keyword overlap >= 60%', () => {
+      store.save({
+        id: 'PIT-030', type: 'pitfall', title: 'Prisma 连接超时导致 API 请求失败',
+        content: 'Some content about Prisma connection timeout issues',
+        maturity: 'draft', layer: 'system',
+        created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [],
+      });
+
+      // Keywords: prisma, 连接, 超时, 导致, api, 请求, 失败
+      // Incoming: prisma, 超时, 请求, 失败 → 4/7 overlap
+      const merged = ingest.ingestEntry(
+        { title: 'Prisma 超时导致请求失败', content: 'totally different content', type: 'pitfall' },
+        { source: 'test', layer: 'system' },
+      );
+      expect(store.list({ types: ['pitfall'] })).toHaveLength(1);
+    });
+
+    it('should not apply pitfall dedup to non-pitfall types', () => {
+      store.save({
+        id: 'GUI-001', type: 'guideline', title: '端口不匹配导致事件处理失败',
+        content: '根因：events-daemon 默认使用 3001 端口连接 API',
+        maturity: 'draft', layer: 'system',
+        created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [],
+      });
+
+      // Same title for guideline type — should NOT do pitfall fuzzy dedup
+      ingest.ingestEntry(
+        { title: '端口不匹配', content: 'shorter title', type: 'guideline' },
+        { source: 'test', layer: 'system' },
+      );
+      expect(store.list({ types: ['guideline'] })).toHaveLength(2);
+    });
+  });
+
   describe('edge cases', () => {
     it('should default to guideline type when type is not provided', () => {
       const entry = ingest.ingestEntry(

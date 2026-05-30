@@ -235,4 +235,84 @@ describe('KnowledgeStore', () => {
       expect(retrieved!.decayAt).toBeUndefined();
     });
   });
+
+  describe('findFile precision (E3)', () => {
+    it('should not collide when one id is a suffix of another', () => {
+      // pitfall with id containing hyphen: file = pitfall-mppq8n44-1829.md
+      const pitfall = makeEntry({
+        id: 'PIT-mppq8n44-1829',
+        type: 'pitfall',
+        title: 'Pitfall Entry',
+        content: 'pitfall content',
+      });
+      // decision with numeric id that is a suffix: file = decision-1829.md
+      const decision = makeEntry({
+        id: '1829',
+        type: 'decision',
+        title: 'Decision Entry',
+        content: 'decision content',
+      });
+      store.save(pitfall);
+      store.save(decision);
+
+      // get('1829') must return the decision, not the pitfall
+      const retrieved = store.get('1829');
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.id).toBe('1829');
+      expect(retrieved!.type).toBe('decision');
+
+      // get('PIT-mppq8n44-1829') must return the pitfall
+      const pit = store.get('PIT-mppq8n44-1829');
+      expect(pit).toBeDefined();
+      expect(pit!.id).toBe('PIT-mppq8n44-1829');
+      expect(pit!.type).toBe('pitfall');
+    });
+
+    it('should not collide when id contains type prefix of another entry', () => {
+      // model with id that contains "GUI" prefix: file = model-GUI-003.md
+      const model = makeEntry({
+        id: 'GUI-003',
+        type: 'model',
+        title: 'Model Entry',
+        content: 'model content',
+      });
+      // guideline with id "003": file = guideline-003.md
+      const guideline = makeEntry({
+        id: '003',
+        type: 'guideline',
+        title: 'Guideline Entry',
+        content: 'guideline content',
+      });
+      store.save(model);
+      store.save(guideline);
+
+      const retrieved = store.get('003');
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.id).toBe('003');
+      expect(retrieved!.type).toBe('guideline');
+    });
+
+    it('should handle delete correctly with colliding ids', () => {
+      const pitfall = makeEntry({
+        id: 'PIT-mppq8n44-1829',
+        type: 'pitfall',
+        title: 'Pitfall Entry',
+        content: 'pitfall content',
+      });
+      const decision = makeEntry({
+        id: '1829',
+        type: 'decision',
+        title: 'Decision Entry',
+        content: 'decision content',
+      });
+      store.save(pitfall);
+      store.save(decision);
+
+      // delete('1829') should only delete the decision
+      expect(store.delete('1829')).toBe(true);
+      expect(store.get('1829')).toBeUndefined();
+      // pitfall should still exist
+      expect(store.get('PIT-mppq8n44-1829')).toBeDefined();
+    });
+  });
 });

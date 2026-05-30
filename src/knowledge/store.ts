@@ -118,8 +118,21 @@ export class KnowledgeStore {
   }
 
   private findFile(id: string): string | undefined {
+    // 1. Fast path: index has id→type mapping, construct exact filename
+    const index = this.readIndex();
+    const idx = index.find(e => e.id === id);
+    if (idx) {
+      const exact = path.join(this.baseDir, `${idx.type}-${idx.id}.md`);
+      if (fs.existsSync(exact)) return exact;
+    }
+    // 2. Fallback: scan files, verify id from frontmatter
     const files = this.listFiles();
-    return files.find(f => path.basename(f).includes(`-${id}.md`));
+    for (const f of files) {
+      if (!path.basename(f).includes(`-${id}.md`)) continue;
+      const entry = this.readFile(f);
+      if (entry?.id === id) return f;
+    }
+    return undefined;
   }
 
   private listFiles(): string[] {

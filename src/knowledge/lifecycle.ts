@@ -14,6 +14,8 @@ import type {
 import { DEFAULT_DECAY_CONFIG } from './types';
 import { KnowledgeStore } from './store';
 
+const MAX_REFERENCED_BY = 20;
+
 // ── Lifecycle ──────────────────────────────────────────────
 
 export class KnowledgeLifecycle {
@@ -39,9 +41,13 @@ export class KnowledgeLifecycle {
       : entry.contributors;
 
     const refKey = `${contributor || 'unknown'}:${now.slice(0, 10)}`;
-    const referencedBy = entry.referencedBy.includes(refKey)
-      ? entry.referencedBy
-      : [...entry.referencedBy, refKey];
+
+    // B4: Skip file write if this refKey already exists (same-day, same contributor)
+    if (entry.referencedBy.includes(refKey)) {
+      return entry;
+    }
+
+    const referencedBy = [...entry.referencedBy, refKey].slice(-MAX_REFERENCED_BY);
 
     return this.store.update(entryId, {
       lastReferenced: now,

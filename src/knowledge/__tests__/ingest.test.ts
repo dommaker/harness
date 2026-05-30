@@ -100,6 +100,76 @@ describe('KnowledgeIngest', () => {
     });
   });
 
+  describe('findDuplicate reads from disk (A1)', () => {
+    it('should find duplicate even when index.json is stale', () => {
+      // Create an entry normally (writes to disk + index)
+      ingest.ingestEntry(
+        { title: 'Disk Dedup Test', content: 'Original', type: 'decision' },
+        { source: 'test', layer: 'project' },
+      );
+
+      // Corrupt index.json to simulate stale index
+      const indexPath = path.join(tempDir, 'index.json');
+      fs.writeFileSync(indexPath, '[]', 'utf-8');
+
+      // Ingest same title again — should still find the duplicate on disk
+      const merged = ingest.ingestEntry(
+        { title: 'Disk Dedup Test', content: 'Updated', type: 'decision' },
+        { source: 'test', layer: 'project' },
+      );
+
+      // Should merge into existing entry, not create a second one
+      expect(merged.content).toBe('Updated');
+      // Count .md files on disk (excluding index.json)
+      const mdFiles = fs.readdirSync(tempDir).filter(f => f.endsWith('.md'));
+      expect(mdFiles).toHaveLength(1);
+    });
+  });
+
+  describe('sourceReferences cap at 20 (A2)', () => {
+    it('should cap sourceReferences to MAX_SOURCE_REFS when merging', () => {
+      // Create entry with 15 sourceReferences
+      const refs15 = Array.from({ length: 15 }, (_, i) => ({
+        workflow: `workflow-${i}`,
+        timestamp: `2026-05-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`,
+      }));
+      store.save({
+        id: 'REF-001',
+        type: 'decision',
+        title: 'Ref Cap Test',
+        content: 'Original',
+        maturity: 'draft',
+        layer: 'project',
+        created: '2026-05-01T00:00:00.000Z',
+        lastReferenced: '',
+        contributors: [],
+        projects: [],
+        tags: [],
+        applicablePhases: [],
+        sourceReferences: refs15,
+        referencedBy: [],
+      });
+
+      // Ingest duplicate with 10 more sourceReferences
+      const refs10 = Array.from({ length: 10 }, (_, i) => ({
+        workflow: `new-workflow-${i}`,
+        timestamp: `2026-05-${String(i + 16).padStart(2, '0')}T00:00:00.000Z`,
+      }));
+      ingest.ingestEntry(
+        { id: 'REF-001', title: 'Ref Cap Test', type: 'decision', sourceReferences: refs10 },
+        { source: 'test', layer: 'project' },
+      );
+
+      const entry = store.get('REF-001');
+      expect(entry!.sourceReferences.length).toBeLessThanOrEqual(20);
+      // 15 + 10 = 25, but capped to last 20
+      expect(entry!.sourceReferences).toHaveLength(20);
+      // Should keep the most recent ones (slice(-20) from 25)
+      expect(entry!.sourceReferences[0].workflow).toBe('workflow-5');
+      expect(entry!.sourceReferences[19].workflow).toBe('new-workflow-9');
+    });
+  });
+
   describe('edge cases', () => {
     it('should default to guideline type when type is not provided', () => {
       const entry = ingest.ingestEntry(

@@ -14,6 +14,8 @@ import { KnowledgeStore } from './store';
 import { ReferenceTracker } from './reference-tracker';
 import type { KnowledgeEntry, LintIssue, LintIssueType, MaturityLevel } from './types';
 
+const MAX_SOURCE_REFS = 20;
+
 export interface LintReport {
   timestamp: string;
   totalEntries: number;
@@ -214,7 +216,7 @@ export class KnowledgeLinter {
     // 按 tag 组合分组
     for (const entry of entries) {
       if (entry.maturity === 'archived') continue;
-      if (entry.tags.length === 0) continue;
+      if (!entry.tags || entry.tags.length === 0) continue;
 
       const tagKey = entry.tags.sort().join(',');
       const existing = byTagGroup.get(tagKey) || [];
@@ -284,7 +286,7 @@ export class KnowledgeLinter {
     }
 
     // Contradicts proven entry with same tags
-    if (entry.tags.length > 0) {
+    if (entry.tags && entry.tags.length > 0) {
       const allEntries = this.store.list({ excludeArchived: false });
       for (const existing of allEntries) {
         if (existing.maturity !== 'proven') continue;
@@ -341,6 +343,45 @@ export class KnowledgeLinter {
    */
   private autoFix(issues: LintIssue[]): number {
     let fixed = 0;
+
+    // A3: Deduplicate — group by entryId, keep newest, archive rest
+    const duplicateIssues = issues.filter(i => i.type === 'duplicate' && i.entryId);
+    const processedGroups = new Set<string>();
+    for (const issue of duplicateIssues) {
+      // Extract group from suggestion field: "考虑合并: GUI-003, GUI-004"
+      const match = issue.suggestion?.match(/: (.+)$/);
+      if (!match) continue;
+      const groupKey = match[1];
+      if (processedGroups.has(groupKey)) continue;
+      processedGroups.add(groupKey);
+
+      const ids = groupKey.split(', ').map(s => s.trim());
+      const entries = ids.map(id => this.store.get(id)).filter(Boolean) as KnowledgeEntry[];
+      if (entries.length <= 1) continue;
+
+      // Keep the one with most recent lastReferenced
+      entries.sort((a, b) => (b.lastReferenced || '').localeCompare(a.lastReferenced || ''));
+      const keep = entries[0];
+      for (let i = 1; i < entries.length; i++) {
+        this.store.update(entries[i].id, { maturity: 'archived' });
+        fixed++;
+      }
+      // Merge sourceReferences from archived entries into kept entry
+      const allRefs = entries.flatMap(e => e.sourceReferences || []);
+      if (allRefs.length > 0) {
+        const existing = keep.sourceReferences || [];
+        const merged = [...existing, ...allRefs];
+        // Deduplicate by workflow+timestamp
+        const seen = new Set<string>();
+        const deduped = merged.filter(ref => {
+          const key = `${ref.workflow}:${ref.timestamp}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(-MAX_SOURCE_REFS);
+        this.store.update(keep.id, { sourceReferences: deduped });
+      }
+    }
 
     for (const issue of issues) {
       if (issue.type === 'index_inconsistent') {

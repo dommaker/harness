@@ -14,6 +14,8 @@ import type {
 } from './types';
 import { KnowledgeStore } from './store';
 
+const MAX_SOURCE_REFS = 20;
+
 // ── Ingest ─────────────────────────────────────────────────
 
 export class KnowledgeIngest {
@@ -97,7 +99,8 @@ export class KnowledgeIngest {
   }
 
   private findDuplicate(title: string, type: KnowledgeType): KnowledgeEntry | undefined {
-    const all = this.store.list({ types: [type] });
+    // A1: Read from disk directly to avoid stale index causing dedup failure
+    const all = this.store.readEntriesFromDisk().filter(e => e.type === type);
     return all.find(e => e.title.toLowerCase() === title.toLowerCase());
   }
 
@@ -112,7 +115,7 @@ export class KnowledgeIngest {
       contributors: [...new Set([...existing.contributors, ...incoming.contributors])],
       projects: [...new Set([...existing.projects, ...incoming.projects])],
       tags: [...new Set([...existing.tags, ...incoming.tags])],
-      sourceReferences: [...existing.sourceReferences, ...incoming.sourceReferences],
+      sourceReferences: [...existing.sourceReferences, ...incoming.sourceReferences].slice(-MAX_SOURCE_REFS),
     };
     return this.store.update(existing.id, merged)!;
   }

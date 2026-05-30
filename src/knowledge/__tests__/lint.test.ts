@@ -397,5 +397,53 @@ describe('KnowledgeLinter', () => {
       const entry = store.get('old-1');
       expect(entry?.maturity).toBe('archived');
     });
+
+    it('A3: 应该归档重复条目，保留最新，合并 sourceReferences', () => {
+      // Create 3 entries with same title/type, different lastReferenced dates
+      saveEntry({
+        id: 'dup-old',
+        title: 'Duplicate Title',
+        type: 'decision',
+        lastReferenced: '2026-01-01T00:00:00.000Z',
+        sourceReferences: [{ workflow: 'old-wf', timestamp: '2026-01-01T00:00:00.000Z' }],
+      });
+      saveEntry({
+        id: 'dup-mid',
+        title: 'Duplicate Title',
+        type: 'decision',
+        lastReferenced: '2026-03-01T00:00:00.000Z',
+        sourceReferences: [{ workflow: 'mid-wf', timestamp: '2026-03-01T00:00:00.000Z' }],
+      });
+      saveEntry({
+        id: 'dup-new',
+        title: 'Duplicate Title',
+        type: 'decision',
+        lastReferenced: '2026-05-01T00:00:00.000Z',
+        sourceReferences: [{ workflow: 'new-wf', timestamp: '2026-05-01T00:00:00.000Z' }],
+      });
+
+      const report = linter.run(true);
+
+      // Should have fixed 2 duplicates (archived old and mid)
+      const dupFixes = report.issues.filter(i => i.type === 'duplicate');
+      expect(dupFixes.length).toBe(3); // all 3 reported as duplicates
+      expect(report.fixed).toBeGreaterThanOrEqual(2);
+
+      // Newest should be kept
+      const kept = store.get('dup-new');
+      expect(kept).toBeDefined();
+      expect(kept!.maturity).not.toBe('archived');
+
+      // Old and mid should be archived
+      expect(store.get('dup-old')!.maturity).toBe('archived');
+      expect(store.get('dup-mid')!.maturity).toBe('archived');
+
+      // SourceReferences from archived entries should be merged into kept entry
+      expect(kept!.sourceReferences.length).toBeGreaterThanOrEqual(3);
+      const workflows = kept!.sourceReferences.map(r => r.workflow);
+      expect(workflows).toContain('old-wf');
+      expect(workflows).toContain('mid-wf');
+      expect(workflows).toContain('new-wf');
+    });
   });
 });

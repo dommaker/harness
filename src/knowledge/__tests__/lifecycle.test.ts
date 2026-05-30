@@ -80,6 +80,53 @@ describe('KnowledgeLifecycle', () => {
     });
   });
 
+  describe('recordReference same-day dedup (B4)', () => {
+    it('should skip file write when same contributor references on same day', () => {
+      store.save(makeEntry());
+      const result1 = lifecycle.recordReference('DEC-001', 'alice');
+      expect(result1).toBeDefined();
+      expect(result1!.referencedBy).toHaveLength(1);
+
+      // Second call same day, same contributor — should return entry unchanged
+      const result2 = lifecycle.recordReference('DEC-001', 'alice');
+      expect(result2).toBeDefined();
+      expect(result2!.referencedBy).toHaveLength(1); // no new refKey added
+      expect(result2!.lastReferenced).toBe(result1!.lastReferenced); // unchanged
+    });
+
+    it('should add ref for different contributor on same day', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice');
+      const result = lifecycle.recordReference('DEC-001', 'bob');
+      expect(result!.referencedBy).toHaveLength(2);
+    });
+  });
+
+  describe('referencedBy cap at 20 (B4)', () => {
+    it('should cap referencedBy at MAX_REFERENCED_BY (20)', () => {
+      // Pre-fill with 19 referencedBy entries
+      const refs = Array.from({ length: 19 }, (_, i) => `user-${i}:2026-05-${String(i + 1).padStart(2, '0')}`);
+      store.save(makeEntry({ referencedBy: refs }));
+
+      // Add a new unique ref
+      const result = lifecycle.recordReference('DEC-001', 'new-user');
+      expect(result!.referencedBy).toHaveLength(20);
+      expect(result!.referencedBy[19]).toMatch(/^new-user:/);
+    });
+
+    it('should drop oldest refs when exceeding cap', () => {
+      // Pre-fill with 25 referencedBy entries
+      const refs = Array.from({ length: 25 }, (_, i) => `user-${i}:2026-05-${String(i + 1).padStart(2, '0')}`);
+      store.save(makeEntry({ referencedBy: refs }));
+
+      // Add a new unique ref — total would be 26, should cap to 20
+      const result = lifecycle.recordReference('DEC-001', 'brand-new');
+      expect(result!.referencedBy).toHaveLength(20);
+      // Should have dropped the 6 oldest (indices 0-5)
+      expect(result!.referencedBy[0]).toBe('user-6:2026-05-07');
+    });
+  });
+
   describe('checkPromotion', () => {
     it('should promote draft to verified when referenced', () => {
       store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01' }));

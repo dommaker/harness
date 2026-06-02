@@ -11,7 +11,7 @@
 
 export type KnowledgeType = 'model' | 'decision' | 'guideline' | 'pitfall' | 'process' | 'architecture';
 
-export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived';
+export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived' | 'active' | 'deprecated';
 
 export type StorageLayer = 'personal' | 'team' | 'tech' | 'domain' | 'project' | 'system';
 

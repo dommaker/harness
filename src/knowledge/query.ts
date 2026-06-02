@@ -24,8 +24,10 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MATURITY_RANK: Record<MaturityLevel, number> = {
   proven: 3,
   verified: 2,
+  active: 2,
   draft: 1,
   archived: 0,
+  deprecated: 0,
 };
 
 // ── Cache ──────────────────────────────────────────────────

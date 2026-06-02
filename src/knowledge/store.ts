@@ -255,7 +255,7 @@ export class KnowledgeStore {
     if (filter.layers && filter.layers.length > 0 && !filter.layers.includes(entry.layer)) return false;
     if (filter.tags && filter.tags.length > 0 && !filter.tags.some(t => (entry.tags ?? []).includes(t))) return false;
     if (filter.applicablePhases && filter.applicablePhases.length > 0 && !filter.applicablePhases.some(p => (entry.applicablePhases ?? []).includes(p))) return false;
-    if (filter.excludeArchived !== false && entry.maturity === 'archived') return false;
+    if (filter.excludeArchived !== false && (entry.maturity === 'archived' || entry.maturity === 'deprecated')) return false;
     if (filter.consumptionModes && filter.consumptionModes.length > 0 && !filter.consumptionModes.includes(entry.consumptionMode ?? 'reference')) return false;
     if (filter.origins && filter.origins.length > 0 && !filter.origins.includes(entry.origin ?? 'agent')) return false;
     return true;
@@ -310,7 +310,7 @@ export class KnowledgeStore {
     let survived = 0;
     for (const snapEntry of snapshot) {
       const current = currentMap.get(snapEntry.id);
-      if (current && current.maturity !== 'archived') survived++;
+      if (current && current.maturity !== 'archived' && current.maturity !== 'deprecated') survived++;
     }
 
     return {

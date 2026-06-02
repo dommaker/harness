@@ -17,6 +17,10 @@ import { KnowledgeStore } from './store';
 const MAX_REFERENCED_BY = 20;
 const MIN_CONTENT_FOR_PROVEN = 100;
 const TEST_ID_PATTERN = /^(test-|inj-test)/;
+const SIGNAL_SATURATION_THRESHOLD = 3;
+const CONTEXT_DECAY_MONTHS = 3;
+const RULE_MIN_RESULTS_FOR_DECAY = 3;
+const RULE_FAIL_THRESHOLD = 0.5;
 
 // ── Lifecycle ──────────────────────────────────────────────
 
@@ -99,11 +103,11 @@ export class KnowledgeLifecycle {
    * Check if an entry meets promotion criteria.
    * Returns the target maturity level if promotion is warranted, otherwise undefined.
    *
-   * Rules:
-   * - draft → verified: lastReferenced is set AND content >= 50 chars
-   * - verified → proven: two paths
-   *   A) Multi-project: contributors >= 3 AND projects >= 2
-   *   B) Single-project: referencedBy >= 3 AND sourceReferences from 2+ distinct workflows
+   * Branches by consumptionMode:
+   * - rule: draft→active (1 success execution)
+   * - reference: draft→verified→proven (existing logic)
+   * - context: draft→active (1 reference)
+   * - signal: no promotion
    */
   checkPromotion(entryId: string): MaturityLevel | undefined {
     const entry = this.store.get(entryId);
@@ -112,75 +116,39 @@ export class KnowledgeLifecycle {
     // RC2: block test entries from any promotion
     if (TEST_ID_PATTERN.test(entryId)) return undefined;
 
-    switch (entry.maturity) {
-      case 'draft':
-        // GAP-11: content quality gate — require >= 50 chars for promotion
-        if (entry.lastReferenced && entry.content.trim().length >= 50) return 'verified';
-        return undefined;
+    const mode = entry.consumptionMode || 'reference';
 
-      case 'verified': {
-        // RC2: content quality gate for proven promotion
-        if (entry.content.trim().length < MIN_CONTENT_FOR_PROVEN) return undefined;
-
-        // Path C: execution success rate (result-based)
-        // Prefer human-sourced results when available
-        const humanRate = this.getHumanSuccessRate(entryId);
-        if (humanRate && humanRate.total >= 3 && humanRate.rate >= 0.8) {
-          return 'proven';
-        }
-        // Fall back to overall rate (auto-only or mixed)
-        const execRate = this.getExecutionSuccessRate(entryId);
-        if (execRate && execRate.total >= 3 && execRate.rate >= 0.8) {
-          return 'proven';
-        }
-
-        // Path A: multi-project validation
-        if (entry.contributors.length >= 3 && entry.projects.length >= 2) {
-          return 'proven';
-        }
-        // Path B: single-project — multiple independent references from different sources
-        const refCount = entry.referencedBy?.length || 0;
-        const distinctSources = new Set(entry.sourceReferences?.map(s => s.workflow).filter(Boolean) || []);
-        if (refCount >= 3 && distinctSources.size >= 2) {
-          return 'proven';
-        }
-        return undefined;
-      }
-
-      case 'proven':
-      case 'archived':
-        return undefined;
+    switch (mode) {
+      case 'rule':      return this.checkRulePromotion(entry);
+      case 'context':   return this.checkContextPromotion(entry);
+      case 'signal':    return undefined; // signal never promotes
+      case 'reference': return this.checkReferencePromotion(entry);
     }
   }
 
   /**
-   * Check if an entry should decay based on time since last reference.
+   * Check if an entry should decay.
    * Returns the target maturity level if decay is warranted, otherwise undefined.
+   *
+   * - decayAt hard expiry takes precedence (all modes)
+   * - Then branches by consumptionMode for mode-specific decay
    */
   checkEntryDecay(entryId: string): MaturityLevel | undefined {
     const entry = this.store.get(entryId);
     if (!entry) return undefined;
 
-    const lastRef = entry.lastReferenced || entry.created;
-    if (!lastRef) return undefined;
+    // decayAt hard expiry — all modes, highest priority
+    if (entry.decayAt && new Date(entry.decayAt) <= new Date()) {
+      return 'archived';
+    }
 
-    const monthsSinceRef = this.monthsSince(lastRef);
+    const mode = entry.consumptionMode || 'reference';
 
-    switch (entry.maturity) {
-      case 'proven':
-        if (monthsSinceRef >= this.config.provenDecayMonths) return 'verified';
-        return undefined;
-
-      case 'verified':
-        if (monthsSinceRef >= this.config.verifiedDecayMonths) return 'draft';
-        return undefined;
-
-      case 'draft':
-        if (monthsSinceRef >= this.config.draftDecayMonths) return 'archived';
-        return undefined;
-
-      case 'archived':
-        return undefined;
+    switch (mode) {
+      case 'rule':      return this.checkRuleDecay(entry);
+      case 'reference': return this.checkReferenceDecay(entry);
+      case 'context':   return this.checkContextDecay(entry);
+      case 'signal':    return this.checkSignalDecay(entry);
     }
   }
 
@@ -261,6 +229,109 @@ export class KnowledgeLifecycle {
     const total = humanResults.length;
     const successes = humanResults.filter(r => r.success).length;
     return { rate: successes / total, total };
+  }
+
+  // ── Per-mode promotion ─────────────────────────────────────
+
+  /** rule: draft→active with 1 success execution */
+  private checkRulePromotion(entry: KnowledgeEntry): MaturityLevel | undefined {
+    if (entry.maturity !== 'draft') return undefined;
+    const rate = this.getExecutionSuccessRate(entry.id);
+    if (rate && rate.total >= 1 && rate.rate >= 1.0) return 'active';
+    return undefined;
+  }
+
+  /** reference: draft→verified→proven (existing logic) */
+  private checkReferencePromotion(entry: KnowledgeEntry): MaturityLevel | undefined {
+    switch (entry.maturity) {
+      case 'draft':
+        if (entry.lastReferenced && entry.content.trim().length >= 50) return 'verified';
+        return undefined;
+
+      case 'verified': {
+        if (entry.content.trim().length < MIN_CONTENT_FOR_PROVEN) return undefined;
+        const humanRate = this.getHumanSuccessRate(entry.id);
+        if (humanRate && humanRate.total >= 3 && humanRate.rate >= 0.8) return 'proven';
+        const execRate = this.getExecutionSuccessRate(entry.id);
+        if (execRate && execRate.total >= 3 && execRate.rate >= 0.8) return 'proven';
+        if (entry.contributors.length >= 3 && entry.projects.length >= 2) return 'proven';
+        const refCount = entry.referencedBy?.length || 0;
+        const distinctSources = new Set(entry.sourceReferences?.map(s => s.workflow).filter(Boolean) || []);
+        if (refCount >= 3 && distinctSources.size >= 2) return 'proven';
+        return undefined;
+      }
+
+      default:
+        return undefined;
+    }
+  }
+
+  /** context: draft→active with 1 reference */
+  private checkContextPromotion(entry: KnowledgeEntry): MaturityLevel | undefined {
+    if (entry.maturity !== 'draft') return undefined;
+    if (entry.referencedBy.length >= 1) return 'active';
+    return undefined;
+  }
+
+  // ── Per-mode decay ─────────────────────────────────────────
+
+  /** rule: active→deprecated when fail rate >= 50% with 3+ results */
+  private checkRuleDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
+    if (entry.maturity !== 'active') return undefined;
+    const rate = this.getExecutionSuccessRate(entry.id);
+    if (rate && rate.total >= RULE_MIN_RESULTS_FOR_DECAY && rate.rate < RULE_FAIL_THRESHOLD) return 'deprecated';
+    return undefined;
+  }
+
+  /** reference: proven→verified→draft→archived by time (existing logic) */
+  private checkReferenceDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
+    const lastRef = entry.lastReferenced || entry.created;
+    if (!lastRef) return undefined;
+    const monthsSinceRef = this.monthsSince(lastRef);
+
+    switch (entry.maturity) {
+      case 'proven':
+        if (monthsSinceRef >= this.config.provenDecayMonths) return 'verified';
+        return undefined;
+      case 'verified':
+        if (monthsSinceRef >= this.config.verifiedDecayMonths) return 'draft';
+        return undefined;
+      case 'draft':
+        if (monthsSinceRef >= this.config.draftDecayMonths) return 'archived';
+        return undefined;
+      default:
+        return undefined;
+    }
+  }
+
+  /** context: active→archived after CONTEXT_DECAY_MONTHS unreferenced */
+  private checkContextDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
+    if (entry.maturity !== 'active') return undefined;
+    const lastRef = entry.lastReferenced || entry.created;
+    if (!lastRef) return undefined;
+    if (this.monthsSince(lastRef) >= CONTEXT_DECAY_MONTHS) return 'archived';
+    return undefined;
+  }
+
+  /**
+   * signal: active→archived by consumption saturation.
+   * Saturated = referencedBy >= threshold AND newer same-tag signal entry exists.
+   */
+  private checkSignalDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
+    if (entry.maturity !== 'active') return undefined;
+    const refCount = entry.referencedBy?.length || 0;
+    if (refCount < SIGNAL_SATURATION_THRESHOLD) return undefined;
+
+    const newer = this.store.list({
+      tags: entry.tags,
+      excludeArchived: false,
+    }).find(e =>
+      e.id !== entry.id &&
+      (e.consumptionMode || 'reference') === 'signal' &&
+      e.created > entry.created
+    );
+    if (newer) return 'archived';
+    return undefined;
   }
 
   // ── Internal ───────────────────────────────────────────────

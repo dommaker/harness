@@ -639,4 +639,263 @@ describe('KnowledgeLifecycle', () => {
       expect(lifecycle.checkEntryDecay('DEC-001')).toBe('verified');
     });
   });
+
+  // ── decayAt hard expiry ────────────────────────────────────
+
+  describe('decayAt hard expiry', () => {
+    it('should archive entry when decayAt is in the past', () => {
+      store.save(makeEntry({
+        maturity: 'proven',
+        decayAt: '2026-01-01T00:00:00.000Z',
+      }));
+      expect(lifecycle.checkEntryDecay('DEC-001')).toBe('archived');
+    });
+
+    it('should NOT archive entry when decayAt is in the future', () => {
+      const future = new Date();
+      future.setFullYear(future.getFullYear() + 1);
+      store.save(makeEntry({
+        maturity: 'proven',
+        decayAt: future.toISOString(),
+        lastReferenced: new Date().toISOString(),
+      }));
+      expect(lifecycle.checkEntryDecay('DEC-001')).toBeUndefined();
+    });
+
+    it('should take precedence over mode-specific decay', () => {
+      // proven entry with decayAt in the past should go straight to archived
+      // even though proven→verified takes 12 months normally
+      store.save(makeEntry({
+        maturity: 'proven',
+        decayAt: '2026-01-01T00:00:00.000Z',
+        lastReferenced: new Date().toISOString(), // recent
+      }));
+      expect(lifecycle.checkEntryDecay('DEC-001')).toBe('archived');
+    });
+  });
+
+  // ── rule lifecycle ─────────────────────────────────────────
+
+  describe('rule lifecycle', () => {
+    it('should promote draft→active with 1 success execution', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'draft',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01T00:00:00.000Z', source: 'human' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('RULE-001')).toBe('active');
+    });
+
+    it('should NOT promote draft→active with 0 executions', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'draft',
+        content: 'API port must be 13101',
+        executionResults: [],
+      }));
+      expect(lifecycle.checkPromotion('RULE-001')).toBeUndefined();
+    });
+
+    it('should NOT promote draft→active with failure execution', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'draft',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: false, timestamp: '2026-05-01T00:00:00.000Z', source: 'human' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('RULE-001')).toBeUndefined();
+    });
+
+    it('should decay active→deprecated when fail rate >= 50% with 3+ results', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: false, timestamp: '2026-05-01T00:00:00.000Z' },
+          { contributor: 'bob', success: false, timestamp: '2026-05-02T00:00:00.000Z' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBe('deprecated');
+    });
+
+    it('should NOT decay active→deprecated when fail rate < 50%', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01T00:00:00.000Z' },
+          { contributor: 'bob', success: true, timestamp: '2026-05-02T00:00:00.000Z' },
+          { contributor: 'charlie', success: false, timestamp: '2026-05-03T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBeUndefined();
+    });
+
+    it('should NOT decay active with < 3 results', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: false, timestamp: '2026-05-01T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBeUndefined();
+    });
+
+    it('should NOT promote or decay deprecated', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'deprecated',
+        content: 'Old rule',
+      }));
+      expect(lifecycle.checkPromotion('RULE-001')).toBeUndefined();
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBeUndefined();
+    });
+  });
+
+  // ── context lifecycle ──────────────────────────────────────
+
+  describe('context lifecycle', () => {
+    it('should promote draft→active with 1 reference', () => {
+      store.save(makeEntry({
+        id: 'CTX-001',
+        consumptionMode: 'context',
+        maturity: 'draft',
+        content: 'Project uses TypeScript 5.0',
+        referencedBy: ['user:2026-05-01'],
+      }));
+      expect(lifecycle.checkPromotion('CTX-001')).toBe('active');
+    });
+
+    it('should NOT promote draft→active with 0 references', () => {
+      store.save(makeEntry({
+        id: 'CTX-001',
+        consumptionMode: 'context',
+        maturity: 'draft',
+        content: 'Project uses TypeScript 5.0',
+        referencedBy: [],
+      }));
+      expect(lifecycle.checkPromotion('CTX-001')).toBeUndefined();
+    });
+
+    it('should decay active→archived after 3 months unreferenced', () => {
+      const oldDate = new Date();
+      oldDate.setMonth(oldDate.getMonth() - 4);
+      store.save(makeEntry({
+        id: 'CTX-001',
+        consumptionMode: 'context',
+        maturity: 'active',
+        content: 'Project uses TypeScript 5.0',
+        lastReferenced: oldDate.toISOString(),
+      }));
+      expect(lifecycle.checkEntryDecay('CTX-001')).toBe('archived');
+    });
+
+    it('should NOT decay active when recently referenced', () => {
+      store.save(makeEntry({
+        id: 'CTX-001',
+        consumptionMode: 'context',
+        maturity: 'active',
+        content: 'Project uses TypeScript 5.0',
+        lastReferenced: new Date().toISOString(),
+      }));
+      expect(lifecycle.checkEntryDecay('CTX-001')).toBeUndefined();
+    });
+
+    it('should NOT promote active or archived', () => {
+      store.save(makeEntry({
+        id: 'CTX-001',
+        consumptionMode: 'context',
+        maturity: 'active',
+        content: 'Project uses TypeScript 5.0',
+      }));
+      expect(lifecycle.checkPromotion('CTX-001')).toBeUndefined();
+    });
+  });
+
+  // ── signal lifecycle ───────────────────────────────────────
+
+  describe('signal lifecycle', () => {
+    it('should NOT promote signal entries', () => {
+      store.save(makeEntry({
+        id: 'SIG-001',
+        consumptionMode: 'signal',
+        maturity: 'active',
+        content: 'CPU usage spike detected',
+        tags: ['monitoring'],
+      }));
+      expect(lifecycle.checkPromotion('SIG-001')).toBeUndefined();
+    });
+
+    it('should archive saturated signal with newer same-tag entry', () => {
+      store.save(makeEntry({
+        id: 'SIG-001',
+        consumptionMode: 'signal',
+        maturity: 'active',
+        content: 'Old monitoring alert',
+        tags: ['monitoring'],
+        created: '2026-05-01T00:00:00.000Z',
+        referencedBy: ['a:2026-05-01', 'b:2026-05-02', 'c:2026-05-03'],
+      }));
+      store.save(makeEntry({
+        id: 'SIG-002',
+        consumptionMode: 'signal',
+        maturity: 'active',
+        content: 'New monitoring alert',
+        tags: ['monitoring'],
+        created: '2026-05-10T00:00:00.000Z',
+      }));
+      expect(lifecycle.checkEntryDecay('SIG-001')).toBe('archived');
+    });
+
+    it('should NOT archive saturated signal without newer same-tag entry', () => {
+      store.save(makeEntry({
+        id: 'SIG-001',
+        consumptionMode: 'signal',
+        maturity: 'active',
+        content: 'Latest monitoring alert',
+        tags: ['monitoring'],
+        created: '2026-05-10T00:00:00.000Z',
+        referencedBy: ['a:2026-05-01', 'b:2026-05-02', 'c:2026-05-03'],
+      }));
+      expect(lifecycle.checkEntryDecay('SIG-001')).toBeUndefined();
+    });
+
+    it('should NOT archive unsaturated signal even with newer entry', () => {
+      store.save(makeEntry({
+        id: 'SIG-001',
+        consumptionMode: 'signal',
+        maturity: 'active',
+        content: 'Old monitoring alert',
+        tags: ['monitoring'],
+        created: '2026-05-01T00:00:00.000Z',
+        referencedBy: ['a:2026-05-01'], // only 1 reference, not saturated
+      }));
+      store.save(makeEntry({
+        id: 'SIG-002',
+        consumptionMode: 'signal',
+        maturity: 'active',
+        content: 'New monitoring alert',
+        tags: ['monitoring'],
+        created: '2026-05-10T00:00:00.000Z',
+      }));
+      expect(lifecycle.checkEntryDecay('SIG-001')).toBeUndefined();
+    });
+  });
 });

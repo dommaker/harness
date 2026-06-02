@@ -138,6 +138,59 @@ describe('KnowledgeLifecycle', () => {
     });
   });
 
+  describe('getHumanSuccessRate', () => {
+    it('should return undefined when no execution data', () => {
+      store.save(makeEntry());
+      expect(lifecycle.getHumanSuccessRate('DEC-001')).toBeUndefined();
+    });
+
+    it('should return undefined when no human-sourced results', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'auto-bot', true, 'auto');
+      lifecycle.recordReference('DEC-001', 'auto-bot', true, 'auto');
+      expect(lifecycle.getHumanSuccessRate('DEC-001')).toBeUndefined();
+    });
+
+    it('should compute human-only success rate', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice', true, 'human');
+      lifecycle.recordReference('DEC-001', 'bob', true, 'human');
+      lifecycle.recordReference('DEC-001', 'auto-bot', true, 'auto');
+      lifecycle.recordReference('DEC-001', 'charlie', false, 'human');
+      const rate = lifecycle.getHumanSuccessRate('DEC-001');
+      expect(rate).toBeDefined();
+      expect(rate!.total).toBe(3); // 3 human results
+      expect(rate!.rate).toBeCloseTo(2 / 3); // 2 success out of 3 human
+    });
+
+    it('should return undefined for non-existent entry', () => {
+      expect(lifecycle.getHumanSuccessRate('NON-EXISTENT')).toBeUndefined();
+    });
+  });
+
+  describe('recordReference with source', () => {
+    it('should store source in execution result', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice', true, 'human');
+      const entry = store.get('DEC-001');
+      expect(entry!.executionResults[0].source).toBe('human');
+    });
+
+    it('should default source to undefined when not provided', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice', true);
+      const entry = store.get('DEC-001');
+      expect(entry!.executionResults[0].source).toBeUndefined();
+    });
+
+    it('should auto-detect source for auto- prefixed contributors', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'auto-deploy', true);
+      const entry = store.get('DEC-001');
+      expect(entry!.executionResults[0].source).toBe('auto');
+    });
+  });
+
   describe('onReference callback', () => {
     it('should fire callback on recordReference()', () => {
       store.save(makeEntry());
@@ -502,6 +555,54 @@ describe('KnowledgeLifecycle', () => {
         ],
       }));
       expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined(); // content gate blocks
+    });
+
+    // Path C: human source preference
+    it('should promote verified via human success rate when mixed with auto', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01', source: 'human' },
+          { contributor: 'bob', success: true, timestamp: '2026-05-02', source: 'human' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03', source: 'human' },
+          { contributor: 'auto-bot', success: false, timestamp: '2026-05-04', source: 'auto' },
+        ],
+      }));
+      // Human rate: 3/3 = 100%, auto fails but human succeeds → promote
+      expect(lifecycle.checkPromotion('DEC-001')).toBe('proven');
+    });
+
+    it('should NOT promote when human rate < 80% even if overall rate >= 80%', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'alice', success: false, timestamp: '2026-05-01', source: 'human' },
+          { contributor: 'bob', success: false, timestamp: '2026-05-02', source: 'human' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03', source: 'human' },
+          { contributor: 'auto-1', success: true, timestamp: '2026-05-04', source: 'auto' },
+          { contributor: 'auto-2', success: true, timestamp: '2026-05-05', source: 'auto' },
+          { contributor: 'auto-3', success: true, timestamp: '2026-05-06', source: 'auto' },
+        ],
+      }));
+      // Human rate: 1/3 = 33%, overall: 4/6 = 67% — neither meets threshold
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined();
+    });
+
+    it('should fall back to overall rate when no human results', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'auto-1', success: true, timestamp: '2026-05-01', source: 'auto' },
+          { contributor: 'auto-2', success: true, timestamp: '2026-05-02', source: 'auto' },
+          { contributor: 'auto-3', success: true, timestamp: '2026-05-03', source: 'auto' },
+          { contributor: 'auto-4', success: true, timestamp: '2026-05-04', source: 'auto' },
+        ],
+      }));
+      // No human results → fall back to overall: 4/4 = 100%
+      expect(lifecycle.checkPromotion('DEC-001')).toBe('proven');
     });
   });
 

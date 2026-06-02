@@ -48,7 +48,7 @@ export class KnowledgeLifecycle {
    * Updates lastReferenced timestamp, contributors, and referencedBy.
    * Optionally records execution success/failure.
    */
-  recordReference(entryId: string, contributor?: string, success?: boolean): KnowledgeEntry | undefined {
+  recordReference(entryId: string, contributor?: string, success?: boolean, source?: 'human' | 'auto'): KnowledgeEntry | undefined {
     const entry = this.store.get(entryId);
     if (!entry) return undefined;
 
@@ -58,6 +58,7 @@ export class KnowledgeLifecycle {
       : entry.contributors;
 
     const refKey = `${contributor || 'unknown'}:${now.slice(0, 10)}`;
+    const execSource = source || (contributor?.startsWith('auto-') ? 'auto' : undefined);
 
     // B4: Skip file write if this refKey already exists (same-day, same contributor)
     if (entry.referencedBy.includes(refKey)) {
@@ -65,7 +66,7 @@ export class KnowledgeLifecycle {
       if (success !== undefined) {
         const executionResults = [
           ...(entry.executionResults || []),
-          { contributor: contributor || 'unknown', success, timestamp: now },
+          { contributor: contributor || 'unknown', success, timestamp: now, source: execSource },
         ].slice(-MAX_REFERENCED_BY);
         this.store.update(entryId, { executionResults });
       }
@@ -74,7 +75,7 @@ export class KnowledgeLifecycle {
 
     const referencedBy = [...entry.referencedBy, refKey].slice(-MAX_REFERENCED_BY);
     const executionResults = success !== undefined
-      ? [...(entry.executionResults || []), { contributor: contributor || 'unknown', success, timestamp: now }].slice(-MAX_REFERENCED_BY)
+      ? [...(entry.executionResults || []), { contributor: contributor || 'unknown', success, timestamp: now, source: execSource }].slice(-MAX_REFERENCED_BY)
       : entry.executionResults;
 
     const updated = this.store.update(entryId, {
@@ -122,6 +123,12 @@ export class KnowledgeLifecycle {
         if (entry.content.trim().length < MIN_CONTENT_FOR_PROVEN) return undefined;
 
         // Path C: execution success rate (result-based)
+        // Prefer human-sourced results when available
+        const humanRate = this.getHumanSuccessRate(entryId);
+        if (humanRate && humanRate.total >= 3 && humanRate.rate >= 0.8) {
+          return 'proven';
+        }
+        // Fall back to overall rate (auto-only or mixed)
         const execRate = this.getExecutionSuccessRate(entryId);
         if (execRate && execRate.total >= 3 && execRate.rate >= 0.8) {
           return 'proven';
@@ -239,6 +246,20 @@ export class KnowledgeLifecycle {
     if (!entry || !entry.executionResults || entry.executionResults.length === 0) return undefined;
     const total = entry.executionResults.length;
     const successes = entry.executionResults.filter(r => r.success).length;
+    return { rate: successes / total, total };
+  }
+
+  /**
+   * Get execution success rate for human-sourced results only.
+   * Returns { rate, total } or undefined if no human execution data.
+   */
+  getHumanSuccessRate(entryId: string): { rate: number; total: number } | undefined {
+    const entry = this.store.get(entryId);
+    if (!entry || !entry.executionResults || entry.executionResults.length === 0) return undefined;
+    const humanResults = entry.executionResults.filter(r => r.source === 'human');
+    if (humanResults.length === 0) return undefined;
+    const total = humanResults.length;
+    const successes = humanResults.filter(r => r.success).length;
     return { rate: successes / total, total };
   }
 

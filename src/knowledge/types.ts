@@ -47,6 +47,7 @@ export interface ExecutionResult {
   contributor: string;
   success: boolean;
   timestamp: string;
+  source?: 'human' | 'auto';
 }
 
 // ── Query ───────────────────────────────────────────────────

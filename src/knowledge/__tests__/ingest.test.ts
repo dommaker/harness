@@ -177,6 +177,7 @@ describe('KnowledgeIngest', () => {
         applicablePhases: [],
         sourceReferences: refs15,
         referencedBy: [],
+        executionResults: [],
       });
 
       // Ingest duplicate with 10 more sourceReferences
@@ -210,6 +211,7 @@ describe('KnowledgeIngest', () => {
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [],
+        executionResults: [],
       });
 
       // Different title, same root cause content → should merge
@@ -233,6 +235,7 @@ describe('KnowledgeIngest', () => {
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [],
+        executionResults: [],
       });
 
       // After stripping [prefix], normalizing: "api超时导致请求失败" contains "api超时导致"
@@ -251,6 +254,7 @@ describe('KnowledgeIngest', () => {
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [],
+        executionResults: [],
       });
 
       // Completely different root cause → should NOT merge
@@ -268,7 +272,7 @@ describe('KnowledgeIngest', () => {
         maturity: 'draft', layer: 'system',
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
-        sourceReferences: [], referencedBy: [],
+        sourceReferences: [], referencedBy: [], executionResults: [],
       });
 
       // Keywords: prisma, 连接, 超时, 导致, api, 请求, 失败
@@ -287,7 +291,7 @@ describe('KnowledgeIngest', () => {
         maturity: 'draft', layer: 'system',
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
-        sourceReferences: [], referencedBy: [],
+        sourceReferences: [], referencedBy: [], executionResults: [],
       });
 
       // Title substring match (>= 6 chars) — should detect as duplicate

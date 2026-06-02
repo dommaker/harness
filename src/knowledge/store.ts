@@ -177,6 +177,7 @@ export class KnowledgeStore {
       applicablePhases: (meta.applicablePhases as string[]) || [],
       sourceReferences: (meta.sourceReferences as KnowledgeEntry['sourceReferences']) || [],
       referencedBy: (meta.referencedBy as string[]) || [],
+      executionResults: (meta.executionResults as import('./types').ExecutionResult[]) || [],
       decayAt: meta.decayAt as string | undefined,
     };
   }
@@ -197,6 +198,7 @@ export class KnowledgeStore {
       sourceReferences: entry.sourceReferences,
       referencedBy: entry.referencedBy,
     };
+    if (entry.executionResults?.length > 0) meta.executionResults = entry.executionResults;
     if (entry.decayAt) meta.decayAt = entry.decayAt;
     return yaml.dump(meta, { lineWidth: 120 });
   }
@@ -231,6 +233,7 @@ export class KnowledgeStore {
       applicablePhases: idx.applicablePhases ?? [],
       sourceReferences: [],
       referencedBy: [],
+      executionResults: [],
     };
   }
 

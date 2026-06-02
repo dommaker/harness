@@ -37,6 +37,7 @@ function makeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
     applicablePhases: [],
     sourceReferences: [],
     referencedBy: [],
+    executionResults: [],
     ...overrides,
   };
 }

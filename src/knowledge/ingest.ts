@@ -119,6 +119,7 @@ export class KnowledgeIngest {
       applicablePhases: partial.applicablePhases || [],
       sourceReferences: partial.sourceReferences || this.defaultSourceRef(options.source),
       referencedBy: partial.referencedBy || [],
+      executionResults: partial.executionResults || [],
     };
   }
 

@@ -27,6 +27,7 @@ describe('KnowledgeStore', () => {
     applicablePhases: ['ARCHITECT'],
     sourceReferences: [],
     referencedBy: [],
+    executionResults: [],
     ...overrides,
   });
 

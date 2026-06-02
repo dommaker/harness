@@ -25,6 +25,7 @@ export interface ConsumptionEvent {
   contributor: string;
   timestamp: string;
   context?: string;
+  success?: boolean;
 }
 
 export class KnowledgeLifecycle {
@@ -45,8 +46,9 @@ export class KnowledgeLifecycle {
   /**
    * Record that an entry was referenced.
    * Updates lastReferenced timestamp, contributors, and referencedBy.
+   * Optionally records execution success/failure.
    */
-  recordReference(entryId: string, contributor?: string): KnowledgeEntry | undefined {
+  recordReference(entryId: string, contributor?: string, success?: boolean): KnowledgeEntry | undefined {
     const entry = this.store.get(entryId);
     if (!entry) return undefined;
 
@@ -59,21 +61,33 @@ export class KnowledgeLifecycle {
 
     // B4: Skip file write if this refKey already exists (same-day, same contributor)
     if (entry.referencedBy.includes(refKey)) {
+      // But still record execution result if provided
+      if (success !== undefined) {
+        const executionResults = [
+          ...(entry.executionResults || []),
+          { contributor: contributor || 'unknown', success, timestamp: now },
+        ].slice(-MAX_REFERENCED_BY);
+        this.store.update(entryId, { executionResults });
+      }
       return entry;
     }
 
     const referencedBy = [...entry.referencedBy, refKey].slice(-MAX_REFERENCED_BY);
+    const executionResults = success !== undefined
+      ? [...(entry.executionResults || []), { contributor: contributor || 'unknown', success, timestamp: now }].slice(-MAX_REFERENCED_BY)
+      : entry.executionResults;
 
     const updated = this.store.update(entryId, {
       lastReferenced: now,
       contributors,
       referencedBy,
+      executionResults,
     });
 
     // Fire consumption event callbacks
     for (const cb of this.onReferenceCallbacks) {
       try {
-        cb({ entryId, contributor: contributor || 'unknown', timestamp: now });
+        cb({ entryId, contributor: contributor || 'unknown', timestamp: now, success });
       } catch { /* non-blocking */ }
     }
 
@@ -106,6 +120,12 @@ export class KnowledgeLifecycle {
       case 'verified': {
         // RC2: content quality gate for proven promotion
         if (entry.content.trim().length < MIN_CONTENT_FOR_PROVEN) return undefined;
+
+        // Path C: execution success rate (result-based)
+        const execRate = this.getExecutionSuccessRate(entryId);
+        if (execRate && execRate.total >= 3 && execRate.rate >= 0.8) {
+          return 'proven';
+        }
 
         // Path A: multi-project validation
         if (entry.contributors.length >= 3 && entry.projects.length >= 2) {
@@ -208,6 +228,18 @@ export class KnowledgeLifecycle {
    */
   shouldAutoPromote(source: string): boolean {
     return this.config.autoPromoteSources.some(s => source.includes(s));
+  }
+
+  /**
+   * Get execution success rate for an entry.
+   * Returns { rate, total } or undefined if no execution data.
+   */
+  getExecutionSuccessRate(entryId: string): { rate: number; total: number } | undefined {
+    const entry = this.store.get(entryId);
+    if (!entry || !entry.executionResults || entry.executionResults.length === 0) return undefined;
+    const total = entry.executionResults.length;
+    const successes = entry.executionResults.filter(r => r.success).length;
+    return { rate: successes / total, total };
   }
 
   // ── Internal ───────────────────────────────────────────────

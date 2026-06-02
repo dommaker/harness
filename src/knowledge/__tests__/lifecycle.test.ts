@@ -29,6 +29,7 @@ describe('KnowledgeLifecycle', () => {
     applicablePhases: [],
     sourceReferences: [],
     referencedBy: [],
+    executionResults: [],
     ...overrides,
   });
 
@@ -77,6 +78,63 @@ describe('KnowledgeLifecycle', () => {
 
     it('should return undefined for non-existent entry', () => {
       expect(lifecycle.recordReference('NON-EXISTENT')).toBeUndefined();
+    });
+  });
+
+  describe('recordReference with execution result', () => {
+    it('should record success execution result', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice', true);
+      const entry = store.get('DEC-001');
+      expect(entry!.executionResults).toHaveLength(1);
+      expect(entry!.executionResults[0].success).toBe(true);
+      expect(entry!.executionResults[0].contributor).toBe('alice');
+    });
+
+    it('should record failure execution result', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'bob', false);
+      const entry = store.get('DEC-001');
+      expect(entry!.executionResults).toHaveLength(1);
+      expect(entry!.executionResults[0].success).toBe(false);
+    });
+
+    it('should not record execution result when success is undefined', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice');
+      const entry = store.get('DEC-001');
+      expect(entry!.executionResults).toHaveLength(0);
+    });
+
+    it('should record execution result even on same-day dedup', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'alice', true);
+      lifecycle.recordReference('DEC-001', 'alice', false); // same day, but different result
+      const entry = store.get('DEC-001');
+      expect(entry!.referencedBy).toHaveLength(1); // deduped
+      expect(entry!.executionResults).toHaveLength(2); // both recorded
+    });
+  });
+
+  describe('getExecutionSuccessRate', () => {
+    it('should return undefined when no execution data', () => {
+      store.save(makeEntry());
+      expect(lifecycle.getExecutionSuccessRate('DEC-001')).toBeUndefined();
+    });
+
+    it('should compute success rate correctly', () => {
+      store.save(makeEntry());
+      lifecycle.recordReference('DEC-001', 'a', true);
+      lifecycle.recordReference('DEC-001', 'b', true);
+      lifecycle.recordReference('DEC-001', 'c', false);
+      const rate = lifecycle.getExecutionSuccessRate('DEC-001');
+      expect(rate).toBeDefined();
+      expect(rate!.total).toBe(3);
+      expect(rate!.rate).toBeCloseTo(2 / 3);
+    });
+
+    it('should return undefined for non-existent entry', () => {
+      expect(lifecycle.getExecutionSuccessRate('NON-EXISTENT')).toBeUndefined();
     });
   });
 
@@ -362,6 +420,88 @@ describe('KnowledgeLifecycle', () => {
         ],
       }));
       expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined();
+    });
+
+    // Path C: execution success rate promotion
+    it('should promote verified to proven via execution success rate >= 80%', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: true, timestamp: '2026-05-02' },
+          { contributor: 'c', success: true, timestamp: '2026-05-03' },
+          { contributor: 'd', success: true, timestamp: '2026-05-04' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBe('proven'); // 4/4 = 100%
+    });
+
+    it('should promote verified to proven with exactly 80% success rate', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: true, timestamp: '2026-05-02' },
+          { contributor: 'c', success: true, timestamp: '2026-05-03' },
+          { contributor: 'd', success: true, timestamp: '2026-05-04' },
+          { contributor: 'e', success: false, timestamp: '2026-05-05' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBe('proven'); // 4/5 = 80%
+    });
+
+    it('should NOT promote verified with execution success rate just below 80%', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: true, timestamp: '2026-05-02' },
+          { contributor: 'c', success: true, timestamp: '2026-05-03' },
+          { contributor: 'd', success: false, timestamp: '2026-05-04' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined(); // 3/4 = 75%
+    });
+
+    it('should NOT promote verified with execution success rate < 80%', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: false, timestamp: '2026-05-02' },
+          { contributor: 'c', success: false, timestamp: '2026-05-03' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined(); // 1/3 = 33%
+    });
+
+    it('should NOT promote verified with < 3 execution results', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: true, timestamp: '2026-05-02' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined(); // only 2 results
+    });
+
+    it('should NOT promote verified via Path C with content < 100 chars', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'short',
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: true, timestamp: '2026-05-02' },
+          { contributor: 'c', success: true, timestamp: '2026-05-03' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined(); // content gate blocks
     });
   });
 

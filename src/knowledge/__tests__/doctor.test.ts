@@ -72,6 +72,7 @@ describe('KnowledgeHealthScorer', () => {
         applicablePhases: ['design'],
         sourceReferences: [],
         referencedBy: ['decision-1'],
+        executionResults: [],
       };
       store.save(entry);
 
@@ -100,6 +101,7 @@ describe('KnowledgeHealthScorer', () => {
           applicablePhases: [],
           sourceReferences: [],
           referencedBy: [],
+          executionResults: [],
         });
       }
 
@@ -134,6 +136,7 @@ describe('KnowledgeHealthScorer', () => {
           applicablePhases: [],
           sourceReferences: [],
           referencedBy: ['decision-ref'],
+          executionResults: [],
         });
       }
       // Save healthy entries to keep ratios manageable (3 outdated out of ~56 = ~5.3%)
@@ -153,6 +156,7 @@ describe('KnowledgeHealthScorer', () => {
           applicablePhases: [],
           sourceReferences: [],
           referencedBy: ['decision-ref'],
+          executionResults: [],
         });
       }
 
@@ -179,6 +183,7 @@ describe('KnowledgeHealthScorer', () => {
         applicablePhases: [],
         sourceReferences: [],
         referencedBy: ['decision-ref'],
+        executionResults: [],
       });
       store.save({
         id: 'dup-2',
@@ -195,6 +200,7 @@ describe('KnowledgeHealthScorer', () => {
         applicablePhases: [],
         sourceReferences: [],
         referencedBy: ['decision-ref'],
+        executionResults: [],
       });
 
       const report = scorer.healthScore();
@@ -220,6 +226,7 @@ describe('KnowledgeHealthScorer', () => {
         applicablePhases: [],
         sourceReferences: [],
         referencedBy: ['decision-ref'],
+        executionResults: [],
       });
       store.save({
         id: 'draft-entry',
@@ -236,6 +243,7 @@ describe('KnowledgeHealthScorer', () => {
         applicablePhases: [],
         sourceReferences: [],
         referencedBy: ['decision-ref'],
+        executionResults: [],
       });
 
       const report = scorer.healthScore();
@@ -262,6 +270,7 @@ describe('KnowledgeHealthScorer', () => {
           applicablePhases: [],
           sourceReferences: [],
           referencedBy: [],
+          executionResults: [],
         });
       }
 

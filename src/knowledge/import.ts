@@ -388,6 +388,7 @@ export class ColdStartImporter {
         timestamp: new Date().toISOString(),
       }],
       referencedBy: [],
+      executionResults: [],
     };
   }
 

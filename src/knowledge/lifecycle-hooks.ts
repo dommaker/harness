@@ -194,6 +194,7 @@ export class KnowledgeLifecycleHooks {
         timestamp: new Date().toISOString(),
       }],
       referencedBy: [],
+      executionResults: [],
     };
   }
 }

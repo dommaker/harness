@@ -29,6 +29,7 @@ describe('KnowledgeQuery', () => {
     applicablePhases: [],
     sourceReferences: [],
     referencedBy: [],
+    executionResults: [],
     ...overrides,
   });
 

@@ -76,7 +76,9 @@ export * from './verification';
 // ========================================
 // 约束分层导出
 // ========================================
-export * from './constraints';
+export * from './constraints/types';
+export { ConstraintRegistry } from './constraints/registry';
+export { ConstraintLifecycleRunner } from './constraints/lifecycle-runner';
 
 // ========================================
 // Dashboard 数据导出

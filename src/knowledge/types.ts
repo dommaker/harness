@@ -32,6 +32,7 @@ export interface KnowledgeEntry {
   applicablePhases: string[];
   sourceReferences: SourceRef[];
   referencedBy: string[];
+  executionResults: ExecutionResult[];
   decayAt?: string;
 }
 
@@ -39,6 +40,12 @@ export interface SourceRef {
   workflow?: string;
   step?: string;
   commit?: string;
+  timestamp: string;
+}
+
+export interface ExecutionResult {
+  contributor: string;
+  success: boolean;
   timestamp: string;
 }
 

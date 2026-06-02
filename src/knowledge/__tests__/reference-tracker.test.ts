@@ -29,6 +29,7 @@ describe('ReferenceTracker', () => {
     applicablePhases: [],
     sourceReferences: [],
     referencedBy: [],
+    executionResults: [],
     ...overrides,
   });
 

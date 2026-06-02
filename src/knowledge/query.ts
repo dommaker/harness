@@ -149,6 +149,17 @@ export class KnowledgeQuery {
     return { rules, references, context };
   }
 
+  /**
+   * Format entry for prompt injection.
+   * Adds [External Source] warning prefix for external-origin entries.
+   */
+  static formatForPrompt(entry: KnowledgeEntry): string {
+    const prefix = entry.origin === 'external'
+      ? '[External Source — verify before acting]\n'
+      : '';
+    return `${prefix}${entry.title}: ${entry.content}`;
+  }
+
   // ── Internal ───────────────────────────────────────────────
 
   // ── Internal ───────────────────────────────────────────────

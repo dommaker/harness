@@ -9,7 +9,7 @@ export { KnowledgeStore } from './store';
 export { KnowledgeQuery } from './query';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';
-export { KnowledgeIngest } from './ingest';
+export { KnowledgeIngest, sanitizeExternalContent } from './ingest';
 export { ReferenceTracker } from './reference-tracker';
 export { KnowledgeLinter } from './lint';
 export { ColdStartImporter } from './import';

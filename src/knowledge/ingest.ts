@@ -16,6 +16,39 @@ import { KnowledgeStore } from './store';
 import { KnowledgeAudit } from './audit';
 
 const MAX_SOURCE_REFS = 20;
+const MAX_EXTERNAL_CONTENT_LENGTH = 5000;
+
+/** Known prompt injection patterns to strip from external content */
+const INJECTION_PATTERNS = [
+  /ignore\s+(all\s+)?previous\s+instructions/gi,
+  /ignore\s+(all\s+)?prior\s+instructions/gi,
+  /system:\s*/gi,
+  /\[INST\]/gi,
+  /\[\/INST\]/gi,
+  /<\|im_start\|>/gi,
+  /<\|im_end\|>/gi,
+  /you\s+are\s+now\s+/gi,
+  /forget\s+(everything|all)\s+(you|about)/gi,
+  /new\s+instructions?:/gi,
+  /override\s+(your|system)\s+(instructions|prompt)/gi,
+];
+
+/**
+ * Sanitize external content for safe ingest.
+ * - Strips known prompt injection patterns
+ * - Limits content length
+ * - Returns sanitized string
+ */
+export function sanitizeExternalContent(content: string): string {
+  let sanitized = content;
+  for (const pattern of INJECTION_PATTERNS) {
+    sanitized = sanitized.replace(pattern, '[FILTERED]');
+  }
+  if (sanitized.length > MAX_EXTERNAL_CONTENT_LENGTH) {
+    sanitized = sanitized.slice(0, MAX_EXTERNAL_CONTENT_LENGTH) + '...[truncated]';
+  }
+  return sanitized;
+}
 
 // ── Ingest ─────────────────────────────────────────────────
 
@@ -92,6 +125,23 @@ export class KnowledgeIngest {
     options: IngestOptions,
   ): KnowledgeEntry[] {
     return partials.map(p => this.ingestEntry(p, options));
+  }
+
+  /**
+   * Ingest external content with sanitization.
+   * - Sanitizes content (strips injection patterns, limits length)
+   * - Forces origin: 'external'
+   * - Uses consumptionMode from options (default: 'reference')
+   */
+  ingestExternal(
+    partial: Partial<KnowledgeEntry>,
+    options: Omit<IngestOptions, 'origin'> & { fullContentPath?: string },
+  ): KnowledgeEntry {
+    const sanitizedContent = sanitizeExternalContent(partial.content || '');
+    return this.ingestEntry(
+      { ...partial, content: sanitizedContent },
+      { ...options, origin: 'external' },
+    );
   }
 
   // ── Internal ───────────────────────────────────────────────

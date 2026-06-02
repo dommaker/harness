@@ -249,4 +249,23 @@ describe('KnowledgeQuery', () => {
       expect(result.references.length).toBeLessThanOrEqual(3);
     });
   });
+
+  describe('formatForPrompt', () => {
+    it('should add External Source prefix for external origin', () => {
+      const { KnowledgeQuery: KQ } = require('../query');
+      const entry = makeEntry({ origin: 'external', title: 'GitHub Doc', content: 'Architecture' });
+      const result = KQ.formatForPrompt(entry);
+      expect(result).toContain('[External Source');
+      expect(result).toContain('GitHub Doc');
+      expect(result).toContain('Architecture');
+    });
+
+    it('should not add prefix for agent origin', () => {
+      const { KnowledgeQuery: KQ } = require('../query');
+      const entry = makeEntry({ origin: 'agent', title: 'Internal', content: 'Details' });
+      const result = KQ.formatForPrompt(entry);
+      expect(result).not.toContain('[External Source');
+      expect(result).toBe('Internal: Details');
+    });
+  });
 });

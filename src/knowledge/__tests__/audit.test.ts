@@ -38,6 +38,8 @@ function makeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
     sourceReferences: [],
     referencedBy: [],
     executionResults: [],
+    consumptionMode: 'reference',
+    origin: 'agent',
     ...overrides,
   };
 }

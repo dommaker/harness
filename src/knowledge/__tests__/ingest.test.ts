@@ -178,6 +178,8 @@ describe('KnowledgeIngest', () => {
         sourceReferences: refs15,
         referencedBy: [],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       // Ingest duplicate with 10 more sourceReferences
@@ -212,6 +214,8 @@ describe('KnowledgeIngest', () => {
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       // Different title, same root cause content → should merge
@@ -236,6 +240,8 @@ describe('KnowledgeIngest', () => {
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       // After stripping [prefix], normalizing: "api超时导致请求失败" contains "api超时导致"
@@ -255,6 +261,8 @@ describe('KnowledgeIngest', () => {
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       // Completely different root cause → should NOT merge
@@ -273,6 +281,8 @@ describe('KnowledgeIngest', () => {
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [], executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       // Keywords: prisma, 连接, 超时, 导致, api, 请求, 失败
@@ -292,6 +302,8 @@ describe('KnowledgeIngest', () => {
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
         contributors: [], projects: [], tags: [], applicablePhases: [],
         sourceReferences: [], referencedBy: [], executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       // Title substring match (>= 6 chars) — should detect as duplicate

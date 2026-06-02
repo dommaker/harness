@@ -19,6 +19,8 @@ function makeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
     sourceReferences: [],
     referencedBy: ['ref-1'],
     executionResults: [],
+    consumptionMode: 'reference',
+    origin: 'agent',
     ...overrides,
   };
 }

@@ -30,6 +30,8 @@ describe('ReferenceTracker', () => {
     sourceReferences: [],
     referencedBy: [],
     executionResults: [],
+    consumptionMode: 'reference',
+    origin: 'agent',
     ...overrides,
   });
 

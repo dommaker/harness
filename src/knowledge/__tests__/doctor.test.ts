@@ -73,6 +73,8 @@ describe('KnowledgeHealthScorer', () => {
         sourceReferences: [],
         referencedBy: ['decision-1'],
         executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
       };
       store.save(entry);
 
@@ -102,6 +104,8 @@ describe('KnowledgeHealthScorer', () => {
           sourceReferences: [],
           referencedBy: [],
           executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
         });
       }
 
@@ -137,6 +141,8 @@ describe('KnowledgeHealthScorer', () => {
           sourceReferences: [],
           referencedBy: ['decision-ref'],
           executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
         });
       }
       // Save healthy entries to keep ratios manageable (3 outdated out of ~56 = ~5.3%)
@@ -157,6 +163,8 @@ describe('KnowledgeHealthScorer', () => {
           sourceReferences: [],
           referencedBy: ['decision-ref'],
           executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
         });
       }
 
@@ -184,6 +192,8 @@ describe('KnowledgeHealthScorer', () => {
         sourceReferences: [],
         referencedBy: ['decision-ref'],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
       store.save({
         id: 'dup-2',
@@ -201,6 +211,8 @@ describe('KnowledgeHealthScorer', () => {
         sourceReferences: [],
         referencedBy: ['decision-ref'],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       const report = scorer.healthScore();
@@ -227,6 +239,8 @@ describe('KnowledgeHealthScorer', () => {
         sourceReferences: [],
         referencedBy: ['decision-ref'],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
       store.save({
         id: 'draft-entry',
@@ -244,6 +258,8 @@ describe('KnowledgeHealthScorer', () => {
         sourceReferences: [],
         referencedBy: ['decision-ref'],
         executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       });
 
       const report = scorer.healthScore();
@@ -271,6 +287,8 @@ describe('KnowledgeHealthScorer', () => {
           sourceReferences: [],
           referencedBy: [],
           executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
         });
       }
 

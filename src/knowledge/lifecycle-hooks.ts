@@ -195,6 +195,8 @@ export class KnowledgeLifecycleHooks {
       }],
       referencedBy: [],
       executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
     };
   }
 }

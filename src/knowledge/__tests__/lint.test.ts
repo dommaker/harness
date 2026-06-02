@@ -42,6 +42,9 @@ describe('KnowledgeLinter', () => {
       applicablePhases: [],
       sourceReferences: [],
       referencedBy: [],
+      executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       ...overrides,
     });
   }

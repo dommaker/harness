@@ -28,6 +28,8 @@ describe('KnowledgeStore', () => {
     sourceReferences: [],
     referencedBy: [],
     executionResults: [],
+    consumptionMode: 'reference',
+    origin: 'agent',
     ...overrides,
   });
 
@@ -126,6 +128,23 @@ describe('KnowledgeStore', () => {
       const list = store.list({ excludeArchived: false });
       expect(list).toHaveLength(2);
     });
+
+    it('should filter by consumptionMode', () => {
+      store.save(makeEntry({ id: 'DEC-001', consumptionMode: 'reference' }));
+      store.save(makeEntry({ id: 'DEC-002', consumptionMode: 'rule', title: 'Rule' }));
+      store.save(makeEntry({ id: 'DEC-003', consumptionMode: 'signal', title: 'Signal' }));
+      const list = store.list({ consumptionModes: ['rule', 'signal'] });
+      expect(list).toHaveLength(2);
+      expect(list.map(e => e.id).sort()).toEqual(['DEC-002', 'DEC-003']);
+    });
+
+    it('should filter by origin', () => {
+      store.save(makeEntry({ id: 'DEC-001', origin: 'agent' }));
+      store.save(makeEntry({ id: 'DEC-002', origin: 'human', title: 'Human' }));
+      const list = store.list({ origins: ['human'] });
+      expect(list).toHaveLength(1);
+      expect(list[0].origin).toBe('human');
+    });
   });
 
   describe('delete', () => {
@@ -165,6 +184,28 @@ describe('KnowledgeStore', () => {
   });
 
   describe('edge cases', () => {
+    it('should round-trip consumptionMode and origin through save/load', () => {
+      store.save(makeEntry({
+        id: 'DEC-001',
+        consumptionMode: 'rule',
+        origin: 'human',
+        fullContentPath: 'https://example.com/doc',
+        skillId: 'skill-001',
+      }));
+      const loaded = store.get('DEC-001');
+      expect(loaded?.consumptionMode).toBe('rule');
+      expect(loaded?.origin).toBe('human');
+      expect(loaded?.fullContentPath).toBe('https://example.com/doc');
+      expect(loaded?.skillId).toBe('skill-001');
+    });
+
+    it('should default consumptionMode to reference and origin to agent', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      const loaded = store.get('DEC-001');
+      expect(loaded?.consumptionMode).toBe('reference');
+      expect(loaded?.origin).toBe('agent');
+    });
+
     it('getBaseDir() returns configured baseDir', () => {
       expect(store.getBaseDir()).toBe(tempDir);
     });

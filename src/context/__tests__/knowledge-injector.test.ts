@@ -42,6 +42,9 @@ describe('KnowledgeInjector', () => {
       applicablePhases: [],
       sourceReferences: [],
       referencedBy: [],
+      executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       ...overrides,
     });
   }

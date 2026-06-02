@@ -179,6 +179,10 @@ export class KnowledgeStore {
       referencedBy: (meta.referencedBy as string[]) || [],
       executionResults: (meta.executionResults as import('./types').ExecutionResult[]) || [],
       decayAt: meta.decayAt as string | undefined,
+      consumptionMode: (meta.consumptionMode as KnowledgeEntry['consumptionMode']) || 'reference',
+      origin: (meta.origin as KnowledgeEntry['origin']) || 'agent',
+      fullContentPath: meta.fullContentPath as string | undefined,
+      skillId: meta.skillId as string | undefined,
     };
   }
 
@@ -197,9 +201,13 @@ export class KnowledgeStore {
       applicablePhases: entry.applicablePhases,
       sourceReferences: entry.sourceReferences,
       referencedBy: entry.referencedBy,
+      consumptionMode: entry.consumptionMode,
+      origin: entry.origin,
     };
     if (entry.executionResults?.length > 0) meta.executionResults = entry.executionResults;
     if (entry.decayAt) meta.decayAt = entry.decayAt;
+    if (entry.fullContentPath) meta.fullContentPath = entry.fullContentPath;
+    if (entry.skillId) meta.skillId = entry.skillId;
     return yaml.dump(meta, { lineWidth: 120 });
   }
 
@@ -214,6 +222,8 @@ export class KnowledgeStore {
       applicablePhases: entry.applicablePhases,
       lastReferenced: entry.lastReferenced,
       created: entry.created,
+      consumptionMode: entry.consumptionMode,
+      origin: entry.origin,
     };
   }
 
@@ -234,6 +244,8 @@ export class KnowledgeStore {
       sourceReferences: [],
       referencedBy: [],
       executionResults: [],
+      consumptionMode: idx.consumptionMode || 'reference',
+      origin: idx.origin || 'agent',
     };
   }
 
@@ -244,6 +256,8 @@ export class KnowledgeStore {
     if (filter.tags && filter.tags.length > 0 && !filter.tags.some(t => (entry.tags ?? []).includes(t))) return false;
     if (filter.applicablePhases && filter.applicablePhases.length > 0 && !filter.applicablePhases.some(p => (entry.applicablePhases ?? []).includes(p))) return false;
     if (filter.excludeArchived !== false && entry.maturity === 'archived') return false;
+    if (filter.consumptionModes && filter.consumptionModes.length > 0 && !filter.consumptionModes.includes(entry.consumptionMode ?? 'reference')) return false;
+    if (filter.origins && filter.origins.length > 0 && !filter.origins.includes(entry.origin ?? 'agent')) return false;
     return true;
   }
 

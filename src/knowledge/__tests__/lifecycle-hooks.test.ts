@@ -42,6 +42,9 @@ describe('KnowledgeLifecycleHooks', () => {
       applicablePhases: [],
       sourceReferences: [],
       referencedBy: [],
+      executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
       ...overrides,
     });
   }

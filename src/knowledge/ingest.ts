@@ -120,6 +120,10 @@ export class KnowledgeIngest {
       sourceReferences: partial.sourceReferences || this.defaultSourceRef(options.source),
       referencedBy: partial.referencedBy || [],
       executionResults: partial.executionResults || [],
+      consumptionMode: partial.consumptionMode || options.consumptionMode || 'reference',
+      origin: partial.origin || options.origin || 'agent',
+      fullContentPath: partial.fullContentPath || options.fullContentPath,
+      skillId: partial.skillId,
     };
   }
 

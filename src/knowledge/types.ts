@@ -15,6 +15,12 @@ export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived';
 
 export type StorageLayer = 'personal' | 'team' | 'tech' | 'domain' | 'project' | 'system';
 
+/** How agent consumes this knowledge — drives injection strategy and lifecycle */
+export type ConsumptionMode = 'rule' | 'reference' | 'context' | 'signal';
+
+/** Where this knowledge came from — affects initial trust and maturity */
+export type KnowledgeOrigin = 'human' | 'agent' | 'external' | 'system';
+
 // ── Core Entry ──────────────────────────────────────────────
 
 export interface KnowledgeEntry {
@@ -34,6 +40,14 @@ export interface KnowledgeEntry {
   referencedBy: string[];
   executionResults: ExecutionResult[];
   decayAt?: string;
+  /** How agent consumes this knowledge (default: 'reference') */
+  consumptionMode: ConsumptionMode;
+  /** Where this knowledge came from (default: 'agent') */
+  origin: KnowledgeOrigin;
+  /** Path/URL to full content for on-demand retrieval */
+  fullContentPath?: string;
+  /** Skill ID if this knowledge was refined into a Skill */
+  skillId?: string;
 }
 
 export interface SourceRef {
@@ -79,6 +93,8 @@ export interface QueryFilter {
   tags?: string[];
   applicablePhases?: string[];
   excludeArchived?: boolean;
+  consumptionModes?: ConsumptionMode[];
+  origins?: KnowledgeOrigin[];
 }
 
 // ── Lint ────────────────────────────────────────────────────
@@ -101,6 +117,9 @@ export interface IngestOptions {
   maturity?: MaturityLevel;
   tags?: string[];
   projects?: string[];
+  consumptionMode?: ConsumptionMode;
+  origin?: KnowledgeOrigin;
+  fullContentPath?: string;
 }
 
 // ── Lifecycle ───────────────────────────────────────────────
@@ -147,4 +166,6 @@ export interface IndexEntry {
   applicablePhases: string[];
   lastReferenced: string;
   created: string;
+  consumptionMode: ConsumptionMode;
+  origin: KnowledgeOrigin;
 }

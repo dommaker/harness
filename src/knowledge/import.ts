@@ -389,6 +389,8 @@ export class ColdStartImporter {
       }],
       referencedBy: [],
       executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'system',
     };
   }
 

@@ -142,19 +142,15 @@ export class KnowledgeIngest {
     const exact = all.find(e => e.title.toLowerCase() === title.toLowerCase());
     if (exact) return exact;
 
-    // Pitfall-aware dedup: same root cause, different title wording
-    if (type === 'pitfall') {
-      return this.findPitfallDuplicate(title, content, all);
-    }
-
-    return undefined;
+    // Semantic dedup: content prefix + title substring + keyword overlap
+    return this.findSemanticDuplicate(title, content, all);
   }
 
   /**
-   * Pitfall dedup: detect same root cause with different title wording.
+   * Semantic dedup: detect same knowledge with different title wording.
    * Signal priority: content prefix > title substring > title keyword overlap.
    */
-  private findPitfallDuplicate(title: string, content: string, entries: KnowledgeEntry[]): KnowledgeEntry | undefined {
+  private findSemanticDuplicate(title: string, content: string, entries: KnowledgeEntry[]): KnowledgeEntry | undefined {
     const normalized = this.normalizeForDedup(title);
     const contentPrefix = this.getContentPrefix(content);
 

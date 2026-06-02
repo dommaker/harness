@@ -137,9 +137,13 @@ const perEntryRules: AuditRule[] = [
     action: 'archive',
     detect: (entry) => {
       if (entry.maturity === 'archived') return null;
+      // Match test ID patterns
+      if (/^(test-|inj-test)/.test(entry.id)) {
+        return `测试 ID: "${entry.id}"`;
+      }
       const hasTestTag = (entry.tags ?? []).some(t => TEST_TAG_PATTERNS.some(p => p.test(t)));
       if (hasTestTag) {
-        return `测试标签: ${entry.tags.filter(t => TEST_TAG_PATTERNS.some(p => p.test(t))).join(', ')}`;
+        return `测试标签: ${(entry.tags ?? []).filter(t => TEST_TAG_PATTERNS.some(p => p.test(t))).join(', ')}`;
       }
       if (/^(Test Entry|Test pattern|Test incident|Empty Test)$/i.test(entry.title.trim())) {
         return `测试标题: "${entry.title}"`;

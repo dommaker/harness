@@ -104,6 +104,24 @@ describe('D2: test-data-pollution', () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  it('archives entries with test-* ID', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ id: 'test-search-1780414709970-pattern' });
+    const issues = audit.validate(entry);
+    expect(issues.some(i => i.rule === 'test-data-pollution' && i.detail.includes('test-search'))).toBe(true);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('archives entries with inj-test-* ID', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ id: 'inj-test-1780414711344' });
+    const issues = audit.validate(entry);
+    expect(issues.some(i => i.rule === 'test-data-pollution' && i.detail.includes('inj-test'))).toBe(true);
+    fs.rmSync(dir, { recursive: true });
+  });
+
   it('skips archived entries', () => {
     const dir = makeTmpDir();
     const audit = new KnowledgeAudit({ baseDir: dir });

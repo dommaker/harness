@@ -280,9 +280,9 @@ describe('KnowledgeIngest', () => {
       expect(store.list({ types: ['pitfall'] })).toHaveLength(1);
     });
 
-    it('should not apply pitfall dedup to non-pitfall types', () => {
+    it('should apply semantic dedup to non-pitfall types', () => {
       store.save({
-        id: 'GUI-001', type: 'guideline', title: '端口不匹配导致事件处理失败',
+        id: 'GUI-001', type: 'guideline', title: 'events-daemon 端口不匹配导致事件处理失败',
         content: '根因：events-daemon 默认使用 3001 端口连接 API',
         maturity: 'draft', layer: 'system',
         created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
@@ -290,12 +290,12 @@ describe('KnowledgeIngest', () => {
         sourceReferences: [], referencedBy: [],
       });
 
-      // Same title for guideline type — should NOT do pitfall fuzzy dedup
+      // Title substring match (>= 6 chars) — should detect as duplicate
       ingest.ingestEntry(
-        { title: '端口不匹配', content: 'shorter title', type: 'guideline' },
+        { title: 'events-daemon 端口不匹配', content: 'shorter title', type: 'guideline' },
         { source: 'test', layer: 'system' },
       );
-      expect(store.list({ types: ['guideline'] })).toHaveLength(2);
+      expect(store.list({ types: ['guideline'] })).toHaveLength(1);
     });
   });
 

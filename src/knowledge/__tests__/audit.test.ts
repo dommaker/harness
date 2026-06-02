@@ -3,7 +3,7 @@
  *
  * Covers all 11 rules across 6 dimensions:
  * D1: frontmatter-missing
- * D2: test-data-pollution, daily-audit-noise, zero-content-proven, short-content, maturity-inflation
+ * D2: test-data-pollution, daily-audit-noise, event-noise, zero-content-proven, short-content, maturity-inflation
  * D3: title-duplicate, source-refs-bloat
  * D4: promotion-blocked, orphan-draft
  * D5: stale-entry
@@ -132,6 +132,64 @@ describe('D2: daily-audit-noise', () => {
     const entry = makeEntry({ title: 'Normal knowledge entry' });
     const issues = audit.validate(entry);
     expect(issues.filter(i => i.rule === 'daily-audit-noise')).toHaveLength(0);
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+// ── D2: event-noise ────────────────────────────────────
+
+describe('D2: event-noise', () => {
+  it('rejects [Monitor] event titles', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: '[Monitor] stuck_goals: GoalExecution abc123' });
+    const issues = audit.validate(entry);
+    expect(issues.some(i => i.rule === 'event-noise' && i.action === 'archive')).toBe(true);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('rejects KnowledgeSync cycle titles', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: 'KnowledgeSync cycle: 0 stale, 0 unmonitored' });
+    const issues = audit.validate(entry);
+    expect(issues.some(i => i.rule === 'event-noise' && i.action === 'archive')).toBe(true);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('rejects [Triage Fix] titles', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: '[Triage Fix] timeout (critical)' });
+    const issues = audit.validate(entry);
+    expect(issues.some(i => i.rule === 'event-noise' && i.action === 'archive')).toBe(true);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('rejects [Session Feature] titles', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: '[Session Feature] feat: studio release' });
+    const issues = audit.validate(entry);
+    expect(issues.some(i => i.rule === 'event-noise' && i.action === 'archive')).toBe(true);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('passes for normal knowledge titles', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: 'SQLite WAL mode pattern' });
+    const issues = audit.validate(entry);
+    expect(issues.filter(i => i.rule === 'event-noise')).toHaveLength(0);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('skips archived entries', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ maturity: 'archived', title: '[Monitor] stuck_goals: test' });
+    const issues = audit.validate(entry);
+    expect(issues.filter(i => i.rule === 'event-noise')).toHaveLength(0);
     fs.rmSync(dir, { recursive: true });
   });
 });

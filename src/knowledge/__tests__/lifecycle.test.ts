@@ -199,6 +199,7 @@ describe('KnowledgeLifecycle', () => {
     it('should promote verified to proven when criteria met', () => {
       store.save(makeEntry({
         maturity: 'verified',
+        content: 'a'.repeat(100),
         contributors: ['a', 'b', 'c'],
         projects: ['p1', 'p2'],
       }));
@@ -316,6 +317,51 @@ describe('KnowledgeLifecycle', () => {
 
     it('should return undefined for non-existent entry', () => {
       expect(lifecycle.checkPromotion('NON-EXISTENT')).toBeUndefined();
+    });
+
+    // RC2: test ID exclusion
+    it('should NOT promote draft with test-* ID', () => {
+      store.save(makeEntry({ id: 'test-search-123', maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(60) }));
+      expect(lifecycle.checkPromotion('test-search-123')).toBeUndefined();
+    });
+
+    it('should NOT promote draft with inj-test-* ID', () => {
+      store.save(makeEntry({ id: 'inj-test-123', maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(60) }));
+      expect(lifecycle.checkPromotion('inj-test-123')).toBeUndefined();
+    });
+
+    // RC2: verified→proven content quality gate
+    it('should NOT promote verified to proven with content < 100 chars', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'short content',
+        contributors: ['a', 'b', 'c'],
+        projects: ['p1', 'p2'],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined();
+    });
+
+    it('should promote verified to proven with content >= 100 chars', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        contributors: ['a', 'b', 'c'],
+        projects: ['p1', 'p2'],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBe('proven');
+    });
+
+    it('should NOT promote verified via Path B with content < 100 chars', () => {
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'short',
+        referencedBy: ['a:2026-05-01', 'b:2026-05-02', 'c:2026-05-03'],
+        sourceReferences: [
+          { workflow: 'pattern:monitor', timestamp: '2026-05-01' },
+          { workflow: 'pattern:triage', timestamp: '2026-05-02' },
+        ],
+      }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined();
     });
   });
 

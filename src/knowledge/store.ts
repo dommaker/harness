@@ -227,8 +227,8 @@ export class KnowledgeStore {
       lastReferenced: idx.lastReferenced,
       contributors: [],
       projects: [],
-      tags: idx.tags,
-      applicablePhases: idx.applicablePhases,
+      tags: idx.tags ?? [],
+      applicablePhases: idx.applicablePhases ?? [],
       sourceReferences: [],
       referencedBy: [],
     };

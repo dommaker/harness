@@ -2,7 +2,7 @@
  * knowledge 命令测试 — knowledgeAudit
  */
 
-import { knowledgeAudit } from '../knowledge';
+import { knowledgeAudit, knowledgeStats } from '../knowledge';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -59,6 +59,48 @@ const MOCK_REPORT = {
   autoFixed: 0,
   healthScore: { before: 95, after: 95 },
 };
+
+describe('getKnowledgeDir', () => {
+  const os = require('os');
+  const path = require('path');
+  const storeModule = require('../../../knowledge/store');
+  let storeCtorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    delete process.env.KNOWLEDGE_BASE_DIR;
+    storeCtorSpy = jest.spyOn(storeModule, 'KnowledgeStore').mockImplementation(() => ({
+      list: jest.fn().mockReturnValue([]),
+    }));
+  });
+
+  afterEach(() => {
+    storeCtorSpy.mockRestore();
+    delete process.env.KNOWLEDGE_BASE_DIR;
+  });
+
+  it('should use KNOWLEDGE_BASE_DIR env var when set', async () => {
+    process.env.KNOWLEDGE_BASE_DIR = '/custom/knowledge';
+    await knowledgeStats({ json: true });
+    expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
+      baseDir: '/custom/knowledge',
+    }));
+  });
+
+  it('should default to ~/.studio/knowledge when no env var', async () => {
+    const expected = path.join(os.homedir(), '.studio', 'knowledge');
+    await knowledgeStats({ json: true });
+    expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
+      baseDir: expected,
+    }));
+  });
+
+  it('should use projectPath when provided', async () => {
+    await knowledgeStats({ projectPath: '/my/project', json: true });
+    expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
+      baseDir: '/my/project/.harness/knowledge',
+    }));
+  });
+});
 
 describe('knowledgeAudit CLI', () => {
   let consoleSpy: jest.SpyInstance;

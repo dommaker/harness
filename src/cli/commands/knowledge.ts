@@ -6,6 +6,8 @@
 
 import chalk from 'chalk';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { KnowledgeStore } from '../../knowledge/store';
 import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
@@ -387,8 +389,9 @@ export async function knowledgeSyncStatus(options: KnowledgeOptions): Promise<vo
 }
 
 function getKnowledgeDir(projectPath?: string): string {
-  const base = projectPath || process.cwd();
-  return `${base}/.harness/knowledge`;
+  if (projectPath) return `${projectPath}/.harness/knowledge`;
+  if (process.env.KNOWLEDGE_BASE_DIR) return process.env.KNOWLEDGE_BASE_DIR;
+  return path.join(os.homedir(), '.studio', 'knowledge');
 }
 
 /**

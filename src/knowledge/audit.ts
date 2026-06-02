@@ -22,6 +22,7 @@ export type AuditRuleName =
   // D2: 内容质量
   | 'test-data-pollution'
   | 'daily-audit-noise'
+  | 'event-noise'
   | 'zero-content-proven'
   | 'short-content'
   | 'maturity-inflation'
@@ -87,6 +88,12 @@ const MAX_SOURCE_REFS = 20;
 
 const TEST_TAG_PATTERNS = [/^test-scope-/, /^test-empty-/, /^test-\d/];
 const DAILY_AUDIT_PATTERN = /^\[Auditor\] Daily audit/;
+const EVENT_NOISE_PATTERNS = [
+  /^\[Monitor\]\s/,
+  /^KnowledgeSync cycle:/,
+  /^\[Triage Fix\]\s/,
+  /^\[Session Feature\]\s/,
+];
 const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'];
 
 // ── Per-Entry Rules ───────────────────────────────────────
@@ -130,7 +137,7 @@ const perEntryRules: AuditRule[] = [
     action: 'archive',
     detect: (entry) => {
       if (entry.maturity === 'archived') return null;
-      const hasTestTag = entry.tags.some(t => TEST_TAG_PATTERNS.some(p => p.test(t)));
+      const hasTestTag = (entry.tags ?? []).some(t => TEST_TAG_PATTERNS.some(p => p.test(t)));
       if (hasTestTag) {
         return `测试标签: ${entry.tags.filter(t => TEST_TAG_PATTERNS.some(p => p.test(t))).join(', ')}`;
       }
@@ -148,6 +155,20 @@ const perEntryRules: AuditRule[] = [
       if (entry.maturity === 'archived') return null;
       if (DAILY_AUDIT_PATTERN.test(entry.title)) {
         return `每日审计摘要: "${entry.title}"`;
+      }
+      return null;
+    },
+  },
+  {
+    name: 'event-noise',
+    severity: 'critical',
+    action: 'archive',
+    detect: (entry) => {
+      if (entry.maturity === 'archived') return null;
+      for (const pattern of EVENT_NOISE_PATTERNS) {
+        if (pattern.test(entry.title)) {
+          return `运维事件标题: "${entry.title}"`;
+        }
       }
       return null;
     },
@@ -381,7 +402,7 @@ export class KnowledgeAudit {
     const d1Score = entries.length === 0 ? 100 : Math.max(0, 100 - (d1Issues.length / entries.length) * 100);
 
     // D2: 内容质量
-    const d2Rules: AuditRuleName[] = ['test-data-pollution', 'daily-audit-noise', 'zero-content-proven', 'short-content', 'maturity-inflation'];
+    const d2Rules: AuditRuleName[] = ['test-data-pollution', 'daily-audit-noise', 'event-noise', 'zero-content-proven', 'short-content', 'maturity-inflation'];
     const d2Issues = issues.filter(i => d2Rules.includes(i.rule));
     const d2Score = active.length === 0 ? 100 : Math.max(0, 100 - (d2Issues.length / active.length) * 100);
 

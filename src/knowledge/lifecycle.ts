@@ -15,6 +15,8 @@ import { DEFAULT_DECAY_CONFIG } from './types';
 import { KnowledgeStore } from './store';
 
 const MAX_REFERENCED_BY = 20;
+const MIN_CONTENT_FOR_PROVEN = 100;
+const TEST_ID_PATTERN = /^(test-|inj-test)/;
 
 // ── Lifecycle ──────────────────────────────────────────────
 
@@ -92,6 +94,9 @@ export class KnowledgeLifecycle {
     const entry = this.store.get(entryId);
     if (!entry) return undefined;
 
+    // RC2: block test entries from any promotion
+    if (TEST_ID_PATTERN.test(entryId)) return undefined;
+
     switch (entry.maturity) {
       case 'draft':
         // GAP-11: content quality gate — require >= 50 chars for promotion
@@ -99,6 +104,9 @@ export class KnowledgeLifecycle {
         return undefined;
 
       case 'verified': {
+        // RC2: content quality gate for proven promotion
+        if (entry.content.trim().length < MIN_CONTENT_FOR_PROVEN) return undefined;
+
         // Path A: multi-project validation
         if (entry.contributors.length >= 3 && entry.projects.length >= 2) {
           return 'proven';

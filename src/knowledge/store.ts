@@ -244,6 +244,66 @@ export class KnowledgeStore {
     return true;
   }
 
+  // ── Snapshots ────────────────────────────────────────────
+
+  private static readonly SNAPSHOTS_DIR = '.snapshots';
+
+  /**
+   * 保存当日 index.json 快照
+   */
+  snapshot(): string {
+    const snapDir = path.join(this.baseDir, KnowledgeStore.SNAPSHOTS_DIR);
+    if (!fs.existsSync(snapDir)) {
+      fs.mkdirSync(snapDir, { recursive: true });
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const snapPath = path.join(snapDir, `index-${today}.json`);
+    const indexPath = path.join(this.baseDir, INDEX_FILE);
+    if (fs.existsSync(indexPath)) {
+      fs.copyFileSync(indexPath, snapPath);
+    }
+    return snapPath;
+  }
+
+  /**
+   * 读取指定日期的快照
+   */
+  getSnapshot(date: string): IndexEntry[] | undefined {
+    const snapPath = path.join(this.baseDir, KnowledgeStore.SNAPSHOTS_DIR, `index-${date}.json`);
+    if (!fs.existsSync(snapPath)) return undefined;
+    try {
+      return JSON.parse(fs.readFileSync(snapPath, 'utf-8')) as IndexEntry[];
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * 计算 N 天前快照中条目的存活率
+   * 存活 = 当前 index 中存在且 maturity !== 'archived'
+   */
+  getSurvivalRate(daysAgo: number): { rate: number; survived: number; total: number; snapshotDate: string } | undefined {
+    const target = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const snapshot = this.getSnapshot(target);
+    if (!snapshot || snapshot.length === 0) return undefined;
+
+    const currentIndex = this.readIndex();
+    const currentMap = new Map(currentIndex.map(e => [e.id, e]));
+
+    let survived = 0;
+    for (const snapEntry of snapshot) {
+      const current = currentMap.get(snapEntry.id);
+      if (current && current.maturity !== 'archived') survived++;
+    }
+
+    return {
+      rate: Math.round((survived / snapshot.length) * 100),
+      survived,
+      total: snapshot.length,
+      snapshotDate: target,
+    };
+  }
+
   // ── Index I/O ────────────────────────────────────────────
 
   private readIndex(): IndexEntry[] {

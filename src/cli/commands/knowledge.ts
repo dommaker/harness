@@ -484,3 +484,18 @@ export async function knowledgeAudit(options: KnowledgeOptions & {
     console.log(chalk.yellow(`\n  使用 --fix 自动修复`));
   }
 }
+
+/**
+ * 知识库快照（KR4 存活率追踪）
+ */
+export function knowledgeSnapshot(options: KnowledgeOptions & { dir?: string }): void {
+  const store = new KnowledgeStore({ baseDir: options.dir || getKnowledgeDir(options.projectPath) });
+  const snapPath = store.snapshot();
+
+  if (options.json) {
+    console.log(JSON.stringify({ snapshotPath: snapPath }));
+    return;
+  }
+
+  console.log(chalk.green(`✅ 快照已保存: ${snapPath}`));
+}

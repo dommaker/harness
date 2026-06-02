@@ -40,6 +40,7 @@ const {
   knowledgeSyncStatus,
   knowledgeSyncRag,
   knowledgeAudit,
+  knowledgeSnapshot,
   failureList,
   failureStats,
   failureClear,
@@ -422,6 +423,9 @@ program
           threshold: options.threshold,
           dir: options.dir,
         });
+        break;
+      case 'snapshot':
+        knowledgeSnapshot({ ...opts, dir: options.dir });
         break;
       default:
         // 无子命令时显示帮助

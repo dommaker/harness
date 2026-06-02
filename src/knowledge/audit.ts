@@ -63,6 +63,7 @@ export interface AuditReport {
     maturity: DimensionMetrics;
     freshness: DimensionMetrics;
     flywheel: DimensionMetrics;
+    incremental: DimensionMetrics;
   };
   autoFixed: number;
   healthScore: { before: number; after: number };
@@ -500,6 +501,25 @@ export class KnowledgeAudit {
           dailyConsumptionEvents,
           consumptionHitRate: Math.round(consumptionHitRate * 100),
         },
+      },
+      incremental: this.computeIncremental(),
+    };
+  }
+
+  private computeIncremental(): DimensionMetrics {
+    const survival = this.store.getSurvivalRate(30);
+    if (!survival) {
+      return { score: 100, issues: 0, details: { note: 'no 30d snapshot available' } };
+    }
+    // Score = survival rate directly (80% target → 80/100)
+    return {
+      score: survival.rate,
+      issues: survival.total - survival.survived,
+      details: {
+        survivalRate: survival.rate,
+        survived: survival.survived,
+        total: survival.total,
+        snapshotDate: survival.snapshotDate,
       },
     };
   }

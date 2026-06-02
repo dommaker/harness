@@ -319,4 +319,85 @@ describe('KnowledgeStore', () => {
       expect(store.get('PIT-mppq8n44-1829')).toBeDefined();
     });
   });
+
+  describe('snapshot', () => {
+    it('should create snapshot file in .snapshots/', () => {
+      store.save(makeEntry({ id: 'SNAP-001' }));
+      const snapPath = store.snapshot();
+      expect(fs.existsSync(snapPath)).toBe(true);
+      expect(snapPath).toContain('.snapshots/index-');
+      const content = JSON.parse(fs.readFileSync(snapPath, 'utf-8'));
+      expect(content.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should overwrite existing snapshot for same date', () => {
+      store.save(makeEntry({ id: 'SNAP-001' }));
+      store.snapshot();
+      store.save(makeEntry({ id: 'SNAP-002', title: 'Second' }));
+      store.snapshot();
+      const today = new Date().toISOString().slice(0, 10);
+      const snapPath = path.join(tempDir, '.snapshots', `index-${today}.json`);
+      const content = JSON.parse(fs.readFileSync(snapPath, 'utf-8'));
+      expect(content.some((e: any) => e.id === 'SNAP-002')).toBe(true);
+    });
+
+    it('should read snapshot by date', () => {
+      store.save(makeEntry({ id: 'SNAP-001' }));
+      store.snapshot();
+      const today = new Date().toISOString().slice(0, 10);
+      const snapshot = store.getSnapshot(today);
+      expect(snapshot).toBeDefined();
+      expect(snapshot!.some(e => e.id === 'SNAP-001')).toBe(true);
+    });
+
+    it('should return undefined for non-existent snapshot date', () => {
+      expect(store.getSnapshot('2020-01-01')).toBeUndefined();
+    });
+  });
+
+  describe('getSurvivalRate', () => {
+    it('should return undefined when no snapshot exists', () => {
+      expect(store.getSurvivalRate(30)).toBeUndefined();
+    });
+
+    it('should return 100% when all entries still active', () => {
+      store.save(makeEntry({ id: 'SUR-001' }));
+      store.save(makeEntry({ id: 'SUR-002' }));
+      // Create a snapshot with today's date, then check survival against 0 days ago
+      store.snapshot();
+      // Manually copy snapshot to look like 30 days ago
+      const today = new Date().toISOString().slice(0, 10);
+      const pastDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const snapDir = path.join(tempDir, '.snapshots');
+      fs.copyFileSync(
+        path.join(snapDir, `index-${today}.json`),
+        path.join(snapDir, `index-${pastDate}.json`),
+      );
+      const result = store.getSurvivalRate(30);
+      expect(result).toBeDefined();
+      expect(result!.rate).toBe(100);
+      expect(result!.survived).toBe(2);
+      expect(result!.total).toBe(2);
+    });
+
+    it('should count archived entries as not survived', () => {
+      store.save(makeEntry({ id: 'SUR-001' }));
+      store.save(makeEntry({ id: 'SUR-002' }));
+      store.snapshot();
+      // Archive one entry after snapshot
+      store.update('SUR-002', { maturity: 'archived' });
+      // Copy snapshot to 30 days ago
+      const today = new Date().toISOString().slice(0, 10);
+      const pastDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const snapDir = path.join(tempDir, '.snapshots');
+      fs.copyFileSync(
+        path.join(snapDir, `index-${today}.json`),
+        path.join(snapDir, `index-${pastDate}.json`),
+      );
+      const result = store.getSurvivalRate(30);
+      expect(result!.rate).toBe(50);
+      expect(result!.survived).toBe(1);
+      expect(result!.total).toBe(2);
+    });
+  });
 });

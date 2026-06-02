@@ -41,6 +41,7 @@ const {
   knowledgeSyncRag,
   knowledgeAudit,
   knowledgeSnapshot,
+  knowledgeMigrate,
   failureList,
   failureStats,
   failureClear,
@@ -426,6 +427,9 @@ program
         break;
       case 'snapshot':
         knowledgeSnapshot({ ...opts, dir: options.dir });
+        break;
+      case 'migrate':
+        knowledgeMigrate({ ...opts, dir: options.dir });
         break;
       default:
         // 无子命令时显示帮助

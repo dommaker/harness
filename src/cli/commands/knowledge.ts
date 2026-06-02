@@ -13,6 +13,7 @@ import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
 import { KnowledgeAudit } from '../../knowledge/audit';
+import { migrateKnowledgeEntries } from '../../knowledge/migration';
 import type { KnowledgeType, MaturityLevel, QueryFilter } from '../../knowledge/types';
 
 export interface KnowledgeOptions {
@@ -525,4 +526,37 @@ export function knowledgeSnapshot(options: KnowledgeOptions & { dir?: string }):
   }
 
   console.log(chalk.green(`✅ 快照已保存: ${snapPath}`));
+}
+
+/**
+ * 知识库迁移 — 为现有条目添加 AS-021 新字段
+ */
+export function knowledgeMigrate(options: KnowledgeOptions & { dir?: string }): void {
+  const baseDir = options.dir || getKnowledgeDir(options.projectPath);
+
+  if (options.json) {
+    const result = migrateKnowledgeEntries(baseDir);
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(chalk.blue('🔄 迁移知识条目（添加 consumptionMode/origin 字段）\n'));
+  const result = migrateKnowledgeEntries(baseDir);
+
+  console.log(chalk.green(`  总计: ${result.total} 条`));
+  console.log(chalk.green(`  已迁移: ${result.migrated} 条`));
+  console.log(chalk.gray(`  已跳过: ${result.skipped} 条`));
+
+  if (result.errors.length > 0) {
+    console.log(chalk.red(`\n  错误: ${result.errors.length} 条`));
+    for (const err of result.errors.slice(0, 5)) {
+      console.log(chalk.red(`    ${err}`));
+    }
+  }
+
+  if (result.migrated === 0 && result.errors.length === 0) {
+    console.log(chalk.green('\n✅ 所有条目已是最新，无需迁移'));
+  } else if (result.migrated > 0) {
+    console.log(chalk.green(`\n✅ 迁移完成`));
+  }
 }

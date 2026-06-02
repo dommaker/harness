@@ -204,6 +204,7 @@ export async function knowledgeDecay(options: KnowledgeOptions): Promise<void> {
 export async function knowledgeStats(options: KnowledgeOptions): Promise<void> {
   const store = new KnowledgeStore({ baseDir: getKnowledgeDir(options.projectPath) });
   const entries = store.list({ excludeArchived: false });
+  const active = entries.filter(e => e.maturity !== 'archived');
 
   const byType: Record<string, number> = {};
   const byMaturity: Record<string, number> = {};
@@ -215,13 +216,31 @@ export async function knowledgeStats(options: KnowledgeOptions): Promise<void> {
     byLayer[entry.layer] = (byLayer[entry.layer] || 0) + 1;
   }
 
+  // D6 flywheel metrics
+  const withRefs = active.filter(e => e.referencedBy.length > 0).length;
+  const refCoverage = active.length > 0 ? Math.round(withRefs / active.length * 100) : 0;
+  const avgRefs = active.length > 0
+    ? Math.round(active.reduce((sum, e) => sum + e.referencedBy.length, 0) / active.length * 10) / 10
+    : 0;
+  let consumptionHitRate = 0;
+  try {
+    const statsPath = path.join(store.getBaseDir(), '.consumption-stats.json');
+    if (fs.existsSync(statsPath)) {
+      const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
+      const dailyEvents = stats.dailyEvents || 0;
+      consumptionHitRate = active.length > 0 ? Math.min(Math.round(dailyEvents / active.length * 100), 100) : 0;
+    }
+  } catch { /* best-effort */ }
+
+  const flywheel = { refCoverage, avgRefs, consumptionHitRate };
+
   if (options.json) {
-    console.log(JSON.stringify({ total: entries.length, byType, byMaturity, byLayer }, null, 2));
+    console.log(JSON.stringify({ total: entries.length, byType, byMaturity, byLayer, flywheel }, null, 2));
     return;
   }
 
   console.log(chalk.blue(`📊 知识库统计\n`));
-  console.log(chalk.bold(`  总计: ${entries.length} 条\n`));
+  console.log(chalk.bold(`  总计: ${entries.length} 条 (活跃: ${active.length})\n`));
 
   console.log(chalk.bold('  按类型:'));
   for (const [type, count] of Object.entries(byType)) {
@@ -238,6 +257,11 @@ export async function knowledgeStats(options: KnowledgeOptions): Promise<void> {
   for (const [layer, count] of Object.entries(byLayer)) {
     console.log(`    ${layer}: ${count}`);
   }
+
+  console.log(chalk.bold('\n  飞轮指标:'));
+  console.log(`    引用覆盖: ${refCoverage}%`);
+  console.log(`    平均引用: ${avgRefs}`);
+  console.log(`    消费命中率: ${consumptionHitRate}%`);
 }
 
 export interface KnowledgeUpsertOptions {

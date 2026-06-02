@@ -83,7 +83,7 @@ export class KnowledgeLifecycle {
    * Returns the target maturity level if promotion is warranted, otherwise undefined.
    *
    * Rules:
-   * - draft → verified: lastReferenced is set (referenced at least once)
+   * - draft → verified: lastReferenced is set AND content >= 50 chars
    * - verified → proven: two paths
    *   A) Multi-project: contributors >= 3 AND projects >= 2
    *   B) Single-project: referencedBy >= 3 AND sourceReferences from 2+ distinct workflows
@@ -94,7 +94,8 @@ export class KnowledgeLifecycle {
 
     switch (entry.maturity) {
       case 'draft':
-        if (entry.lastReferenced) return 'verified';
+        // GAP-11: content quality gate — require >= 50 chars for promotion
+        if (entry.lastReferenced && entry.content.trim().length >= 50) return 'verified';
         return undefined;
 
       case 'verified': {

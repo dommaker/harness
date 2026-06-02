@@ -177,7 +177,17 @@ describe('KnowledgeLifecycle', () => {
 
   describe('checkPromotion', () => {
     it('should promote draft to verified when referenced', () => {
-      store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01' }));
+      store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(60) }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBe('verified');
+    });
+
+    it('should NOT promote draft with content < 50 chars', () => {
+      store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01', content: 'short' }));
+      expect(lifecycle.checkPromotion('DEC-001')).toBeUndefined();
+    });
+
+    it('should promote draft with exactly 50 chars content', () => {
+      store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(50) }));
       expect(lifecycle.checkPromotion('DEC-001')).toBe('verified');
     });
 
@@ -273,7 +283,7 @@ describe('KnowledgeLifecycle', () => {
 
   describe('tryPromote', () => {
     it('should promote eligible entry', () => {
-      store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01' }));
+      store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(60) }));
       const change = lifecycle.tryPromote('DEC-001');
       expect(change).toBeDefined();
       expect(change!.from).toBe('draft');

@@ -9,6 +9,7 @@ import type {
   KnowledgeEntry,
   KnowledgeType,
   MaturityLevel,
+  ConsumptionMode,
   StorageLayer,
   QueryBudget,
   QueryResult,
@@ -110,6 +111,46 @@ export class KnowledgeQuery {
     this.cache.clear();
   }
 
+  /**
+   * Query entries by consumptionMode.
+   * Convenience wrapper around store.list() with mode filter.
+   */
+  queryByMode(mode: ConsumptionMode, filter?: QueryFilter): KnowledgeEntry[] {
+    return this.store.list({
+      ...filter,
+      consumptionModes: [mode],
+    });
+  }
+
+  /**
+   * Consume knowledge for a task context.
+   * Returns entries grouped by consumptionMode for prompt assembly.
+   *
+   * - rules: rule-mode entries (for prompt injection)
+   * - references: reference-mode entries matching task text keywords
+   * - context: context-mode entries matching applicablePhases
+   */
+  consume(taskContext: {
+    requirementText?: string;
+    phase?: string;
+  }): { rules: KnowledgeEntry[]; references: KnowledgeEntry[]; context: KnowledgeEntry[] } {
+    const rules = this.queryByMode('rule');
+
+    const allRefs = this.queryByMode('reference');
+    const references = taskContext.requirementText
+      ? this.filterByText(allRefs, taskContext.requirementText).slice(0, 3)
+      : allRefs.slice(0, 3);
+
+    const allContext = this.queryByMode('context');
+    const context = taskContext.phase
+      ? allContext.filter(e => e.applicablePhases.includes(taskContext.phase!))
+      : allContext;
+
+    return { rules, references, context };
+  }
+
+  // ── Internal ───────────────────────────────────────────────
+
   // ── Internal ───────────────────────────────────────────────
 
   private sortEntries(entries: KnowledgeEntry[]): KnowledgeEntry[] {
@@ -148,5 +189,22 @@ export class KnowledgeQuery {
 
   private cacheKey(budget: QueryBudget, filter?: QueryFilter): string {
     return JSON.stringify({ budget, filter });
+  }
+
+  /** Filter entries by keyword overlap with text. Returns sorted by relevance. */
+  private filterByText(entries: KnowledgeEntry[], text: string): KnowledgeEntry[] {
+    const keywords = text.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+    if (keywords.length === 0) return entries;
+
+    const scored = entries.map(entry => {
+      const haystack = `${entry.title} ${entry.content}`.toLowerCase();
+      const score = keywords.filter(k => haystack.includes(k)).length;
+      return { entry, score };
+    });
+
+    return scored
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(s => s.entry);
   }
 }

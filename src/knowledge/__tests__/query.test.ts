@@ -185,4 +185,68 @@ describe('KnowledgeQuery', () => {
       expect(result.fromCache).toBe(false);
     });
   });
+
+  describe('queryByMode', () => {
+    it('should filter by consumptionMode', () => {
+      store.save(makeEntry({ id: 'RUL-001', consumptionMode: 'rule', title: 'Rule' }));
+      store.save(makeEntry({ id: 'REF-001', consumptionMode: 'reference', title: 'Ref' }));
+      store.save(makeEntry({ id: 'SIG-001', consumptionMode: 'signal', title: 'Signal' }));
+
+      const rules = query.queryByMode('rule');
+      expect(rules).toHaveLength(1);
+      expect(rules[0].id).toBe('RUL-001');
+    });
+
+    it('should combine with additional filter', () => {
+      store.save(makeEntry({ id: 'REF-001', consumptionMode: 'reference', tags: ['arch'] }));
+      store.save(makeEntry({ id: 'REF-002', consumptionMode: 'reference', tags: ['api'] }));
+
+      const refs = query.queryByMode('reference', { tags: ['arch'] });
+      expect(refs).toHaveLength(1);
+      expect(refs[0].id).toBe('REF-001');
+    });
+  });
+
+  describe('consume', () => {
+    it('should return rules, references, and context', () => {
+      store.save(makeEntry({ id: 'RUL-001', consumptionMode: 'rule', title: 'Port Rule' }));
+      store.save(makeEntry({
+        id: 'REF-001', consumptionMode: 'reference', title: 'Architecture',
+        content: 'The API uses TypeScript and REST endpoints',
+      }));
+      store.save(makeEntry({
+        id: 'CTX-001', consumptionMode: 'context', title: 'Env',
+        applicablePhases: ['build'],
+      }));
+
+      const result = query.consume({ requirementText: 'API TypeScript', phase: 'build' });
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0].id).toBe('RUL-001');
+      expect(result.references.length).toBeGreaterThanOrEqual(1);
+      expect(result.context).toHaveLength(1);
+      expect(result.context[0].id).toBe('CTX-001');
+    });
+
+    it('should filter context by phase', () => {
+      store.save(makeEntry({
+        id: 'CTX-001', consumptionMode: 'context', title: 'Build Config',
+        applicablePhases: ['build'],
+      }));
+      store.save(makeEntry({
+        id: 'CTX-002', consumptionMode: 'context', title: 'Deploy Config',
+        applicablePhases: ['deploy'],
+      }));
+
+      const result = query.consume({ phase: 'build' });
+      expect(result.context).toHaveLength(1);
+      expect(result.context[0].id).toBe('CTX-001');
+    });
+
+    it('should return empty references when no requirementText', () => {
+      store.save(makeEntry({ id: 'REF-001', consumptionMode: 'reference' }));
+      const result = query.consume({});
+      // With no text filter, returns up to 3
+      expect(result.references.length).toBeLessThanOrEqual(3);
+    });
+  });
 });

@@ -84,6 +84,35 @@ describe('KnowledgeIngest', () => {
       // Should only have one entry in the store
       expect(store.list()).toHaveLength(1);
     });
+
+    it('should use incoming maturity when merging duplicate entries', () => {
+      // First ingest creates entry with default maturity (draft)
+      const first = ingest.ingestEntry(
+        { title: 'MaturityTest', content: 'Original', type: 'pitfall' },
+        { source: 'test', layer: 'project', maturity: 'verified' },
+      );
+      expect(first.maturity).toBe('verified');
+
+      // Second ingest merges with explicit draft maturity (LLM extraction scenario)
+      const merged = ingest.ingestEntry(
+        { title: 'MaturityTest', content: 'Updated content', type: 'pitfall' },
+        { source: 'test', layer: 'project', maturity: 'draft' },
+      );
+      expect(merged.maturity).toBe('draft');
+      expect(store.list()).toHaveLength(1);
+    });
+
+    it('should preserve existing maturity when incoming has no explicit maturity', () => {
+      ingest.ingestEntry(
+        { title: 'PreserveTest', content: 'Original', type: 'guideline' },
+        { source: 'test', layer: 'project', maturity: 'verified' },
+      );
+      const merged = ingest.ingestEntry(
+        { title: 'PreserveTest', content: 'Updated', type: 'guideline' },
+        { source: 'test', layer: 'project' },
+      );
+      expect(merged.maturity).toBe('verified');
+    });
   });
 
   describe('ingestBatch', () => {
@@ -267,6 +296,49 @@ describe('KnowledgeIngest', () => {
         { source: 'test', layer: 'system' },
       );
       expect(store.list({ types: ['guideline'] })).toHaveLength(2);
+    });
+  });
+
+  describe('audit quality gate', () => {
+    it('should archive entry with test-scope tags', () => {
+      ingest.ingestEntry(
+        { title: 'TestEntry', type: 'guideline', tags: ['test-scope-abc'], content: 'real content here' },
+        { source: 'test', layer: 'project' },
+      );
+      const saved = store.list({ excludeArchived: false });
+      expect(saved).toHaveLength(1);
+      expect(saved[0].maturity).toBe('archived');
+    });
+
+    it('should demote zero-content proven entry to draft', () => {
+      ingest.ingestEntry(
+        { title: 'ZeroProven', type: 'guideline', content: 'tiny', maturity: 'proven' as any },
+        { source: 'test', layer: 'project' },
+      );
+      const saved = store.list({ excludeArchived: false });
+      expect(saved).toHaveLength(1);
+      expect(saved[0].maturity).toBe('draft');
+    });
+
+    it('should skip demote when options.maturity is explicitly set', () => {
+      ingest.ingestEntry(
+        { title: 'ExplicitMaturity', type: 'guideline', content: 'tiny' },
+        { source: 'test', layer: 'project', maturity: 'verified' },
+      );
+      const saved = store.list({ excludeArchived: false });
+      expect(saved).toHaveLength(1);
+      // Should stay verified — audit demote skipped because maturity was explicit
+      expect(saved[0].maturity).toBe('verified');
+    });
+
+    it('should flag short-content entry with low_quality tag', () => {
+      ingest.ingestEntry(
+        { title: 'ShortContent', type: 'guideline', content: 'a'.repeat(30) },
+        { source: 'test', layer: 'project' },
+      );
+      const saved = store.list({ excludeArchived: false });
+      expect(saved).toHaveLength(1);
+      expect(saved[0].tags).toContain('low_quality');
     });
   });
 

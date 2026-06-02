@@ -18,13 +18,26 @@ const MAX_REFERENCED_BY = 20;
 
 // ── Lifecycle ──────────────────────────────────────────────
 
+export interface ConsumptionEvent {
+  entryId: string;
+  contributor: string;
+  timestamp: string;
+  context?: string;
+}
+
 export class KnowledgeLifecycle {
   private store: KnowledgeStore;
   private config: DecayConfig;
+  private onReferenceCallbacks: Array<(event: ConsumptionEvent) => void> = [];
 
   constructor(store: KnowledgeStore, config?: Partial<DecayConfig>) {
     this.store = store;
     this.config = { ...DEFAULT_DECAY_CONFIG, ...config };
+  }
+
+  /** Register a callback fired on every recordReference() call */
+  onReference(callback: (event: ConsumptionEvent) => void): void {
+    this.onReferenceCallbacks.push(callback);
   }
 
   /**
@@ -49,11 +62,20 @@ export class KnowledgeLifecycle {
 
     const referencedBy = [...entry.referencedBy, refKey].slice(-MAX_REFERENCED_BY);
 
-    return this.store.update(entryId, {
+    const updated = this.store.update(entryId, {
       lastReferenced: now,
       contributors,
       referencedBy,
     });
+
+    // Fire consumption event callbacks
+    for (const cb of this.onReferenceCallbacks) {
+      try {
+        cb({ entryId, contributor: contributor || 'unknown', timestamp: now });
+      } catch { /* non-blocking */ }
+    }
+
+    return updated;
   }
 
   /**

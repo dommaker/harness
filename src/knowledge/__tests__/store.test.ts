@@ -164,6 +164,10 @@ describe('KnowledgeStore', () => {
   });
 
   describe('edge cases', () => {
+    it('getBaseDir() returns configured baseDir', () => {
+      expect(store.getBaseDir()).toBe(tempDir);
+    });
+
     it('should create directory if it does not exist', () => {
       const newDir = path.join(process.cwd(), 'temp-test-knowledge-nested', 'sub', 'deep');
       const s = new KnowledgeStore({ baseDir: newDir });

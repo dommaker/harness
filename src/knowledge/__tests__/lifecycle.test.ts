@@ -80,6 +80,54 @@ describe('KnowledgeLifecycle', () => {
     });
   });
 
+  describe('onReference callback', () => {
+    it('should fire callback on recordReference()', () => {
+      store.save(makeEntry());
+      const events: any[] = [];
+      lifecycle.onReference((event) => events.push(event));
+
+      lifecycle.recordReference('DEC-001', 'alice');
+
+      expect(events).toHaveLength(1);
+      expect(events[0].entryId).toBe('DEC-001');
+      expect(events[0].contributor).toBe('alice');
+      expect(events[0].timestamp).toBeDefined();
+    });
+
+    it('should fire multiple callbacks', () => {
+      store.save(makeEntry());
+      const events1: any[] = [];
+      const events2: any[] = [];
+      lifecycle.onReference((event) => events1.push(event));
+      lifecycle.onReference((event) => events2.push(event));
+
+      lifecycle.recordReference('DEC-001', 'bob');
+
+      expect(events1).toHaveLength(1);
+      expect(events2).toHaveLength(1);
+    });
+
+    it('should not fire callback on same-day dedup', () => {
+      store.save(makeEntry());
+      const events: any[] = [];
+      lifecycle.onReference((event) => events.push(event));
+
+      lifecycle.recordReference('DEC-001', 'alice');
+      lifecycle.recordReference('DEC-001', 'alice'); // same day dedup
+
+      expect(events).toHaveLength(1); // only first call fires
+    });
+
+    it('should not fire callback for non-existent entry', () => {
+      const events: any[] = [];
+      lifecycle.onReference((event) => events.push(event));
+
+      lifecycle.recordReference('NONEXISTENT', 'alice');
+
+      expect(events).toHaveLength(0);
+    });
+  });
+
   describe('recordReference same-day dedup (B4)', () => {
     it('should skip file write when same contributor references on same day', () => {
       store.save(makeEntry());

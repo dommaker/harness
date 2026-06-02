@@ -13,6 +13,7 @@ import type {
   SourceRef,
 } from './types';
 import { KnowledgeStore } from './store';
+import { KnowledgeAudit } from './audit';
 
 const MAX_SOURCE_REFS = 20;
 
@@ -36,6 +37,23 @@ export class KnowledgeIngest {
   ): KnowledgeEntry {
     const entry = this.buildEntry(partial, options);
 
+    // Quality gate: audit before saving
+    const audit = new KnowledgeAudit({ baseDir: this.store.getBaseDir() });
+    let issues = audit.validate(entry);
+    const critical = issues.filter(i => i.action === 'reject');
+    if (critical.length > 0) {
+      // Reject: return entry without saving, caller can check issues
+      (entry as any).__rejected = true;
+      (entry as any).__rejectReasons = critical.map(i => i.detail);
+      return entry;
+    }
+
+    // If caller explicitly set maturity, skip demote actions from audit.
+    // Demote is for auto-inferred maturity that's too high; explicit is a user decision.
+    if (options.maturity) {
+      issues = issues.filter(i => i.action !== 'demote');
+    }
+
     // Dedup check: same title + same type
     const existing = this.findDuplicate(entry.title, entry.content, entry.type);
     if (existing) {
@@ -44,6 +62,24 @@ export class KnowledgeIngest {
     }
 
     this.store.save(entry);
+
+    // Post-save: apply auto-fixes (archive/demote/flag)
+    const fixable = issues.filter(i => i.action !== 'reject');
+    if (fixable.length > 0) {
+      for (const issue of fixable) {
+        if (issue.action === 'archive') {
+          this.store.update(entry.id, { maturity: 'archived' });
+        } else if (issue.action === 'demote') {
+          this.store.update(entry.id, { maturity: 'draft' });
+        } else if (issue.action === 'flag') {
+          const saved = this.store.get(entry.id);
+          if (saved && !saved.tags.includes('low_quality')) {
+            this.store.update(entry.id, { tags: [...saved.tags, 'low_quality'] });
+          }
+        }
+      }
+    }
+
     return entry;
   }
 
@@ -184,6 +220,7 @@ export class KnowledgeIngest {
   ): KnowledgeEntry {
     const merged: Partial<KnowledgeEntry> = {
       content: incoming.content || existing.content,
+      maturity: options.maturity || existing.maturity,
       lastReferenced: new Date().toISOString(),
       contributors: [...new Set([...existing.contributors, ...incoming.contributors])],
       projects: [...new Set([...existing.projects, ...incoming.projects])],

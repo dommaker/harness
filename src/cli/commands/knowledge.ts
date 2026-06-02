@@ -10,6 +10,7 @@ import { KnowledgeStore } from '../../knowledge/store';
 import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
+import { KnowledgeAudit } from '../../knowledge/audit';
 import type { KnowledgeType, MaturityLevel, QueryFilter } from '../../knowledge/types';
 
 export interface KnowledgeOptions {
@@ -388,4 +389,98 @@ export async function knowledgeSyncStatus(options: KnowledgeOptions): Promise<vo
 function getKnowledgeDir(projectPath?: string): string {
   const base = projectPath || process.cwd();
   return `${base}/.harness/knowledge`;
+}
+
+/**
+ * 知识库质量审计
+ */
+export async function knowledgeAudit(options: KnowledgeOptions & {
+  fix?: boolean;
+  dryRun?: boolean;
+  threshold?: number;
+  dir?: string;
+}): Promise<void> {
+  const audit = new KnowledgeAudit({
+    baseDir: options.dir || getKnowledgeDir(options.projectPath),
+    shortContentThreshold: options.threshold ? parseInt(options.threshold as any, 10) : undefined,
+  });
+
+  const isDryRun = options.dryRun && !options.fix;
+
+  if (!options.json && !isDryRun) {
+    console.log(chalk.blue('🔍 知识库质量审计...\n'));
+  }
+
+  const report = audit.run({ autoFix: options.fix && !isDryRun });
+
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  // Summary
+  console.log(chalk.bold(`  总条目: ${report.totalEntries}`));
+  console.log(chalk.bold(`  健康分: ${report.healthScore.before}/100`));
+  if (report.autoFixed > 0) {
+    console.log(chalk.green(`  自动修复: ${report.autoFixed} 条`));
+    console.log(chalk.bold(`  修复后: ${report.healthScore.after}/100`));
+  }
+  console.log();
+
+  // Dimension scores
+  const dimLabels: Record<string, string> = {
+    structure: 'D1 结构完整性',
+    content: 'D2 内容质量',
+    dedup: 'D3 去重有效性',
+    maturity: 'D4 成熟度健康',
+    freshness: 'D5 新鲜度',
+    flywheel: 'D6 飞轮验证',
+  };
+  console.log(chalk.bold('  维度评分:'));
+  for (const [key, dim] of Object.entries(report.dimensions)) {
+    const label = dimLabels[key] || key;
+    const scoreColor = dim.score >= 80 ? chalk.green : dim.score >= 60 ? chalk.yellow : chalk.red;
+    console.log(`    ${label}: ${scoreColor(`${dim.score}/100`)} (${dim.issues} 问题)`);
+  }
+  console.log();
+
+  // Issues by rule
+  const ruleLabels: Record<string, string> = {
+    'frontmatter-missing': 'frontmatter 缺失',
+    'test-data-pollution': '测试数据污染',
+    'daily-audit-noise': '每日审计噪音',
+    'zero-content-proven': '零内容 proven',
+    'short-content': '短内容',
+    'maturity-inflation': '成熟度虚高',
+    'title-duplicate': '标题重复',
+    'source-refs-bloat': 'sourceReferences 膨胀',
+    'promotion-blocked': 'promotion 受阻',
+    'orphan-draft': '孤儿 draft',
+    'stale-entry': '过期条目',
+  };
+
+  for (const [rule, count] of Object.entries(report.summary)) {
+    if (count === 0) continue;
+    const label = ruleLabels[rule] || rule;
+    console.log(`  ${chalk.red(`${label}: ${count}`)}`);
+  }
+
+  // Detail (first 20)
+  if (report.issues.length > 0) {
+    console.log(chalk.bold(`\n  问题详情 (前 20 条):\n`));
+    for (const issue of report.issues.slice(0, 20)) {
+      const severityColor = issue.severity === 'critical' ? chalk.red
+        : issue.severity === 'high' ? chalk.yellow
+        : chalk.gray;
+      console.log(`  ${severityColor(`[${issue.severity}]`)} ${issue.entryId}: ${issue.title}`);
+      console.log(`    ${chalk.gray(issue.detail)} → ${issue.action}`);
+    }
+    if (report.issues.length > 20) {
+      console.log(chalk.gray(`\n  ... 还有 ${report.issues.length - 20} 条`));
+    }
+  }
+
+  if (!options.fix && report.issues.length > 0) {
+    console.log(chalk.yellow(`\n  使用 --fix 自动修复`));
+  }
 }

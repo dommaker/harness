@@ -30,6 +30,10 @@ export class KnowledgeStore {
     this.ensureDirectory();
   }
 
+  getBaseDir(): string {
+    return this.baseDir;
+  }
+
   // ── CRUD ─────────────────────────────────────────────────
 
   get(id: string): KnowledgeEntry | undefined {

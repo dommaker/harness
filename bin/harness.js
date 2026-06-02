@@ -39,6 +39,7 @@ const {
   knowledgeUpsert,
   knowledgeSyncStatus,
   knowledgeSyncRag,
+  knowledgeAudit,
   failureList,
   failureStats,
   failureClear,
@@ -351,7 +352,7 @@ program
 // ========================================
 program
   .command('knowledge [subcommand] [arg]')
-  .description('知识库管理（list/search/import/decay/stats）')
+  .description('知识库管理（list/search/import/decay/stats/audit）')
   .alias('kb')
   .option('-p, --project-path <path>', '项目路径')
   .option('--type <types>', '按类型过滤（逗号分隔）')
@@ -365,6 +366,10 @@ program
   .option('--content <content>', '知识内容 Markdown（用于 upsert）')
   .option('--file <path>', '从文件读取内容（用于 upsert）')
   .option('--source <source>', '知识来源 (analyst/cli/design)', 'cli')
+  .option('--fix', '自动修复（用于 audit）', false)
+  .option('--dry-run', '只输出报告不修改（用于 audit）', false)
+  .option('--threshold <n>', '短内容阈值（字符数，用于 audit）', '50')
+  .option('--dir <path>', '知识库目录（覆盖默认路径）')
   .option('--json', 'JSON 格式输出', false)
   .action(async (subcommand, arg, options) => {
     const opts = { projectPath: options.projectPath, json: options.json };
@@ -406,6 +411,16 @@ program
           file: options.file || '',
           type: options.type || 'architecture',
           source: options.source || 'cli',
+        });
+        break;
+      case 'audit':
+      case 'a':
+        await knowledgeAudit({
+          ...opts,
+          fix: options.fix,
+          dryRun: options.dryRun,
+          threshold: options.threshold,
+          dir: options.dir,
         });
         break;
       default:

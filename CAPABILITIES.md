@@ -15,7 +15,7 @@ AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, Security
 TraceCollector, TraceAnalyzer, PerformanceMonitor, ConstraintDiagnostics
 
 ## Knowledge Infrastructure
-KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle, KnowledgeIngest
+KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle, KnowledgeIngest, KnowledgeAudit (6-dimension quality audit: structure/content/dedup/maturity/freshness/flywheel)
 
 ## Hook Scripts (bin/)
 harness-knowledge-track.sh/js, harness-knowledge-check.js, harness-knowledge-capture.js, harness-sensitive-check.sh

@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.14.0] - 2026-06-04
+
+### Added
+- **ConsumptionMode + KnowledgeOrigin types** (AS-021 P1): `rule | context | signal | reference` 消费模式，`system | agent | human | external` 知识来源
+- **Per-mode lifecycle** (AS-021 P2): rule/context/signal 三条独立生命周期路径
+- **queryByMode + consume()** (AS-021 P3): 按 consumptionMode 查询 + 消费时 recordReference
+- **External content sanitization** (AS-021 P4): `ingestExternal()` 剥离 prompt injection 模式 + 长度限制
+- **Migration script + CLI** (AS-021 P5): `harness knowledge migrate` 旧条目自动标记 consumptionMode
+- **6-dimension quality audit engine**: `harness knowledge audit [--fix] [--dry-run]`，健康分 + 自动修复
+- **KR4 snapshot mechanism**: 每日 index.json 快照 + 30 天存活率统计
+- **GAP-11 promotion content quality gate**: draft→verified 要求 content ≥ 50 字符
+- **Semantic dedup + test ID interception**: KnowledgeIngest 去重增强
+- **Execution success rate tracking**: Path C 自动晋升依据
+- **Human/auto contributor classification**: 晋升来源区分
+- **D6 flywheel stats**: `harness knowledge stats` 展示飞轮指标
+- **hooks → Agent Event Protocol API** (B9-016): 通用 hook 管线暴露为 API
+
+### Fixed
+- **飞轮质量审计 5 项根因修复**: 噪音治理 + 资源优化
+- **B12 噪音治理**: 低质量条目过滤 + 资源优化
+- **E3 findFile 碰撞修复**: 文件查找哈希碰撞
+- **`no_delete_without_context` 增强**: 零引用 ≠ 无价值
+- **undefined tags/applicablePhases guard**: matchesFilter 空值保护
+
 ## [0.13.0] - 2026-05-26
 
 ### Breaking

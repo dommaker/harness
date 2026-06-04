@@ -84,5 +84,6 @@
   "bugs": {
     "url": "https://github.com/kww/harness/issues"
   },
-  "homepage": "https://github.com/kww/harness#readme"
+  "homepage": "https://github.com/kww/harness#readme",
+  "private": true
 }

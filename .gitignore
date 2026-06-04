@@ -44,3 +44,5 @@ specs/
 .daemon/
 rebuild-index.js
 rebuild-studio-index.js
+*.tgz
+harness.tgz

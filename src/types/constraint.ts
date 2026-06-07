@@ -220,7 +220,7 @@ export interface ConstraintContext {
   /** 是否有需求文档（用于 no_implementation_without_requirement） */
   hasRequirement?: boolean;
 
-  /** 是否在 worktree 中执行（用于 must_use_worktree） */
+  /** 是否在 worktree 中执行（用于 prefer_worktree） */
   hasWorktree?: boolean;
 
   /** worktree 路径（用于 worktree 相关检查） */

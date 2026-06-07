@@ -1113,19 +1113,19 @@ describe('ConstraintChecker', () => {
       expect(result.satisfied).toBe(false);
     });
 
-    it('must_use_worktree should pass with worktree', async () => {
+    it('prefer_worktree should pass with worktree', async () => {
       const context: ConstraintContext = { operation: 'code_implementation', hasWorktree: true };
       const result = await checker.check(
-        { id: 'must_use_worktree', level: 'iron_law', rule: 'WORKTREE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'prefer_worktree', level: 'guideline', rule: 'WORKTREE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         context
       );
       expect(result.satisfied).toBe(true);
     });
 
-    it('must_use_worktree should fail without worktree', async () => {
+    it('prefer_worktree should fail without worktree', async () => {
       const context: ConstraintContext = { operation: 'code_implementation', hasWorktree: false };
       const result = await checker.check(
-        { id: 'must_use_worktree', level: 'iron_law', rule: 'WORKTREE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'prefer_worktree', level: 'guideline', rule: 'WORKTREE', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         context
       );
       expect(result.satisfied).toBe(false);

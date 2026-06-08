@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeQuery } from '../query';
 import type { KnowledgeEntry, QueryBudget } from '../types';
 import * as fs from 'fs';

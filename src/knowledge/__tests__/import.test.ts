@@ -3,7 +3,7 @@
  */
 
 import { ColdStartImporter } from '../import';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

@@ -9,7 +9,7 @@
 
 import type { KnowledgeEntry, MaturityLevel } from '../knowledge/types';
 import type { KnowledgeDiagnosis } from './knowledge-doctor';
-import { KnowledgeStore } from '../knowledge/store';
+import type { KnowledgeStore } from '../knowledge/store';
 
 // ── 进化提案 ─────────────────────────────────────────────
 

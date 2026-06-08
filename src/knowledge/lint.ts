@@ -10,7 +10,7 @@
  * - 成熟度衰减
  */
 
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 import { ReferenceTracker } from './reference-tracker';
 import type { KnowledgeEntry, LintIssue, LintIssueType, MaturityLevel } from './types';
 
@@ -79,7 +79,7 @@ export class KnowledgeLinter {
    */
   checkIndexConsistency(entries: KnowledgeEntry[]): LintIssue[] {
     const issues: LintIssue[] = [];
-    const index = this.store['readIndex']();
+    const index = this.store.readIndex();
 
     // 检查索引中的条目是否都有对应文件
     for (const indexEntry of index) {

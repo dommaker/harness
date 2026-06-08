@@ -12,7 +12,7 @@ import type {
   DecayConfig,
 } from './types';
 import { DEFAULT_DECAY_CONFIG } from './types';
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 
 const MAX_REFERENCED_BY = 20;
 const MIN_CONTENT_FOR_PROVEN = 100;

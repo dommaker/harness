@@ -12,7 +12,7 @@ import type {
   IngestOptions,
   SourceRef,
 } from './types';
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 import { KnowledgeAudit } from './audit';
 
 const MAX_SOURCE_REFS = 20;

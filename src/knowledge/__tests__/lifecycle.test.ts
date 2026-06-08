@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeLifecycle } from '../lifecycle';
 import type { KnowledgeEntry } from '../types';
 import * as fs from 'fs';

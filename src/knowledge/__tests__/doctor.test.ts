@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeLinter, type LintReport } from '../lint';
 import { ReferenceTracker } from '../reference-tracker';
 import { KnowledgeHealthScorer } from '../doctor';

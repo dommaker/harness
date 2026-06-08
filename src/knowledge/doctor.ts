@@ -5,7 +5,7 @@
  * MonitorAgent 周期性调用，低于 60 分触发 Triage 告警。
  */
 
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 import { KnowledgeLinter } from './lint';
 import type { LintIssue } from './types';
 

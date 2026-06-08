@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { KnowledgeStore } from '../../knowledge/store';
+import { FileKnowledgeStore as KnowledgeStore } from '../../knowledge/store';
 import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';

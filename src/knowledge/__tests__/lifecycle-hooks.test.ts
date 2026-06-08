@@ -3,7 +3,7 @@
  */
 
 import { KnowledgeLifecycleHooks } from '../lifecycle-hooks';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeQuery } from '../query';
 import * as fs from 'fs';
 import * as path from 'path';

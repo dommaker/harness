@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { KnowledgeEntry, KnowledgeType, MaturityLevel, StorageLayer } from './types';
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 
 // ── 导入源 ───────────────────────────────────────────────
 

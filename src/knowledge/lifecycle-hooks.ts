@@ -7,7 +7,7 @@
  */
 
 import type { KnowledgeEntry, KnowledgeType } from './types';
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 import { KnowledgeQuery } from './query';
 import type { ContextSource } from '../context/types';
 

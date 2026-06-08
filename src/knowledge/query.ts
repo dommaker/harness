@@ -16,7 +16,7 @@ import type {
   QueryFilter,
   IndexEntry,
 } from './types';
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 import { KnowledgeLifecycle } from './lifecycle';
 
 // ── Constants ──────────────────────────────────────────────

@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { KnowledgeAudit } from '../audit';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import type { KnowledgeEntry } from '../types';
 
 function makeTmpDir(): string {

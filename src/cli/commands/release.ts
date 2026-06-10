@@ -44,7 +44,26 @@ export async function release(options: ReleaseOptions): Promise<void> {
   console.log(chalk.cyan(`📦 ${pkgName}@${oldVersion}`));
   console.log(chalk.cyan(`   bump: ${bumpType}${dryRun ? ' (dry-run)' : ''}`));
 
-  // ── 2. Check clean working tree ──
+  // ── 2. Check branch (must be on master/main) ──
+  const branchResult = await run('git rev-parse --abbrev-ref HEAD', pkgPath);
+  const currentBranch = branchResult.stdout.trim();
+  if (currentBranch !== 'master' && currentBranch !== 'main') {
+    console.error(chalk.red(`❌ Must be on master or main branch to release. Currently on: ${currentBranch}`));
+    console.error(chalk.gray('   Run: git checkout master && git merge ' + currentBranch));
+    process.exit(1);
+  }
+  console.log(chalk.green(`✅ git: on ${currentBranch}`));
+
+  // ── 2b. Check remote sync ──
+  await run('git fetch origin', pkgPath, 15_000);
+  const behind = await run(`git rev-list --count HEAD..origin/${currentBranch}`, pkgPath);
+  if (behind.stdout.trim() !== '0') {
+    console.error(chalk.red(`❌ Local ${currentBranch} is ${behind.stdout.trim()} commits behind origin/${currentBranch}. Pull first.`));
+    process.exit(1);
+  }
+  console.log(chalk.green('✅ git: synced with remote'));
+
+  // ── 2c. Check clean working tree ──
   const stat = await run('git status --porcelain -uno', pkgPath);
   if (stat.stdout.length > 0) {
     console.error(chalk.red('❌ Uncommitted changes. Commit or stash before releasing.'));
@@ -98,6 +117,18 @@ export async function release(options: ReleaseOptions): Promise<void> {
   // ── 5. Bump version (npm version creates git commit + tag atomically,
   //     including package-lock.json — no desync possible) ──
   console.log(chalk.cyan('🔢 Bumping version...'));
+  const [major, minor, patch] = oldVersion.split('.').map(Number);
+  let expectedNew: string;
+  if (bumpType === 'major') expectedNew = `${major + 1}.0.0`;
+  else if (bumpType === 'minor') expectedNew = `${major}.${minor + 1}.0`;
+  else expectedNew = `${major}.${minor}.${patch + 1}`;
+  const expectedTag = `v${expectedNew}`;
+  const tagExists = await run(`git tag -l "${expectedTag}"`, pkgPath);
+  if (tagExists.stdout.trim() === expectedTag) {
+    console.error(chalk.red(`❌ Tag ${expectedTag} already exists. Version may have been released already.`));
+    process.exit(1);
+  }
+
   const bump = await run(`npm version ${bumpType} -m "release: %s"`, pkgPath);
   if (bump.stderr && !bump.stdout) {
     console.error(chalk.red('❌ npm version failed:'), bump.stderr);
@@ -107,10 +138,9 @@ export async function release(options: ReleaseOptions): Promise<void> {
   const tag = `v${newVersion}`;
   console.log(chalk.green(`✅ version: ${oldVersion} → ${newVersion} (committed + tagged)`));
 
-  // ── 7. Push ──
+  // ── 6. Push ──
   console.log(chalk.cyan('⬆️  Pushing...'));
-  const branch = await run('git rev-parse --abbrev-ref HEAD', pkgPath);
-  const push = await run(`git push origin ${branch.stdout}`, pkgPath, 30_000);
+  const push = await run(`git push origin ${currentBranch}`, pkgPath, 30_000);
   if (push.stderr && push.stderr.includes('error')) {
     console.error(chalk.red('❌ git push failed:'), push.stderr.slice(0, 500));
     process.exit(1);
@@ -118,7 +148,15 @@ export async function release(options: ReleaseOptions): Promise<void> {
   await run(`git push origin ${tag}`, pkgPath, 30_000);
   console.log(chalk.green('✅ git: pushed'));
 
-  // ── 8. npm publish ──
+  // ── 8. Check private flag ──
+  if (pkgJson.private) {
+    console.error(chalk.red('❌ package.json has "private": true. Remove it before publishing.'));
+    console.error(chalk.gray('   The release tool will NOT auto-remove private flag.'));
+    process.exit(1);
+  }
+  console.log(chalk.green('✅ package: not private'));
+
+  // ── 7. npm publish ──
   // Switch to npmjs.org for publishing (npmmirror is read-only mirror)
   const origRegistry = await run('npm config get registry', pkgPath);
   await run('npm config set registry https://registry.npmjs.org/', pkgPath);
@@ -136,7 +174,7 @@ export async function release(options: ReleaseOptions): Promise<void> {
     process.exit(1);
   }
 
-  // ── 9. GitHub Release ──
+  // ── 8. GitHub Release ──
   console.log(chalk.cyan('🐙 Creating GitHub Release...'));
   const gh = await run(`gh release create ${tag} --generate-notes`, pkgPath, 30_000);
   if (gh.stderr && gh.stderr.includes('already exists')) {

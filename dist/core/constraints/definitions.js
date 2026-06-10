@@ -236,30 +236,6 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
         promptInjection: '开始编写代码前，必须确认：需求来源明确（Spec/Issue/Roadmap/用户指令）、验收标准(AC)已定义、边界情况已明确。不要凭假设或猜测开始实现。',
     },
     /**
-     * 必须在 worktree 中开发
-     * 原因：隔离工作区，安全回滚，并行开发
-     * 来源：Superpowers must_use_worktree
-     */
-    must_use_worktree: {
-        id: 'must_use_worktree',
-        rule: 'CODE CHANGES MUST BE ISOLATED IN A WORKTREE',
-        message: '代码开发必须在隔离的 worktree 中进行',
-        level: 'iron_law',
-        trigger: ['code_implementation'],
-        enforcement: 'check-worktree',
-        description: `所有代码修改必须在隔离的 worktree 中进行，不要在原始仓库目录直接编辑。
-
-【原因】
-- 隔离风险：worktree 中的改动不会影响主工作区
-- 安全回滚：删除 worktree 即可放弃改动
-- 并行开发：多个任务可同时在不同 worktree 中进行
-
-【禁止】
-- 在原始仓库目录直接编辑文件
-- 跳过 worktree 创建直接执行 Agent`,
-        promptInjection: '所有代码修改必须在隔离的 worktree 中进行。不要在原始仓库目录直接编辑文件。worktree 提供了安全回滚和并行开发能力。如果你发现不在 worktree 中，立即停止并要求创建 worktree。',
-    },
-    /**
      * 禁止模糊完成声明
      * 原因：质量底线，必须有可量化证据
      * 来源：Superpowers no_fuzzy_completion_claim
@@ -362,6 +338,36 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 // 定义：优先建议，有例外，违背发警告但不阻止
 // ========================================
 exports.GUIDELINES = {
+    /**
+     * 高风险改动优先使用 worktree
+     * 原因：隔离工作区，安全回滚，并行开发
+     * 来源：Superpowers prefer_worktree
+     */
+    prefer_worktree: {
+        id: 'prefer_worktree',
+        rule: 'USE WORKTREE FOR HIGH-RISK CHANGES',
+        message: '高风险改动应在 worktree 中进行',
+        level: 'guideline',
+        trigger: ['code_implementation'],
+        enforcement: 'check-worktree',
+        description: `高风险改动应在隔离的 worktree 中进行。
+
+【何时需要 worktree】
+- 新功能开发（新增模块/API）
+- 跨模块改动（>3 文件）
+- 基础设施变更（CI/CD、依赖）
+
+【何时不需要】
+- 配置文件修改
+- 单文件 bug fix
+- 外科手术式修复（typo、missing import）
+
+【原因】
+- 隔离风险：worktree 中的改动不会影响主工作区
+- 安全回滚：删除 worktree 即可放弃改动
+- 并行开发：多个任务可同时在不同 worktree 中进行`,
+        promptInjection: '高风险改动（新功能、跨模块、基础设施）应在 worktree 中进行。配置修改、单文件 fix 可直接编辑。',
+    },
     /**
      * 禁止无调查修复 bug
      * 例外：简单 typo、配置错误

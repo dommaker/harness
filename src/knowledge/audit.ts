@@ -11,7 +11,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { KnowledgeStore } from './store';
+import { FileKnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 import type { KnowledgeEntry, MaturityLevel } from './types';
 
 // ── Types ─────────────────────────────────────────────────
@@ -300,7 +301,7 @@ export class KnowledgeAudit {
   private promotionBlockDays: number;
 
   constructor(options?: AuditOptions) {
-    this.store = new KnowledgeStore({ baseDir: options?.baseDir });
+    this.store = new FileKnowledgeStore({ baseDir: options?.baseDir });
     this.shortContentThreshold = options?.shortContentThreshold ?? DEFAULT_SHORT_CONTENT_THRESHOLD;
     this.staleDays = options?.staleDays ?? DEFAULT_STALE_DAYS;
     this.promotionBlockDays = options?.promotionBlockDays ?? DEFAULT_PROMOTION_BLOCK_DAYS;

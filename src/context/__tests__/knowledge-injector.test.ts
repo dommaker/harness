@@ -4,7 +4,7 @@
 
 import { KnowledgeInjector } from '../knowledge-injector';
 import { KnowledgeQuery } from '../../knowledge/query';
-import { KnowledgeStore } from '../../knowledge/store';
+import { FileKnowledgeStore as KnowledgeStore } from '../../knowledge/store';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

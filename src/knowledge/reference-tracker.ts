@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ReferenceRecord } from './types';
-import { KnowledgeStore } from './store';
+import type { KnowledgeStore } from './store';
 
 const REFERENCES_FILE = 'references.jsonl';
 

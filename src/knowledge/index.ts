@@ -5,7 +5,8 @@
  */
 
 export * from './types';
-export { KnowledgeStore } from './store';
+export type { KnowledgeStore } from './store';
+export { FileKnowledgeStore } from './store';
 export { KnowledgeQuery } from './query';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';

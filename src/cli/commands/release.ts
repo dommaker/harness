@@ -4,6 +4,17 @@
  * 完整 npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。
  * 与 studio MCP tool `publishPackage` 共享同一逻辑，但此 CLI 命令不依赖 Studio API 运行。
  * 当 studio API 因 harness 包损坏而无法启动时，此 CLI 命令仍可用。
+ *
+ * 流程：
+ *   1. Verify package
+ *   2. Check branch (must be master/main) + remote sync + clean tree
+ *   3. tsc build
+ *   4. Verify dist files
+ *   5. Bump version (npm version → commit + tag)
+ *   6. Push (protected branch → create release PR instead)
+ *   7. Check private flag
+ *   8. npm publish (or skip if PR flow)
+ *   9. GitHub Release
  */
 
 import { execSync } from 'child_process';
@@ -44,7 +55,26 @@ export async function release(options: ReleaseOptions): Promise<void> {
   console.log(chalk.cyan(`📦 ${pkgName}@${oldVersion}`));
   console.log(chalk.cyan(`   bump: ${bumpType}${dryRun ? ' (dry-run)' : ''}`));
 
-  // ── 2. Check clean working tree ──
+  // ── 2. Check branch (must be on master/main) ──
+  const branchResult = await run('git rev-parse --abbrev-ref HEAD', pkgPath);
+  const currentBranch = branchResult.stdout.trim();
+  if (currentBranch !== 'master' && currentBranch !== 'main') {
+    console.error(chalk.red(`❌ Must be on master or main branch to release. Currently on: ${currentBranch}`));
+    console.error(chalk.gray('   Run: git checkout master && git merge ' + currentBranch));
+    process.exit(1);
+  }
+  console.log(chalk.green(`✅ git: on ${currentBranch}`));
+
+  // ── 2b. Check remote sync ──
+  await run('git fetch origin', pkgPath, 15_000);
+  const behind = await run(`git rev-list --count HEAD..origin/${currentBranch}`, pkgPath);
+  if (behind.stdout.trim() !== '0') {
+    console.error(chalk.red(`❌ Local ${currentBranch} is ${behind.stdout.trim()} commits behind origin/${currentBranch}. Pull first.`));
+    process.exit(1);
+  }
+  console.log(chalk.green('✅ git: synced with remote'));
+
+  // ── 2c. Check clean working tree ──
   const stat = await run('git status --porcelain -uno', pkgPath);
   if (stat.stdout.length > 0) {
     console.error(chalk.red('❌ Uncommitted changes. Commit or stash before releasing.'));
@@ -95,9 +125,20 @@ export async function release(options: ReleaseOptions): Promise<void> {
     process.exit(0);
   }
 
-  // ── 5. Bump version (npm version creates git commit + tag atomically,
-  //     including package-lock.json — no desync possible) ──
+  // ── 5. Bump version (npm version creates git commit + tag atomically) ──
   console.log(chalk.cyan('🔢 Bumping version...'));
+  const [major, minor, patch] = oldVersion.split('.').map(Number);
+  let expectedNew: string;
+  if (bumpType === 'major') expectedNew = `${major + 1}.0.0`;
+  else if (bumpType === 'minor') expectedNew = `${major}.${minor + 1}.0`;
+  else expectedNew = `${major}.${minor}.${patch + 1}`;
+  const expectedTag = `v${expectedNew}`;
+  const tagExists = await run(`git tag -l "${expectedTag}"`, pkgPath);
+  if (tagExists.stdout.trim() === expectedTag) {
+    console.error(chalk.red(`❌ Tag ${expectedTag} already exists. Version may have been released already.`));
+    process.exit(1);
+  }
+
   const bump = await run(`npm version ${bumpType} -m "release: %s"`, pkgPath);
   if (bump.stderr && !bump.stdout) {
     console.error(chalk.red('❌ npm version failed:'), bump.stderr);
@@ -107,10 +148,40 @@ export async function release(options: ReleaseOptions): Promise<void> {
   const tag = `v${newVersion}`;
   console.log(chalk.green(`✅ version: ${oldVersion} → ${newVersion} (committed + tagged)`));
 
-  // ── 7. Push ──
+  // ── 6. Push (handle protected branch via PR) ──
   console.log(chalk.cyan('⬆️  Pushing...'));
-  const branch = await run('git rev-parse --abbrev-ref HEAD', pkgPath);
-  const push = await run(`git push origin ${branch.stdout}`, pkgPath, 30_000);
+  const push = await run(`git push origin ${currentBranch}`, pkgPath, 30_000);
+  const isProtected = push.stderr.includes('GH006') || push.stderr.includes('protected branch');
+
+  if (isProtected) {
+    // Protected branch: create release branch + PR
+    const releaseBranch = `release/v${newVersion}`;
+    console.log(chalk.yellow(`⚠️  ${currentBranch} is protected. Creating PR via ${releaseBranch}...`));
+
+    await run(`git checkout -b ${releaseBranch}`, pkgPath);
+    await run(`git push origin ${releaseBranch}`, pkgPath, 30_000);
+
+    // Create PR
+    const prBody = `## Release ${pkgName}@${newVersion}\n\n- Bump version: ${oldVersion} → ${newVersion}\n- Changelog updated\n\nAfter merge, push tag to trigger npm publish:\n\`\`\`\ngit push origin ${tag}\n\`\`\``;
+    const pr = await run(`gh pr create --title "release: ${pkgName}@${newVersion}" --body "${prBody}" --base ${currentBranch}`, pkgPath, 30_000);
+    if (pr.stdout) {
+      console.log(chalk.green(`✅ PR created: ${pr.stdout.trim()}`));
+    } else {
+      console.error(chalk.red('❌ PR creation failed:'), pr.stderr.slice(0, 500));
+      process.exit(1);
+    }
+
+    // Switch back to original branch
+    await run(`git checkout ${currentBranch}`, pkgPath);
+
+    console.log(chalk.cyan('\n📋 Next steps:'));
+    console.log(chalk.gray(`   1. Merge the PR: ${pr.stdout.trim()}`));
+    console.log(chalk.gray(`   2. After merge, push tag to trigger npm publish:`));
+    console.log(chalk.gray(`      git push origin ${tag}`));
+    console.log(chalk.gray(`   3. Or run: gh release create ${tag} --generate-notes`));
+    return;
+  }
+
   if (push.stderr && push.stderr.includes('error')) {
     console.error(chalk.red('❌ git push failed:'), push.stderr.slice(0, 500));
     process.exit(1);
@@ -118,21 +189,25 @@ export async function release(options: ReleaseOptions): Promise<void> {
   await run(`git push origin ${tag}`, pkgPath, 30_000);
   console.log(chalk.green('✅ git: pushed'));
 
+  // ── 7. Check private flag ──
+  if (pkgJson.private) {
+    console.error(chalk.red('❌ package.json has "private": true. Remove it before publishing.'));
+    console.error(chalk.gray('   The release tool will NOT auto-remove private flag.'));
+    process.exit(1);
+  }
+  console.log(chalk.green('✅ package: not private'));
+
   // ── 8. npm publish ──
-  // Switch to npmjs.org for publishing (npmmirror is read-only mirror)
   const origRegistry = await run('npm config get registry', pkgPath);
   await run('npm config set registry https://registry.npmjs.org/', pkgPath);
   console.log(chalk.cyan('📤 Publishing to npm...'));
-  // npm publish to npmjs.org (the write registry — npmmirror is read-only)
   const pub = await run('npm publish --registry https://registry.npmjs.org/', pkgPath, 180_000);
-  // Restore original registry
   await run(`npm config set registry ${origRegistry.stdout}`, pkgPath);
-  // Don't string-match npm output — verify by querying the registry
   const verify = await run(`npm view ${pkgName} version --registry https://registry.npmjs.org/`, pkgPath);
   if (verify.stdout.trim() === newVersion) {
     console.log(chalk.green(`✅ npm: published ${pkgName}@${newVersion}`));
   } else {
-    console.log(chalk.red(`❌ npm publish verification failed. Expected ${newVersion}, registry has ${verify.stdout.trim() || '???'}`));
+    console.error(chalk.red(`❌ npm publish verification failed. Expected ${newVersion}, registry has ${verify.stdout.trim() || '???'}`));
     process.exit(1);
   }
 
@@ -144,7 +219,6 @@ export async function release(options: ReleaseOptions): Promise<void> {
   } else if (gh.stderr) {
     console.log(chalk.yellow(`⚠️  gh: release may have failed (non-fatal): ${gh.stderr.slice(0, 200)}`));
   } else {
-    // Derive repo URL from git remote
     let repoUrl = '';
     try {
       const remoteUrl = execSync('git remote get-url origin', { cwd: pkgPath, encoding: 'utf-8', stdio: 'pipe', timeout: 5_000 }).trim();

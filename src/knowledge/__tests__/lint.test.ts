@@ -3,7 +3,7 @@
  */
 
 import { KnowledgeLinter } from '../lint';
-import { KnowledgeStore } from '../store';
+import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { ReferenceTracker } from '../reference-tracker';
 import * as fs from 'fs';
 import * as path from 'path';

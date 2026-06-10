@@ -22,7 +22,30 @@ const DEFAULT_CONFIG: StoreConfig = {
   baseDir: DEFAULT_DIR,
 };
 
-export class KnowledgeStore {
+/**
+ * KnowledgeStore interface — abstract contract for knowledge storage.
+ */
+export interface KnowledgeStore {
+  getBaseDir(): string;
+  get(id: string): KnowledgeEntry | undefined;
+  list(filter?: QueryFilter): KnowledgeEntry[];
+  save(entry: KnowledgeEntry): void;
+  delete(id: string): boolean;
+  update(id: string, partial: Partial<KnowledgeEntry>): KnowledgeEntry | undefined;
+  rebuildIndex(): void;
+  readIndex(): IndexEntry[];
+  readEntriesFromDisk(): KnowledgeEntry[];
+  snapshot(): string;
+  getSnapshot(date: string): IndexEntry[] | undefined;
+  getSurvivalRate(daysAgo: number): { rate: number; survived: number; total: number; snapshotDate: string } | undefined;
+}
+
+/**
+ * FileKnowledgeStore — file-based implementation of KnowledgeStore.
+ * Each entry is a markdown file with YAML frontmatter.
+ * An index.json provides fast listing without reading all files.
+ */
+export class FileKnowledgeStore implements KnowledgeStore {
   private baseDir: string;
 
   constructor(config?: Partial<StoreConfig>) {
@@ -269,7 +292,7 @@ export class KnowledgeStore {
    * 保存当日 index.json 快照
    */
   snapshot(): string {
-    const snapDir = path.join(this.baseDir, KnowledgeStore.SNAPSHOTS_DIR);
+    const snapDir = path.join(this.baseDir, FileKnowledgeStore.SNAPSHOTS_DIR);
     if (!fs.existsSync(snapDir)) {
       fs.mkdirSync(snapDir, { recursive: true });
     }
@@ -286,7 +309,7 @@ export class KnowledgeStore {
    * 读取指定日期的快照
    */
   getSnapshot(date: string): IndexEntry[] | undefined {
-    const snapPath = path.join(this.baseDir, KnowledgeStore.SNAPSHOTS_DIR, `index-${date}.json`);
+    const snapPath = path.join(this.baseDir, FileKnowledgeStore.SNAPSHOTS_DIR, `index-${date}.json`);
     if (!fs.existsSync(snapPath)) return undefined;
     try {
       return JSON.parse(fs.readFileSync(snapPath, 'utf-8')) as IndexEntry[];
@@ -323,7 +346,7 @@ export class KnowledgeStore {
 
   // ── Index I/O ────────────────────────────────────────────
 
-  private readIndex(): IndexEntry[] {
+  readIndex(): IndexEntry[] {
     const indexPath = path.join(this.baseDir, INDEX_FILE);
     if (!fs.existsSync(indexPath)) return [];
     try {

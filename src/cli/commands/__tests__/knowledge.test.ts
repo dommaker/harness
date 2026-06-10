@@ -68,7 +68,7 @@ describe('getKnowledgeDir', () => {
 
   beforeEach(() => {
     delete process.env.KNOWLEDGE_BASE_DIR;
-    storeCtorSpy = jest.spyOn(storeModule, 'KnowledgeStore').mockImplementation(() => ({
+    storeCtorSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([]),
     }));
   });

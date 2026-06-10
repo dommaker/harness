@@ -245,7 +245,7 @@ class ConstraintChecker {
             case 'no_implementation_without_requirement':
                 // 检查是否有需求文档
                 return context.hasRequirement === true;
-            case 'must_use_worktree':
+            case 'prefer_worktree':
                 // 检查是否在 worktree 中执行
                 return context.hasWorktree === true;
             case 'no_fuzzy_completion_claim':

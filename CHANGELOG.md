@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.16.0] - 2026-06-10
+
+### Changed
+- **prefer_worktree demoted to guideline**: `prefer_worktree` moved from iron_law to guideline severity — worktree usage is now recommended, not enforced
+- **KnowledgeStore interface extracted**: `FileKnowledgeStore` implements `KnowledgeStore` interface, enabling mock/testing and future alternative implementations
+
+## [0.15.0] - 2026-06-07
+
+### Changed
+- Internal release (constraint tier adjustment prep)
+
 ## [0.14.0] - 2026-06-04
 
 ### Added

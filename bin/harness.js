@@ -50,6 +50,8 @@ const {
   updateUserModel,
   release,
   constraints,
+  docFreshnessCheck,
+  specBaselineCheck,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -537,6 +539,38 @@ program
   .option('--json', '输出 JSON 格式', false)
   .action(async (options) => {
     await constraints(options);
+  });
+
+// ========================================
+// harness doc-freshness-check
+// ========================================
+program
+  .command('doc-freshness-check <docPath>')
+  .description('检查文档声明的新鲜度：提取可验证声明，与代码对照')
+  .option('--changed-files <list>', '变更文件列表（逗号分隔）')
+  .option('--format <format>', '输出格式 (table/json)', 'table')
+  .option('-p, --project-path <path>', '项目路径')
+  .action(async (docPath, options) => {
+    await docFreshnessCheck(docPath, {
+      changedFiles: options.changedFiles,
+      format: options.format,
+      projectPath: options.projectPath,
+    });
+  });
+
+// ========================================
+// harness spec-baseline-check
+// ========================================
+program
+  .command('spec-baseline-check <specPath>')
+  .description('验证 spec 文件的前置条件是否满足')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--json', '输出 JSON 格式', false)
+  .action(async (specPath, options) => {
+    await specBaselineCheck(specPath, {
+      projectPath: options.projectPath,
+      json: options.json,
+    });
   });
 
 // 解析命令行参数

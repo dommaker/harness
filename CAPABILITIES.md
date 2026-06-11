@@ -1,21 +1,21 @@
 # Harness Capabilities
 
-## CLI Commands (22)
-check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model
+## CLI Commands (24)
+check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check
 
 ## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
 
 ## Constraint Layers
-- Iron Laws (13): 绝对禁止，无例外
-- Guidelines (27): 优先建议，有例外
+- Iron Laws (12): 绝对禁止，无例外
+- Guidelines (28): 优先建议，有例外
 - Tips (2): 信息性提示
 
 ## Monitoring
 TraceCollector, TraceAnalyzer, PerformanceMonitor, ConstraintDiagnostics
 
 ## Knowledge Infrastructure
-KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), migrateKnowledgeEntries (AS-021 migration)
+KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), migrateKnowledgeEntries (AS-021 migration), extractCodeStructure (TS Compiler API code analysis)
 
 ## Hook Scripts (bin/)
 harness-knowledge-track.sh/js, harness-knowledge-check.js, harness-knowledge-capture.js, harness-sensitive-check.sh

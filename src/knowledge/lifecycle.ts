@@ -194,7 +194,78 @@ export class KnowledgeLifecycle {
       reason: `Promotion: ${entry.maturity} → ${target}`,
     };
     this.store.update(entryId, { maturity: target });
+
+    // AC-8a: After promotion, check skillCandidate eligibility
+    if (target === 'proven') {
+      this.checkSkillCandidate(entryId);
+    }
+
     return change;
+  }
+
+  /**
+   * AC-8a: Check if a proven entry qualifies as a skillCandidate.
+   * Marks with 'skillCandidate' tag and emits event if eligible.
+   * Returns true if newly marked.
+   */
+  checkSkillCandidate(entryId: string): boolean {
+    const entry = this.store.get(entryId);
+    if (!entry) return false;
+    if (!this.isSkillCandidate(entry)) return false;
+
+    // Mark as skillCandidate
+    this.store.update(entryId, {
+      tags: [...entry.tags, 'skillCandidate'],
+    });
+
+    // Emit event for downstream consumers
+    const now = new Date().toISOString();
+    for (const cb of this.onReferenceCallbacks) {
+      try {
+        cb({
+          entryId,
+          contributor: 'lifecycle',
+          timestamp: now,
+          context: 'skillCandidate:marked',
+        });
+      } catch { /* non-blocking */ }
+    }
+
+    return true;
+  }
+
+  /**
+   * AC-8a: Check if an entry meets skillCandidate criteria.
+   */
+  private isSkillCandidate(entry: KnowledgeEntry): boolean {
+    if (entry.maturity !== 'proven') return false;
+    if (entry.tags.includes('skillCandidate')) return false;
+    if (entry.contributors.length < 3) return false;
+    if ((entry.executionResults?.length || 0) < 5) return false;
+    if (entry.content.length < 200) return false;
+
+    const execRate = this.getExecutionSuccessRate(entry.id);
+    if (!execRate || execRate.rate < 0.7) return false;
+
+    return true;
+  }
+
+  /**
+   * AC-8c: Remove skillCandidate tag if success rate drops below 50%.
+   * Called after execution writeback.
+   */
+  checkSkillCandidateRevocation(entryId: string): boolean {
+    const entry = this.store.get(entryId);
+    if (!entry || !entry.tags.includes('skillCandidate')) return false;
+
+    const execRate = this.getExecutionSuccessRate(entryId);
+    if (execRate && execRate.total >= 5 && execRate.rate < 0.5) {
+      this.store.update(entryId, {
+        tags: entry.tags.filter(t => t !== 'skillCandidate'),
+      });
+      return true;
+    }
+    return false;
   }
 
   /**

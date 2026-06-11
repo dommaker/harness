@@ -24,3 +24,5 @@ export { release, type ReleaseOptions } from './release';
 export { analyzeSessions, type AnalyzeSessionsOptions } from './analyze-sessions';
 export { updateUserModel, type UpdateUserModelOptions } from './update-user-model';
 export { constraints, getConstraintsMeta, type ConstraintsMeta } from './constraints';
+export { docFreshnessCheck, extractClaims, verifyClaims, type DocFreshnessCheckOptions, type ClaimResult, type ClaimType } from './doc-freshness-check';
+export { specBaselineCheck, extractBaselineSection, type SpecBaselineCheckOptions, type PrerequisiteResult } from './spec-baseline-check';

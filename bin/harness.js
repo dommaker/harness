@@ -42,6 +42,7 @@ const {
   knowledgeAudit,
   knowledgeSnapshot,
   knowledgeMigrate,
+  knowledgeHealth,
   failureList,
   failureStats,
   failureClear,
@@ -432,6 +433,10 @@ program
         break;
       case 'migrate':
         knowledgeMigrate({ ...opts, dir: options.dir });
+        break;
+      case 'health':
+      case 'h':
+        await knowledgeHealth({ ...opts, dir: options.dir });
         break;
       default:
         // 无子命令时显示帮助

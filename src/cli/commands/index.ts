@@ -17,7 +17,7 @@ export { contract, validateSchema, type ContractOptions } from './contract';
 export { review, reviewStatus, type ReviewOptions } from './review';
 export { executeCommand, type CommandCheckOptions } from './command';
 export { syncDocs, type SyncDocsOptions } from './sync-docs';
-export { knowledgeList, knowledgeSearch, knowledgeImport, knowledgeDecay, knowledgeStats, knowledgeUpsert, knowledgeSyncStatus, knowledgeSyncRag, knowledgeAudit, knowledgeSnapshot, knowledgeMigrate, type KnowledgeOptions, type KnowledgeUpsertOptions } from './knowledge';
+export { knowledgeList, knowledgeSearch, knowledgeImport, knowledgeDecay, knowledgeStats, knowledgeUpsert, knowledgeSyncStatus, knowledgeSyncRag, knowledgeAudit, knowledgeSnapshot, knowledgeMigrate, knowledgeHealth, type KnowledgeOptions, type KnowledgeUpsertOptions } from './knowledge';
 export { failureList, failureStats, failureClear, type FailureOptions } from './failure';
 export { postevalPlan, type PostEvalPlanOptions } from './posteval-plan';
 export { release, type ReleaseOptions } from './release';

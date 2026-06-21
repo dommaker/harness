@@ -2,7 +2,7 @@
  * knowledge 命令测试 — knowledgeAudit
  */
 
-import { knowledgeAudit, knowledgeStats } from '../knowledge';
+import { knowledgeAudit, knowledgeStats, knowledgeHealth } from '../knowledge';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -163,5 +163,66 @@ describe('knowledgeAudit CLI', () => {
     expect(KnowledgeAudit).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: '/custom/path',
     }));
+  });
+});
+
+describe('knowledgeHealth CLI', () => {
+  const storeModule = require('../../../knowledge/store');
+  let consoleSpy: jest.SpyInstance;
+  let storeSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    if (storeSpy) storeSpy.mockRestore();
+  });
+
+  it('should output health score and summary in JSON mode', async () => {
+    storeSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
+      list: jest.fn().mockReturnValue([
+        { id: 'GUI-001', maturity: 'verified', sourceReferences: [], referencedBy: ['GUI-002'], created: new Date().toISOString() },
+        { id: 'GUI-002', maturity: 'draft', sourceReferences: [], referencedBy: [], created: new Date().toISOString() },
+      ]),
+      getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
+    }));
+
+    await knowledgeHealth({ json: true });
+    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    const parsed = JSON.parse(output);
+    expect(parsed).toHaveProperty('healthScore');
+    expect(parsed.summary).toHaveProperty('total', 2);
+  });
+
+  it('should detect low-reference verified entries', async () => {
+    storeSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
+      list: jest.fn().mockReturnValue([
+        { id: 'GUI-001', maturity: 'verified', sourceReferences: [], referencedBy: [], created: new Date().toISOString() },
+      ]),
+      getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
+    }));
+
+    await knowledgeHealth({ json: true });
+    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    const parsed = JSON.parse(output);
+    expect(parsed.summary.lowRefEntries).toBe(1);
+  });
+
+  it('should detect stale draft entries', async () => {
+    const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(); // 100 days ago
+    storeSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
+      list: jest.fn().mockReturnValue([
+        { id: 'GUI-001', maturity: 'draft', sourceReferences: [], referencedBy: [], created: oldDate },
+      ]),
+      getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
+    }));
+
+    await knowledgeHealth({ json: true });
+    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    const parsed = JSON.parse(output);
+    expect(parsed.summary.staleEntries).toBe(1);
   });
 });

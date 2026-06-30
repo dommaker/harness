@@ -15,7 +15,7 @@ AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, Security
 TraceCollector, TraceAnalyzer, PerformanceMonitor, ConstraintDiagnostics
 
 ## Knowledge Infrastructure
-KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), migrateKnowledgeEntries (AS-021 migration), extractCodeStructure (TS Compiler API code analysis)
+KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), migrateKnowledgeEntries (AS-021 migration), extractCodeStructure (TS Compiler API code analysis)
 
 ## Hook Scripts (bin/)
 harness-knowledge-track.sh/js, harness-knowledge-check.js, harness-knowledge-capture.js, harness-sensitive-check.sh

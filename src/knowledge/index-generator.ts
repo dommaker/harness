@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 
-const EXCLUDED_DIRS = ['.archive', '.snapshots', 'resolutions'];
+const EXCLUDED_DIRS = ['.archive', 'archived', '.snapshots', 'resolutions'];
 const INDEX_FILENAME = '_index.md';
 
 interface IndexEntry {

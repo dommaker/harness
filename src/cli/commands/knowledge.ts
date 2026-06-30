@@ -14,6 +14,7 @@ import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
 import { KnowledgeAudit } from '../../knowledge/audit';
 import { migrateKnowledgeEntries } from '../../knowledge/migration';
+import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
 import type { KnowledgeType, MaturityLevel, QueryFilter } from '../../knowledge/types';
 
 export interface KnowledgeOptions {
@@ -582,6 +583,7 @@ export async function knowledgeAudit(options: KnowledgeOptions & {
     'maturity-inflation': '成熟度虚高',
     'title-duplicate': '标题重复',
     'source-refs-bloat': 'sourceReferences 膨胀',
+    'fragment-cluster': '碎片集群',
     'promotion-blocked': 'promotion 受阻',
     'orphan-draft': '孤儿 draft',
     'stale-entry': '过期条目',
@@ -610,6 +612,14 @@ export async function knowledgeAudit(options: KnowledgeOptions & {
 
   if (!options.fix && report.issues.length > 0) {
     console.log(chalk.yellow(`\n  使用 --fix 自动修复`));
+  }
+
+  // Auto-rebuild index after audit (files may have changed)
+  const baseDir = options.dir || getKnowledgeDir(options.projectPath);
+  const idxGen = new KnowledgeIndexGenerator(baseDir);
+  idxGen.regenerate();
+  if (!options.json) {
+    console.log(chalk.gray(`  📇 索引已重建`));
   }
 }
 
@@ -658,5 +668,41 @@ export function knowledgeMigrate(options: KnowledgeOptions & { dir?: string }): 
     console.log(chalk.green('\n✅ 所有条目已是最新，无需迁移'));
   } else if (result.migrated > 0) {
     console.log(chalk.green(`\n✅ 迁移完成`));
+  }
+}
+
+/**
+ * 知识库索引重建 — 生成 _index.md 供 Agent grep 使用
+ */
+export function knowledgeIndex(options: KnowledgeOptions & { dir?: string }): void {
+  const baseDir = options.dir || getKnowledgeDir(options.projectPath);
+  const gen = new KnowledgeIndexGenerator(baseDir);
+
+  const beforeSize = (() => {
+    const indexPath = path.join(baseDir, '_index.md');
+    return fs.existsSync(indexPath) ? fs.statSync(indexPath).size : 0;
+  })();
+
+  const output = gen.regenerate();
+
+  const afterSize = Buffer.byteLength(output, 'utf-8');
+  const lineCount = output.split('\n').filter(l => !l.startsWith('#')).length;
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      path: path.join(baseDir, '_index.md'),
+      entries: lineCount,
+      size: afterSize,
+      previousSize: beforeSize,
+    }));
+    return;
+  }
+
+  console.log(chalk.blue(`📇 索引已重建`));
+  console.log(chalk.gray(`  路径: ${path.join(baseDir, '_index.md')}`));
+  console.log(chalk.green(`  条目: ${lineCount}`));
+  console.log(chalk.green(`  大小: ${(afterSize / 1024).toFixed(1)} KB`));
+  if (beforeSize > 0) {
+    console.log(chalk.gray(`  旧大小: ${(beforeSize / 1024).toFixed(1)} KB`));
   }
 }

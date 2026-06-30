@@ -43,6 +43,7 @@ const {
   knowledgeSnapshot,
   knowledgeMigrate,
   knowledgeHealth,
+  knowledgeIndex,
   failureList,
   failureStats,
   failureClear,
@@ -433,6 +434,10 @@ program
         break;
       case 'migrate':
         knowledgeMigrate({ ...opts, dir: options.dir });
+        break;
+      case 'index':
+      case 'idx':
+        knowledgeIndex({ ...opts, dir: options.dir });
         break;
       case 'health':
       case 'h':

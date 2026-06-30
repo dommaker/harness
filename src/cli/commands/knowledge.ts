@@ -672,7 +672,7 @@ export function knowledgeMigrate(options: KnowledgeOptions & { dir?: string }): 
 }
 
 /**
- * 知识库索引重建 — 生成 _index.md 供 Agent grep 使用
+ * 知识库索引重建 — 生成 _index.md 供 Agent grep 使用，同时同步 index.json
  */
 export function knowledgeIndex(options: KnowledgeOptions & { dir?: string }): void {
   const baseDir = options.dir || getKnowledgeDir(options.projectPath);
@@ -684,6 +684,10 @@ export function knowledgeIndex(options: KnowledgeOptions & { dir?: string }): vo
   })();
 
   const output = gen.regenerate();
+
+  // Sync index.json from disk files (removes ghost entries from manual mv/rm)
+  const store = new KnowledgeStore({ baseDir });
+  store.rebuildIndex();
 
   const afterSize = Buffer.byteLength(output, 'utf-8');
   const lineCount = output.split('\n').filter(l => !l.startsWith('#')).length;

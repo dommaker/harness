@@ -558,6 +558,62 @@ describe('auto-fix', () => {
   });
 });
 
+// ── D2b: deprecated-domain ──────────────────────────────
+
+describe('D2b: deprecated-domain', () => {
+  it('flags entry with "pipeline" tag', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ tags: ['pipeline', 'deployment'] });
+    const issues = audit.validate(entry);
+    const dd = issues.filter(i => i.rule === 'deprecated-domain');
+    expect(dd.length).toBe(1);
+    expect(dd[0].action).toBe('archive');
+    expect(dd[0].severity).toBe('high');
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('flags entry with "pipeline" in title', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: 'Pipeline 工作单元不可见导致协作效率低' });
+    const issues = audit.validate(entry);
+    const dd = issues.filter(i => i.rule === 'deprecated-domain');
+    expect(dd.length).toBe(1);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('flags entry with "管线" in title', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: 'B51 管线端到端验证常量与测试' });
+    const issues = audit.validate(entry);
+    const dd = issues.filter(i => i.rule === 'deprecated-domain');
+    expect(dd.length).toBe(1);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('does not flag entry without deprecated domain references', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: 'Agent Network 核心概念', tags: ['agent', 'architecture'] });
+    const issues = audit.validate(entry);
+    const dd = issues.filter(i => i.rule === 'deprecated-domain');
+    expect(dd.length).toBe(0);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  it('skips already archived entries', () => {
+    const dir = makeTmpDir();
+    const audit = new KnowledgeAudit({ baseDir: dir });
+    const entry = makeEntry({ title: 'Pipeline legacy entry', maturity: 'archived', tags: ['pipeline'] });
+    const issues = audit.validate(entry);
+    const dd = issues.filter(i => i.rule === 'deprecated-domain');
+    expect(dd.length).toBe(0);
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
 // ── run() report structure ─────────────────────────────
 
 describe('run() report', () => {

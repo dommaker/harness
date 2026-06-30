@@ -35,7 +35,9 @@ export type AuditRuleName =
   | 'promotion-blocked'
   | 'orphan-draft'
   // D5: 新鲜度
-  | 'stale-entry';
+  | 'stale-entry'
+  // D2: 领域相关性
+  | 'deprecated-domain';
 
 export type AuditAction = 'archive' | 'demote' | 'flag' | 'reject' | 'trim';
 
@@ -323,6 +325,27 @@ const perEntryRules: AuditRule[] = [
       return null;
     },
   },
+
+  // D2b: 领域相关性 — 检测已废弃领域的残留条目
+  {
+    name: 'deprecated-domain',
+    severity: 'high',
+    action: 'archive',
+    detect: (entry) => {
+      if (entry.maturity === 'archived') return null;
+      const tags = (entry.tags ?? []).map(t => t.toLowerCase());
+      // Tag-level: "pipeline" tag is deprecated (Studio Pipeline superseded by Agent Network)
+      if (tags.includes('pipeline')) {
+        return `标签 "pipeline" 属于已废弃领域（已被 Agent Network 取代）`;
+      }
+      // Title-level: strong domain-specific terms
+      const title = entry.title || '';
+      if (/pipeline|管线|GoalExecution|DeployAgent|Integration step/i.test(title)) {
+        return `标题引用已废弃领域: "${title}"`;
+      }
+      return null;
+    },
+  },
 ];
 
 // ── Audit Engine ──────────────────────────────────────────
@@ -440,7 +463,7 @@ export class KnowledgeAudit {
     const d1Score = entries.length === 0 ? 100 : Math.max(0, 100 - (d1Issues.length / entries.length) * 100);
 
     // D2: 内容质量
-    const d2Rules: AuditRuleName[] = ['test-data-pollution', 'daily-audit-noise', 'event-noise', 'zero-content-proven', 'short-content', 'maturity-inflation'];
+    const d2Rules: AuditRuleName[] = ['test-data-pollution', 'daily-audit-noise', 'event-noise', 'zero-content-proven', 'short-content', 'maturity-inflation', 'deprecated-domain'];
     const d2Issues = issues.filter(i => d2Rules.includes(i.rule));
     const d2Score = active.length === 0 ? 100 : Math.max(0, 100 - (d2Issues.length / active.length) * 100);
 

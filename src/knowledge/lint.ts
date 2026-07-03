@@ -181,7 +181,7 @@ export class KnowledgeLinter {
       if (entry.maturity === 'archived') continue;
 
       // 基于 title + type 去重（大小写不敏感）
-      const key = `${entry.type}:${entry.title.toLowerCase().trim()}`;
+      const key = `${entry.type}:${(entry.title || '').toLowerCase().trim()}`;
       const existing = seen.get(key) || [];
       existing.push(entry);
       seen.set(key, existing);
@@ -309,8 +309,8 @@ export class KnowledgeLinter {
       const allEntries = this.store.list({ excludeArchived: false });
       for (const existing of allEntries) {
         if (existing.id === entry.title) continue; // not same entry (entry doesn't have id yet)
-        const existingTitle = existing.title.toLowerCase();
-        const newTitle = entry.title.toLowerCase();
+        const existingTitle = (existing.title || '').toLowerCase();
+        const newTitle = (entry.title || '').toLowerCase();
         if (existingTitle === newTitle) {
           issues.push({
             type: 'duplicate',

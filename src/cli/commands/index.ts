@@ -26,3 +26,4 @@ export { updateUserModel, type UpdateUserModelOptions } from './update-user-mode
 export { constraints, getConstraintsMeta, type ConstraintsMeta } from './constraints';
 export { docFreshnessCheck, extractClaims, verifyClaims, type DocFreshnessCheckOptions, type ClaimResult, type ClaimType } from './doc-freshness-check';
 export { specBaselineCheck, extractBaselineSection, type SpecBaselineCheckOptions, type PrerequisiteResult } from './spec-baseline-check';
+export { sddIndex, type SDDOptions } from './sdd';

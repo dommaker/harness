@@ -48,6 +48,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/spec/` | Spec annotation validation in code |
 | `src/safety/` | Security guardrails: Input/Output/Tool Guardrail + Sandbox (L1-L4) |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
+| `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
 | `src/evolution/` | Constraint auto-evolution: trace-based degradation/rollback proposals |
@@ -56,7 +57,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/llm/` | LLM adapter layer: unified interface for multi-model switching |
 | `src/tools/` | Tool registry, core tools, loader, path management |
 | `src/verification/` | Rules-based verification engine + loop verification |
-| `src/cli/commands/` | 24 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check) |
+| `src/cli/commands/` | 25 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd) |
 
 ### Entry Points
 

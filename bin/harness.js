@@ -54,6 +54,7 @@ const {
   constraints,
   docFreshnessCheck,
   specBaselineCheck,
+  sddIndex,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -447,6 +448,32 @@ program
         // 无子命令时显示帮助
         if (!subcommand) {
           program.commands.find(c => c.name() === 'knowledge').help();
+        } else {
+          console.error(`未知子命令: ${subcommand}`);
+          process.exit(1);
+        }
+    }
+  });
+
+// ========================================
+// harness sdd
+// ========================================
+program
+  .command('sdd [subcommand]')
+  .description('SDD 管理（index）')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--dir <dir>', '指定基础目录')
+  .option('--json', 'JSON 输出')
+  .action(async (subcommand, options) => {
+    const opts = { projectPath: options.projectPath, json: options.json };
+    switch (subcommand) {
+      case 'index':
+      case 'idx':
+        sddIndex({ ...opts, dir: options.dir });
+        break;
+      default:
+        if (!subcommand) {
+          program.commands.find(c => c.name() === 'sdd').help();
         } else {
           console.error(`未知子命令: ${subcommand}`);
           process.exit(1);

@@ -37,6 +37,7 @@ export class KnowledgeIndexGenerator {
   regenerate(): string {
     const lines = this.generateIndexLines();
     const output = this.generate();
+    fs.mkdirSync(this.baseDir, { recursive: true });
     fs.writeFileSync(path.join(this.baseDir, INDEX_FILENAME), output, 'utf-8');
     return output;
   }

@@ -9,7 +9,10 @@
 
 // ── Dimensions ──────────────────────────────────────────────
 
-export type KnowledgeType = 'model' | 'decision' | 'guideline' | 'pitfall' | 'process' | 'architecture';
+export type KnowledgeSubsystem = 'model' | 'decision' | 'guideline' | 'pitfall' | 'process' | 'architecture';
+
+/** @deprecated Use KnowledgeSubsystem */
+export type KnowledgeType = KnowledgeSubsystem;
 
 export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived' | 'active' | 'deprecated';
 

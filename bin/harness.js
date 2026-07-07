@@ -42,6 +42,8 @@ const {
   knowledgeAudit,
   knowledgeSnapshot,
   knowledgeMigrate,
+  knowledgeHealth,
+  knowledgeIndex,
   failureList,
   failureStats,
   failureClear,
@@ -50,6 +52,9 @@ const {
   updateUserModel,
   release,
   constraints,
+  docFreshnessCheck,
+  specBaselineCheck,
+  sddIndex,
 } = require('../dist/cli/commands/index');
 
 const program = new Command();
@@ -431,10 +436,44 @@ program
       case 'migrate':
         knowledgeMigrate({ ...opts, dir: options.dir });
         break;
+      case 'index':
+      case 'idx':
+        knowledgeIndex({ ...opts, dir: options.dir });
+        break;
+      case 'health':
+      case 'h':
+        await knowledgeHealth({ ...opts, dir: options.dir });
+        break;
       default:
         // 无子命令时显示帮助
         if (!subcommand) {
           program.commands.find(c => c.name() === 'knowledge').help();
+        } else {
+          console.error(`未知子命令: ${subcommand}`);
+          process.exit(1);
+        }
+    }
+  });
+
+// ========================================
+// harness sdd
+// ========================================
+program
+  .command('sdd [subcommand]')
+  .description('SDD 管理（index）')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--dir <dir>', '指定基础目录')
+  .option('--json', 'JSON 输出')
+  .action(async (subcommand, options) => {
+    const opts = { projectPath: options.projectPath, json: options.json };
+    switch (subcommand) {
+      case 'index':
+      case 'idx':
+        sddIndex({ ...opts, dir: options.dir });
+        break;
+      default:
+        if (!subcommand) {
+          program.commands.find(c => c.name() === 'sdd').help();
         } else {
           console.error(`未知子命令: ${subcommand}`);
           process.exit(1);
@@ -537,6 +576,38 @@ program
   .option('--json', '输出 JSON 格式', false)
   .action(async (options) => {
     await constraints(options);
+  });
+
+// ========================================
+// harness doc-freshness-check
+// ========================================
+program
+  .command('doc-freshness-check <docPath>')
+  .description('检查文档声明的新鲜度：提取可验证声明，与代码对照')
+  .option('--changed-files <list>', '变更文件列表（逗号分隔）')
+  .option('--format <format>', '输出格式 (table/json)', 'table')
+  .option('-p, --project-path <path>', '项目路径')
+  .action(async (docPath, options) => {
+    await docFreshnessCheck(docPath, {
+      changedFiles: options.changedFiles,
+      format: options.format,
+      projectPath: options.projectPath,
+    });
+  });
+
+// ========================================
+// harness spec-baseline-check
+// ========================================
+program
+  .command('spec-baseline-check <specPath>')
+  .description('验证 spec 文件的前置条件是否满足')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--json', '输出 JSON 格式', false)
+  .action(async (specPath, options) => {
+    await specBaselineCheck(specPath, {
+      projectPath: options.projectPath,
+      json: options.json,
+    });
   });
 
 // 解析命令行参数

@@ -14,6 +14,7 @@ import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
 import { KnowledgeAudit } from '../../knowledge/audit';
 import { migrateKnowledgeEntries } from '../../knowledge/migration';
+import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
 import type { KnowledgeType, MaturityLevel, QueryFilter } from '../../knowledge/types';
 
 export interface KnowledgeOptions {
@@ -413,6 +414,106 @@ export async function knowledgeSyncStatus(options: KnowledgeOptions): Promise<vo
   }
 }
 
+/**
+ * 飞轮健康检查 — 零 token 检测知识飞轮数据流状态
+ */
+export async function knowledgeHealth(options: KnowledgeOptions & { dir?: string }): Promise<void> {
+  const baseDir = options.dir || getKnowledgeDir(options.projectPath);
+  const store = new KnowledgeStore({ baseDir });
+  const entries = store.list({ excludeArchived: true });
+
+  const issues: Array<{ severity: 'error' | 'warn' | 'info'; entry: string; detail: string }> = [];
+
+  // D1: 引用密度检查（低引用 = 可能孤立）
+  let lowRefEntries = 0;
+  for (const entry of entries) {
+    if (entry.referencedBy.length === 0 && entry.maturity === 'verified') {
+      lowRefEntries++;
+      issues.push({ severity: 'info', entry: entry.id, detail: `verified 条目零引用（可能孤立）` });
+    }
+  }
+
+  // D2: 新鲜度检查
+  const now = Date.now();
+  const staleThreshold = 90 * 24 * 60 * 60 * 1000; // 90 days
+  let staleEntries = 0;
+  for (const entry of entries) {
+    const created = new Date(entry.created).getTime();
+    if (now - created > staleThreshold && entry.maturity === 'draft') {
+      staleEntries++;
+      issues.push({ severity: 'warn', entry: entry.id, detail: `draft 超过 90 天未推进` });
+    }
+  }
+
+  // D3: 消费数据检查
+  let consumptionData = false;
+  const statsPath = path.join(baseDir, '.consumption-stats.json');
+  if (fs.existsSync(statsPath)) {
+    consumptionData = true;
+  } else {
+    issues.push({ severity: 'info', entry: '-', detail: `消费追踪数据不存在（${statsPath}）` });
+  }
+
+  // D4: 飞轮指标
+  const withRefs = entries.filter(e => e.referencedBy.length > 0).length;
+  const refCoverage = entries.length > 0 ? Math.round(withRefs / entries.length * 100) : 0;
+  const avgRefs = entries.length > 0
+    ? Math.round(entries.reduce((sum, e) => sum + e.referencedBy.length, 0) / entries.length * 10) / 10
+    : 0;
+
+  // 健康分计算
+  const totalIssues = issues.filter(i => i.severity === 'error').length * 3
+    + issues.filter(i => i.severity === 'warn').length * 1;
+  const healthScore = Math.max(0, 100 - totalIssues);
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      healthScore,
+      summary: {
+        total: entries.length,
+        lowRefEntries,
+        staleEntries,
+        consumptionData,
+        refCoverage,
+        avgRefs,
+      },
+      issues: issues.slice(0, 50),
+    }, null, 2));
+    return;
+  }
+
+  console.log(chalk.blue('🏥 飞轮健康检查\n'));
+  console.log(chalk.bold(`  健康分: ${healthScore >= 80 ? chalk.green(healthScore) : healthScore >= 60 ? chalk.yellow(healthScore) : chalk.red(healthScore)}/100`));
+  console.log(chalk.bold(`  活跃条目: ${entries.length}`));
+  console.log();
+
+  console.log(chalk.bold('  数据流状态:'));
+  console.log(`    引用密度: ${lowRefEntries === 0 ? chalk.green('✓') : chalk.yellow(`⚠ ${lowRefEntries} 个零引用 verified`)}`);
+  console.log(`    新鲜度: ${staleEntries === 0 ? chalk.green('✓') : chalk.yellow(`⚠ ${staleEntries} 个过期 draft`)}`);
+  console.log(`    消费追踪: ${consumptionData ? chalk.green('✓') : chalk.gray('○ 未启用')}`);
+  console.log();
+
+  console.log(chalk.bold('  飞轮指标:'));
+  console.log(`    引用覆盖: ${refCoverage}%`);
+  console.log(`    平均引用: ${avgRefs}`);
+  console.log();
+
+  if (issues.length > 0) {
+    console.log(chalk.bold(`  问题 (前 20):`));
+    for (const issue of issues.slice(0, 20)) {
+      const sevColor = issue.severity === 'error' ? chalk.red
+        : issue.severity === 'warn' ? chalk.yellow
+        : chalk.gray;
+      console.log(`    ${sevColor(`[${issue.severity}]`)} ${issue.entry}: ${issue.detail}`);
+    }
+    if (issues.length > 20) {
+      console.log(chalk.gray(`    ... 还有 ${issues.length - 20} 条`));
+    }
+  } else {
+    console.log(chalk.green('  ✓ 无问题'));
+  }
+}
+
 function getKnowledgeDir(projectPath?: string): string {
   if (projectPath) return `${projectPath}/.harness/knowledge`;
   if (process.env.KNOWLEDGE_BASE_DIR) return process.env.KNOWLEDGE_BASE_DIR;
@@ -482,6 +583,7 @@ export async function knowledgeAudit(options: KnowledgeOptions & {
     'maturity-inflation': '成熟度虚高',
     'title-duplicate': '标题重复',
     'source-refs-bloat': 'sourceReferences 膨胀',
+    'fragment-cluster': '碎片集群',
     'promotion-blocked': 'promotion 受阻',
     'orphan-draft': '孤儿 draft',
     'stale-entry': '过期条目',
@@ -510,6 +612,14 @@ export async function knowledgeAudit(options: KnowledgeOptions & {
 
   if (!options.fix && report.issues.length > 0) {
     console.log(chalk.yellow(`\n  使用 --fix 自动修复`));
+  }
+
+  // Auto-rebuild index after audit (files may have changed)
+  const baseDir = options.dir || getKnowledgeDir(options.projectPath);
+  const idxGen = new KnowledgeIndexGenerator(baseDir);
+  idxGen.regenerate();
+  if (!options.json) {
+    console.log(chalk.gray(`  📇 索引已重建`));
   }
 }
 
@@ -558,5 +668,45 @@ export function knowledgeMigrate(options: KnowledgeOptions & { dir?: string }): 
     console.log(chalk.green('\n✅ 所有条目已是最新，无需迁移'));
   } else if (result.migrated > 0) {
     console.log(chalk.green(`\n✅ 迁移完成`));
+  }
+}
+
+/**
+ * 知识库索引重建 — 生成 _index.md 供 Agent grep 使用，同时同步 index.json
+ */
+export function knowledgeIndex(options: KnowledgeOptions & { dir?: string }): void {
+  const baseDir = options.dir || getKnowledgeDir(options.projectPath);
+  const gen = new KnowledgeIndexGenerator(baseDir);
+
+  const beforeSize = (() => {
+    const indexPath = path.join(baseDir, '_index.md');
+    return fs.existsSync(indexPath) ? fs.statSync(indexPath).size : 0;
+  })();
+
+  const output = gen.regenerate();
+
+  // Sync index.json from disk files (removes ghost entries from manual mv/rm)
+  const store = new KnowledgeStore({ baseDir });
+  store.rebuildIndex();
+
+  const afterSize = Buffer.byteLength(output, 'utf-8');
+  const lineCount = output.split('\n').filter(l => !l.startsWith('#')).length;
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      path: path.join(baseDir, '_index.md'),
+      entries: lineCount,
+      size: afterSize,
+      previousSize: beforeSize,
+    }));
+    return;
+  }
+
+  console.log(chalk.blue(`📇 索引已重建`));
+  console.log(chalk.gray(`  路径: ${path.join(baseDir, '_index.md')}`));
+  console.log(chalk.green(`  条目: ${lineCount}`));
+  console.log(chalk.green(`  大小: ${(afterSize / 1024).toFixed(1)} KB`));
+  if (beforeSize > 0) {
+    console.log(chalk.gray(`  旧大小: ${(beforeSize / 1024).toFixed(1)} KB`));
   }
 }

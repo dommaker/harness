@@ -24,6 +24,9 @@ importers:
         specifier: ^3.22.4
         version: 3.25.76
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/glob':
         specifier: ^8.1.0
         version: 8.1.0

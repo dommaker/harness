@@ -194,7 +194,7 @@ export class KnowledgeIngest {
     const all = this.store.readEntriesFromDisk().filter(e => e.type === type);
 
     // Exact match (case-insensitive)
-    const exact = all.find(e => e.title.toLowerCase() === title.toLowerCase());
+    const exact = all.find(e => (e.title || '').toLowerCase() === title.toLowerCase());
     if (exact) return exact;
 
     // Semantic dedup: content prefix + title substring + keyword overlap
@@ -236,7 +236,7 @@ export class KnowledgeIngest {
 
   /** Strip [prefix] tags and normalize for comparison */
   private normalizeForDedup(title: string): string {
-    const t = title.replace(/^\[.*?\]\s*/g, '').trim();
+    const t = (title || '').replace(/^\[.*?\]\s*/g, '').trim();
     // Keep spaces between character types (Latin/Chinese boundary) for tokenization
     return t.replace(/[，。、：；！？]/g, '').toLowerCase();
   }

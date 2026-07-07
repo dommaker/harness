@@ -30,11 +30,14 @@ export type AuditRuleName =
   // D3: 去重有效性
   | 'title-duplicate'
   | 'source-refs-bloat'
+  | 'fragment-cluster'
   // D4: 成熟度健康
   | 'promotion-blocked'
   | 'orphan-draft'
   // D5: 新鲜度
-  | 'stale-entry';
+  | 'stale-entry'
+  // D2: 领域相关性
+  | 'deprecated-domain';
 
 export type AuditAction = 'archive' | 'demote' | 'flag' | 'reject' | 'trim';
 
@@ -96,6 +99,12 @@ const EVENT_NOISE_PATTERNS = [
   /^\[Session Feature\]\s/,
 ];
 const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'];
+const SYNTHETIC_REF_PATTERN = /^(search|test-agent|prompt-inject|monitor|analyst|auditor|triage|executor|session|trend|incident):\d{4}-\d{2}-\d{2}/;
+
+/** Filter out synthetic references (automated search/ops records, not genuine consumption) */
+function genuineRefs(refs: string[]): string[] {
+  return refs.filter(r => !SYNTHETIC_REF_PATTERN.test(r));
+}
 
 // ── Per-Entry Rules ───────────────────────────────────────
 
@@ -222,11 +231,12 @@ const perEntryRules: AuditRule[] = [
     detect: (entry, ctx) => {
       if (entry.maturity === 'archived') return null;
       if (!ctx.allEntries) return null;
+      if (!entry.title) return null;
       const dupes = ctx.allEntries.filter(e =>
         e.id !== entry.id &&
         e.maturity !== 'archived' &&
         e.type === entry.type &&
-        e.title.toLowerCase().trim() === entry.title.toLowerCase().trim()
+        e.title?.toLowerCase().trim() === entry.title.toLowerCase().trim()
       );
       if (dupes.length > 0) {
         return `与 ${dupes.map(e => e.id).join(', ')} 标题重复`;
@@ -241,6 +251,31 @@ const perEntryRules: AuditRule[] = [
     detect: (entry) => {
       if ((entry.sourceReferences?.length || 0) > MAX_SOURCE_REFS) {
         return `sourceReferences ${entry.sourceReferences!.length} 条 (上限 ${MAX_SOURCE_REFS})`;
+      }
+      return null;
+    },
+  },
+  {
+    name: 'fragment-cluster',
+    severity: 'medium',
+    action: 'flag',
+    detect: (entry, ctx) => {
+      if (entry.maturity === 'archived') return null;
+      if (!ctx.allEntries || entry.content.trim().length >= 100) return null;
+      if (!entry.tags?.length) return null;
+
+      // Find peers: same type, short body, shared tags ≥2
+      const entryTags = new Set(entry.tags);
+      const peers = ctx.allEntries.filter(e =>
+        e.id !== entry.id &&
+        e.maturity !== 'archived' &&
+        e.type === entry.type &&
+        e.content.trim().length < 100 &&
+        e.tags?.filter(t => entryTags.has(t)).length >= 2
+      );
+
+      if (peers.length >= 2) {
+        return `碎片集群：与 ${peers.map(e => e.id).join(', ')} 同 type+tags 且 body 均 <100 字符，建议合并`;
       }
       return null;
     },
@@ -267,7 +302,7 @@ const perEntryRules: AuditRule[] = [
     action: 'flag',
     detect: (entry) => {
       if (entry.maturity !== 'draft') return null;
-      if (entry.contributors.length === 0 && entry.projects.length === 0 && entry.referencedBy.length === 0) {
+      if (entry.contributors.length === 0 && entry.projects.length === 0 && genuineRefs(entry.referencedBy).length === 0) {
         return `draft 无贡献者/项目/引用`;
       }
       return null;
@@ -286,6 +321,27 @@ const perEntryRules: AuditRule[] = [
       const daysSinceRef = (Date.now() - new Date(lastRef).getTime()) / (1000 * 60 * 60 * 24);
       if (daysSinceRef > ctx.staleDays) {
         return `超过 ${Math.floor(daysSinceRef)} 天未引用 (阈值 ${ctx.staleDays})`;
+      }
+      return null;
+    },
+  },
+
+  // D2b: 领域相关性 — 检测已废弃领域的残留条目
+  {
+    name: 'deprecated-domain',
+    severity: 'high',
+    action: 'archive',
+    detect: (entry) => {
+      if (entry.maturity === 'archived') return null;
+      const tags = (entry.tags ?? []).map(t => t.toLowerCase());
+      // Tag-level: "pipeline" tag is deprecated (Studio Pipeline superseded by Agent Network)
+      if (tags.includes('pipeline')) {
+        return `标签 "pipeline" 属于已废弃领域（已被 Agent Network 取代）`;
+      }
+      // Title-level: strong domain-specific terms
+      const title = entry.title || '';
+      if (/pipeline|管线|GoalExecution|DeployAgent|Integration step/i.test(title)) {
+        return `标题引用已废弃领域: "${title}"`;
       }
       return null;
     },
@@ -337,7 +393,7 @@ export class KnowledgeAudit {
    * 全量扫描（日兜底 / 手动模式）
    */
   run(options?: { autoFix?: boolean }): AuditReport {
-    const entries = this.store.list({ excludeArchived: false });
+    const entries = this.store.list({ excludeArchived: false }).filter(e => e.title && e.type && e.content != null);
     const ctx: AuditContext = {
       shortContentThreshold: this.shortContentThreshold,
       staleDays: this.staleDays,
@@ -407,12 +463,12 @@ export class KnowledgeAudit {
     const d1Score = entries.length === 0 ? 100 : Math.max(0, 100 - (d1Issues.length / entries.length) * 100);
 
     // D2: 内容质量
-    const d2Rules: AuditRuleName[] = ['test-data-pollution', 'daily-audit-noise', 'event-noise', 'zero-content-proven', 'short-content', 'maturity-inflation'];
+    const d2Rules: AuditRuleName[] = ['test-data-pollution', 'daily-audit-noise', 'event-noise', 'zero-content-proven', 'short-content', 'maturity-inflation', 'deprecated-domain'];
     const d2Issues = issues.filter(i => d2Rules.includes(i.rule));
     const d2Score = active.length === 0 ? 100 : Math.max(0, 100 - (d2Issues.length / active.length) * 100);
 
     // D3: 去重有效性
-    const d3Rules: AuditRuleName[] = ['title-duplicate', 'source-refs-bloat'];
+    const d3Rules: AuditRuleName[] = ['title-duplicate', 'source-refs-bloat', 'fragment-cluster'];
     const d3Issues = issues.filter(i => d3Rules.includes(i.rule));
     const d3Score = active.length === 0 ? 100 : Math.max(0, 100 - (d3Issues.length / active.length) * 100);
 
@@ -441,10 +497,10 @@ export class KnowledgeAudit {
     const d5Score = active.length === 0 ? 100 : Math.max(0, 100 - (staleRatio * 100));
 
     // D6: 飞轮验证
-    const withRefs = active.filter(e => e.referencedBy.length > 0).length;
+    const withRefs = active.filter(e => genuineRefs(e.referencedBy).length > 0).length;
     const refCoverage = active.length > 0 ? withRefs / active.length : 0;
     const avgRefs = active.length > 0
-      ? active.reduce((sum, e) => sum + e.referencedBy.length, 0) / active.length
+      ? active.reduce((sum, e) => sum + genuineRefs(e.referencedBy).length, 0) / active.length
       : 0;
 
     // Consumption hit rate from aggregated stats file (written by MonitorAgent)

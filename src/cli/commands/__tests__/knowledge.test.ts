@@ -22,6 +22,13 @@ jest.mock('../../../knowledge/audit', () => ({
   })),
 }));
 
+// Mock KnowledgeIndexGenerator (avoids real fs writes in CLI tests)
+jest.mock('../../../knowledge/index-generator', () => ({
+  KnowledgeIndexGenerator: jest.fn().mockImplementation(() => ({
+    regenerate: jest.fn(),
+  })),
+}));
+
 const MOCK_REPORT = {
   timestamp: '2026-06-02T00:00:00.000Z',
   totalEntries: 100,

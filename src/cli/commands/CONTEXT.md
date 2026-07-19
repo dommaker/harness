@@ -1,10 +1,10 @@
 # cli/commands/
 
 ## 职责
-CLI 子命令实现：21 个命令覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布/会话分析等。
+CLI 子命令实现：25 个命令覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布/会话分析等。
 
-## 核心导出(21 命令)
-check / validate / passes-gate / init / report / status / flow / spec / acceptance / performance / security / contract / review / command / sync-docs / knowledge / failure / posteval-plan / release / analyze-sessions / update-user-model
+## 核心导出(25 命令)
+check / validate / passes-gate / init / report / status / flow / spec / acceptance / performance / security / contract / review / command / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / doc-freshness-check / spec-baseline-check
 
 ## 依赖关系
 - 依赖 `src/core/constraints/` 约束引擎

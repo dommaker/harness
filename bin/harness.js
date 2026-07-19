@@ -343,10 +343,11 @@ program
 // ========================================
 program
   .command('sync-docs')
-  .description('同步项目文档（CAPABILITIES.md、CONTEXT.md）')
+  .description('同步项目文档（CAPABILITIES.md、CONTEXT.md、AGENTS.md）')
   .option('-p, --project-path <path>', '项目路径')
   .option('-c, --check', '只检查不修改（CI 模式）', false)
   .option('--json', '输出 JSON 格式（供 LLM 消费）', false)
+  .option('--agents', '同步 AGENTS.md（agent 导读）', false)
   .action(async (options) => {
     const ok = await syncDocs(options);
     if (!ok && options.check) {

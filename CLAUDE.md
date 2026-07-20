@@ -21,8 +21,8 @@ npm run lint           # ESLint on src/
 ### Three-Tier Constraint System
 
 Constraints are defined in `src/core/constraints/definitions.ts` (42 total):
-- **Iron Laws** (13) — severity: error. Violation throws `ConstraintViolationError`, blocks execution.
-- **Guidelines** (27) — severity: warning. Records warning, allows continuation. Each has exception flags mapped via `EXCEPTION_FIELD_MAP` in `checker.ts`.
+- **Iron Laws** (12) — severity: error. Violation throws `ConstraintViolationError`, blocks execution.
+- **Guidelines** (28) — severity: warning. Records warning, allows continuation. Each has exception flags mapped via `EXCEPTION_FIELD_MAP` in `checker.ts`.
 - **Tips** (2) — severity: info. Informational only.
 
 Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relaxed` enables only Iron Laws.

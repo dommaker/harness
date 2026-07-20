@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.16.2] - 2026-07-20
+
+### Added
+- **sync-docs --agents**: AGENTS.md 生成器——面向 agent 的仓库导读（结构/命令/约束/知识入口），挂在 `sync-docs` 命令下
+
+### Fixed
+- CLAUDE.md 分层计数修正（13/27 → 12/28）
+- src/cli/commands/CONTEXT.md 命令计数修正（21 → 25，补 sdd/constraints/doc-freshness-check/spec-baseline-check）
+- CHANGELOG 补齐 0.16.1/0.16.2（修复 docs_freshness 铁律 changelog_version 检查）
+
+## [0.16.1] - 2026-07-17
+
+### Added
+- knowledge 模块导出纳入发布产物
+- CAPABILITIES 增加 sdd CLI 命令
+
+### Changed
+- release 命令支持受保护 master 分支时改走 PR 流程
+
 ## [0.16.0] - 2026-06-10
 
 ### Changed

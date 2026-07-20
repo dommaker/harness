@@ -25,6 +25,8 @@ export interface SyncDocsOptions {
   changelog?: boolean;
   /** 输出 JSON 格式（供 LLM 消费） */
   json?: boolean;
+  /** 同步 AGENTS.md（agent 导读），在默认章节之外追加 */
+  agents?: boolean;
 }
 
 interface ModuleInfo {
@@ -140,10 +142,26 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     }
   }
 
+  // 4c. AGENTS.md（--agents 启用）：缺失或内容漂移
+  let agentsMdExpected: string | null = null;
+  let agentsMdExists = false;
+  let agentsMdStale = false;
+  if (options.agents) {
+    agentsMdExpected = await buildAgentsMd(projectPath, srcDirs);
+    try {
+      const existing = await fs.readFile(path.join(projectPath, 'AGENTS.md'), 'utf-8');
+      agentsMdExists = true;
+      agentsMdStale = existing !== agentsMdExpected;
+    } catch {
+      agentsMdStale = true; // 缺失视为漂移
+    }
+  }
+  const hasAgentsIssues = options.agents === true && agentsMdStale;
+
   const hasTableIssues = result.added.length > 0 || result.removed.length > 0;
   const hasCapIssues = capCountMismatches.length > 0;
   const hasContextIssues = result.contextMissing.length > 0 || result.contextStale.length > 0;
-  const hasIssues = hasTableIssues || hasCapIssues || hasContextIssues;
+  const hasIssues = hasTableIssues || hasCapIssues || hasContextIssues || hasAgentsIssues;
 
   // 5. JSON 输出模式：结构化输出供 LLM 消费
   if (isJson) {
@@ -203,6 +221,17 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       );
     }
 
+    if (options.agents) {
+      jsonOutput.agentsMd = { file: 'AGENTS.md', exists: agentsMdExists, stale: agentsMdStale };
+      if (agentsMdStale) {
+        (jsonOutput.resolution as Array<Record<string, unknown>>).push({
+          action: 'sync-agents-md',
+          command: 'harness sync-docs --agents',
+          details: '生成/更新 AGENTS.md（agent 导读）',
+        });
+      }
+    }
+
     console.log(JSON.stringify(jsonOutput, null, 2));
     return !hasIssues;
   }
@@ -233,6 +262,15 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     result.contextStale.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
+  if (hasAgentsIssues) {
+    console.log(
+      chalk.yellow(agentsMdExists
+        ? `\n🤖 AGENTS.md 与当前项目状态不一致:`
+        : `\n🤖 缺少 AGENTS.md（agent 导读）:`)
+    );
+    console.log(chalk.gray(`  - AGENTS.md`));
+  }
+
   if (!hasIssues) {
     console.log(chalk.green('✅ 所有文档都是最新的'));
     return true;
@@ -259,6 +297,11 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   for (const dir of result.contextMissing) {
     await createContextMd(projectPath, dir);
     console.log(chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+  }
+
+  if (hasAgentsIssues && agentsMdExpected !== null) {
+    await fs.writeFile(path.join(projectPath, 'AGENTS.md'), agentsMdExpected, 'utf-8');
+    console.log(chalk.green(agentsMdExists ? `✅ 已更新 AGENTS.md` : `✅ 已生成 AGENTS.md`));
   }
 
   return !hasIssues;
@@ -741,3 +784,314 @@ function updateCapabilityCounts(content: string, projectPath: string): string {
   return content;
 }
 
+
+// ========================================
+// AGENTS.md 生成（--agents）
+// ========================================
+
+/** 生成 AGENTS.md 目录结构表时跳过的目录（依赖/构建产物/报告等） */
+const AGENTS_MD_SKIP_DIRS = new Set([
+  'node_modules', 'dist', 'build', 'out', 'coverage',
+  'playwright-report', 'test-results', '.git', '.next', '.turbo',
+]);
+
+/** 知名顶层目录的一句话说明 */
+const AGENTS_MD_DIR_ROLES: Record<string, string> = {
+  docs: '项目文档',
+  scripts: '工具脚本',
+  tests: '测试',
+  test: '测试',
+  bin: '可执行入口/脚本',
+  templates: '项目模板',
+  '.github': 'CI/CD 配置',
+  '.harness': 'harness 配置与运行时状态',
+};
+
+/** 常用命令候选（按展示顺序），仅列出 package.json 中实际存在的脚本 */
+const AGENTS_MD_COMMANDS: Array<[string, string]> = [
+  ['dev', '启动开发环境'],
+  ['build', '构建'],
+  ['test', '运行测试'],
+  ['test:e2e', '端到端测试'],
+  ['test:unit', '单元测试'],
+  ['typecheck', '类型检查'],
+  ['lint', '代码检查'],
+  ['start', '启动生产服务'],
+];
+
+interface PackageJsonLite {
+  name?: string;
+  description?: string;
+  scripts?: Record<string, string>;
+}
+
+interface GovernanceInfo {
+  hasConfig: boolean;
+  preset?: string;
+  hasClaudeGovernance: boolean;
+  ironLaws?: number;
+  guidelines?: number;
+}
+
+/**
+ * 生成 AGENTS.md 内容（agent 导读：项目简介/目录结构/常用命令/约束治理/知识入口）
+ *
+ * 纯静态提取（零 LLM），确定性输出：同一代码库状态生成同一内容（无时间戳），
+ * 因此重跑幂等，--check 可直接用文本对比检测漂移。
+ */
+async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<string> {
+  const pkg = await readPackageJsonLite(projectPath);
+  const [dirs, governance, knowledgeCount, contextDocCount] = await Promise.all([
+    getTopLevelDirEntries(projectPath, srcDirs),
+    getGovernanceInfo(projectPath),
+    countKnowledgeEntries(projectPath),
+    countContextDocs(projectPath, srcDirs),
+  ]);
+
+  const name = pkg?.name || path.basename(projectPath);
+  const description = pkg?.description || await getConfigDescription(projectPath);
+
+  const lines: string[] = [
+    '# AGENTS.md',
+    '',
+    '> 本文件由 `harness sync-docs --agents` 自动生成，请勿手改。内容漂移时重新运行该命令更新。',
+    '',
+    '## 项目简介',
+    '',
+    description ? `**${name}** — ${description}` : `**${name}**`,
+    '',
+    '## 目录结构',
+    '',
+  ];
+
+  if (dirs.length > 0) {
+    lines.push('| 目录 | 说明 |', '|------|------|');
+    for (const d of dirs) {
+      lines.push(`| \`${d.dir}/\` | ${d.role} |`);
+    }
+  } else {
+    lines.push('（未检测到顶层目录）');
+  }
+
+  lines.push('', '## 常用命令', '');
+  const pm = detectPackageManager(projectPath);
+  const scripts = pkg?.scripts || {};
+  const commands = AGENTS_MD_COMMANDS.filter(([n]) => scripts[n]);
+  if (commands.length > 0) {
+    lines.push('```bash');
+    for (const [n, comment] of commands) {
+      lines.push(`${formatScriptCommand(pm, n)}  # ${comment}`);
+    }
+    lines.push('```');
+  } else {
+    lines.push('（package.json 中未检测到常用脚本）');
+  }
+
+  lines.push('', '## 约束与治理', '');
+  if (governance.hasConfig) {
+    lines.push(`- 治理配置：\`.harness/config.yml\`${governance.preset ? `（preset: ${governance.preset}）` : ''}`);
+  }
+  if (governance.hasClaudeGovernance) {
+    const counts = [
+      governance.ironLaws !== undefined ? `Iron Laws ${governance.ironLaws} 条` : null,
+      governance.guidelines !== undefined ? `Guidelines ${governance.guidelines} 条` : null,
+    ].filter(Boolean).join('、');
+    lines.push(`- 约束清单：\`CLAUDE.md\` Governance Rules 块${counts ? `（${counts}）` : ''}`);
+  }
+  if (!governance.hasConfig && !governance.hasClaudeGovernance) {
+    lines.push('- 未检测到 harness 治理配置，可运行 `harness init` 初始化');
+  }
+
+  lines.push('', '## 知识入口', '');
+  if (knowledgeCount !== null) {
+    lines.push(`- \`.harness/knowledge/\`：项目知识库（${knowledgeCount} 条），用 \`harness knowledge\` 查询`);
+  }
+  lines.push(
+    contextDocCount > 0
+      ? `- 各源码目录的 \`CONTEXT.md\` 是权威模块文档（现有 ${contextDocCount} 个），改动代码时同步更新`
+      : '- 各源码目录的 `CONTEXT.md` 是权威模块文档，缺失目录可由 `harness sync-docs` 生成模板'
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/** 读取 package.json（不存在或无法解析时返回 null） */
+async function readPackageJsonLite(dir: string): Promise<PackageJsonLite | null> {
+  try {
+    return JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf-8')) as PackageJsonLite;
+  } catch {
+    return null;
+  }
+}
+
+/** 从 .harness/config.yml 读取项目描述（package.json 无 description 时的兜底） */
+async function getConfigDescription(projectPath: string): Promise<string> {
+  try {
+    const content = await fs.readFile(path.join(projectPath, '.harness', 'config.yml'), 'utf-8');
+    const config = yaml.load(content) as Record<string, unknown> | undefined;
+    return typeof config?.description === 'string' ? config.description : '';
+  } catch {
+    return '';
+  }
+}
+
+/** 检测包管理器（决定命令前缀）：pnpm workspace/lockfile → yarn lockfile → 默认 npm */
+function detectPackageManager(projectPath: string): 'pnpm' | 'yarn' | 'npm' {
+  if (existsSync(path.join(projectPath, 'pnpm-workspace.yaml')) || existsSync(path.join(projectPath, 'pnpm-lock.yaml'))) {
+    return 'pnpm';
+  }
+  if (existsSync(path.join(projectPath, 'yarn.lock'))) return 'yarn';
+  return 'npm';
+}
+
+/** 格式化脚本调用方式（npm 的 start/test 可省略 run） */
+function formatScriptCommand(pm: 'pnpm' | 'yarn' | 'npm', name: string): string {
+  if (pm === 'pnpm') return `pnpm ${name}`;
+  if (pm === 'yarn') return `yarn ${name}`;
+  return name === 'start' || name === 'test' ? `npm ${name}` : `npm run ${name}`;
+}
+
+/** 收集顶层目录及其一句话说明（排序保证确定性） */
+async function getTopLevelDirEntries(
+  projectPath: string,
+  srcDirs: string[]
+): Promise<Array<{ dir: string; role: string }>> {
+  let dirents: import('fs').Dirent[];
+  try {
+    dirents = await fs.readdir(projectPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const entries: Array<{ dir: string; role: string }> = [];
+  for (const d of dirents) {
+    if (!d.isDirectory()) continue;
+    if (AGENTS_MD_SKIP_DIRS.has(d.name)) continue;
+    // 隐藏目录只保留 .harness / .github
+    if (d.name.startsWith('.') && d.name !== '.harness' && d.name !== '.github') continue;
+    entries.push({ dir: d.name, role: await describeTopLevelDir(projectPath, d.name, srcDirs) });
+  }
+  entries.sort((a, b) => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
+  return entries;
+}
+
+/** 顶层目录的一句话说明：知名目录 → monorepo 成员 → 源码根 → 子包 description → 占位 */
+async function describeTopLevelDir(projectPath: string, dir: string, srcDirs: string[]): Promise<string> {
+  const known = AGENTS_MD_DIR_ROLES[dir];
+  if (known) return known;
+
+  if (dir === 'apps' || dir === 'packages') {
+    const members = await listWorkspaceMembers(path.join(projectPath, dir));
+    if (members.length > 0) {
+      return `monorepo ${dir === 'apps' ? '应用' : '共享包'}：${members.join('、')}`;
+    }
+    return 'monorepo 工作区';
+  }
+
+  if (srcDirs.includes(dir)) return '源码目录';
+
+  const subPkg = await readPackageJsonLite(path.join(projectPath, dir));
+  if (subPkg?.description) return subPkg.description;
+
+  return '—';
+}
+
+/** 列出 monorepo 工作区成员（含 package.json 的子目录名，排序） */
+async function listWorkspaceMembers(dir: string): Promise<string[]> {
+  try {
+    const dirents = await fs.readdir(dir, { withFileTypes: true });
+    const members: string[] = [];
+    for (const d of dirents) {
+      if (!d.isDirectory() || d.name.startsWith('.')) continue;
+      if (existsSync(path.join(dir, d.name, 'package.json'))) {
+        members.push(d.name);
+      }
+    }
+    return members.sort();
+  } catch {
+    return [];
+  }
+}
+
+/** 收集治理信息：.harness/config.yml 与 CLAUDE.md 治理块（含铁律/指南计数） */
+async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
+  const info: GovernanceInfo = { hasConfig: false, hasClaudeGovernance: false };
+
+  try {
+    const content = await fs.readFile(path.join(projectPath, '.harness', 'config.yml'), 'utf-8');
+    const config = yaml.load(content) as Record<string, unknown> | undefined;
+    info.hasConfig = true;
+    if (config && typeof config.preset === 'string') {
+      info.preset = config.preset;
+    }
+  } catch {
+    // 配置不存在
+  }
+
+  try {
+    const claude = await fs.readFile(path.join(projectPath, 'CLAUDE.md'), 'utf-8');
+    if (/^##\s+Governance Rules/m.test(claude) || claude.includes('HARNESS_CONSTRAINTS_START')) {
+      info.hasClaudeGovernance = true;
+      info.ironLaws = countConstraintBullets(claude, 'Iron Laws');
+      info.guidelines = countConstraintBullets(claude, 'Guidelines');
+    }
+  } catch {
+    // CLAUDE.md 不存在
+  }
+
+  return info;
+}
+
+/** 统计 CLAUDE.md 指定约束分节下的条目数（`- **key**:` 行），分节不存在时返回 undefined */
+function countConstraintBullets(content: string, section: string): number | undefined {
+  const heading = new RegExp(`^###\\s+${section}[^\\n]*$`, 'm').exec(content);
+  if (!heading) return undefined;
+  const rest = content.slice(heading.index + heading[0].length);
+  const end = rest.search(/^###\s|^\s*<!--\s*HARNESS_CONSTRAINTS_END/m);
+  const block = end === -1 ? rest : rest.slice(0, end);
+  const items = block.match(/^-\s+\*\*[A-Za-z0-9_]+\*\*/gm);
+  return items ? items.length : 0;
+}
+
+/** 统计 .harness/knowledge 下的知识条目数（.md 文件），目录不存在时返回 null */
+async function countKnowledgeEntries(projectPath: string): Promise<number | null> {
+  try {
+    const files = await fs.readdir(path.join(projectPath, '.harness', 'knowledge'));
+    return files.filter(f => f.endsWith('.md')).length;
+  } catch {
+    return null;
+  }
+}
+
+/** 统计源码根内的 CONTEXT.md 数量（含源码根本身，跨根去重） */
+async function countContextDocs(projectPath: string, srcDirs: string[]): Promise<number> {
+  const found = new Set<string>();
+
+  async function scan(dir: string): Promise<void> {
+    let entries: import('fs').Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'dist') continue;
+      const entryPath = path.join(dir, entry.name);
+      if (existsSync(path.join(entryPath, 'CONTEXT.md'))) {
+        found.add(entryPath);
+      }
+      await scan(entryPath);
+    }
+  }
+
+  for (const root of srcDirs) {
+    const rootPath = path.join(projectPath, root);
+    if (existsSync(path.join(rootPath, 'CONTEXT.md'))) {
+      found.add(rootPath);
+    }
+    await scan(rootPath);
+  }
+  return found.size;
+}

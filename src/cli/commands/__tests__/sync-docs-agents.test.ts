@@ -223,4 +223,201 @@ describe('sync-docs --agents', () => {
 
     fs.rmSync(testDir, { recursive: true, force: true });
   });
+
+  it('yarn 项目应该使用 yarn 前缀执行脚本', async () => {
+    const testDir = path.join(tempDir, 'gen-yarn');
+    createFixture(testDir);
+    fs.writeFileSync(path.join(testDir, 'yarn.lock'), '# yarn lockfile v1\n');
+
+    await syncDocs({ projectPath: testDir, agents: true });
+
+    const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+    expect(content).toContain('yarn dev');
+    expect(content).toContain('yarn build');
+    expect(content).toContain('yarn test');
+    expect(content).toContain('yarn start');
+    expect(content).not.toContain('npm run');
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('空项目应该生成兜底内容（无 package.json、无治理配置、无知识库）', async () => {
+    const testDir = path.join(tempDir, 'empty-project');
+    // 只放应被跳过的目录：依赖/构建产物/隐藏目录
+    fs.mkdirSync(path.join(testDir, 'node_modules'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, 'coverage'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, '.next'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, '.vscode'), { recursive: true });
+
+    const result = await syncDocs({ projectPath: testDir, agents: true });
+    expect(result).toBe(false); // AGENTS.md 缺失 → 有问题，但已生成
+
+    const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+    // 项目名回退到目录名，无 description
+    expect(content).toContain('**empty-project**');
+    expect(content).not.toContain('**empty-project** —');
+    // 兜底分支
+    expect(content).toContain('（未检测到顶层目录）');
+    expect(content).toContain('（package.json 中未检测到常用脚本）');
+    expect(content).toContain('未检测到 harness 治理配置');
+    expect(content).toContain('缺失目录可由 `harness sync-docs` 生成模板');
+    expect(content).not.toContain('项目知识库');
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('package.json 无 description 时回退 config.yml，required_dirs 缺失时静默跳过', async () => {
+    const testDir = path.join(tempDir, 'config-fallback');
+    fs.mkdirSync(path.join(testDir, '.harness'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'cfg-app' }));
+    fs.writeFileSync(path.join(testDir, '.harness', 'config.yml'), [
+      'description: 来自配置的项目描述',
+      'governance:',
+      '  context_files:',
+      '    enabled: true',
+      '    required_dirs:',
+      '      - src',
+      '',
+    ].join('\n'));
+
+    const result = await syncDocs({ projectPath: testDir, agents: true });
+    expect(result).toBe(false);
+
+    // src 目录不存在：扫描/统计静默跳过，不中断生成
+    const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+    // description 来自 config.yml
+    expect(content).toContain('**cfg-app** — 来自配置的项目描述');
+    // 有治理配置但无 preset
+    expect(content).toContain('治理配置：`.harness/config.yml`');
+    expect(content).not.toContain('preset:');
+    // .harness 是保留的知名隐藏目录
+    expect(content).toContain('`.harness/`');
+
+    // 写入模式已补建 src/CONTEXT.md
+    expect(fs.existsSync(path.join(testDir, 'src', 'CONTEXT.md'))).toBe(true);
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('monorepo 应该标注 apps/packages 成员、子包 description 与占位目录', async () => {
+    const testDir = path.join(tempDir, 'monorepo');
+    fs.mkdirSync(path.join(testDir, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'src', 'app.ts'), '/**\n * App module\n */\nexport const app = 1;');
+    fs.mkdirSync(path.join(testDir, 'apps', 'web'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, 'apps', 'api'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, 'apps', '.hidden'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'web' }));
+    fs.writeFileSync(path.join(testDir, 'apps', 'api', 'package.json'), JSON.stringify({ name: 'api' }));
+    fs.mkdirSync(path.join(testDir, 'packages'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, 'services'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'services', 'package.json'), JSON.stringify({ name: 'svc', description: '内部服务目录' }));
+    fs.mkdirSync(path.join(testDir, 'misc'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({
+      name: 'mono-app',
+      description: '单仓项目',
+      scripts: { test: 'jest' },
+    }));
+
+    const result = await syncDocs({ projectPath: testDir, agents: true });
+    expect(result).toBe(false); // CAPABILITIES.md/AGENTS.md 缺失 → 已生成
+
+    const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+    expect(content).toContain('| `apps/` | monorepo 应用：api、web |');
+    expect(content).toContain('| `packages/` | monorepo 工作区 |');
+    expect(content).toContain('| `services/` | 内部服务目录 |');
+    expect(content).toContain('| `misc/` | — |');
+    expect(content).toContain('| `src/` | 源码目录 |');
+
+    // 无 CAPABILITIES.md 时应整体新建
+    const caps = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+    expect(caps).toContain('| app | src/app.ts |');
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('CLAUDE.md 治理块无约束分节时不显示计数', async () => {
+    const testDir = path.join(tempDir, 'governance-no-sections');
+    createFixture(testDir, { withCapabilities: true });
+    fs.writeFileSync(path.join(testDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n（尚未配置约束）\n');
+
+    await syncDocs({ projectPath: testDir, agents: true });
+
+    const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+    expect(content).toContain('Governance Rules 块');
+    expect(content).not.toContain('Iron Laws');
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('--json 幂等时 agentsMd 应为 exists:true、stale:false', async () => {
+    const testDir = path.join(tempDir, 'json-idempotent');
+    createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+    await syncDocs({ projectPath: testDir, agents: true });
+
+    const result = await syncDocs({ projectPath: testDir, agents: true, json: true });
+    expect(result).toBe(true);
+
+    const jsonCall = consoleSpy.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
+    );
+    expect(jsonCall).toBeDefined();
+    const parsed = JSON.parse(jsonCall![0]);
+    expect(parsed.stale).toBe(false);
+    expect(parsed.agentsMd).toEqual({ file: 'AGENTS.md', exists: true, stale: false });
+    expect(parsed.resolution.some((r: { action: string }) => r.action === 'sync-agents-md')).toBe(false);
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('应该检测 CONTEXT.md 缺失/过时并给出 resolution（json + 人读输出）', async () => {
+    const testDir = path.join(tempDir, 'context-stale');
+    createFixture(testDir, { withCapabilities: true });
+    // 启用 context_files 并要求 lib（不存在 → 缺失）
+    fs.writeFileSync(path.join(testDir, '.harness', 'config.yml'), [
+      'preset: standard',
+      'governance:',
+      '  context_files:',
+      '    enabled: true',
+      '    required_dirs:',
+      '      - src',
+      '      - lib',
+      '',
+    ].join('\n'));
+    // src 子目录树：触发子目录递归扫描 + CONTEXT.md 过时检测
+    fs.mkdirSync(path.join(testDir, 'src', 'modules', 'deep'), { recursive: true });
+    fs.mkdirSync(path.join(testDir, 'src', '__tests__'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'src', 'modules', 'util.ts'), '/**\n * Util module\n */\nexport const util = 1;');
+    fs.writeFileSync(path.join(testDir, 'src', 'modules', 'index.ts'), 'export * from \'./util\';');
+    fs.writeFileSync(path.join(testDir, 'src', 'modules', 'deep', 'deep.ts'), '/**\n * Deep module\n */\nexport const deep = 1;');
+    fs.writeFileSync(path.join(testDir, 'src', 'modules', 'CONTEXT.md'), '# modules\n');
+    // 人为把 CONTEXT.md 的 mtime 拨到过去 → 源码比文档新 → 过时
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(testDir, 'src', 'modules', 'CONTEXT.md'), past, past);
+
+    // json 模式：结构化输出缺失/过时
+    const jsonResult = await syncDocs({ projectPath: testDir, agents: true, check: true, json: true });
+    expect(jsonResult).toBe(false);
+    const jsonCall = consoleSpy.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
+    );
+    expect(jsonCall).toBeDefined();
+    const parsed = JSON.parse(jsonCall![0]);
+    expect(parsed.summary.contextMissing).toBe(1);
+    expect(parsed.summary.contextStale).toBe(1);
+    expect(parsed.contextMissing).toEqual([{ dir: 'lib', file: 'lib/CONTEXT.md' }]);
+    expect(parsed.contextStale).toEqual([{ dir: 'src/modules', file: 'src/modules/CONTEXT.md' }]);
+    expect(parsed.resolution.some((r: { action: string }) => r.action === 'create-context-md')).toBe(true);
+    expect(parsed.resolution.some((r: { action: string }) => r.action === 'update-context-md')).toBe(true);
+    expect(parsed.agentsMd).toEqual({ file: 'AGENTS.md', exists: false, stale: true });
+
+    // 人读模式：输出过时提示
+    consoleSpy.mockClear();
+    const humanResult = await syncDocs({ projectPath: testDir, agents: true, check: true });
+    expect(humanResult).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('可能过时'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('缺少 CONTEXT.md'));
+
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
 });

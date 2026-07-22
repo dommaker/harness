@@ -557,7 +557,8 @@ async function updateCapabilitiesFile(
     // 移除已删除文件的行
     for (const removed of result.removed) {
       const escapedFile = removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const rowRegex = new RegExp(`^\\|[^|]*\\|\\s*${escapedFile}\\s*\\|.*$`, 'gm');
+      // 第二列存完整路径，basename 只在末尾出现，用 [^|]* 匹配路径前缀
+      const rowRegex = new RegExp(`^\\|[^|]*\\|[^|]*\\b${escapedFile}\\s*\\|.*$`, 'gm');
       content = content.replace(rowRegex, '');
     }
 

@@ -331,5 +331,32 @@ describe('sync-docs command', () => {
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
+
+    it('写入模式应移除已删除文件的行', async () => {
+      const testDir = path.join(tempDir, 'remove-stale');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      // 创建两个源文件
+      fs.writeFileSync(path.join(srcDir, 'kept.ts'), 'export const kept = 1;');
+      fs.writeFileSync(path.join(srcDir, 'removed.ts'), 'export const removed = 1;');
+
+      // 先让 syncDocs 创建初始 CAPABILITIES.md（包含两个文件）
+      await syncDocs({ projectPath: testDir });
+      let content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('kept.ts');
+      expect(content).toContain('removed.ts');
+
+      // 删除 removed.ts
+      fs.unlinkSync(path.join(srcDir, 'removed.ts'));
+
+      // 重新运行 syncDocs（写入模式）
+      await syncDocs({ projectPath: testDir });
+      content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('kept.ts');
+      expect(content).not.toContain('removed.ts');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
   });
 });

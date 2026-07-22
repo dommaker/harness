@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.16.3] - 2026-07-22
+
+### Changes
+- fix(sync-docs): 删除 stale 条目正则修复 — basename 匹配完整路径列
+- test(sync-docs): 补 --agents 覆盖率低分分支（statements 78.9% → ≥79.5%）
+- docs: CHANGELOG 补齐 0.16.1/0.16.2（修复 docs_freshness 铁律 changelog_version 检查）
+
 ## [0.16.2] - 2026-07-20
 
 ### Added

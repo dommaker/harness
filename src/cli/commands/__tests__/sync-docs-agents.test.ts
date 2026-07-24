@@ -420,4 +420,121 @@ describe('sync-docs --agents', () => {
 
     fs.rmSync(testDir, { recursive: true, force: true });
   });
+
+  describe('PRESERVE 标记段保留', () => {
+    const MANUAL_BLOCK = [
+      '<!-- PRESERVE:manual -->',
+      '## 手写区',
+      '',
+      '使用者自有内容',
+      '<!-- /PRESERVE:manual -->',
+    ].join('\n');
+
+    function appendBlock(dir: string, block: string): void {
+      fs.appendFileSync(path.join(dir, 'AGENTS.md'), block + '\n');
+    }
+
+    it('PRESERVE 块在重新生成时保留，组合结果幂等（--check 通过）', async () => {
+      const testDir = path.join(tempDir, 'preserve-basic');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+      appendBlock(testDir, MANUAL_BLOCK);
+
+      // 追加块后构成漂移 → 写入模式重组：生成部分 + PRESERVE 块
+      await syncDocs({ projectPath: testDir, agents: true });
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain(MANUAL_BLOCK);
+      // 块位于生成内容之后
+      expect(content.indexOf('## 知识入口')).toBeLessThan(content.indexOf('<!-- PRESERVE:manual -->'));
+
+      // 重组后幂等：--check 通过
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('多个 PRESERVE 块保持原有相对顺序', async () => {
+      const testDir = path.join(tempDir, 'preserve-order');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+      appendBlock(testDir, '<!-- PRESERVE:one -->\n第一块\n<!-- /PRESERVE:one -->');
+      appendBlock(testDir, '<!-- PRESERVE:two -->\n第二块\n<!-- /PRESERVE:two -->');
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content.indexOf('PRESERVE:one')).toBeLessThan(content.indexOf('PRESERVE:two'));
+      expect(content).toContain('第一块');
+      expect(content).toContain('第二块');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('块内手改不报漂移，块外手改报漂移且重生成后块仍在', async () => {
+      const testDir = path.join(tempDir, 'preserve-drift');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+      appendBlock(testDir, MANUAL_BLOCK);
+      await syncDocs({ projectPath: testDir, agents: true }); // 重组为规范形态
+
+      // 块内手改 → 不报漂移
+      const agentsPath = path.join(testDir, 'AGENTS.md');
+      const edited = fs.readFileSync(agentsPath, 'utf-8').replace('使用者自有内容', '改过的内容');
+      fs.writeFileSync(agentsPath, edited);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+
+      // 块外手改（生成部分） → 报漂移；重生成后块仍在、块外改动被还原
+      fs.appendFileSync(agentsPath, '\n块外手动追加\n');
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(false);
+      await syncDocs({ projectPath: testDir, agents: true });
+      const regenerated = fs.readFileSync(agentsPath, 'utf-8');
+      expect(regenerated).toContain('改过的内容');
+      expect(regenerated).not.toContain('块外手动追加');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('未闭合的 PRESERVE 块不予保留并告警', async () => {
+      const testDir = path.join(tempDir, 'preserve-malformed');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+      appendBlock(testDir, '<!-- PRESERVE:broken -->\n没有结束标记');
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未闭合'));
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).not.toContain('PRESERVE:broken');
+      expect(content).not.toContain('没有结束标记');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('仓库状态变化时报漂移：重生成更新生成部分且保留 PRESERVE 块', async () => {
+      const testDir = path.join(tempDir, 'preserve-repo-change');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+      appendBlock(testDir, MANUAL_BLOCK);
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      // package.json 删除一个 curated 脚本 → 生成部分变化
+      const pkgPath = path.join(testDir, 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      delete pkg.scripts.lint;
+      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(false);
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).not.toContain('pnpm lint');
+      expect(content).toContain(MANUAL_BLOCK);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
 });

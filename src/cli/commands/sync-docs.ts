@@ -25,7 +25,7 @@ export interface SyncDocsOptions {
   changelog?: boolean;
   /** 输出 JSON 格式（供 LLM 消费） */
   json?: boolean;
-  /** 同步 AGENTS.md（agent 导读），在默认章节之外追加 */
+  /** 同步 AGENTS.md（agent 导读）；PRESERVE 标记段在重新生成时原样保留 */
   agents?: boolean;
 }
 
@@ -143,18 +143,27 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   }
 
   // 4c. AGENTS.md（--agents 启用）：缺失或内容漂移
+  // 漂移比对基于"生成内容 + 既有 PRESERVE 标记块"的组合结果：
+  // PRESERVE 块原样穿过，块内手改不报漂移；块外手改/仓库状态变化报漂移。
   let agentsMdExpected: string | null = null;
   let agentsMdExists = false;
   let agentsMdStale = false;
+  let agentsMdMalformedPreserve: string[] = [];
   if (options.agents) {
-    agentsMdExpected = await buildAgentsMd(projectPath, srcDirs);
+    const generated = await buildAgentsMd(projectPath, srcDirs);
+    let existing: string | null = null;
     try {
-      const existing = await fs.readFile(path.join(projectPath, 'AGENTS.md'), 'utf-8');
+      existing = await fs.readFile(path.join(projectPath, 'AGENTS.md'), 'utf-8');
       agentsMdExists = true;
-      agentsMdStale = existing !== agentsMdExpected;
     } catch {
-      agentsMdStale = true; // 缺失视为漂移
+      // 缺失视为漂移
     }
+    const { blocks, malformed } = existing !== null
+      ? extractPreserveBlocks(existing)
+      : { blocks: [] as string[], malformed: [] as string[] };
+    agentsMdMalformedPreserve = malformed;
+    agentsMdExpected = composeAgentsMd(generated, blocks);
+    agentsMdStale = existing !== agentsMdExpected;
   }
   const hasAgentsIssues = options.agents === true && agentsMdStale;
 
@@ -269,6 +278,14 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
         : `\n🤖 缺少 AGENTS.md（agent 导读）:`)
     );
     console.log(chalk.gray(`  - AGENTS.md`));
+  }
+
+  if (agentsMdMalformedPreserve.length > 0) {
+    console.log(
+      chalk.yellow(
+        `\n⚠️ AGENTS.md 中 PRESERVE 标记块未闭合（不予保留，重新生成将丢弃）: ${agentsMdMalformedPreserve.join(', ')}`
+      )
+    );
   }
 
   if (!hasIssues) {
@@ -838,7 +855,8 @@ interface GovernanceInfo {
  * 生成 AGENTS.md 内容（agent 导读：项目简介/目录结构/常用命令/约束治理/知识入口）
  *
  * 纯静态提取（零 LLM），确定性输出：同一代码库状态生成同一内容（无时间戳），
- * 因此重跑幂等，--check 可直接用文本对比检测漂移。
+ * 因此重跑幂等。既有文件中的 PRESERVE 标记块由 composeAgentsMd 组合回输出，
+ * --check 对组合结果做文本对比检测漂移（块内手改不报漂移）。
  */
 async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<string> {
   const pkg = await readPackageJsonLite(projectPath);
@@ -855,7 +873,7 @@ async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<st
   const lines: string[] = [
     '# AGENTS.md',
     '',
-    '> 本文件由 `harness sync-docs --agents` 自动生成，请勿手改。内容漂移时重新运行该命令更新。',
+    '> 本文件由 `harness sync-docs --agents` 自动生成，请勿手改。`<!-- PRESERVE:名称 -->` 与 `<!-- /PRESERVE:名称 -->` 之间的内容在重新生成时原样保留。内容漂移时重新运行该命令更新。',
     '',
     '## 项目简介',
     '',
@@ -915,6 +933,64 @@ async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<st
   lines.push('');
 
   return lines.join('\n');
+}
+
+// AGENTS.md PRESERVE 标记块（--agents）
+//
+// 使用者在 AGENTS.md 中用 `<!-- PRESERVE:名称 -->` / `<!-- /PRESERVE:名称 -->`
+// 圈出的区段属于使用者自有内容：重新生成时原样保留（附于生成内容之后，保持相对顺序），
+// 漂移比对对块内改动免疫。名称仅允许字母/数字/下划线/连字符，标记须独占一行。
+
+/** PRESERVE 开始标记：独占一行，捕获名称 */
+const PRESERVE_BEGIN_RE = /^<!-- PRESERVE:([A-Za-z0-9_-]+) -->\s*$/;
+
+interface PreserveExtraction {
+  /** 完整保留块（含首尾标记行，块间不含外部空行），保持原有相对顺序 */
+  blocks: string[];
+  /** 未闭合（缺同名结束标记）的块名——不予保留，调用方应告警 */
+  malformed: string[];
+}
+
+/**
+ * 从既有 AGENTS.md 提取 PRESERVE 标记块（逐行扫描，结束标记须与开始标记同名）。
+ * 块内容原样保留（含标记行）；未闭合的开始标记按普通内容处理并记入 malformed。
+ */
+function extractPreserveBlocks(content: string): PreserveExtraction {
+  const blocks: string[] = [];
+  const malformed: string[] = [];
+  const lines = content.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const m = lines[i].match(PRESERVE_BEGIN_RE);
+    if (!m) {
+      i++;
+      continue;
+    }
+    const name = m[1];
+    const endMarker = `<!-- /PRESERVE:${name} -->`;
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim() !== endMarker) {
+      j++;
+    }
+    if (j >= lines.length) {
+      malformed.push(name);
+      i++; // 未闭合：跳过开始标记行，其余行按普通内容继续扫描
+      continue;
+    }
+    blocks.push(lines.slice(i, j + 1).join('\n'));
+    i = j + 1;
+  }
+  return { blocks, malformed };
+}
+
+/**
+ * 组合 AGENTS.md 最终内容：生成部分在前，PRESERVE 块按原序附在文末（空行分隔）。
+ * 无保留块时原样返回生成内容（与历史行为一致）；组合结果重跑幂等。
+ */
+function composeAgentsMd(generated: string, blocks: string[]): string {
+  if (blocks.length === 0) return generated;
+  const head = generated.replace(/\s*$/, '');
+  return head + '\n\n' + blocks.join('\n\n') + '\n';
 }
 
 /** 读取 package.json（不存在或无法解析时返回 null） */

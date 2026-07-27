@@ -2,13 +2,14 @@
  * validate 命令测试
  */
 
-import { validate, createExampleCheckpoint } from '../validate';
+import { validate, createExampleCheckpoint, createExampleResolutions } from '../validate';
 import * as fs from 'fs/promises';
 import { CheckpointValidator } from '../../../core/validators/checkpoint';
 import * as yaml from 'js-yaml';
 
 // Mock fs/promises
 jest.mock('fs/promises', () => ({
+  access: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
   mkdir: jest.fn(),
@@ -125,6 +126,7 @@ describe('validate command', () => {
 
   describe('createExampleCheckpoint', () => {
     it('应该创建示例检查点文件', async () => {
+      mockFs.access.mockRejectedValue(new Error('ENOENT'));
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
       mockYaml.dump.mockReturnValue('yaml content');
@@ -134,6 +136,38 @@ describe('validate command', () => {
       expect(mockFs.mkdir).toHaveBeenCalled();
       expect(mockFs.writeFile).toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已创建示例检查点'));
+    });
+
+    it('已存在时不覆盖', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+
+      await createExampleCheckpoint('/project');
+
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('checkpoints.yml 已存在，跳过'));
+    });
+  });
+
+  describe('createExampleResolutions', () => {
+    it('应该创建 Resolutions 文件', async () => {
+      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      await createExampleResolutions('/project');
+
+      expect(mockFs.mkdir).toHaveBeenCalled();
+      expect(mockFs.writeFile).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已创建 Resolutions 文件'));
+    });
+
+    it('已存在时不覆盖', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+
+      await createExampleResolutions('/project');
+
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('resolutions.json 已存在，跳过'));
     });
   });
 });

@@ -156,6 +156,15 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
   const filePath = path.join(projectPath, DEFAULT_CHECKPOINT_FILE);
   const dir = path.dirname(filePath);
 
+  // 如果已存在，不覆盖
+  try {
+    await fs.access(filePath);
+    console.log(chalk.gray(`checkpoints.yml 已存在，跳过`));
+    return;
+  } catch {
+    // 文件不存在，创建
+  }
+
   await fs.mkdir(dir, { recursive: true });
 
   // 动态替换 no-console 检查点的源目录
@@ -212,6 +221,15 @@ const DEFAULT_RESOLUTIONS = {
 export async function createExampleResolutions(projectPath: string): Promise<void> {
   const harnessDir = path.join(projectPath, '.harness');
   const filePath = path.join(harnessDir, 'resolutions.json');
+
+  // 如果已存在，不覆盖
+  try {
+    await fs.access(filePath);
+    console.log(chalk.gray(`resolutions.json 已存在，跳过`));
+    return;
+  } catch {
+    // 文件不存在，创建
+  }
 
   await fs.mkdir(harnessDir, { recursive: true });
 

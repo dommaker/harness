@@ -113,8 +113,9 @@ describe('sync-docs --agents', () => {
     // 约束与治理
     expect(content).toContain('preset: standard');
     expect(content).toContain('Iron Laws 2 条、Guidelines 3 条');
-    // 知识入口
-    expect(content).toContain('项目知识库（1 条）');
+    // 知识入口（只写目录存在性，不写易变的条目数——避免 --check 漂移竞态）
+    expect(content).toContain('项目知识库，用 `harness knowledge` 查询');
+    expect(content).not.toContain('知识库（');
     expect(content).toContain('CONTEXT.md');
     expect(content).toContain('现有 1 个');
 

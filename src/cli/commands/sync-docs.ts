@@ -860,10 +860,10 @@ interface GovernanceInfo {
  */
 async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<string> {
   const pkg = await readPackageJsonLite(projectPath);
-  const [dirs, governance, knowledgeCount, contextDocCount] = await Promise.all([
+  const [dirs, governance, hasKnowledge, contextDocCount] = await Promise.all([
     getTopLevelDirEntries(projectPath, srcDirs),
     getGovernanceInfo(projectPath),
-    countKnowledgeEntries(projectPath),
+    hasKnowledgeDir(projectPath),
     countContextDocs(projectPath, srcDirs),
   ]);
 
@@ -922,8 +922,10 @@ async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<st
   }
 
   lines.push('', '## 知识入口', '');
-  if (knowledgeCount !== null) {
-    lines.push(`- \`.harness/knowledge/\`：项目知识库（${knowledgeCount} 条），用 \`harness knowledge\` 查询`);
+  if (hasKnowledge) {
+    // 不写条目数：.harness/knowledge 通常不入 git，条数是环境状态，
+    // 写进受 --check 漂移比对的文档会制造「必然过期」竞态（任何知识写入都使已提交文档过期）
+    lines.push('- `.harness/knowledge/`：项目知识库，用 `harness knowledge` 查询');
   }
   lines.push(
     contextDocCount > 0
@@ -1131,13 +1133,12 @@ function countConstraintBullets(content: string, section: string): number | unde
   return items ? items.length : 0;
 }
 
-/** 统计 .harness/knowledge 下的知识条目数（.md 文件），目录不存在时返回 null */
-async function countKnowledgeEntries(projectPath: string): Promise<number | null> {
+/** 判断 .harness/knowledge 目录是否存在（只判存在性，不统计条数——条数易变，见 buildAgentsMd 注释） */
+async function hasKnowledgeDir(projectPath: string): Promise<boolean> {
   try {
-    const files = await fs.readdir(path.join(projectPath, '.harness', 'knowledge'));
-    return files.filter(f => f.endsWith('.md')).length;
+    return (await fs.stat(path.join(projectPath, '.harness', 'knowledge'))).isDirectory();
   } catch {
-    return null;
+    return false;
   }
 }
 

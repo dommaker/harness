@@ -385,7 +385,10 @@ describe('KnowledgeLifecycle', () => {
       const oldDate = new Date();
       oldDate.setMonth(oldDate.getMonth() - 13);
       store.save(makeEntry({ id: 'DEC-001', maturity: 'proven', lastReferenced: oldDate.toISOString() }));
-      store.save(makeEntry({ id: 'DEC-002', maturity: 'draft', lastReferenced: '2026-05-01' }));
+      const recentDate = new Date();
+      recentDate.setMonth(recentDate.getMonth() - 1);
+      // DEC-002 不应 decay：lastReferenced 必须相对当前时间（硬编码日期会随时间越过阈值，2026-08 已爆雷）
+      store.save(makeEntry({ id: 'DEC-002', maturity: 'draft', lastReferenced: recentDate.toISOString() }));
 
       const changes = lifecycle.runDecayCycle();
       expect(changes).toHaveLength(1);

@@ -110,8 +110,18 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       return clean.split('/').pop()!;
     };
     const currentBasenames = currentModules.map(m => getBasename(m.file));
-    result.added = currentBasenames.filter(f => !existingFiles.includes(f));
-    result.removed = existingFiles.filter(f => !currentBasenames.includes(f));
+    // 目录条目（如 src/、agents/）按前缀覆盖其中的文件，且不参与 removed 对比
+    // （basename 列表里永远不会有目录，直接对比会把目录行误报为「已删除的模块」）
+    const existingDirs = existingFiles.filter(f => f.endsWith('/'));
+    const existingFileNames = existingFiles.filter(f => !f.endsWith('/'));
+    result.added = currentModules
+      .filter(
+        m =>
+          !existingDirs.some(d => m.file.startsWith(d)) &&
+          !existingFileNames.includes(getBasename(m.file))
+      )
+      .map(m => getBasename(m.file));
+    result.removed = existingFileNames.filter(f => !currentBasenames.includes(f));
   }
 
   // 4. 检查 CONTEXT.md（缺失 + 过时）
@@ -439,7 +449,10 @@ async function parseCapabilitiesFiles(capabilitiesPath: string): Promise<string[
     }
   }
   // 也匹配目录条目（如 agents/、gates/）
-  const dirRegex = /\|\s*([^|]+?\/)\s*\|/g;
+  // 仅匹配纯路径样式的单元格（字母/数字/._/-/@ 与 / 组成、以 / 结尾），
+  // 否则以 / 结尾的散文描述（如 JSDoc 首行在 "gitRepo /" 处换行）会被误判为
+  // 目录条目，导致 --check 永远报「包含已删除的模块」不收敛（2026-08-04 studio PR #44）
+  const dirRegex = /\|\s*([\w][\w@./-]*\/)\s*\|/g;
   while ((match = dirRegex.exec(content)) !== null) {
     const dir = match[1].trim();
     if (!files.includes(dir)) {

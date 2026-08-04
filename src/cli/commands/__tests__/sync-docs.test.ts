@@ -169,6 +169,53 @@ describe('sync-docs command', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
+    it('描述以 / 结尾的表格行不应被误判为目录条目（check 必须收敛）', async () => {
+      // 回归：JSDoc 首行在 "gitRepo /" 处换行时，生成的描述单元格以 / 结尾，
+      // 旧目录条目正则将其误判为目录 → --check 永远报「包含已删除的模块」
+      // （2026-08-04 studio PR #44 CI Governance 不收敛事故）
+      const testDir = path.join(tempDir, 'trailing-slash-desc');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(srcDir, 'workspace.ts'),
+        '/**\n * 归属链解析 — metadata.workspaceRoot（Requirement→gitRepo /\n * 人工绑定）优先。\n */\nexport const x = 1;\n'
+      );
+
+      // 第一轮：生成 CAPABILITIES.md（描述行以 / 结尾）
+      await syncDocs({ projectPath: testDir });
+      const cap = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(cap).toContain('workspace.ts');
+      expect(cap).toMatch(/gitRepo\s*\/\s*\|/);
+
+      // 第二轮：生成后立即 --check 必须收敛（修复前此处必 false）
+      consoleSpy.mockClear();
+      const check = await syncDocs({ projectPath: testDir, check: true });
+      expect(check).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('真正的目录条目（如 agents/）仍应被识别', async () => {
+      const testDir = path.join(tempDir, 'dir-entry');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+
+      fs.writeFileSync(path.join(srcDir, 'mymodule.ts'), 'export const x = 1;');
+
+      // CAPABILITIES.md 用目录条目记录 src/ 下的模块
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| all | src/ | 全量记录 |'
+      );
+
+      // src/ 目录条目覆盖 mymodule.ts → 无 added，check 通过
+      const result = await syncDocs({ projectPath: testDir, check: true });
+      expect(result).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
     it('应该检查 CONTEXT.md 是否存在', async () => {
       const testDir = path.join(tempDir, 'context-check');
       const harnessDir = path.join(testDir, '.harness');

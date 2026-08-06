@@ -20,10 +20,18 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
   - 清理范围:根目录 rebuild-*.js、coverage/、temp-nonexistent-perf/、docs/ 均在列
 - 技能链:research → prototype → task → codebase-design → to-spec → triage → 逐个执行 → improve-codebase-architecture 终审
 - 终审额外专项:孤立死代码、无用导入、闲置变量零残留
+- **已锁定的事实**(调研所得):
+  - jest 基线:128 套件 / 2167 通过 / 8 skipped / 0 失败,全绿(重构全程保持)
+  - 双锁裁决:CI(4 workflow)与 publish 均用 npm ci → 保留 package-lock.json,已删 pnpm-lock.yaml(commit 76a9b66)
+  - `docs/2026-05-01-harness-transformation.md`(3271 行)是作者的"从约束引擎到知识引擎"转型蓝图,含目标包结构/约束分层/模块改造表 → 本次重构的**架构北极星**;但属功能转型规划,本次只对齐结构、不实现新功能
+  - 仓库自身 dogfooding:.harness/checkpoints.yml 的 no-console checkpoint 有 bug(grep src/ 全量扫描,CLI 产品必然有合法 console 输出却判失败),pre-commit 每次跑全量 build+test —— 均属修复目标
+  - CI 门槛:coverage ≥79%,master 受保护走 PR(但本次按用户决议不 push,只本地提交)
 
 ## Decisions so far
 
 - [一次性 grilling:全套重构边界决议](issues/01-grilling-decisions.md) — 删除判据、接口边界、测试策略、git 交付、验收形式全部锁定(见该工单 Answer)
+- [task:前置准备](issues/05-task-prep.md) — jest 基线全绿;双锁反向裁决保留 npm;rebuild-*.js 已删
+- [research:studio 使用面快照](issues/03-research-studio-usage.md) — 50 条护栏清单(P0 不可破坏);最脆弱:知识引擎构造器、version 契约、sync-docs PRESERVE 语义
 
 ## Not yet specified
 

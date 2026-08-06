@@ -109,3 +109,17 @@ When making changes to this codebase, follow these rules:
 ## Runtime State
 
 All runtime state lives under `.harness/` (logs, traces, diagnoses, proposals). This directory is created at runtime and should not be committed.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (dommaker/harness), operated via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage labels used as-is (needs-triage etc.). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.

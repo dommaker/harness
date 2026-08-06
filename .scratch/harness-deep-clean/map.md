@@ -32,6 +32,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [一次性 grilling:全套重构边界决议](issues/01-grilling-decisions.md) — 删除判据、接口边界、测试策略、git 交付、验收形式全部锁定(见该工单 Answer)
 - [task:前置准备](issues/05-task-prep.md) — jest 基线全绿;双锁反向裁决保留 npm;rebuild-*.js 已删
 - [research:studio 使用面快照](issues/03-research-studio-usage.md) — 50 条护栏清单(P0 不可破坏);最脆弱:知识引擎构造器、version 契约、sync-docs PRESERVE 语义
+- [research:源码全景调研](issues/02-research-codebase.md) — 10 孤岛模块(仅 governance 可删)、三大件病灶、zod/死常量/双发布流水线、core↔monitoring 循环、typescript 隐式依赖 bug、no-console checkpoint 根因
 
 ## Not yet specified
 

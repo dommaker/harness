@@ -532,16 +532,3 @@ export class CheckpointValidator {
     return current;
   }
 }
-
-// 导出单例
-export const checkpointValidator = CheckpointValidator.getInstance();
-
-/**
- * 快捷函数：验证检查点
- */
-export async function validateCheckpoint(
-  checkpoint: Checkpoint,
-  context: CheckpointContext
-): Promise<CheckpointResult> {
-  return checkpointValidator.validate(checkpoint, context);
-}

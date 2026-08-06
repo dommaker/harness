@@ -324,25 +324,3 @@ export class PerformanceCollector {
     };
   }
 }
-
-/**
- * 全局单例（可选）
- */
-let globalCollector: PerformanceCollector | null = null;
-
-/**
- * 获取全局收集器
- */
-export function getPerformanceCollector(): PerformanceCollector {
-  if (!globalCollector) {
-    globalCollector = new PerformanceCollector();
-  }
-  return globalCollector;
-}
-
-/**
- * 配置全局收集器
- */
-export function configurePerformanceCollector(config: Partial<PerformanceCollectorConfig>): void {
-  globalCollector = new PerformanceCollector(config);
-}

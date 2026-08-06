@@ -243,10 +243,3 @@ export class ProjectConfigLoader {
     );
   }
 }
-
-/**
- * 创建项目配置加载器
- */
-export function createProjectConfigLoader(projectPath?: string): ProjectConfigLoader {
-  return new ProjectConfigLoader(projectPath);
-}

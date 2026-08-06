@@ -1,10 +1,10 @@
 /**
- * Tests for standard.ts — applyPreset, getPreset, getIronLawPreset
+ * Tests for standard.ts — applyPreset, getPreset
  *
  * Pure logic, no I/O — tests preset selection and constraint filtering.
  */
 
-import { applyPreset, getPreset, getIronLawPreset } from '../standard';
+import { applyPreset, getPreset } from '../standard';
 
 describe('getPreset', () => {
   it('returns strict preset', () => {
@@ -85,20 +85,5 @@ describe('applyPreset with PresetConfig object', () => {
       tips: [],
     });
     expect(config.disabled.length).toBeGreaterThan(0);
-  });
-});
-
-describe('getIronLawPreset (deprecated)', () => {
-  it('returns iron law config for strict preset', () => {
-    const config = getIronLawPreset('strict');
-    expect(config.preset).toBe('strict');
-    expect(config.enabled).toBe(true);
-    expect(config.ironLaws.length).toBeGreaterThan(5);
-  });
-
-  it('returns iron law config for relaxed preset', () => {
-    const config = getIronLawPreset('relaxed');
-    expect(config.preset).toBe('relaxed');
-    expect(config.ironLaws).toHaveLength(3);
   });
 });

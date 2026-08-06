@@ -764,14 +764,6 @@ describe('ConstraintChecker', () => {
     });
   });
 
-  describe('Deprecated functions', () => {
-    it('getAllLaws should work', () => {
-      const { getAllLaws } = require('../core/constraints/definitions');
-      const laws = getAllLaws();
-      expect(Array.isArray(laws)).toBe(true);
-      expect(laws.length).toBeGreaterThan(0);
-    });
-
     it('findLawsByTrigger should work', () => {
       const { findLawsByTrigger } = require('../core/constraints/definitions');
       const laws = findLawsByTrigger('code_implementation');

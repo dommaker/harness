@@ -1133,37 +1133,3 @@ export async function checkBeforeExecution(
 
 // 导出单例
 export const constraintChecker = ConstraintChecker.getInstance();
-
-// ========================================
-// 向后兼容的类和函数
-// ========================================
-
-/**
- * @deprecated 使用 ConstraintChecker 代替
- */
-export const IronLawChecker = ConstraintChecker;
-
-/**
- * @deprecated 使用 checkConstraint 代替
- */
-export async function checkIronLaw(
-  lawId: string,
-  context: ConstraintContext
-): Promise<ConstraintResult> {
-  return checkConstraint(lawId, context);
-}
-
-/**
- * @deprecated 使用 checkConstraints 代替
- */
-export async function checkAllIronLaws(
-  context: ConstraintContext
-): Promise<ConstraintResult[]> {
-  const result = await checkConstraints(context);
-  return [...result.ironLaws, ...result.guidelines, ...result.tips];
-}
-
-/**
- * @deprecated 使用 constraintChecker 代替
- */
-export const ironLawChecker = constraintChecker;

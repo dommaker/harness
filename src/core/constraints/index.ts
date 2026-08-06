@@ -10,11 +10,6 @@ export {
   getAllConstraints,
   findConstraintsByTrigger,
   getConstraint,
-  // 向后兼容
-  getAllLaws,
-  findLawsByTrigger,
-  getLaw,
-  filterLawsBySeverity,
 } from './definitions';
 
 // 约束检查器
@@ -24,11 +19,6 @@ export {
   checkConstraints,
   checkBeforeExecution,
   constraintChecker,
-  // 向后兼容
-  IronLawChecker,
-  checkIronLaw,
-  checkAllIronLaws,
-  ironLawChecker,
 } from './checker';
 
 // 类型导出
@@ -40,28 +30,12 @@ export type {
   ConstraintResult,
   ConstraintContext,
   ConstraintCheckResult,
-  // 向后兼容
-  IronLawId,
-  IronLawSeverity,
-  IronLawTrigger,
-  IronLaw,
-  IronLawResult,
   IronLawContext,
 } from '../../types/constraint';
 
-export {
-  ConstraintViolationError,
-  // 向后兼容
-  IronLawViolationError,
-} from '../../types/constraint';
+export { ConstraintViolationError } from '../../types/constraint';
 
 // 约束拦截器
-// 约束 Prompt 注入
-export {
-  formatConstraintsForPrompt,
-  type AgentRole,
-} from './prompt-injection';
-
 export {
   ConstraintInterceptor,
   constraintInterceptor,

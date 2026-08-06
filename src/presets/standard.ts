@@ -136,28 +136,3 @@ export function getPreset(name: string): PresetConfig {
       return STANDARD_PRESET;
   }
 }
-
-// ========================================
-// 向后兼容
-// ========================================
-
-import type { IronLawConfig } from '../types/iron-law';
-
-/**
- * @deprecated 使用 PresetConfig 代替
- */
-export { STANDARD_PRESET as STANDARD_IRON_LAWS_CONFIG };
-
-/**
- * @deprecated 使用 getPreset 代替
- */
-export function getIronLawPreset(preset: string): IronLawConfig {
-  const config = getPreset(preset);
-  return {
-    preset: preset as 'strict' | 'standard' | 'relaxed',
-    enabled: true,
-    ironLaws: config.ironLaws 
-      ? Object.values(IRON_LAWS).filter(c => config.ironLaws!.includes(c.id))
-      : Object.values(IRON_LAWS),
-  };
-}

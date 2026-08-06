@@ -791,35 +791,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.rmSync(coverageDir, { recursive: true, force: true });
     });
   });
-
-  describe('deprecated 函数', () => {
-    it('checkIronLaw 应该等同于 checkConstraint', async () => {
-      const { checkIronLaw } = await import('../core/constraints/checker');
-
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        hasTest: true,
-        hasVerificationEvidence: true,
-      };
-
-      const result = await checkIronLaw('no_self_approval', context);
-      expect(result.id).toBe('no_self_approval');
-      expect(result.satisfied).toBe(true);
-    });
-
-    it('checkAllIronLaws 应该返回所有检查结果', async () => {
-      const { checkAllIronLaws } = await import('../core/constraints/checker');
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-        hasTest: true,
-      };
-
-      const results = await checkAllIronLaws(context);
-      expect(Array.isArray(results)).toBe(true);
-      expect(results.length).toBeGreaterThan(0);
-    });
   });
 
   describe('checkConstraint 快捷函数', () => {

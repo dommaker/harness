@@ -9,8 +9,6 @@
 
 import type { Constraint, ConstraintTrigger } from '../../types/constraint';
 
-// 导出兼容类
-export { IronLawViolationError } from '../../types/constraint';
 
 // ========================================
 // IRON LAWS（铁律）
@@ -1089,39 +1087,3 @@ export function findConstraintsByTrigger(trigger: ConstraintTrigger): Constraint
 export function getConstraint(id: string): Constraint | undefined {
   return IRON_LAWS[id] || GUIDELINES[id] || TIPS[id];
 }
-
-// ========================================
-// 向后兼容的函数
-// ========================================
-
-/**
- * @deprecated 使用 getAllConstraints 代替
- */
-export function getAllLaws(): Constraint[] {
-  return getAllConstraints();
-}
-
-/**
- * @deprecated 使用 findConstraintsByTrigger 代替
- */
-export function findLawsByTrigger(trigger: ConstraintTrigger): Constraint[] {
-  return findConstraintsByTrigger(trigger);
-}
-
-/**
- * @deprecated 使用 getConstraint 代替
- */
-export function getLaw(id: string): Constraint | undefined {
-  return getConstraint(id);
-}
-
-/**
- * @deprecated 使用 GUIDELINES 代替
- */
-export const filterLawsBySeverity = (severity: 'error' | 'warning' | 'info'): Constraint[] => {
-  // 向后兼容映射
-  if (severity === 'error') return Object.values(IRON_LAWS);
-  if (severity === 'warning') return Object.values(GUIDELINES);
-  if (severity === 'info') return Object.values(TIPS);
-  return [];
-};

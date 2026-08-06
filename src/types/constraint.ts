@@ -63,33 +63,6 @@ export interface Constraint {
   exceptions?: string[];
 }
 
-// ========================================
-// 向后兼容的类型别名
-// ========================================
-
-/**
- * @deprecated 使用 ConstraintId 代替
- */
-export type IronLawId = ConstraintId;
-
-/**
- * @deprecated 使用 ConstraintLevel 代替
- */
-export type IronLawSeverity = 'error' | 'warning' | 'info';
-
-/**
- * @deprecated 使用 ConstraintTrigger 代替
- */
-export type IronLawTrigger = ConstraintTrigger;
-
-/**
- * @deprecated 使用 Constraint 代替
- */
-export interface IronLaw extends Constraint {
-  /** @deprecated 使用 level 代替 */
-  severity?: IronLawSeverity;
-}
-
 /**
  * 约束检查结果
  */
@@ -114,14 +87,6 @@ export interface ConstraintResult {
   
   /** 检查时间 */
   checkedAt: Date;
-}
-
-/**
- * @deprecated 使用 ConstraintResult 代替
- */
-export interface IronLawResult extends ConstraintResult {
-  /** @deprecated */
-  law?: Constraint;
 }
 
 /**
@@ -260,11 +225,6 @@ export interface ConstraintContext {
 }
 
 /**
- * @deprecated 使用 ConstraintContext 代替
- */
-export type IronLawContext = ConstraintContext;
-
-/**
  * 约束违规错误
  */
 export class ConstraintViolationError extends Error {
@@ -274,16 +234,6 @@ export class ConstraintViolationError extends Error {
     super(result.message || 'Constraint violation');
     this.name = 'ConstraintViolationError';
     this.result = result;
-  }
-}
-
-/**
- * @deprecated 使用 ConstraintViolationError 代替
- */
-export class IronLawViolationError extends ConstraintViolationError {
-  constructor(result: ConstraintResult) {
-    super(result);
-    this.name = 'IronLawViolationError';
   }
 }
 
@@ -309,3 +259,8 @@ export interface ConstraintCheckResult {
   /** 提示数量 */
   tipCount: number;
 }
+
+/**
+ * studio 兼容别名(P0 护栏):等价于 ConstraintContext
+ */
+export type IronLawContext = ConstraintContext;

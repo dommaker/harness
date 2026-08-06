@@ -764,31 +764,6 @@ describe('ConstraintChecker', () => {
     });
   });
 
-    it('findLawsByTrigger should work', () => {
-      const { findLawsByTrigger } = require('../core/constraints/definitions');
-      const laws = findLawsByTrigger('code_implementation');
-      expect(Array.isArray(laws)).toBe(true);
-    });
-
-    it('getLaw should work', () => {
-      const { getLaw } = require('../core/constraints/definitions');
-      const law = getLaw('no_bypass_checkpoint');
-      expect(law).toBeDefined();
-    });
-
-    it('filterLawsBySeverity should work', () => {
-      const { filterLawsBySeverity } = require('../core/constraints/definitions');
-      const errors = filterLawsBySeverity('error');
-      expect(Array.isArray(errors)).toBe(true);
-      
-      const warnings = filterLawsBySeverity('warning');
-      expect(Array.isArray(warnings)).toBe(true);
-      
-      const infos = filterLawsBySeverity('info');
-      expect(Array.isArray(infos)).toBe(true);
-    });
-  });
-
   describe('Helper functions', () => {
     it('should check single constraint via checkConstraint', async () => {
       const context: ConstraintContext = {

@@ -791,7 +791,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.rmSync(coverageDir, { recursive: true, force: true });
     });
   });
-  });
 
   describe('checkConstraint 快捷函数', () => {
     it('未知约束应该返回不满足', async () => {

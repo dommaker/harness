@@ -52,7 +52,6 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
 | `src/evolution/` | Constraint auto-evolution: trace-based degradation/rollback proposals |
-| `src/governance/` | AI governance: detect doc/code/config drift, output diff reports (detect only, no repair) |
 | `src/dashboard/` | Dashboard stats aggregation and data source management |
 | `src/llm/` | LLM adapter layer: unified interface for multi-model switching |
 | `src/tools/` | Tool registry, core tools, loader, path management |

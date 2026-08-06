@@ -34,6 +34,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [research:studio 使用面快照](issues/03-research-studio-usage.md) — 50 条护栏清单(P0 不可破坏);最脆弱:知识引擎构造器、version 契约、sync-docs PRESERVE 语义
 - [research:源码全景调研](issues/02-research-codebase.md) — 10 孤岛模块(仅 governance 可删)、三大件病灶、zod/死常量/双发布流水线、core↔monitoring 循环、typescript 隐式依赖 bug、no-console checkpoint 根因
 - [prototype:重构方案验证](issues/04-prototype-approach.md) — knip+人工核对流程固化;依赖瘦身实测通过(d5b4bac);三大件拆分边界锁定
+- [codebase-design:目标模块架构规划](issues/06-codebase-design.md) — 单向分层 types→utils→core→领域层→cli;三大件注册表化/按层拆分/同步器化;删除清单与 dogfooding 修复设计锁定
 
 ## Not yet specified
 

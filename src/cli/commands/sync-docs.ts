@@ -14,6 +14,7 @@ import { loadRawProjectConfig } from '../../core/project-config-loader';
 import { FreshnessRunner } from '../../core/constraints/doc-freshness/runner';
 import { FreshnessAutoFix } from '../../core/constraints/doc-freshness/auto-fix';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { findTsSourceFiles } from '../../utils/file-walk';
 import type { DocFreshnessCheck } from '../../types/project-config';
 
 export interface SyncDocsOptions {
@@ -356,7 +357,7 @@ async function scanSourceModules(srcDir: string, projectPath: string): Promise<M
 
     if (stat.isDirectory()) {
       // 子目录：递归扫描 .ts 文件（不报告目录条目本身）
-      const subFiles = await findTsFiles(entryPath);
+      const subFiles = findTsSourceFiles(entryPath, { skipIndex: true });
       for (const f of subFiles) {
         modules.push({
           name: path.basename(f, '.ts'),
@@ -374,32 +375,6 @@ async function scanSourceModules(srcDir: string, projectPath: string): Promise<M
   }
 
   return modules;
-}
-
-/**
- * 递归查找 .ts 文件
- */
-async function findTsFiles(dir: string): Promise<string[]> {
-  const results: string[] = [];
-  let entries: string[];
-  try {
-    entries = await fs.readdir(dir);
-  } catch {
-    return [];
-  }
-
-  for (const entry of entries) {
-    if (entry === 'node_modules' || entry === '__tests__' || entry === 'dist') continue;
-    if (entry === 'index.ts') continue; // barrel export
-    const entryPath = path.join(dir, entry);
-    const stat = await fs.stat(entryPath);
-    if (stat.isDirectory()) {
-      results.push(...await findTsFiles(entryPath));
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
-      results.push(entryPath);
-    }
-  }
-  return results;
 }
 
 /**

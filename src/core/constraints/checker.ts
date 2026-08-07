@@ -27,6 +27,7 @@ import { join, relative } from 'path';
 import { loadRawProjectConfig } from '../project-config-loader';
 import { CheckCache } from './check-cache';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { findTsSourceFiles } from '../../utils/file-walk';
 
 /**
  * 例外名称 → ConstraintContext 中布尔字段的映射
@@ -915,29 +916,7 @@ export class ConstraintChecker {
    * 查找 src/ 目录中的源文件
    */
   private findSourceFiles(dir: string, projectPath: string): string[] {
-    const results: string[] = [];
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      return [];
-    }
-
-    for (const entry of entries) {
-      if (entry === 'node_modules' || entry === '__tests__' || entry === 'dist') continue;
-      const entryPath = join(dir, entry);
-      try {
-        const stat = statSync(entryPath);
-        if (stat.isDirectory()) {
-          results.push(...this.findSourceFiles(entryPath, projectPath));
-        } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts') && entry !== 'index.ts') {
-          results.push(relative(projectPath, entryPath));
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return results;
+    return findTsSourceFiles(dir, { skipIndex: true }).map((f) => relative(projectPath, f));
   }
 
   /**

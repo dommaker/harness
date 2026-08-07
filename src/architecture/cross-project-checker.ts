@@ -8,6 +8,7 @@
  */
 
 import { runCommand } from '../utils/exec';
+import { findTsSourceFiles } from '../utils/file-walk';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import * as path from 'path';
 
@@ -334,25 +335,6 @@ interface ApiChange {
 
 // ============ 辅助函数实现 ============
 
-/**
- * 递归查找目录中的 .ts 文件（排除 node_modules/__tests__/dist/.d.ts）
- */
-function findTsFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  const results: string[] = [];
-  const entries = readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'dist') continue;
-      results.push(...findTsFiles(fullPath));
-    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-      results.push(fullPath);
-    }
-  }
-  return results;
-}
-
 function extractApiName(file: string): string {
   return path.basename(file, '.ts');
 }
@@ -388,7 +370,7 @@ async function detectChangeType(file: string, baseBranch: string): Promise<ApiCh
 function extractExportedTypes(project: string): string[] {
   const projectPath = resolveProjectPath(project);
   const srcDir = path.join(projectPath, 'src');
-  const files = findTsFiles(srcDir);
+  const files = findTsSourceFiles(srcDir);
   const types = new Set<string>();
 
   for (const file of files) {
@@ -410,7 +392,7 @@ function extractExportedTypes(project: string): string[] {
 function extractTypeUsage(project: string, types: string[]): Record<string, { hasMismatch: boolean; expected?: string; actual?: string }> {
   const projectPath = resolveProjectPath(project);
   const srcDir = path.join(projectPath, 'src');
-  const files = findTsFiles(srcDir);
+  const files = findTsSourceFiles(srcDir);
   const result: Record<string, { hasMismatch: boolean; expected?: string; actual?: string }> = {};
 
   for (const typeName of types) {
@@ -487,7 +469,7 @@ function parseDocInterfaces(docPath: string): Record<string, Array<{name: string
 function extractExportedApis(project: string): Array<{name: string, signature: string}> {
   const projectPath = resolveProjectPath(project);
   const srcDir = path.join(projectPath, 'src');
-  const files = findTsFiles(srcDir);
+  const files = findTsSourceFiles(srcDir);
   const apis: Array<{name: string, signature: string}> = [];
   const seen = new Set<string>();
 

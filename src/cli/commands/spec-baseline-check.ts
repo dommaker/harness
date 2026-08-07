@@ -8,6 +8,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { walkFiles } from '../../utils/file-walk';
 
 export interface SpecBaselineCheckOptions {
   /** 项目路径 */
@@ -160,29 +161,21 @@ function checkCodePattern(pattern: string, projectPath: string): { exists: boole
   const found: string[] = [];
   const notFound: string[] = [];
 
+  // 遍历一次，供所有关键词复用（工单 19：walkFiles 收敛）
+  const sourceFiles = walkFiles(projectPath, {
+    skipDirs: ['node_modules', 'dist'],
+    skipHidden: true,
+    filter: (_name, fullPath) => fullPath.endsWith('.ts') || fullPath.endsWith('.js'),
+  });
+
   for (const kw of keywords) {
     let count = 0;
-    function walkDir(dir: string) {
-      let entries: fs.Dirent[];
+    for (const fullPath of sourceFiles) {
       try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') continue;
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walkDir(fullPath);
-        } else if (entry.isFile() && (fullPath.endsWith('.ts') || fullPath.endsWith('.js'))) {
-          try {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            if (content.includes(kw)) count++;
-          } catch { /* skip */ }
-        }
-      }
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        if (content.includes(kw)) count++;
+      } catch { /* skip */ }
     }
-    walkDir(projectPath);
     if (count > 0) {
       found.push(`${kw} (${count} files)`);
     } else {

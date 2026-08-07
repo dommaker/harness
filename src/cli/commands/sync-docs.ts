@@ -9,8 +9,8 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { loadRawProjectConfig } from '../../core/project-config-loader';
 import { FreshnessRunner } from '../../core/constraints/doc-freshness/runner';
 import { FreshnessAutoFix } from '../../core/constraints/doc-freshness/auto-fix';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
@@ -534,10 +534,8 @@ async function getLatestTsMtime(dirPath: string): Promise<number | null> {
  * 获取需要 CONTEXT.md 的目录列表
  */
 async function getRequiredContextDirs(projectPath: string): Promise<string[]> {
-  const configPath = path.join(projectPath, '.harness', 'config.yml');
   try {
-    const content = await fs.readFile(configPath, 'utf-8');
-    const config = yaml.load(content) as Record<string, unknown>;
+    const config = loadRawProjectConfig(projectPath) ?? {};
     const governance = config.governance as Record<string, unknown> | undefined;
     const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
     if (contextFiles?.enabled) {
@@ -1020,8 +1018,7 @@ async function readPackageJsonLite(dir: string): Promise<PackageJsonLite | null>
 /** 从 .harness/config.yml 读取项目描述（package.json 无 description 时的兜底） */
 async function getConfigDescription(projectPath: string): Promise<string> {
   try {
-    const content = await fs.readFile(path.join(projectPath, '.harness', 'config.yml'), 'utf-8');
-    const config = yaml.load(content) as Record<string, unknown> | undefined;
+    const config = loadRawProjectConfig(projectPath);
     return typeof config?.description === 'string' ? config.description : '';
   } catch {
     return '';
@@ -1111,9 +1108,8 @@ async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
   const info: GovernanceInfo = { hasConfig: false, hasClaudeGovernance: false };
 
   try {
-    const content = await fs.readFile(path.join(projectPath, '.harness', 'config.yml'), 'utf-8');
-    const config = yaml.load(content) as Record<string, unknown> | undefined;
-    info.hasConfig = true;
+    const config = loadRawProjectConfig(projectPath);
+    info.hasConfig = config !== undefined;
     if (config && typeof config.preset === 'string') {
       info.preset = config.preset;
     }

@@ -28,23 +28,10 @@ async function loadConfigAsync(projectPath: string): Promise<{
   config: ReturnType<ProjectConfigLoader['getConfig']>;
   mergedConstraints: MergedConstraintsConfig;
 }> {
-  // 使用动态 import 避免同步 readFileSync 阻塞事件循环
-  const { promises: fs } = await import('fs');
-  const path = await import('path');
-  const yaml = await import('js-yaml');
-
+  // config.yml 解析经 loadRawProjectConfig 进程级 memoize（工单 16），
+  // 此处不再重复读取文件
   const loader = new ProjectConfigLoader(projectPath);
-
-  // 异步读取主配置
-  const configPath = path.join(projectPath, '.harness', 'config.yml');
-  try {
-    await fs.access(configPath);
-    const content = await fs.readFile(configPath, 'utf-8');
-    const loaded = yaml.load(content) as Record<string, unknown>;
-    loader.load(); // 同步回退作为 fallback
-  } catch {
-    loader.load(); // 文件不存在，使用默认配置
-  }
+  loader.load();
 
   return {
     config: loader.getConfig(),

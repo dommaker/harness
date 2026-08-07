@@ -36,13 +36,18 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [prototype:重构方案验证](issues/04-prototype-approach.md) — knip+人工核对流程固化;依赖瘦身实测通过(d5b4bac);三大件拆分边界锁定
 - [codebase-design:目标模块架构规划](issues/06-codebase-design.md) — 单向分层 types→utils→core→领域层→cli;三大件注册表化/按层拆分/同步器化;删除清单与 dogfooding 修复设计锁定
 - [to-spec:重构规格](issues/07-to-spec.md) — spec.md 发布(ready-for-agent):17 用户故事/13 实现决议
+- [执行:死代码基础批](issues/09-dead-code-basics.md) — 16 死常量/3 死导出/2 无引用桶删除,jest 全绿
+- [执行:废弃脚本与冗余依赖清理](issues/10-dead-scripts-deps.md) — 废弃发布脚本与无引用知识钩子删除
+- [执行:删除 governance 孤岛模块](issues/11-delete-governance.md) — governance 整模块删除
+- [执行:删除 prompt-injection 与兼容别名族](issues/12-delete-prompt-injection-aliases.md) — prompt-injection 与 IronLaw 别名族删除
+- [执行:typescript 隐式运行时依赖修复](issues/13-typescript-lazy.md) — 改为懒加载降级
+- [执行:types 层去反向依赖](issues/14-types-layer-fix.md) — Diagnosis/Proposal/failure 类型归位 types 层,types 零反向依赖
+- [执行:core↔monitoring 循环消除](issues/15-core-monitoring-decycle.md) — trace 记录器注入化 + evolver 约束集参数化,双向值导入归零
+- [执行:config.yml 解析收敛与缓存](issues/16-config-cache.md) — loadRawProjectConfig 进程级 memoize(mtime+size 指纹),6 处内联解析收敛
 
 ## Not yet specified
 
 (已清空:执行工单 09-24 已毕业;终审巡检工单待执行完毕后创建)
-
-- 具体重构工单清单(triage 之后才逐个毕业为 issues/09+)
-- 最终架构巡检工单(待执行工单全部闭环后创建)
 
 ## Out of scope
 

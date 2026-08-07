@@ -24,7 +24,7 @@ import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import * as yaml from 'js-yaml';
+import { loadRawProjectConfig } from '../project-config-loader';
 import { CheckCache } from './check-cache';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 
@@ -748,9 +748,7 @@ export class ConstraintChecker {
    */
   private async checkContextDocSync(projectPath: string): Promise<boolean> {
     try {
-      const configPath = join(projectPath, '.harness', 'config.yml');
-      const configContent = readFileSync(configPath, 'utf-8');
-      const config = yaml.load(configContent) as Record<string, unknown>;
+      const config = loadRawProjectConfig(projectPath) ?? {};
       const governance = config.governance as Record<string, unknown> | undefined;
       const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
 
@@ -786,23 +784,20 @@ export class ConstraintChecker {
 
     // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
     try {
-      const configPath = join(projectPath, '.harness', 'config.yml');
       let freshnessConfig: DocFreshnessConfig | undefined;
       let requiredDirs: string[] | undefined;
 
-      if (existsSync(configPath)) {
-        try {
-          const raw = yaml.load(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
-          const governance = raw.governance as Record<string, unknown> | undefined;
-          freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
+      try {
+        const raw = loadRawProjectConfig(projectPath);
+        const governance = raw?.governance as Record<string, unknown> | undefined;
+        freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
 
-          const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
-          if (contextFiles?.enabled && Array.isArray(contextFiles.required_dirs)) {
-            requiredDirs = contextFiles.required_dirs as string[];
-          }
-        } catch {
-          // 配置解析失败，使用默认
+        const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
+        if (contextFiles?.enabled && Array.isArray(contextFiles.required_dirs)) {
+          requiredDirs = contextFiles.required_dirs as string[];
         }
+      } catch {
+        // 配置解析失败，使用默认
       }
 
       const runner = new FreshnessRunner();

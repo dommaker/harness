@@ -45,6 +45,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:core↔monitoring 循环消除](issues/15-core-monitoring-decycle.md) — trace 记录器注入化 + evolver 约束集参数化,双向值导入归零
 - [执行:config.yml 解析收敛与缓存](issues/16-config-cache.md) — loadRawProjectConfig 进程级 memoize(mtime+size 指纹),6 处内联解析收敛
 - [执行:CLI 懒加载](issues/17-cli-lazy-load.md) — bin 命令实现 .action 内按需 require,--version 加载模块 173→9
+- [执行:CheckContext 与 git 缓存](issues/18-checkcontext-gitcache.md) — run 级 memo 收敛 4 处 git diff;ls-tree 逐文件→批量(2/N 次→1 次)
 
 ## Not yet specified
 

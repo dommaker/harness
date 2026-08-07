@@ -79,13 +79,50 @@ export class ConstraintChecker {
   /** 自定义约束配置（项目级） */
   private customConfig: MergedConstraintsConfig | null = null;
 
-  /** 检查结果缓存（S7：减少重复 git diff / src scan I/O，TTL=1s 防跨测试污染） */
+  /** 检查结果缓存（S7：src 扫描等重复 I/O，TTL=1s 防跨测试污染） */
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
+
+  /**
+   * run 级 memo（工单 18）：一次 checkConstraints/checkConstraintsSafe 内
+   * git diff 等命令只执行一次；run 外直接调用私有检查方法时不 memo（恒新鲜）。
+   */
+  private runCache: Map<string, Promise<string>> | null = null;
 
   /** trace 记录器（注入式，默认 no-op；生产入口经 setTraceRecorder 接入真实收集器） */
   private traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER;
 
   private constructor() {}
+
+  /**
+   * run 内 memoize；无活动 run 时直接执行（工单 18）
+   */
+  private memoRun(key: string, fn: () => Promise<string>): Promise<string> {
+    if (!this.runCache) return fn();
+    let pending = this.runCache.get(key);
+    if (!pending) {
+      pending = fn();
+      this.runCache.set(key, pending);
+    }
+    return pending;
+  }
+
+  /**
+   * staged 全量 diff（同一次 run 内只执行一次 git 命令，工单 18）
+   */
+  private getStagedDiff(projectPath: string): Promise<string> {
+    return this.memoRun(`git_diff_staged:${projectPath}`, () =>
+      runCommand('git diff --cached', projectPath)
+    );
+  }
+
+  /**
+   * staged 变更文件名列表（同一次 run 内只执行一次 git 命令，工单 18）
+   */
+  private getStagedDiffNames(projectPath: string): Promise<string> {
+    return this.memoRun(`git_diff_staged_names:${projectPath}`, () =>
+      runCommand('git diff --cached --name-only', projectPath)
+    );
+  }
 
   /**
    * 获取单例实例
@@ -542,7 +579,7 @@ export class ConstraintChecker {
   private async checkNoTestSimplification(projectPath: string): Promise<boolean> {
     try {
       // 检查是否有删除测试的 diff
-      const diff = await runCommand('git diff --cached', projectPath);
+      const diff = await this.getStagedDiff(projectPath);
       
       // 检查是否删除了测试行
       const deletedTestPatterns = [
@@ -613,7 +650,7 @@ export class ConstraintChecker {
       const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
       if (!existsSync(capabilitiesPath)) {
         // 检查是否有代码变更，无变更则跳过
-        const diff = await runCommand('git diff --cached --name-only', projectPath);
+        const diff = await this.getStagedDiffNames(projectPath);
         const changedCodeFiles = diff.split('\n').filter(
           (f: string) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
         );
@@ -623,7 +660,7 @@ export class ConstraintChecker {
       const listedFiles = this.parseCapabilitiesFiles(capabilitiesPath);
 
       // ── Step 1: Git diff 增量检查 ──
-      const diff = await runCommand('git diff --cached --name-only', projectPath);
+      const diff = await this.getStagedDiffNames(projectPath);
       const changedCodeFiles = diff.split('\n').filter(
         (f: string) => f.endsWith('.ts') || f.endsWith('.tsx') || f.endsWith('.js')
       );
@@ -692,7 +729,7 @@ export class ConstraintChecker {
    */
   private async checkNoSimplificationWithoutApproval(projectPath: string): Promise<boolean> {
     try {
-      const diff = await runCommand('git diff --cached', projectPath);
+      const diff = await this.getStagedDiff(projectPath);
 
       // 检查是否有简化关键词
       const simplificationPatterns = [
@@ -950,59 +987,67 @@ export class ConstraintChecker {
     context: ConstraintContext,
     customConfig?: MergedConstraintsConfig | null
   ): Promise<ConstraintCheckResult> {
-    const result: ConstraintCheckResult = {
-      ironLaws: [],
-      guidelines: [],
-      tips: [],
-      passed: true,
-      warningCount: 0,
-      tipCount: 0,
-    };
+    // run 起始：重置 run 级缓存；run 结束（含铁律提前抛出）清空（工单 18）
+    this.cache.invalidate();
+    this.runCache = new Map();
 
-    const traceCollector = this.traceRecorder;
-    const constraints = this.getConstraints(customConfig);
+    try {
+      const result: ConstraintCheckResult = {
+        ironLaws: [],
+        guidelines: [],
+        tips: [],
+        passed: true,
+        warningCount: 0,
+        tipCount: 0,
+      };
 
-    // 1. Iron Laws: 必须全部通过
-    for (const constraint of Object.values(constraints.ironLaws)) {
-      if (!this.matchesTrigger(constraint, context.operation)) continue;
+      const traceCollector = this.traceRecorder;
+      const constraints = this.getConstraints(customConfig);
 
-      const checkResult = await this.check(constraint, context);
-      result.ironLaws.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
+      // 1. Iron Laws: 必须全部通过
+      for (const constraint of Object.values(constraints.ironLaws)) {
+        if (!this.matchesTrigger(constraint, context.operation)) continue;
 
-      if (!checkResult.satisfied) {
-        result.passed = false;
-        throw new ConstraintViolationError(checkResult);
+        const checkResult = await this.check(constraint, context);
+        result.ironLaws.push(checkResult);
+        this.recordTrace(traceCollector, constraint, checkResult, context);
+
+        if (!checkResult.satisfied) {
+          result.passed = false;
+          throw new ConstraintViolationError(checkResult);
+        }
       }
-    }
 
-    // 2. Guidelines: 记录警告
-    for (const constraint of Object.values(constraints.guidelines)) {
-      if (!this.matchesTrigger(constraint, context.operation)) continue;
+      // 2. Guidelines: 记录警告
+      for (const constraint of Object.values(constraints.guidelines)) {
+        if (!this.matchesTrigger(constraint, context.operation)) continue;
 
-      const checkResult = await this.check(constraint, context);
-      result.guidelines.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
+        const checkResult = await this.check(constraint, context);
+        result.guidelines.push(checkResult);
+        this.recordTrace(traceCollector, constraint, checkResult, context);
 
-      if (!checkResult.satisfied) {
-        result.warningCount++;
+        if (!checkResult.satisfied) {
+          result.warningCount++;
+        }
       }
-    }
 
-    // 3. Tips: 仅记录
-    for (const constraint of Object.values(constraints.tips)) {
-      if (!this.matchesTrigger(constraint, context.operation)) continue;
+      // 3. Tips: 仅记录
+      for (const constraint of Object.values(constraints.tips)) {
+        if (!this.matchesTrigger(constraint, context.operation)) continue;
 
-      const checkResult = await this.check(constraint, context);
-      result.tips.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
+        const checkResult = await this.check(constraint, context);
+        result.tips.push(checkResult);
+        this.recordTrace(traceCollector, constraint, checkResult, context);
 
-      if (!checkResult.satisfied) {
-        result.tipCount++;
+        if (!checkResult.satisfied) {
+          result.tipCount++;
+        }
       }
-    }
 
-    return result;
+      return result;
+    } finally {
+      this.runCache = null;
+    }
   }
 
   /**
@@ -1015,43 +1060,51 @@ export class ConstraintChecker {
     context: ConstraintContext,
     customConfig?: MergedConstraintsConfig | null
   ): Promise<ConstraintCheckResult> {
-    const result: ConstraintCheckResult = {
-      ironLaws: [],
-      guidelines: [],
-      tips: [],
-      passed: true,
-      warningCount: 0,
-      tipCount: 0,
-    };
+    // run 起始：重置 run 级缓存（工单 18）
+    this.cache.invalidate();
+    this.runCache = new Map();
 
-    const traceCollector = this.traceRecorder;
-    const constraints = this.getConstraints(customConfig);
+    try {
+      const result: ConstraintCheckResult = {
+        ironLaws: [],
+        guidelines: [],
+        tips: [],
+        passed: true,
+        warningCount: 0,
+        tipCount: 0,
+      };
 
-    for (const constraint of Object.values(constraints.ironLaws)) {
-      if (!this.matchesTrigger(constraint, context.operation)) continue;
-      const checkResult = await this.check(constraint, context);
-      result.ironLaws.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
-      if (!checkResult.satisfied) result.passed = false;
+      const traceCollector = this.traceRecorder;
+      const constraints = this.getConstraints(customConfig);
+
+      for (const constraint of Object.values(constraints.ironLaws)) {
+        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        const checkResult = await this.check(constraint, context);
+        result.ironLaws.push(checkResult);
+        this.recordTrace(traceCollector, constraint, checkResult, context);
+        if (!checkResult.satisfied) result.passed = false;
+      }
+
+      for (const constraint of Object.values(constraints.guidelines)) {
+        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        const checkResult = await this.check(constraint, context);
+        result.guidelines.push(checkResult);
+        this.recordTrace(traceCollector, constraint, checkResult, context);
+        if (!checkResult.satisfied) result.warningCount++;
+      }
+
+      for (const constraint of Object.values(constraints.tips)) {
+        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        const checkResult = await this.check(constraint, context);
+        result.tips.push(checkResult);
+        this.recordTrace(traceCollector, constraint, checkResult, context);
+        if (!checkResult.satisfied) result.tipCount++;
+      }
+
+      return result;
+    } finally {
+      this.runCache = null;
     }
-
-    for (const constraint of Object.values(constraints.guidelines)) {
-      if (!this.matchesTrigger(constraint, context.operation)) continue;
-      const checkResult = await this.check(constraint, context);
-      result.guidelines.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
-      if (!checkResult.satisfied) result.warningCount++;
-    }
-
-    for (const constraint of Object.values(constraints.tips)) {
-      if (!this.matchesTrigger(constraint, context.operation)) continue;
-      const checkResult = await this.check(constraint, context);
-      result.tips.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
-      if (!checkResult.satisfied) result.tipCount++;
-    }
-
-    return result;
   }
 
   /**

@@ -41,16 +41,33 @@ async function getChangedFiles(staged: boolean): Promise<string[]> {
 }
 
 /**
+ * 一次性列出 HEAD 中存在的所有目录（工单 18：替代逐文件 git ls-tree）
+ *
+ * 返回 null 表示命令失败（按惯例视所有目录为"新"）。
+ */
+function listHeadDirs(projectPath: string): Set<string> | null {
+  try {
+    const output = execSync('git ls-tree -r --name-only HEAD', { cwd: projectPath, stdio: 'pipe', encoding: 'utf-8' });
+    const dirs = new Set<string>();
+    for (const file of String(output).split('\n')) {
+      if (!file) continue;
+      const parts = file.split('/');
+      for (let i = 1; i < parts.length; i++) {
+        dirs.add(parts.slice(0, i).join('/'));
+      }
+    }
+    return dirs;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 检查文件所在目录是否在 git HEAD 中不存在（即新目录）
  */
-function isNewDirectory(projectPath: string, filePath: string): boolean {
-  const dir = path.dirname(filePath);
-  try {
-    const output = execSync(`git ls-tree HEAD -- "${dir}"`, { cwd: projectPath, stdio: 'pipe', encoding: 'utf-8' });
-    return String(output).trim().length === 0; // empty output = directory doesn't exist in HEAD
-  } catch {
-    return true; // command failed = assume new
-  }
+function isNewDirectory(headDirs: Set<string> | null, filePath: string): boolean {
+  if (headDirs === null) return true; // 命令失败 = 假定为新
+  return !headDirs.has(path.dirname(filePath));
 }
 
 /**
@@ -70,9 +87,10 @@ function detectTrigger(changedFiles: string[], options: CheckOptions): Constrain
     sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) && !f.includes('__tests__')
   );
   const projectPath = options.projectPath || process.cwd();
+  const headDirs = hasModuleChange ? listHeadDirs(projectPath) : null;
   const hasModuleCreation = changedFiles.some(f =>
     sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) &&
-    isNewDirectory(projectPath, f)
+    isNewDirectory(headDirs, f)
   );
 
   if (hasTestChange && !hasModuleChange) return 'test_creation';

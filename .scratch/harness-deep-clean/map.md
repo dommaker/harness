@@ -49,6 +49,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:重复逻辑收敛](issues/19-shared-utils-dedup.md) — file-walk/capabilities-parser/session-mining/analyzer-base 四个共享层(4 提交)
 - [执行:definitions.ts 按层拆分](issues/20-split-definitions.md) — 1088 行拆为三层层文件+50 行薄聚合,约束 hash 不变
 - [执行:checker.ts 注册表化拆分](issues/21-split-checker.md) — 37 约束抽入 checkers/ 注册表,checker 1163→560 行,P0 冻结
+- [执行:sync-docs.ts 同步器化拆分](issues/22-split-sync-docs.md) — 1144 行拆为 5 同步器+入口编排,PRESERVE 语义冻结
 
 ## Not yet specified
 

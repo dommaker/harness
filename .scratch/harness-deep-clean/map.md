@@ -48,6 +48,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:CheckContext 与 git 缓存](issues/18-checkcontext-gitcache.md) — run 级 memo 收敛 4 处 git diff;ls-tree 逐文件→批量(2/N 次→1 次)
 - [执行:重复逻辑收敛](issues/19-shared-utils-dedup.md) — file-walk/capabilities-parser/session-mining/analyzer-base 四个共享层(4 提交)
 - [执行:definitions.ts 按层拆分](issues/20-split-definitions.md) — 1088 行拆为三层层文件+50 行薄聚合,约束 hash 不变
+- [执行:checker.ts 注册表化拆分](issues/21-split-checker.md) — 37 约束抽入 checkers/ 注册表,checker 1163→560 行,P0 冻结
 
 ## Not yet specified
 

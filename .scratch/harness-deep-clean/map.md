@@ -51,10 +51,11 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:checker.ts 注册表化拆分](issues/21-split-checker.md) — 37 约束抽入 checkers/ 注册表,checker 1163→560 行,P0 冻结
 - [执行:sync-docs.ts 同步器化拆分](issues/22-split-sync-docs.md) — 1144 行拆为 5 同步器+入口编排,PRESERVE 语义冻结
 - [执行:checkpoint 修复拆分+validate 退出码+中小文件拆分](issues/23-fixpoint-split.md) — check-handlers 四族+output_* bug 修复+门控 exit 1+context-builder+诊断规则数据化
+- [执行:dogfooding 修复 + knip 终扫](issues/24-dogfood-final-sweep.md) — 钩子/checkpoints/version 戳修复,tools/core 嵌套包清除,knip 清零
 
 ## Not yet specified
 
-(已清空:执行工单 09-24 已毕业;终审巡检工单待执行完毕后创建)
+(执行工单 09-24 全部闭环;最终架构巡检工单 25 已创建)
 
 ## Out of scope
 

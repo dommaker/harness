@@ -1,6 +1,6 @@
 Title: 执行:typescript 隐式运行时依赖修复
 Type: task
-Status: open
+Status: resolved
 Blocked by: 08
 
 ## Question

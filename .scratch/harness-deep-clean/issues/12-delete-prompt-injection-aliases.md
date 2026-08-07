@@ -1,6 +1,6 @@
 Title: 执行:删除 prompt-injection 与兼容别名族
 Type: task
-Status: open
+Status: resolved
 Blocked by: 08
 
 ## Question

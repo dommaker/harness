@@ -1,6 +1,6 @@
 Title: 执行:废弃脚本与冗余依赖清理
 Type: task
-Status: open
+Status: resolved
 Blocked by: 08
 
 ## Question

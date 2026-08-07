@@ -7,12 +7,27 @@
  *   3. 规则缺口（高频模式未被现有 memory 覆盖）
  *
  * 输出候选规则建议，供用户审核后写入 memory。
+ *
+ * 工单 19-C：transcript 解析/纠正模式/分词相似度收敛至 cli/session-mining/。
  */
 
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import {
+  readTranscriptSessions,
+  type MinedSession,
+  extractCorrectionMatches,
+  cleanCorrectionConcept,
+  tokenize,
+  stripCodeBlocks,
+  jaccardSimilarity,
+  isPunctuation,
+  isCodeNoise,
+  hasSemanticContent,
+  STOP_WORDS,
+} from '../session-mining';
 
 export interface AnalyzeSessionsOptions {
   days?: number;
@@ -35,38 +50,6 @@ interface PatternCandidate {
   suggestedRule: string;      // 建议的规则名
 }
 
-// ── Correction pattern templates ──
-// Match user sentences that indicate repeating a request
-const CORRECTION_PATTERNS = [
-  /你(?:又|还是)(?:在)?(?:犯|忘|没|不).{0,20}?[了]?/g,
-  /我不是(?:说|让|让做|讲)[了过]?.{0,30}?[了吗?]?/g,
-  /怎么(?:又|还|老)(?:是|在)?.{0,20}?[了]?/g,
-  /我(?:一直|反复|总是)(?:在|说|强调)?.{0,20}?[了]?/g,
-  /老(?:是|在|犯|忘)(?:了)?.{0,20}?[了]?/g,
-  /这(?:个|种)(?:问题|模式|错误).{0,20}?[.。！]?/g,
-  /(?:第[一二三四五六七八九十\d]+次|反复|重复)(?:说|提醒|强调).{0,20}?/g,
-  /不(?:要|能|想|愿意).{0,20}?老.{0,10}?[了]?/g,
-  /(?:补上|加上|记上|修复).{0,10}?[了吗?？]?/g,
-  /(?:沉淀|监控|日志|记录).{0,5}?[了吗?？]?/g,
-];
-
-// ── N-gram stop words ──
-const STOP_WORDS = new Set([
-  '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一',
-  '一个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着',
-  '没有', '看', '好', '自己', '这', '他', '她', '它', '们', '那',
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-  'should', 'may', 'might', 'can', 'shall', 'to', 'of', 'in', 'for',
-  'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
-  'before', 'after', 'above', 'below', 'between', 'under', 'again',
-  'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
-  'how', 'all', 'both', 'each', 'few', 'more', 'most', 'other', 'some',
-  'such', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just',
-  '因为', '所以', '但是', '而且', '如果', '虽然', '可以', '这个', '那个',
-  '什么', '怎么', '哪', '吗', '吧', '呢', '啊', '嗯', '哦',
-]);
-
 // ── Main ──
 
 export async function analyzeSessions(options: AnalyzeSessionsOptions): Promise<void> {
@@ -80,9 +63,11 @@ export async function analyzeSessions(options: AnalyzeSessionsOptions): Promise<
     return;
   }
 
-  // 1. Scan transcripts
+  // 1. Scan transcripts（按修改时间过滤 + 倒序）
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const sessions = findSessions(transcriptDir, cutoff);
+  const sessions = readTranscriptSessions(transcriptDir)
+    .filter(s => s.mtimeMs >= cutoff)
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   if (sessions.length === 0) {
     console.log(chalk.yellow(`No sessions found in the last ${days} days`));
@@ -111,59 +96,9 @@ export async function analyzeSessions(options: AnalyzeSessionsOptions): Promise<
   printCandidates(candidates, existingRules);
 }
 
-// ── Scan ──
-
-interface Session {
-  id: string;
-  date: string;
-  turns: Array<{ role: string; content: string }>;
-}
-
-function findSessions(dir: string, cutoff: number): Session[] {
-  const sessions: Session[] = [];
-  try {
-    for (const file of fs.readdirSync(dir)) {
-      if (!file.endsWith('.jsonl')) continue;
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.mtimeMs < cutoff) continue;
-
-      const turns: Array<{ role: string; content: string }> = [];
-      const content = fs.readFileSync(filePath, 'utf-8');
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue;
-        try {
-          const entry = JSON.parse(line);
-          // Claude Code transcript format: { type: "user"|"assistant", message: { role, content } }
-          const msg = entry.message;
-          if (msg?.role && (msg.content || entry.type === 'user')) {
-            const text = typeof msg.content === 'string'
-              ? msg.content
-              : Array.isArray(msg.content)
-                ? msg.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join(' ')
-                : '';
-            turns.push({ role: msg.role, content: text });
-          }
-        } catch {}
-      }
-
-      if (turns.length > 0) {
-        sessions.push({
-          id: file.replace('.jsonl', '').slice(0, 40),
-          date: stat.mtime.toISOString().slice(0, 10),
-          turns,
-        });
-      }
-    }
-  } catch (e) {
-    // Directory might not exist
-  }
-  return sessions.sort((a, b) => b.date.localeCompare(a.date));
-}
-
 // ── Correction Extraction ──
 
-function extractCorrections(sessions: Session[]): Correction[] {
+function extractCorrections(sessions: MinedSession[]): Correction[] {
   const corrections: Correction[] = [];
 
   for (const session of sessions) {
@@ -171,18 +106,13 @@ function extractCorrections(sessions: Session[]): Correction[] {
       if (turn.role !== 'user') continue;
       const text = stripCodeBlocks(turn.content);
 
-      for (const pattern of CORRECTION_PATTERNS) {
-        pattern.lastIndex = 0;
-        let match;
-        while ((match = pattern.exec(text)) !== null) {
-          const sentence = match[0].trim();
-          if (sentence.length > 3 && sentence.length < 200) {
-            corrections.push({
-              sentence,
-              sessionId: session.id,
-              timestamp: session.date,
-            });
-          }
+      for (const sentence of extractCorrectionMatches(text)) {
+        if (sentence.length > 3 && sentence.length < 200) {
+          corrections.push({
+            sentence,
+            sessionId: session.id,
+            timestamp: session.date,
+          });
         }
       }
     }
@@ -205,7 +135,7 @@ interface NGramResult {
   sessions: string[];
 }
 
-function extractNGrams(sessions: Session[], opts: NGramOptions): NGramResult[] {
+function extractNGrams(sessions: MinedSession[], opts: NGramOptions): NGramResult[] {
   const phraseMap = new Map<string, { count: number; sessions: Set<string> }>();
 
   for (const session of sessions) {
@@ -242,42 +172,6 @@ function extractNGrams(sessions: Session[], opts: NGramOptions): NGramResult[] {
     .map(([phrase, v]) => ({ phrase, frequency: v.count, sessions: Array.from(v.sessions) }))
     .filter(r => !isCodeNoise(r.phrase) && hasSemanticContent(r.phrase))
     .sort((a, b) => b.frequency - a.frequency || b.sessions.length - a.sessions.length);
-}
-
-function tokenize(text: string): string[] {
-  const tokens: string[] = [];
-  let current = '';
-  const CN = /[\u4e00-\u9fff\u3400-\u4dbf]/;
-
-  for (const char of text) {
-    if (CN.test(char)) {
-      current += char;
-    } else if (/[a-zA-Z0-9_\-/.]/.test(char)) {
-      current += char;
-    } else {
-      pushToken(current, tokens, CN);
-      current = '';
-    }
-  }
-  pushToken(current, tokens, CN);
-
-  return tokens;
-}
-
-function pushToken(current: string, tokens: string[], CN: RegExp): void {
-  if (current.length < 2) return;
-  if (CN.test(current)) {
-    // Chinese: character bigrams + trigrams + the full sequence
-    for (let i = 0; i <= current.length - 2; i++) {
-      tokens.push(current.slice(i, i + 2));
-    }
-    for (let i = 0; i <= current.length - 3; i++) {
-      tokens.push(current.slice(i, i + 3));
-    }
-    if (current.length <= 6) tokens.push(current); // keep short full sequences too
-  } else {
-    tokens.push(current);
-  }
 }
 
 // ── Existing Rules ──
@@ -401,16 +295,7 @@ function clusterCorrections(corrections: Correction[]): CorrectionCluster[] {
 function extractConcept(sentences: string[]): string {
   // Take the longest sentence and extract the noun phrase after the correction marker
   const longest = sentences.reduce((a, b) => a.length > b.length ? a : b, '');
-  // Remove correction patterns, keep the concept
-  const cleaned = longest
-    .replace(/你(?:又|还是)(?:在)?(?:犯|忘|没|不)/g, '')
-    .replace(/我不是(?:说|让|让做|讲)[了过]?/g, '')
-    .replace(/怎么(?:又|还|老)(?:是|在)?/g, '')
-    .replace(/我(?:一直|反复|总是)(?:在|说|强调)?/g, '')
-    .replace(/老(?:是|在|犯|忘)(?:了)?/g, '')
-    .replace(/[，。！？、；：""''（）\s]+/g, '')
-    .trim();
-
+  const cleaned = cleanCorrectionConcept(longest);
   return cleaned.slice(0, 60) || longest.slice(0, 60);
 }
 
@@ -446,43 +331,4 @@ function printCandidates(candidates: PatternCandidate[], existingRules: Set<stri
   if (candidates.length > 10) {
     console.log(chalk.gray(`... and ${candidates.length - 10} more candidates. Run with --json for full list.`));
   }
-}
-
-// ── Utilities ──
-
-function stripCodeBlocks(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`[^`]+`/g, '')
-    .replace(/\{[^{}]*"[^"]+"\s*:\s*"[^"]*"[^}]*\}/g, '')  // strip JSON objects
-    .replace(/\[[\s\S]*?\]/g, '')  // strip JSON arrays
-    .replace(/\\n/g, ' ')  // strip escaped newlines
-    .replace(/[{}[\]"':,\\]+/g, ' '); // strip JSON punctuation
-}
-
-function hasSemanticContent(phrase: string): boolean {
-  // Must contain Chinese characters or be a meaningful English word (≥7 chars)
-  if (/[\u4e00-\u9fff]/.test(phrase)) return true;
-  if (phrase.length >= 7 && /^[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z]$/.test(phrase)) return true;
-  return false;
-}
-
-function isCodeNoise(phrase: string): boolean {
-  // Pure Latin chars without Chinese → likely JSON/code artifact
-  if (!/[\u4e00-\u9fff]/.test(phrase) && phrase.length <= 6) return true;
-  // Common JSON field name fragments
-  if (/^(?:clla|cood|odde|oppe|laaw|peen|enne|ennc|ddec|deco|ecod|code|type|role|name|text|file|path|tool|user|session)$/i.test(phrase)) return true;
-  return false;
-}
-
-function isPunctuation(str: string): boolean {
-  return /^[，。！？、；：""''（）\[\]【】「」『』《》〈〉\s]+$/.test(str);
-}
-
-function jaccardSimilarity(a: string, b: string): number {
-  const setA = new Set(tokenize(a));
-  const setB = new Set(tokenize(b));
-  const intersection = new Set([...setA].filter(x => setB.has(x)));
-  const union = new Set([...setA, ...setB]);
-  return union.size === 0 ? 0 : intersection.size / union.size;
 }

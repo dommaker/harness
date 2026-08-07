@@ -12,12 +12,20 @@
  *
  * 模型状态: ~/.claude/user-model-state.json
  * 画像输出: ~/.claude/projects/-root-projects/memory/user_profile.md
+ *
+ * 工单 19-C：transcript 解析/纠正模式/相似度收敛至 cli/session-mining/。
  */
 
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import {
+  readTranscriptSessions,
+  extractCorrectionMatches,
+  cleanCorrectionConcept,
+  jaccardChinese,
+} from '../session-mining';
 
 export interface UpdateUserModelOptions {
   json?: boolean;
@@ -130,56 +138,17 @@ interface SimpleSession {
 }
 
 function findNewSessions(dir: string, processed: string[]): SimpleSession[] {
-  const sessions: SimpleSession[] = [];
-  try {
-    if (!fs.existsSync(dir)) return [];
-    for (const file of fs.readdirSync(dir)) {
-      if (!file.endsWith('.jsonl')) continue;
-      const sessionId = file.replace('.jsonl', '');
-      if (processed.includes(sessionId)) continue;
+  const sessions = readTranscriptSessions(dir)
+    .filter(s => !processed.includes(s.id))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      const turns: Array<{ role: string; content: string }> = [];
-      const toolCalls: string[] = [];
-
-      const content = fs.readFileSync(filePath, 'utf-8');
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue;
-        try {
-          const entry = JSON.parse(line);
-          const msg = entry.message;
-          if (msg?.role && msg.content) {
-            const text = typeof msg.content === 'string'
-              ? msg.content
-              : Array.isArray(msg.content)
-                ? msg.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join(' ')
-                : '';
-            turns.push({ role: msg.role, content: text });
-          }
-          // Track tool calls from assistant messages
-          if (msg?.role === 'assistant' && Array.isArray(msg.content)) {
-            for (const block of msg.content) {
-              if (block.type === 'tool_use' && block.name) {
-                toolCalls.push(block.name);
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (turns.length > 0) {
-        sessions.push({
-          id: sessionId.slice(0, 40),
-          date: stat.mtime.toISOString().slice(0, 10),
-          userText: turns.filter(t => t.role === 'user').map(t => t.content).join('\n'),
-          assistantText: turns.filter(t => t.role === 'assistant').map(t => t.content).join('\n'),
-          toolCalls: [...new Set(toolCalls)],
-        });
-      }
-    }
-  } catch {}
-  return sessions.sort((a, b) => a.date.localeCompare(b.date));
+  return sessions.map(s => ({
+    id: s.id,
+    date: s.date,
+    userText: s.turns.filter(t => t.role === 'user').map(t => t.content).join('\n'),
+    assistantText: s.turns.filter(t => t.role === 'assistant').map(t => t.content).join('\n'),
+    toolCalls: s.toolCalls,
+  }));
 }
 
 // ── Signal extraction ──
@@ -196,33 +165,11 @@ interface SessionSignals {
   knowledgeCaptured: boolean;         // Write to knowledge-docs
 }
 
-// ── Correction clustering (from analyze-sessions) ──
-
 function extractCorrectionConcepts(userText: string): string[] {
-  const correctionPatterns = [
-    /你(?:又|还是)(?:在)?(?:犯|忘|没|不).{0,30}?[了]?/g,
-    /我不是(?:说|让|让做|讲)[了过]?.{0,50}?[了吗?？]?/g,
-    /怎么(?:又|还|老)(?:是|在)?.{0,30}?[了]?/g,
-    /我(?:一直|反复|总是)(?:在|说|强调)?.{0,30}?[了]?/g,
-    /老(?:是|在|犯|忘)(?:了)?.{0,20}?[了]?/g,
-    /这(?:个|种)(?:问题|模式|错误).{0,20}?/g,
-    /(?:补上|加上|记上|修复).{0,10}?[了吗?？]?/g,
-    /(?:沉淀|监控|日志|记录).{0,5}?[了吗?？]?/g,
-  ];
   const concepts: string[] = [];
-  for (const pat of correctionPatterns) {
-    pat.lastIndex = 0;
-    let m;
-    while ((m = pat.exec(userText)) !== null) {
-      const cleaned = m[0]
-        .replace(/你(?:又|还是)(?:在)?(?:犯|忘|没|不)/g, '')
-        .replace(/我不是(?:说|让|让做|讲)[了过]?/g, '')
-        .replace(/怎么(?:又|还|老)(?:是|在)?/g, '')
-        .replace(/我(?:一直|反复|总是)(?:在|说|强调)?/g, '')
-        .replace(/[，。！？、；：""''（）\s]+/g, '')
-        .trim();
-      if (cleaned.length >= 4 && cleaned.length <= 60) concepts.push(cleaned);
-    }
+  for (const sentence of extractCorrectionMatches(userText)) {
+    const cleaned = cleanCorrectionConcept(sentence);
+    if (cleaned.length >= 4 && cleaned.length <= 60) concepts.push(cleaned);
   }
   return [...new Set(concepts)];
 }
@@ -264,17 +211,6 @@ function clusterConcepts(
 
   return merged;
 }
-
-function jaccardChinese(a: string, b: string): number {
-  const charsA = new Set(a.split('').filter(c => /[\u4e00-\u9fff]/.test(c)));
-  const charsB = new Set(b.split('').filter(c => /[\u4e00-\u9fff]/.test(c)));
-  if (charsA.size === 0 || charsB.size === 0) return 0;
-  const intersection = new Set([...charsA].filter(x => charsB.has(x)));
-  const union = new Set([...charsA, ...charsB]);
-  return intersection.size / union.size;
-}
-
-// ── Old ──
 
 function extractSignals(sessions: SimpleSession[]): SessionSignals[] {
   return sessions.map(s => {

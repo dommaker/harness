@@ -12,6 +12,7 @@ import * as path from 'path';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { loadRawProjectConfig } from '../../core/project-config-loader';
 import { FreshnessRunner } from '../../core/constraints/doc-freshness/runner';
+import { readCapabilitiesEntries } from '../../core/constraints/capabilities-parser';
 import { FreshnessAutoFix } from '../../core/constraints/doc-freshness/auto-fix';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { findTsSourceFiles } from '../../utils/file-walk';
@@ -410,29 +411,13 @@ function extractFirstComment(content: string): string | null {
  * 用于模糊匹配：只要文档中提到了该文件名就算已记录
  */
 async function parseCapabilitiesFiles(capabilitiesPath: string): Promise<string[]> {
-  const content = await fs.readFile(capabilitiesPath, 'utf-8');
+  // 工单 19-B：解析收敛到 core/constraints/capabilities-parser；
+  // 此处保持原语义——文件条目取 basename，目录条目（以 / 结尾）原样保留
+  const entries = readCapabilitiesEntries(capabilitiesPath, { includeDirs: true });
   const files: string[] = [];
-  // 匹配表格行中的文件名（可能带路径前缀）
-  const tableRowRegex = /\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/g;
-  let match;
-  while ((match = tableRowRegex.exec(content)) !== null) {
-    const raw = match[1].trim();
-    // 提取基础文件名（如 core/constraints/definitions.ts → definitions.ts）
-    const basename = raw.split('/').pop()!;
-    if (!files.includes(basename)) {
-      files.push(basename);
-    }
-  }
-  // 也匹配目录条目（如 agents/、gates/）
-  // 仅匹配纯路径样式的单元格（字母/数字/._/-/@ 与 / 组成、以 / 结尾），
-  // 否则以 / 结尾的散文描述（如 JSDoc 首行在 "gitRepo /" 处换行）会被误判为
-  // 目录条目，导致 --check 永远报「包含已删除的模块」不收敛（2026-08-04 studio PR #44）
-  const dirRegex = /\|\s*([\w][\w@./-]*\/)\s*\|/g;
-  while ((match = dirRegex.exec(content)) !== null) {
-    const dir = match[1].trim();
-    if (!files.includes(dir)) {
-      files.push(dir);
-    }
+  for (const entry of entries) {
+    const value = entry.endsWith('/') ? entry : entry.split('/').pop()!;
+    if (!files.includes(value)) files.push(value);
   }
   return files;
 }

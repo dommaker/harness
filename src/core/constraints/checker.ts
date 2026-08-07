@@ -26,6 +26,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import { loadRawProjectConfig } from '../project-config-loader';
 import { CheckCache } from './check-cache';
+import { readCapabilitiesEntries } from './capabilities-parser';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { findTsSourceFiles } from '../../utils/file-walk';
 
@@ -658,7 +659,7 @@ export class ConstraintChecker {
         return changedCodeFiles.length === 0;
       }
 
-      const listedFiles = this.parseCapabilitiesFiles(capabilitiesPath);
+      const listedFiles = readCapabilitiesEntries(capabilitiesPath, { secondColumnOnly: true });
 
       // ── Step 1: Git diff 增量检查 ──
       const diff = await this.getStagedDiffNames(projectPath);
@@ -701,27 +702,6 @@ export class ConstraintChecker {
       return true;
     } catch {
       return true; // 检查失败，默认通过
-    }
-  }
-
-  /**
-   * 解析 CAPABILITIES.md 中表格的文件路径列
-   */
-  private parseCapabilitiesFiles(capabilitiesPath: string): string[] {
-    try {
-      const content = readFileSync(capabilitiesPath, 'utf-8');
-      const files: string[] = [];
-
-      // 匹配 markdown 表格行中的 .ts/.tsx/.js/.jsx 文件路径（第二列）
-      const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
-      let match;
-      while ((match = tableRowRegex.exec(content)) !== null) {
-        files.push(match[1].trim());
-      }
-
-      return files;
-    } catch {
-      return [];
     }
   }
 

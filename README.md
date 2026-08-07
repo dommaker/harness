@@ -58,7 +58,7 @@ const meta = await import('child_process').then(cp =>
 | **Guideline** | warning | 28 | 注入 Agent context。拦截率 <30% 时降为 tip |
 | **Tip** | info | 2 | 信息性提示。拦截率 <10% 时标记废弃 |
 
-约束定义按层级拆分为数据文件（`src/core/constraints/definitions/{iron-laws,guidelines,tips}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
+约束定义按层级维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines,tips}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 
@@ -137,14 +137,14 @@ preset: standard  # strict | standard | relaxed
 
 | 模块 | 说明 |
 |------|------|
-| 约束引擎 | 三层约束 + 生命周期（自动退化/回滚），定义与检查器分离 |
+| 约束引擎 | 三层约束 + 生命周期（自动退化/回滚） |
 | 知识引擎 | 约束退化 → KnowledgeStore 沉淀，可检索、可追溯 |
 | 门禁系统 | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
 | 安全护栏 | Input/Output/Tool Guardrail + Sandbox (L1-L4) |
 | Hook 管线 | 通用 before/after/around hook：注册 → 排序 → 错误隔离 → 采样执行 |
 | 上下文/监控 | Token 预算 + 会话压缩 + Trace 诊断 + 约束进化 |
 
-### 架构速览（0.16.x 重构后）
+### 代码结构
 
 ```
 src/

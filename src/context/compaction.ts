@@ -81,7 +81,7 @@ export class SessionCompaction {
   /**
    * 中等压缩：结构化总结 + 保留最近 N 轮
    */
-  private summaryCompact(messages: SessionMessage[], budget: number, originalTokens: number): CompactionResult {
+  private summaryCompact(messages: SessionMessage[], _budget: number, originalTokens: number): CompactionResult {
     const recentCount = Math.min(6, messages.length); // 保留最近 6 条
     const recent = messages.slice(-recentCount);
     const older = messages.slice(0, -recentCount);
@@ -111,7 +111,7 @@ export class SessionCompaction {
   /**
    * 重型压缩：checkpoint + 清空历史
    */
-  private checkpointCompact(messages: SessionMessage[], budget: number, originalTokens: number): CompactionResult {
+  private checkpointCompact(messages: SessionMessage[], _budget: number, originalTokens: number): CompactionResult {
     const summary = this.generateStructuredSummary(messages);
 
     const checkpointSessionMessage: SessionMessage = {
@@ -169,7 +169,6 @@ export class SessionCompaction {
    * 如果 tool 结果被保留，对应的 tool 调用也要保留
    */
   private preserveToolCallPairs(all: SessionMessage[], compacted: SessionMessage[]): SessionMessage[] {
-    const compactedIds = new Set(compacted.map(m => m.toolCallId).filter(Boolean));
     const result: SessionMessage[] = [];
 
     for (const msg of compacted) {

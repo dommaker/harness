@@ -289,16 +289,12 @@ function parseSimpleYaml(content: string): { rules?: ArchitectureRule[] } {
   const result: { rules?: ArchitectureRule[] } = { rules: [] };
   let currentRule: Partial<ArchitectureRule> | null = null;
   let currentArray: string[] | null = null;
-  let indentLevel = 0;
   
   for (const line of lines) {
     const trimmed = line.trim();
     
     // 跳过注释和空行
     if (!trimmed || trimmed.startsWith('#')) continue;
-    
-    // 检测缩进级别
-    const leadingSpace = line.length - line.trimStart().length;
     
     // 新规则开始
     if (trimmed.startsWith('- id:')) {
@@ -307,7 +303,6 @@ function parseSimpleYaml(content: string): { rules?: ArchitectureRule[] } {
       }
       currentRule = { id: trimmed.replace('- id:', '').trim() };
       currentArray = null;
-      indentLevel = leadingSpace;
     }
     // 规则属性
     else if (currentRule && trimmed.includes(':')) {

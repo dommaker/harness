@@ -366,7 +366,7 @@ function applySignals(state: ModelState, signals: SessionSignals[], mergedConcep
   }
 
   // Detect falling/stable shifts
-  for (const [key, p] of Object.entries(state.patterns)) {
+  for (const [, p] of Object.entries(state.patterns)) {
     if (p.trend === 'stable' && p.lastSeen < new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)) {
       p.trend = 'falling';
     }

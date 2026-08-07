@@ -72,7 +72,7 @@ export class CSOValidator {
   /**
    * 验证描述
    */
-  private validateDescription(description: string, type: string): CSOValidationResult {
+  private validateDescription(description: string, _type: string): CSOValidationResult {
     const issues: CSOIssue[] = [];
 
     // 检查是否有工作流总结关键词

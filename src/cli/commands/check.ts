@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { constraintChecker } from '../../core/constraints/checker';
 import { getTraceCollector } from '../../monitoring/traces';
-import { getAllConstraints, IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { applyPreset } from '../../presets';

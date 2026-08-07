@@ -26,16 +26,12 @@ const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
   /(?:mongodb|postgres|mysql|redis):\/\/[^\s'"]+/gi,
 ];
 
-const DEFAULT_MIN_QUALITY_SCORE = 0.6;
-
 export class OutputGuardrail {
   private sensitivePatterns: RegExp[];
-  private minQualityScore: number;
   private checkKnowledgeRefs: boolean;
 
   constructor(config?: OutputGuardrailConfig) {
     this.sensitivePatterns = config?.sensitivePatterns ?? DEFAULT_SENSITIVE_PATTERNS;
-    this.minQualityScore = config?.minQualityScore ?? DEFAULT_MIN_QUALITY_SCORE;
     this.checkKnowledgeRefs = config?.checkKnowledgeRefs ?? false;
   }
 

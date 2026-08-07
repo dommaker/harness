@@ -39,21 +39,21 @@ export class DefaultLLMAdapter implements LLMAdapter {
     this.config = config;
   }
 
-  async complete(prompt: string, options?: LLMOptions): Promise<string> {
+  async complete(_prompt: string, options?: LLMOptions): Promise<string> {
     throw new Error(
       `LLM complete 未实现。请通过 createLLMAdapter({ customAdapter }) 注入具体实现。` +
       `\n提供商: ${this.config.provider}, 模型: ${options?.model ?? this.config.model ?? '未指定'}`,
     );
   }
 
-  async chat(messages: Message[], options?: LLMOptions): Promise<string> {
+  async chat(messages: Message[], _options?: LLMOptions): Promise<string> {
     throw new Error(
       `LLM chat 未实现。请通过 createLLMAdapter({ customAdapter }) 注入具体实现。` +
       `\n提供商: ${this.config.provider}, 消息数: ${messages.length}`,
     );
   }
 
-  async *streamChat(messages: Message[], options?: LLMOptions): AsyncIterable<string> {
+  async *streamChat(_messages: Message[], _options?: LLMOptions): AsyncIterable<string> {
     throw new Error(
       `LLM streamChat 未实现。请通过 createLLMAdapter({ customAdapter }) 注入具体实现。`,
     );

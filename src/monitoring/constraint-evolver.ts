@@ -423,7 +423,7 @@ export class ConstraintEvolver {
   /**
    * 估算实施信息
    */
-  private estimateImplementation(constraintId: string): ConstraintProposal['implementation'] {
+  private estimateImplementation(_constraintId: string): ConstraintProposal['implementation'] {
     return {
       files: ['src/core/constraints/definitions.ts'],
       linesChanged: 10, // 通常只需修改几行

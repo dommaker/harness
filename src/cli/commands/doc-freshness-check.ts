@@ -250,7 +250,7 @@ function verifyListClaim(claim: ClaimResult, projectPath: string): ClaimResult {
 /**
  * 验证状态声明：检查标记是否与代码/文件一致
  */
-function verifyStatusClaim(claim: ClaimResult, projectPath: string): ClaimResult {
+function verifyStatusClaim(claim: ClaimResult, _projectPath: string): ClaimResult {
   // 状态声明的验证较复杂，标记为需要人工确认
   return {
     ...claim,

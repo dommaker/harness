@@ -10,7 +10,6 @@ import type {
   VerificationRule,
   VerificationContext,
   VerificationResult,
-  VerificationRuleType,
 } from './types';
 
 export class RulesBasedVerification {

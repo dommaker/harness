@@ -4,7 +4,7 @@
  * harness 提供数据，studio 负责渲染
  */
 
-import type { KnowledgeType, MaturityLevel } from '../knowledge/types';
+import type { KnowledgeType } from '../knowledge/types';
 import type { ConstraintLayer, DeprecationStatus } from '../constraints/types';
 
 // ── 知识库全景 ───────────────────────────────────────────

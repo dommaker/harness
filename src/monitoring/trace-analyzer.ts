@@ -13,7 +13,6 @@ import type {
   ExecutionTrace,
   TraceSummary,
   TraceAnomaly,
-  TraceFilter,
   TraceAnalyzerConfig,
 } from '../types/trace';
 import { TraceCollector } from './traces';

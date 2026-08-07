@@ -13,7 +13,6 @@ export interface PostEvalPlanOptions {
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
-const GRACE_PERIOD_MS = parseInt(process.env.POSTEVAL_GRACE_MS || '30000', 10); // 30s total before fallback
 
 async function fetchWithRetry(url: string, body: string, retries: number): Promise<Response> {
   let lastError: any;

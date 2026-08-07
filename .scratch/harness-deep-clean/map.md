@@ -52,10 +52,11 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:sync-docs.ts 同步器化拆分](issues/22-split-sync-docs.md) — 1144 行拆为 5 同步器+入口编排,PRESERVE 语义冻结
 - [执行:checkpoint 修复拆分+validate 退出码+中小文件拆分](issues/23-fixpoint-split.md) — check-handlers 四族+output_* bug 修复+门控 exit 1+context-builder+诊断规则数据化
 - [执行:dogfooding 修复 + knip 终扫](issues/24-dogfood-final-sweep.md) — 钩子/checkpoints/version 戳修复,tools/core 嵌套包清除,knip 清零
+- [最终架构巡检](issues/25-final-architecture-sweep.md) — tsc noUnused 61 处清零,knip 复核,死代码/无用导入/闲置变量零残留
 
 ## Not yet specified
 
-(执行工单 09-24 全部闭环;最终架构巡检工单 25 已创建)
+(全部工单闭环;终点仅剩验收报告交付)
 
 ## Out of scope
 

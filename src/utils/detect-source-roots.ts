@@ -9,7 +9,7 @@
  * 返回相对 projectPath 的路径数组。全都不存在时返回空数组。
  */
 
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 export function detectSourceRoots(projectPath: string): string[] {

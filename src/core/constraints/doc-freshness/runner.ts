@@ -5,8 +5,8 @@
  * 通过 DocFreshnessConfig 配置驱动，不绑定任何项目结构。
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { join, basename, relative } from 'path';
+import { existsSync, readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import type {
   DocFreshnessCheck,
@@ -454,7 +454,6 @@ export class FreshnessRunner {
       const suffix = filePattern.replace(/\*/g, '');
 
       const entries = readdirSync(searchDir, { withFileTypes: true });
-      const reg = new RegExp(pattern);
 
       let count = 0;
       for (const entry of entries) {

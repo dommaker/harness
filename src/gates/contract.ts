@@ -7,7 +7,6 @@
  * - 版本兼容性
  */
 
-import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { GateResult, GateContext, ContractGateConfig } from './types';

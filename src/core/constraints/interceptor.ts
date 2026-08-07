@@ -3,7 +3,6 @@
  */
 
 import type {
-  Constraint,
   ConstraintTrigger,
   ConstraintContext,
   ConstraintLevel,
@@ -15,7 +14,6 @@ import type {
   EnforcementId,
   EnforcementExecutor,
   EnforcementContext,
-  EnforcementResult,
   InterceptionResult,
 } from '../../types/enforcement';
 import { constraintChecker } from './checker';

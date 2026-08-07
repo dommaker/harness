@@ -4,7 +4,7 @@
  * 预设定义哪些约束被启用
  */
 
-import type { ConstraintLevel, Constraint } from '../types/constraint';
+import type { Constraint } from '../types/constraint';
 import type { MergedConstraintsConfig } from '../types/project-config';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../core/constraints/definitions';
 

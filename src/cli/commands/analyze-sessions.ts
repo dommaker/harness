@@ -93,7 +93,7 @@ export async function analyzeSessions(options: AnalyzeSessionsOptions): Promise<
   console.log(chalk.blue(`🔍 Analyzing ${sessions.length} sessions (last ${days} days)...\n`));
 
   printCorrectionSummary(corrections);
-  printCandidates(candidates, existingRules);
+  printCandidates(candidates);
 }
 
 // ── Correction Extraction ──
@@ -310,7 +310,7 @@ function printCorrectionSummary(corrections: Correction[]): void {
   console.log(chalk.yellow(`📢 ${corrections.length} correction signals detected\n`));
 }
 
-function printCandidates(candidates: PatternCandidate[], existingRules: Set<string>): void {
+function printCandidates(candidates: PatternCandidate[]): void {
   if (candidates.length === 0) {
     console.log(chalk.green('✅ No new pattern candidates — all recurring concepts already have rules\n'));
     return;

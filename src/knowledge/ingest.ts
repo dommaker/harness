@@ -8,7 +8,6 @@
 import type {
   KnowledgeEntry,
   KnowledgeType,
-  MaturityLevel,
   IngestOptions,
   SourceRef,
 } from './types';
@@ -184,7 +183,7 @@ export class KnowledgeIngest {
     return `${prefix}-${seq}`;
   }
 
-  private inferType(options: IngestOptions): KnowledgeType {
+  private inferType(_options: IngestOptions): KnowledgeType {
     // Default to 'guideline' if type can't be inferred
     return 'guideline';
   }

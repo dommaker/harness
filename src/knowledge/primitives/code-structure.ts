@@ -159,7 +159,6 @@ function extractImport(node: ts.ImportDeclaration, sourceFile: ts.SourceFile): I
 }
 
 function extractJSDoc(node: ts.Node, sourceFile: ts.SourceFile): string | undefined {
-  const jsDocTags = tsLib().getJSDocTags(node);
   const fullText = sourceFile.getFullText();
   const nodeStart = node.getFullStart();
 

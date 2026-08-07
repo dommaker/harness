@@ -54,7 +54,6 @@ export interface ConstraintDoctorConfig {
 export class ConstraintDoctor {
   private config: ConstraintDoctorConfig;
   private traces: ExecutionTrace[];
-  private summary: TraceSummary | null;
   private llm: LLMAdapter | null;
 
   constructor(config?: ConstraintDoctorConfig, llm?: LLMAdapter) {
@@ -65,16 +64,14 @@ export class ConstraintDoctor {
       ...config,
     };
     this.traces = [];
-    this.summary = null;
     this.llm = llm || null;
   }
 
   /**
    * 设置诊断数据
    */
-  setData(traces: ExecutionTrace[], summary?: TraceSummary): void {
+  setData(traces: ExecutionTrace[], _summary?: TraceSummary): void {
     this.traces = traces;
-    this.summary = summary || null;
   }
 
   /**

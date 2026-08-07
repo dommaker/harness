@@ -9,7 +9,7 @@
 
 import { runCommand } from '../utils/exec';
 import { findTsSourceFiles } from '../utils/file-walk';
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
 
 export interface CrossProjectViolation {
@@ -167,7 +167,7 @@ async function checkTypeConsistency(
 ): Promise<CrossProjectViolation[]> {
   const violations: CrossProjectViolation[] = [];
 
-  for (const [pair, locations] of Object.entries(config.contractLocations)) {
+  for (const [pair] of Object.entries(config.contractLocations)) {
     const [from, to] = pair.split('-');
     if (!context.changedProjects.includes(from) && !context.changedProjects.includes(to)) {
       continue;

@@ -10,8 +10,10 @@ import * as path from 'path';
 import * as readline from 'readline';
 import { TraceCollector } from '../../monitoring/traces';
 import { TraceAnalyzer } from '../../monitoring/trace-analyzer';
-import { ConstraintDoctor, Diagnosis } from '../../monitoring/constraint-doctor';
-import { ConstraintEvolver, ConstraintProposal } from '../../monitoring/constraint-evolver';
+import { ConstraintDoctor } from '../../monitoring/constraint-doctor';
+import { ConstraintEvolver } from '../../monitoring/constraint-evolver';
+import { getConstraint } from '../../core/constraints/definitions';
+import type { Diagnosis, ConstraintProposal } from '../../types/monitoring-types';
 import { ConstraintLifecycleRunner, type ExecutionResult } from '../../constraints/lifecycle-runner';
 import type { TraceAnomaly } from '../../types/trace';
 
@@ -168,7 +170,7 @@ export async function flow(options: FlowOptions): Promise<void> {
     console.log(chalk.blue('💡 步骤 3/4: 生成提案'));
     console.log(chalk.gray('────────────────────────────'));
 
-    const evolver = new ConstraintEvolver();
+    const evolver = new ConstraintEvolver(undefined, getConstraint);
     const proposals: ConstraintProposal[] = [];
 
     for (const diagnosis of diagnoses) {

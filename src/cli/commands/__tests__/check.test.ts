@@ -41,6 +41,7 @@ jest.mock('child_process', () => ({
 jest.mock('../../../core/constraints/checker', () => ({
   constraintChecker: {
     setCustomConfig: jest.fn(),
+    setTraceRecorder: jest.fn(),
     checkConstraints: jest.fn(),
   },
 }));

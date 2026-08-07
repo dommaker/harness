@@ -13,6 +13,7 @@
  */
 
 import { ConstraintChecker } from '../core/constraints/checker';
+import { getTraceCollector } from '../monitoring/traces';
 import { SessionManager } from '../context/session-manager';
 import { ProjectConfigLoader } from '../core/project-config-loader';
 import { HookRegistry } from './registry';
@@ -87,6 +88,7 @@ export async function bootstrapHarness(
   // 2. 初始化核心组件
   const checker = ConstraintChecker.getInstance();
   checker.setCustomConfig(mergedConstraints);
+  checker.setTraceRecorder(getTraceCollector());
 
   const sessions = new SessionManager(resolvedPath);
   const hooks = new HookRegistry();
@@ -124,6 +126,7 @@ export function bootstrapHarnessSync(
 
   const checker = ConstraintChecker.getInstance();
   checker.setCustomConfig(mergedConstraints);
+  checker.setTraceRecorder(getTraceCollector());
 
   const sessions = new SessionManager(resolvedPath);
   const hooks = new HookRegistry();

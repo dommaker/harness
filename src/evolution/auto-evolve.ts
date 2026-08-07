@@ -8,9 +8,9 @@
 import type { ExecutionTrace, TraceAnomaly } from '../types/trace';
 import type { LLMAdapter } from '../llm/types';
 import { ConstraintDoctor } from '../monitoring/constraint-doctor';
-import type { Diagnosis } from '../monitoring/constraint-doctor';
 import { ConstraintEvolver } from '../monitoring/constraint-evolver';
-import type { ConstraintProposal } from '../monitoring/constraint-evolver';
+import { getConstraint } from '../core/constraints/definitions';
+import type { Diagnosis, ConstraintProposal } from '../types/monitoring-types';
 import { ConstraintLifecycleRunner } from '../constraints/lifecycle-runner';
 import type { ExecutionResult } from '../constraints/lifecycle-runner';
 
@@ -49,7 +49,7 @@ export async function autoEvolve(
   const doctor = new ConstraintDoctor({ enabled: !!llm }, llm);
   doctor.setData(traces);
 
-  const evolver = new ConstraintEvolver();
+  const evolver = new ConstraintEvolver(undefined, getConstraint);
   const runner = new ConstraintLifecycleRunner();
 
   const diagnoses: Diagnosis[] = [];

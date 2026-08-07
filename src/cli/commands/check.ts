@@ -10,6 +10,7 @@ import * as path from 'path';
 import { exec, execSync } from 'child_process';
 import { execAsync } from '../../utils/exec';
 import { constraintChecker } from '../../core/constraints/checker';
+import { getTraceCollector } from '../../monitoring/traces';
 import { getAllConstraints, IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
@@ -93,6 +94,7 @@ export async function check(options: CheckOptions): Promise<void> {
     const projectPath = options.projectPath || process.cwd();
     const configLoader = new ProjectConfigLoader(projectPath);
     configLoader.load();
+    constraintChecker.setTraceRecorder(getTraceCollector());
 
     if (configLoader.hasCustomConfig()) {
       const merged = configLoader.mergeConstraints();

@@ -3,8 +3,7 @@
  */
 
 import type { ExecutionTrace, TraceAnomaly } from '../../types/trace';
-import type { Diagnosis } from '../../monitoring/constraint-doctor';
-import type { ConstraintProposal, ProposalReviewResult } from '../../monitoring/constraint-evolver';
+import type { Diagnosis, ConstraintProposal, ProposalReviewResult } from '../../types/monitoring-types';
 import type { ExecutionResult } from '../../constraints/lifecycle-runner';
 
 jest.mock('../../monitoring/constraint-doctor', () => {

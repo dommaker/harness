@@ -4,24 +4,25 @@
 
 import { describe, it, expect } from '@jest/globals';
 import { ConstraintEvolver } from '../monitoring/constraint-evolver';
-import type { Diagnosis } from '../monitoring/constraint-doctor';
+import { getConstraint } from '../core/constraints/definitions';
+import type { Diagnosis } from '../types/monitoring-types';
 
 describe('ConstraintEvolver', () => {
   describe('constructor', () => {
     it('应该创建实例', () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
       expect(evolver).toBeDefined();
     });
 
     it('支持自定义 proposalsDir', () => {
-      const evolver = new ConstraintEvolver('/tmp/test-proposals');
+      const evolver = new ConstraintEvolver('/tmp/test-proposals', getConstraint);
       expect(evolver).toBeDefined();
     });
   });
 
   describe('propose', () => {
     it('应该根据诊断生成提案', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'anomaly-001',
@@ -55,7 +56,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('needsChange=false 应该返回 null', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'anomaly-no-change',
@@ -73,7 +74,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('recommendations 为空应该返回 null', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'anomaly-no-rec',
@@ -91,7 +92,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('应该处理 adjust_threshold 类型', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'anomaly-002',
@@ -112,7 +113,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('应该处理 modify_constraint 类型', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'anomaly-003',
@@ -135,7 +136,7 @@ describe('ConstraintEvolver', () => {
 
   describe('proposeBatch', () => {
     it('应该批量生成提案', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnoses: Diagnosis[] = [
         {
@@ -177,7 +178,7 @@ describe('ConstraintEvolver', () => {
 
   describe('review', () => {
     it('Iron Law 非添加例外应该被拒绝', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'review-001',
@@ -198,7 +199,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('高风险提案应该被拒绝', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'review-002',
@@ -219,7 +220,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('低风险 + 有测试应该通过', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'review-003',
@@ -239,7 +240,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('中风险需要人工审核', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'review-004',
@@ -262,7 +263,7 @@ describe('ConstraintEvolver', () => {
 
   describe('implement', () => {
     it('add_exception 应该生成正确指令', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const diagnosis: Diagnosis = {
         anomalyId: 'impl-001',
@@ -283,7 +284,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('remove_exception 应该生成正确指令', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const proposal = {
         id: 'test-remove',
@@ -304,7 +305,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('adjust_trigger 应该生成正确指令', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const proposal = {
         id: 'test-adjust',
@@ -325,7 +326,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('change_level 应该生成正确指令', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const proposal = {
         id: 'test-level',
@@ -346,7 +347,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('modify_message 应该生成正确指令', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const proposal = {
         id: 'test-msg',
@@ -367,7 +368,7 @@ describe('ConstraintEvolver', () => {
     });
 
     it('new_constraint 应该生成正确指令', async () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
 
       const proposal = {
         id: 'test-new',
@@ -390,13 +391,13 @@ describe('ConstraintEvolver', () => {
 
   describe('listProposals', () => {
     it('应该返回所有提案', () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
       const proposals = evolver.listProposals();
       expect(Array.isArray(proposals)).toBe(true);
     });
 
     it('应该返回待审核提案', () => {
-      const evolver = new ConstraintEvolver();
+      const evolver = new ConstraintEvolver(undefined, getConstraint);
       const pending = evolver.listProposals('proposed');
       expect(Array.isArray(pending)).toBe(true);
     });

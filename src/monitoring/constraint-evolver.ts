@@ -9,94 +9,20 @@
  * - ~3000 Token/次
  */
 
-import type { Diagnosis } from './constraint-doctor';
 import type {
-  Constraint,
-  ConstraintLevel,
-} from '../types/constraint';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../core/constraints/definitions';
+  Diagnosis,
+  ConstraintProposal,
+  ProposalReviewResult,
+} from '../types/monitoring-types';
+import type { Constraint } from '../types/constraint';
+
+// 类型定义已归位 types 层（工单 14），此处再导出保持模块公开面不变
+export type { ConstraintProposal, ProposalReviewResult };
 
 /**
- * 约束提案
+ * 约束查找函数（工单 15：约束集参数化，替代对 core/constraints/definitions 的值依赖）
  */
-export interface ConstraintProposal {
-  /** 提案 ID */
-  id: string;
-
-  /** 提案时间 */
-  proposedAt: number;
-
-  /** 来源诊断 */
-  diagnosisId: string;
-
-  /** 约束 ID */
-  constraintId: string;
-
-  /** 提案类型 */
-  type: 'add_exception' | 'remove_exception' | 'adjust_trigger' | 'change_level' | 'modify_message' | 'new_constraint';
-
-  /** 提案内容 */
-  content: {
-    /** 当前值（如果有） */
-    current?: any;
-
-    /** 建议值 */
-    proposed: any;
-
-    /** 变更描述 */
-    description: string;
-  };
-
-  /** 理由 */
-  reasoning: string;
-
-  /** 预期效果 */
-  expectedOutcome: string;
-
-  /** 风险评估 */
-  risk: {
-    /** 风险等级 */
-    level: 'low' | 'medium' | 'high';
-
-    /** 风险描述 */
-    description: string;
-
-    /** 回滚方案 */
-    rollbackPlan?: string;
-  };
-
-  /** 实施信息 */
-  implementation: {
-    /** 改动文件 */
-    files: string[];
-
-    /** 改动量估计 */
-    linesChanged: number;
-
-    /** 测试要求 */
-    testsRequired: boolean;
-  };
-
-  /** 状态 */
-  status: 'proposed' | 'reviewing' | 'accepted' | 'rejected' | 'implemented';
-
-  /** 审核意见 */
-  reviewComment?: string;
-}
-
-/**
- * 提案审核结果
- */
-export interface ProposalReviewResult {
-  /** 是否接受 */
-  accepted: boolean;
-
-  /** 审核意见 */
-  comment: string;
-
-  /** 修改建议（如果拒绝） */
-  modifications?: Partial<ConstraintProposal>;
-}
+export type ConstraintLookup = (constraintId: string) => Constraint | null | undefined;
 
 /**
  * Constraint Evolver - 约束进化器
@@ -117,9 +43,11 @@ export interface ProposalReviewResult {
  */
 export class ConstraintEvolver {
   private proposalsDir: string;
+  private constraintLookup: ConstraintLookup | undefined;
 
-  constructor(proposalsDir?: string) {
+  constructor(proposalsDir?: string, constraintLookup?: ConstraintLookup) {
     this.proposalsDir = proposalsDir || '.harness/proposals';
+    this.constraintLookup = constraintLookup;
   }
 
   /**
@@ -504,13 +432,10 @@ export class ConstraintEvolver {
   }
 
   /**
-   * 查找约束定义
+   * 查找约束定义（经注入的 lookup；未注入时返回 null）
    */
   private findConstraint(constraintId: string): Constraint | null {
-    return IRON_LAWS[constraintId] ||
-           GUIDELINES[constraintId] ||
-           TIPS[constraintId] ||
-           null;
+    return this.constraintLookup?.(constraintId) ?? null;
   }
 
   /**
@@ -568,6 +493,9 @@ export class ConstraintEvolver {
 /**
  * 创建进化器
  */
-export function createEvolver(proposalsDir?: string): ConstraintEvolver {
-  return new ConstraintEvolver(proposalsDir);
+export function createEvolver(
+  proposalsDir?: string,
+  constraintLookup?: ConstraintLookup
+): ConstraintEvolver {
+  return new ConstraintEvolver(proposalsDir, constraintLookup);
 }

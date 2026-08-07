@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { ConstraintLifecycleRunner, type ExecutionResult } from '../lifecycle-runner';
 import { ConstraintRegistry } from '../registry';
-import type { ConstraintProposal } from '../../monitoring/constraint-evolver';
+import type { ConstraintProposal } from '../../types/monitoring-types';
 
 function makeProposal(overrides: Partial<ConstraintProposal> = {}): ConstraintProposal {
   return {

@@ -17,7 +17,6 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
 import type { MergedConstraintsConfig, DocFreshnessConfig, DocFreshnessCheck } from '../../types/project-config';
 import { FreshnessRunner, type FreshnessCheckResult } from './doc-freshness/runner';
@@ -60,6 +59,18 @@ const EXCEPTION_FIELD_MAP: Record<string, keyof ConstraintContext> = {
 };
 
 /**
+ * trace 记录器最小接口（工单 15：core→monitoring 循环消除）
+ *
+ * checker 不再值导入 monitoring/traces 的单例；生产调用方经
+ * setTraceRecorder 注入真实收集器，默认 no-op。
+ */
+export interface TraceRecorder {
+  record(trace: ExecutionTrace): void;
+}
+
+const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
+
+/**
  * 约束检查器
  */
 export class ConstraintChecker {
@@ -71,6 +82,9 @@ export class ConstraintChecker {
   /** 检查结果缓存（S7：减少重复 git diff / src scan I/O，TTL=1s 防跨测试污染） */
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
+  /** trace 记录器（注入式，默认 no-op；生产入口经 setTraceRecorder 接入真实收集器） */
+  private traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER;
+
   private constructor() {}
 
   /**
@@ -81,6 +95,13 @@ export class ConstraintChecker {
       ConstraintChecker.instance = new ConstraintChecker();
     }
     return ConstraintChecker.instance;
+  }
+
+  /**
+   * 注入 trace 记录器（工单 15：解耦 core 对 monitoring 的值依赖）
+   */
+  setTraceRecorder(recorder: TraceRecorder): void {
+    this.traceRecorder = recorder;
   }
 
   /**
@@ -191,7 +212,7 @@ export class ConstraintChecker {
    * 记录约束检查的 trace
    */
   private recordTrace(
-    collector: ReturnType<typeof getTraceCollector>,
+    collector: TraceRecorder,
     constraint: Constraint,
     checkResult: ConstraintResult,
     context: ConstraintContext
@@ -943,7 +964,7 @@ export class ConstraintChecker {
       tipCount: 0,
     };
 
-    const traceCollector = getTraceCollector();
+    const traceCollector = this.traceRecorder;
     const constraints = this.getConstraints(customConfig);
 
     // 1. Iron Laws: 必须全部通过
@@ -1008,7 +1029,7 @@ export class ConstraintChecker {
       tipCount: 0,
     };
 
-    const traceCollector = getTraceCollector();
+    const traceCollector = this.traceRecorder;
     const constraints = this.getConstraints(customConfig);
 
     for (const constraint of Object.values(constraints.ironLaws)) {

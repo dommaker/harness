@@ -15,12 +15,13 @@ export * from './trace';
 // Performance 类型（Performance Trace 系统）
 export * from './performance';
 
-// 诊断和提案类型（从 monitoring 导入）
-export type { Diagnosis } from '../monitoring/constraint-doctor';
+// 诊断和提案类型（定义已归位 types/monitoring-types.ts，monitoring 改从 types 导入）
+// 显式再导出（不用 export *）：根入口同时星导出 ./monitoring，星-星歧义会静默丢符号
 export type {
+  Diagnosis,
   ConstraintProposal,
   ProposalReviewResult,
-} from '../monitoring/constraint-evolver';
+} from './monitoring-types';
 
 // Session 类型（排除与 passes-gate 冲突的类型）
 export {
@@ -47,7 +48,8 @@ export * from './enforcement';
 // Spec 验证类型
 export * from './spec';
 
-// Failure 类型（从 failure 模块导入）
+// Failure 类型（定义已归位 types/failure.ts，failure 模块经 failure/types.ts 再导出保持兼容）
+// 显式再导出（不用 export *）：根入口同时星导出 ./failure，星-星歧义会静默丢符号
 export {
   ErrorType,
   FailureLevel,
@@ -56,4 +58,4 @@ export {
   ClassificationResult,
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
-} from '../failure/types';
+} from './failure';

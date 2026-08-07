@@ -14,66 +14,11 @@ import type {
   TraceAnomaly,
   TraceSummary,
 } from '../types/trace';
+import type { Diagnosis } from '../types/monitoring-types';
 import type { LLMAdapter } from '../llm/types';
 
-/**
- * 诊断结果
- */
-export interface Diagnosis {
-  /** 异常 ID */
-  anomalyId: string;
-
-  /** 约束 ID */
-  constraintId: string;
-
-  /** 诊断时间 */
-  diagnosedAt: number;
-
-  /** 根因分析 */
-  rootCause: {
-    /** 主要原因 */
-    primary: string;
-
-    /** 次要原因 */
-    secondary?: string[];
-
-    /** 相关 traces */
-    evidence: ExecutionTrace[];
-  };
-
-  /** 影响评估 */
-  impact: {
-    /** 影响程度 */
-    severity: 'low' | 'medium' | 'high';
-
-    /** 影响范围 */
-    scope: 'single_project' | 'multiple_projects' | 'team';
-
-    /** 用户影响 */
-    userImpact: string;
-  };
-
-  /** 改进建议 */
-  recommendations: {
-    /** 建议类型 */
-    type: 'add_exception' | 'adjust_threshold' | 'modify_constraint' | 'user_training';
-
-    /** 建议内容 */
-    content: string;
-
-    /** 预期效果 */
-    expectedOutcome: string;
-
-    /** 实施成本 */
-    implementationCost: 'low' | 'medium' | 'high';
-  }[];
-
-  /** 是否需要变更 */
-  needsChange: boolean;
-
-  /** 紧急程度 */
-  urgency: 'low' | 'medium' | 'high';
-}
+// 类型定义已归位 types 层（工单 14），此处再导出保持模块公开面不变
+export type { Diagnosis };
 
 /**
  * 诊断配置

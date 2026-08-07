@@ -16,6 +16,7 @@ import type {
 } from '../types/trace';
 import type { Diagnosis } from '../types/monitoring-types';
 import type { LLMAdapter } from '../llm/types';
+import { DIAGNOSIS_RULES } from './diagnosis-rules';
 
 // 类型定义已归位 types 层（工单 14），此处再导出保持模块公开面不变
 export type { Diagnosis };
@@ -129,119 +130,15 @@ export class ConstraintDoctor {
       urgency: 'low',
     };
 
-    // 根据异常类型诊断
-    switch (anomaly.type) {
-      case 'high_bypass_rate':
-        diagnosis.rootCause.primary = '约束过于严格，用户频繁绕过';
-        diagnosis.rootCause.secondary = [
-          '约束触发条件过于宽泛',
-          '缺乏必要的例外条件',
-          '约束定义与实际场景不匹配',
-        ];
-        diagnosis.impact.userImpact = '用户被迫绕过约束，降低信任度';
-        diagnosis.recommendations = [
-          {
-            type: 'add_exception',
-            content: `为约束 ${anomaly.constraintId} 添加常见例外条件`,
-            expectedOutcome: '绕过率降低至 20% 以下',
-            implementationCost: 'low',
-          },
-          {
-            type: 'adjust_threshold',
-            content: '调整触发条件，减少误触发',
-            expectedOutcome: '减少不必要的约束检查',
-            implementationCost: 'medium',
-          },
-        ];
-        diagnosis.needsChange = true;
-        diagnosis.urgency = anomaly.data.currentRate > 0.5 ? 'high' : 'medium';
-        break;
-
-      case 'rising_fail_rate':
-        diagnosis.rootCause.primary = '约束失败率呈上升趋势';
-        diagnosis.rootCause.secondary = [
-          '代码质量下降',
-          '约束检查逻辑存在 bug',
-          '环境变化导致约束不再适用',
-        ];
-        diagnosis.impact.userImpact = '开发效率下降，约束频繁阻止正常操作';
-        diagnosis.recommendations = [
-          {
-            type: 'modify_constraint',
-            content: '审查约束逻辑，确认是否符合预期',
-            expectedOutcome: '恢复正常的失败率水平',
-            implementationCost: 'medium',
-          },
-          {
-            type: 'user_training',
-            content: '指导用户正确理解约束要求',
-            expectedOutcome: '减少因误解导致的失败',
-            implementationCost: 'low',
-          },
-        ];
-        diagnosis.needsChange = true;
-        diagnosis.urgency = 'medium';
-        break;
-
-      case 'rising_bypass_rate':
-        diagnosis.rootCause.primary = '绕过率呈上升趋势';
-        diagnosis.rootCause.secondary = [
-          '用户对约束的接受度下降',
-          '约束规则逐渐不适应新的开发模式',
-          '用户发现了绕过约束的"捷径"',
-        ];
-        diagnosis.impact.userImpact = '约束逐渐失去约束力';
-        diagnosis.recommendations = [
-          {
-            type: 'modify_constraint',
-            content: '重新评估约束的必要性',
-            expectedOutcome: '恢复约束的权威性',
-            implementationCost: 'high',
-          },
-        ];
-        diagnosis.needsChange = true;
-        diagnosis.urgency = 'high';
-        break;
-
-      case 'low_pass_rate':
-        diagnosis.rootCause.primary = '约束通过率过低';
-        diagnosis.rootCause.secondary = [
-          '约束要求过于严格',
-          '实际代码质量不达标',
-          '约束定义存在歧义',
-        ];
-        diagnosis.impact.userImpact = '几乎所有操作都被阻止，开发受阻';
-        diagnosis.recommendations = [
-          {
-            type: 'adjust_threshold',
-            content: '放宽约束要求，设置合理阈值',
-            expectedOutcome: '通过率提升至 50% 以上',
-            implementationCost: 'low',
-          },
-        ];
-        diagnosis.needsChange = true;
-        diagnosis.urgency = 'high';
-        break;
-
-      case 'exception_overuse':
-        diagnosis.rootCause.primary = '例外条件被过度使用';
-        diagnosis.rootCause.secondary = [
-          '例外条件过于宽泛',
-          '例外条件定义不够精确',
-          '用户习惯性申请例外',
-        ];
-        diagnosis.impact.userImpact = '例外成为常态，约束失去意义';
-        diagnosis.recommendations = [
-          {
-            type: 'modify_constraint',
-            content: '缩小例外条件范围，提高例外门槛',
-            expectedOutcome: '例外使用率降低至 20% 以下',
-            implementationCost: 'medium',
-          },
-        ];
-        diagnosis.needsChange = true;
-        diagnosis.urgency = 'medium';
-        break;
+    // 根据异常类型诊断（工单 23-B：规则数据化，见 diagnosis-rules.ts）
+    const rule = DIAGNOSIS_RULES[anomaly.type];
+    if (rule) {
+      diagnosis.rootCause.primary = rule.primary;
+      diagnosis.rootCause.secondary = rule.secondary;
+      diagnosis.impact.userImpact = rule.userImpact;
+      diagnosis.recommendations = rule.recommendations(anomaly);
+      diagnosis.needsChange = rule.needsChange;
+      diagnosis.urgency = rule.urgency(anomaly);
     }
 
     // 根据约束层级调整严重性

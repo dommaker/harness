@@ -50,6 +50,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:definitions.ts 按层拆分](issues/20-split-definitions.md) — 1088 行拆为三层层文件+50 行薄聚合,约束 hash 不变
 - [执行:checker.ts 注册表化拆分](issues/21-split-checker.md) — 37 约束抽入 checkers/ 注册表,checker 1163→560 行,P0 冻结
 - [执行:sync-docs.ts 同步器化拆分](issues/22-split-sync-docs.md) — 1144 行拆为 5 同步器+入口编排,PRESERVE 语义冻结
+- [执行:checkpoint 修复拆分+validate 退出码+中小文件拆分](issues/23-fixpoint-split.md) — check-handlers 四族+output_* bug 修复+门控 exit 1+context-builder+诊断规则数据化
 
 ## Not yet specified
 

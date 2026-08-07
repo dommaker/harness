@@ -7,7 +7,6 @@
 
 import type { KnowledgeStore } from './store';
 import { KnowledgeLinter } from './lint';
-import type { LintIssue } from './types';
 
 export interface HealthDetail {
   category: string;

@@ -4,7 +4,7 @@
  * 工具注册/发现/执行
  */
 
-import type { ToolDefinition, ToolCategory, ToolHandler, ToolResult } from './types';
+import type { ToolDefinition, ToolCategory, ToolResult } from './types';
 
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition>;

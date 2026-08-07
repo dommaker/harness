@@ -13,7 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { KnowledgeEntry, KnowledgeType, MaturityLevel, StorageLayer } from './types';
+import type { KnowledgeEntry, KnowledgeType, StorageLayer } from './types';
 import type { KnowledgeStore } from './store';
 
 // ── 导入源 ───────────────────────────────────────────────
@@ -203,7 +203,7 @@ export class ColdStartImporter {
       const cwd = this.config.projectRoot;
 
       // 分析大型重构提交
-      const bigCommits = execSync(
+      execSync(
         'git log --oneline --diff-filter=M --numstat --since="6 months ago" | head -100',
         { cwd, encoding: 'utf-8', timeout: 10000 },
       );

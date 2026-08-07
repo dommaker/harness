@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FileKnowledgeStore } from './store';
 import type { KnowledgeStore } from './store';
-import type { KnowledgeEntry, MaturityLevel } from './types';
+import type { KnowledgeEntry } from './types';
 
 // ── Types ─────────────────────────────────────────────────
 

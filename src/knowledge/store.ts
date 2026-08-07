@@ -9,7 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import type { KnowledgeEntry, IndexEntry, QueryFilter, StorageLayer } from './types';
+import type { KnowledgeEntry, IndexEntry, QueryFilter } from './types';
 
 const DEFAULT_DIR = '.harness/knowledge';
 const INDEX_FILE = 'index.json';

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.16.7] - 2026-08-07
+
+### Changes
+- **深度重构**：constraints definitions 拆分为 iron-laws/guidelines/tips 三层；checker 规则拆至 checkers/ 目录；checkpoint 校验拆至 validators/check-handlers/；sync-docs 拆为 sync-docs/ 模块族；会话挖掘收拢至 cli/session-mining/
+- **死代码清理**：删除 governance executor、prompt-injection 别名、knowledge 孤儿脚本等（-12000+ 行）
+- fix(checkpoint): output_* 检查行为修复；validate 门控失败时返回退出码 1
+- refactor(monitoring): constraint-doctor 诊断规则数据化（diagnosis-rules）
+
 ## [0.16.6] - 2026-07-29
 
 ### Changes

@@ -201,7 +201,7 @@ export async function release(options: ReleaseOptions): Promise<void> {
   const origRegistry = await run('npm config get registry', pkgPath);
   await run('npm config set registry https://registry.npmjs.org/', pkgPath);
   console.log(chalk.cyan('📤 Publishing to npm...'));
-  const pub = await run('npm publish --registry https://registry.npmjs.org/', pkgPath, 180_000);
+  await run('npm publish --registry https://registry.npmjs.org/', pkgPath, 180_000);
   await run(`npm config set registry ${origRegistry.stdout}`, pkgPath);
   const verify = await run(`npm view ${pkgName} version --registry https://registry.npmjs.org/`, pkgPath);
   if (verify.stdout.trim() === newVersion) {

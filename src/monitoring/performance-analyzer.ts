@@ -13,8 +13,6 @@
  * - PerformanceAnalyzer: 分析操作耗时
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import type {
   PerformanceTrace,
   PerformanceSummary,
@@ -22,6 +20,16 @@ import type {
   PerformanceAnalyzerConfig,
 } from '../types/performance';
 import { PerformanceCollector } from './performance-collector';
+import {
+  groupByKey,
+  timeRangeOf,
+  calcAverage,
+  calcPercentile,
+  splitByTime,
+  writeSummaryJson,
+  readSummaryJson,
+  MIN_TREND_SAMPLES,
+} from './analyzer-base';
 
 /**
  * 默认配置
@@ -62,17 +70,13 @@ export class PerformanceAnalyzer {
    */
   summarize(traces: PerformanceTrace[]): PerformanceSummary[] {
     // 按操作类型分组
-    const grouped = this.groupByOperation(traces);
+    const grouped = groupByKey(traces, t => t.operation);
 
     const summaries: PerformanceSummary[] = [];
 
     for (const [operation, group] of grouped) {
       // 计算时间范围
-      const timestamps = group.map(t => t.timestamp);
-      const timeRange = {
-        start: Math.min(...timestamps),
-        end: Math.max(...timestamps),
-      };
+      const timeRange = timeRangeOf(group.map(t => t.timestamp));
 
       // 单次遍历计算核心统计
       const totalCalls = group.length;
@@ -90,11 +94,11 @@ export class PerformanceAnalyzer {
 
       // 计算耗时统计
       const durations = group.map(t => t.duration);
-      const avgDuration = this.calcAverage(durations);
+      const avgDuration = calcAverage(durations);
       const maxDuration = Math.max(...durations);
       const minDuration = Math.min(...durations);
-      const p95Duration = this.calcPercentile(durations, 95);
-      const p99Duration = this.calcPercentile(durations, 99);
+      const p95Duration = calcPercentile(durations, 95);
+      const p99Duration = calcPercentile(durations, 99);
 
       // 计算趋势
       const recentTrend = this.calculateTrend(group);
@@ -256,41 +260,21 @@ export class PerformanceAnalyzer {
   }
 
   /**
-   * 按操作类型分组
-   */
-  private groupByOperation(traces: PerformanceTrace[]): Map<string, PerformanceTrace[]> {
-    const grouped = new Map<string, PerformanceTrace[]>();
-
-    for (const trace of traces) {
-      const existing = grouped.get(trace.operation) || [];
-      existing.push(trace);
-      grouped.set(trace.operation, existing);
-    }
-
-    return grouped;
-  }
-
-  /**
    * 计算趋势
    *
    * 对比前半段和后半段的平均耗时
    */
   private calculateTrend(traces: PerformanceTrace[]): 'stable' | 'rising' | 'falling' {
-    if (traces.length < 10) {
+    if (traces.length < MIN_TREND_SAMPLES) {
       return 'stable';
     }
 
-    // 按时间排序
-    const sorted = [...traces].sort((a, b) => a.timestamp - b.timestamp);
-
-    // 分成前后两半
-    const half = Math.floor(sorted.length / 2);
-    const firstHalf = sorted.slice(0, half);
-    const secondHalf = sorted.slice(half);
+    // 分成前后两半（按时间排序）
+    const [firstHalf, secondHalf] = splitByTime(traces);
 
     // 计算前半段和后半段的平均耗时
-    const firstAvg = this.calcAverage(firstHalf.map(t => t.duration));
-    const secondAvg = this.calcAverage(secondHalf.map(t => t.duration));
+    const firstAvg = calcAverage(firstHalf.map(t => t.duration));
+    const secondAvg = calcAverage(secondHalf.map(t => t.duration));
 
     // 计算变化率
     const delta = secondAvg - firstAvg;
@@ -307,51 +291,17 @@ export class PerformanceAnalyzer {
   }
 
   /**
-   * 计算平均值
-   */
-  private calcAverage(values: number[]): number {
-    if (values.length === 0) return 0;
-    return values.reduce((sum, v) => sum + v, 0) / values.length;
-  }
-
-  /**
-   * 计算百分位数
-   */
-  private calcPercentile(values: number[], percentile: number): number {
-    if (values.length === 0) return 0;
-
-    const sorted = [...values].sort((a, b) => a - b);
-    const index = Math.ceil((percentile / 100) * sorted.length) - 1;
-
-    return sorted[Math.max(0, index)];
-  }
-
-  /**
    * 保存汇总结果
    */
   saveSummary(summaries: PerformanceSummary[]): void {
-    const dir = path.dirname(this.config.summaryFile!);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(
-      this.config.summaryFile!,
-      JSON.stringify(summaries, null, 2),
-      'utf-8'
-    );
+    writeSummaryJson(this.config.summaryFile!, summaries);
   }
 
   /**
    * 加载上次汇总结果
    */
   loadSummary(): PerformanceSummary[] | null {
-    if (!fs.existsSync(this.config.summaryFile!)) {
-      return null;
-    }
-
-    const content = fs.readFileSync(this.config.summaryFile!, 'utf-8');
-    return JSON.parse(content) as PerformanceSummary[];
+    return readSummaryJson<PerformanceSummary[]>(this.config.summaryFile!);
   }
 
   /**

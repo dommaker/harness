@@ -28,7 +28,8 @@ jest.mock('child_process', () => ({
   exec: jest.fn(),
   execSync: jest.fn((cmd: string) => {
     if (cmd.includes('git ls-tree')) {
-      return Buffer.from('040000 tree abc123\tsrc\n'); // directory exists in HEAD
+      // 工单 18 后为批量命令 `git ls-tree -r --name-only HEAD`，返回文件列表
+      return Buffer.from('src/foo.ts\nsrc/module.ts\nsrc/__tests__/module.test.ts\n');
     }
     if (cmd.includes('git diff')) {
       return Buffer.from('src/test.ts\nsrc/legacy.js');
@@ -41,6 +42,7 @@ jest.mock('child_process', () => ({
 jest.mock('../../../core/constraints/checker', () => ({
   constraintChecker: {
     setCustomConfig: jest.fn(),
+    setTraceRecorder: jest.fn(),
     checkConstraints: jest.fn(),
   },
 }));

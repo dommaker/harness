@@ -13,7 +13,30 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+
+let tsLibCache: typeof import('typescript') | null | undefined;
+
+/**
+ * 懒加载 typescript(仅 devDependency):消费者未安装时功能降级为空结果
+ */
+type TsLib = typeof import('typescript');
+
+function loadTypeScript(): TsLib | null {
+  if (tsLibCache !== undefined) return tsLibCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    tsLibCache = require('typescript') as typeof import('typescript');
+  } catch {
+    tsLibCache = null;
+  }
+  return tsLibCache;
+}
+
+/** 调用前必须经 loadTypeScript() 确认可用 */
+function tsLib(): TsLib {
+  return tsLibCache as TsLib;
+}
 
 export interface DeclarationInfo {
   name: string;
@@ -51,6 +74,8 @@ export function extractCodeStructure(dir: string): CodeStructure {
     imports: [],
   };
 
+  if (!loadTypeScript()) return result;
+
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -68,7 +93,7 @@ export function extractCodeStructure(dir: string): CodeStructure {
   for (const fileName of tsFiles) {
     const filePath = path.join(dir, fileName);
     const sourceText = fs.readFileSync(filePath, 'utf-8');
-    const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
+    const sourceFile = tsLib().createSourceFile(fileName, sourceText, tsLib().ScriptTarget.Latest, true);
 
     extractFromFile(sourceFile, result);
   }
@@ -77,20 +102,20 @@ export function extractCodeStructure(dir: string): CodeStructure {
 }
 
 function extractFromFile(sourceFile: ts.SourceFile, result: CodeStructure): void {
-  ts.forEachChild(sourceFile, node => {
-    if (ts.isFunctionDeclaration(node)) {
+  tsLib().forEachChild(sourceFile, node => {
+    if (tsLib().isFunctionDeclaration(node)) {
       const info = extractDeclaration(node, sourceFile);
       if (info) result.functions.push(info);
-    } else if (ts.isClassDeclaration(node)) {
+    } else if (tsLib().isClassDeclaration(node)) {
       const info = extractDeclaration(node, sourceFile);
       if (info) result.classes.push(info);
-    } else if (ts.isInterfaceDeclaration(node)) {
+    } else if (tsLib().isInterfaceDeclaration(node)) {
       const info = extractDeclaration(node, sourceFile);
       if (info) result.interfaces.push(info);
-    } else if (ts.isTypeAliasDeclaration(node)) {
+    } else if (tsLib().isTypeAliasDeclaration(node)) {
       const info = extractDeclaration(node, sourceFile);
       if (info) result.types.push(info);
-    } else if (ts.isImportDeclaration(node)) {
+    } else if (tsLib().isImportDeclaration(node)) {
       const importInfo = extractImport(node, sourceFile);
       if (importInfo) result.imports.push(importInfo);
     }
@@ -112,7 +137,7 @@ function extractDeclaration(
 
 function extractImport(node: ts.ImportDeclaration, sourceFile: ts.SourceFile): ImportInfo | undefined {
   const moduleSpecifier = node.moduleSpecifier;
-  if (!ts.isStringLiteral(moduleSpecifier)) return undefined;
+  if (!tsLib().isStringLiteral(moduleSpecifier)) return undefined;
 
   const source = moduleSpecifier.text;
   const names: string[] = [];
@@ -122,7 +147,7 @@ function extractImport(node: ts.ImportDeclaration, sourceFile: ts.SourceFile): I
       names.push(node.importClause.name.getText(sourceFile));
     }
     if (node.importClause.namedBindings) {
-      if (ts.isNamedImports(node.importClause.namedBindings)) {
+      if (tsLib().isNamedImports(node.importClause.namedBindings)) {
         for (const element of node.importClause.namedBindings.elements) {
           names.push(element.name.getText(sourceFile));
         }
@@ -134,12 +159,11 @@ function extractImport(node: ts.ImportDeclaration, sourceFile: ts.SourceFile): I
 }
 
 function extractJSDoc(node: ts.Node, sourceFile: ts.SourceFile): string | undefined {
-  const jsDocTags = ts.getJSDocTags(node);
   const fullText = sourceFile.getFullText();
   const nodeStart = node.getFullStart();
 
   // Look backwards for JSDoc comment
-  const leadingCommentRanges = ts.getLeadingCommentRanges(fullText, nodeStart);
+  const leadingCommentRanges = tsLib().getLeadingCommentRanges(fullText, nodeStart);
   if (!leadingCommentRanges) return undefined;
 
   for (const range of leadingCommentRanges) {

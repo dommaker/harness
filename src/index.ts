@@ -93,7 +93,6 @@ export * from './llm';
 // ========================================
 // 治理模块导出
 // ========================================
-export * from './governance';
 
 // ========================================
 // 工具注册表导出
@@ -125,9 +124,13 @@ export * from './evolution';
 // ========================================
 
 import { constraintChecker } from './core/constraints/checker';
+import { getTraceCollector } from './monitoring/traces';
 import type { ConstraintContext, ConstraintCheckResult, ConstraintTrigger } from './types/constraint';
 import { constraintInterceptor } from './core/constraints/interceptor';
 import type { EnforcementExecutor, EnforcementId, InterceptionResult } from './types/enforcement';
+
+// 工单 15：checker 的 trace 记录改为注入式，根入口在此接入真实收集器（保持既有行为）
+constraintChecker.setTraceRecorder(getTraceCollector());
 
 /** 约束拦截器单例，用于注册 enforcement executor 和拦截操作 */
 export const interceptor = constraintInterceptor;

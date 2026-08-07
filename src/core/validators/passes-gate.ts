@@ -281,12 +281,12 @@ export class PassesGate {
   /**
    * 运行测试
    */
-  private async runTest(workDir: string, task?: DynamicTask): Promise<TaskTestResult> {
+  private async runTest(workDir: string, _task?: DynamicTask): Promise<TaskTestResult> {
     const testCommand = await this.detectTestCommand(workDir);
     const timestamp = new Date();
 
     try {
-      const { stdout, stderr } = await execAsync(testCommand, {
+      const { stdout } = await execAsync(testCommand, {
         cwd: workDir,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });

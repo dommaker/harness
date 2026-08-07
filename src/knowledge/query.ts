@@ -7,14 +7,11 @@
 
 import type {
   KnowledgeEntry,
-  KnowledgeType,
   MaturityLevel,
   ConsumptionMode,
-  StorageLayer,
   QueryBudget,
   QueryResult,
   QueryFilter,
-  IndexEntry,
 } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeLifecycle } from './lifecycle';

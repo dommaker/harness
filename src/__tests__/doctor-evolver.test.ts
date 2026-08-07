@@ -9,9 +9,9 @@ import { TraceCollector } from '../monitoring/traces';
 import { TraceAnalyzer } from '../monitoring/trace-analyzer';
 import { ConstraintDoctor, createDoctor } from '../monitoring/constraint-doctor';
 import { ConstraintEvolver, createEvolver } from '../monitoring/constraint-evolver';
+import { getConstraint } from '../core/constraints/definitions';
 import type { ExecutionTrace, TraceAnomaly } from '../types/trace';
-import type { Diagnosis } from '../monitoring/constraint-doctor';
-import type { ConstraintProposal } from '../monitoring/constraint-evolver';
+import type { Diagnosis, ConstraintProposal } from '../types/monitoring-types';
 
 describe('ConstraintDoctor', () => {
   let tempDir: string;
@@ -174,7 +174,7 @@ describe('ConstraintEvolver', () => {
   beforeEach(() => {
     tempDir = path.join(os.tmpdir(), `harness-proposals-${Date.now()}`);
     fs.mkdirSync(tempDir, { recursive: true });
-    evolver = createEvolver(tempDir);
+    evolver = createEvolver(tempDir, getConstraint);
     doctor = createDoctor();
   });
 

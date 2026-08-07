@@ -96,8 +96,13 @@ describe('validate command', () => {
       };
       (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
 
+      // 工单 23：检查点失败一律 exit 1（门控语义）
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
       await validate({});
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('失败'));
+      expect(mockExit).toHaveBeenCalledWith(1);
+      mockExit.mockRestore();
     });
 
     it('应该在严格模式下退出', async () => {

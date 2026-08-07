@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { createExampleCheckpoint, createExampleResolutions } from './validate';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
-import { IRON_LAWS, GUIDELINES, TIPS, getAllConstraints } from '../../core/constraints/definitions';
+import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -202,7 +202,7 @@ export async function init(options: InitOptions): Promise<void> {
 
   // 创建 GitHub Actions
   if (options.githubActions !== false) {
-    await setupGitHubActions(projectPath, options.preset);
+    await setupGitHubActions(projectPath);
   }
 
   // 治理相关文件生成
@@ -363,7 +363,7 @@ echo "✅ All checks passed"
 /**
  * 设置 GitHub Actions
  */
-async function setupGitHubActions(projectPath: string, preset: string): Promise<void> {
+async function setupGitHubActions(projectPath: string): Promise<void> {
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
   const workflowPath = path.join(workflowsDir, 'harness-check.yml');
 

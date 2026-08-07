@@ -34,14 +34,12 @@ import { SecurityGate } from './security';
 import { PerformanceGate } from './performance';
 import { ContractGate } from './contract';
 import { SpecAcceptanceGate } from './acceptance';
-import { CommandGate, createCommandGate } from './command';
 import type {
   ReviewGateConfig,
   SecurityGateConfig,
   PerformanceGateConfig,
   ContractGateConfig,
   SpecAcceptanceGateConfig,
-  CommandGateConfig,
 } from './types';
 
 export function createReviewGate(config?: Partial<ReviewGateConfig>): ReviewGate {

@@ -198,7 +198,7 @@ export class PerformanceGate {
   }> {
     try {
       // 使用超时执行覆盖率测试
-      const { stdout, stderr } = await execAsync(
+      await execAsync(
         'npm test -- --coverage --coverageReporters=json-summary 2>/dev/null || true',
         {
           cwd: projectPath,

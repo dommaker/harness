@@ -77,7 +77,7 @@ export class KnowledgeLinter {
   /**
    * 检查索引一致性
    */
-  checkIndexConsistency(entries: KnowledgeEntry[]): LintIssue[] {
+  checkIndexConsistency(_entries: KnowledgeEntry[]): LintIssue[] {
     const issues: LintIssue[] = [];
     const index = this.store.readIndex();
 
@@ -187,7 +187,7 @@ export class KnowledgeLinter {
       seen.set(key, existing);
     }
 
-    for (const [key, group] of seen) {
+    for (const [, group] of seen) {
       if (group.length > 1) {
         for (const entry of group) {
           issues.push({

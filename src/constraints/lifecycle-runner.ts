@@ -6,7 +6,7 @@
  */
 
 import { ConstraintRegistry } from './registry';
-import type { ConstraintProposal } from '../monitoring/constraint-evolver';
+import type { ConstraintProposal } from '../types/monitoring-types';
 import type { ConstraintLevel } from '../types/constraint';
 import type { DeprecationSchedule } from './types';
 

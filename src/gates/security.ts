@@ -8,8 +8,6 @@
  */
 
 import { execAsync } from '../utils/exec';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import type { GateResult, GateContext, SecurityGateConfig } from './types';
 
 /**
@@ -89,7 +87,7 @@ export class SecurityGate {
   /**
    * 检测扫描命令
    */
-  private detectScanCommand(projectPath: string): string {
+  private detectScanCommand(_projectPath: string): string {
     // 默认使用 npm audit
     return 'npm audit --json';
   }

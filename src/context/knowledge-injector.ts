@@ -7,7 +7,7 @@
 
 import { KnowledgeQuery } from '../knowledge/query';
 import { TokenEstimator } from './token-budget';
-import type { KnowledgeEntry, QueryResult, KnowledgeType } from '../knowledge/types';
+import type { KnowledgeEntry, KnowledgeType } from '../knowledge/types';
 import type { ContextSource } from './types';
 
 export interface InjectionConfig {

@@ -4,7 +4,7 @@
  * 预设定义哪些约束被启用
  */
 
-import type { ConstraintLevel, Constraint } from '../types/constraint';
+import type { Constraint } from '../types/constraint';
 import type { MergedConstraintsConfig } from '../types/project-config';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../core/constraints/definitions';
 
@@ -135,29 +135,4 @@ export function getPreset(name: string): PresetConfig {
     default:
       return STANDARD_PRESET;
   }
-}
-
-// ========================================
-// 向后兼容
-// ========================================
-
-import type { IronLawConfig } from '../types/iron-law';
-
-/**
- * @deprecated 使用 PresetConfig 代替
- */
-export { STANDARD_PRESET as STANDARD_IRON_LAWS_CONFIG };
-
-/**
- * @deprecated 使用 getPreset 代替
- */
-export function getIronLawPreset(preset: string): IronLawConfig {
-  const config = getPreset(preset);
-  return {
-    preset: preset as 'strict' | 'standard' | 'relaxed',
-    enabled: true,
-    ironLaws: config.ironLaws 
-      ? Object.values(IRON_LAWS).filter(c => config.ironLaws!.includes(c.id))
-      : Object.values(IRON_LAWS),
-  };
 }

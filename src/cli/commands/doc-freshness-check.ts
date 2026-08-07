@@ -8,6 +8,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { walkFiles } from '../../utils/file-walk';
 
 export interface DocFreshnessCheckOptions {
   /** 输出 JSON 格式 */
@@ -149,36 +150,24 @@ export function extractClaims(content: string, filePath: string): ClaimResult[] 
 function countGrepMatches(pattern: string, projectPath: string, fileGlob?: string): number {
   const searchDir = projectPath || process.cwd();
   let count = 0;
+  const regex = new RegExp(pattern, 'gi');
 
-  function walkDir(dir: string) {
-    let entries: fs.Dirent[];
+  const files = walkFiles(searchDir, {
+    skipDirs: ['node_modules', 'dist'],
+    skipHidden: true,
+    filter: (name) => !fileGlob || matchGlob(name, fileGlob),
+  });
+
+  for (const fullPath of files) {
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const matches = content.match(regex);
+      if (matches) count += matches.length;
     } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') continue;
-
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walkDir(fullPath);
-      } else if (entry.isFile()) {
-        if (fileGlob && !matchGlob(entry.name, fileGlob)) continue;
-        try {
-          const content = fs.readFileSync(fullPath, 'utf-8');
-          const regex = new RegExp(pattern, 'gi');
-          const matches = content.match(regex);
-          if (matches) count += matches.length;
-        } catch {
-          // skip unreadable files
-        }
-      }
+      // skip unreadable files
     }
   }
 
-  walkDir(searchDir);
   return count;
 }
 
@@ -261,7 +250,7 @@ function verifyListClaim(claim: ClaimResult, projectPath: string): ClaimResult {
 /**
  * 验证状态声明：检查标记是否与代码/文件一致
  */
-function verifyStatusClaim(claim: ClaimResult, projectPath: string): ClaimResult {
+function verifyStatusClaim(claim: ClaimResult, _projectPath: string): ClaimResult {
   // 状态声明的验证较复杂，标记为需要人工确认
   return {
     ...claim,

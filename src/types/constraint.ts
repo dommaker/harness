@@ -18,35 +18,11 @@ export type ConstraintId = string;
 export type ConstraintLevel = 'iron_law' | 'guideline' | 'tip';
 
 /**
- * 约束触发条件
- */
-/**
- * 约束触发器（开放扩展）
+ * 约束触发条件（开放扩展）
  *
  * 从硬编码 union type 改为 string，consumer 可传入任意 trigger。
  * 无需修改 harness 即可添加领域特定 trigger。
- *
- * 以下为推荐的抽象 trigger 常量。领域概念（如 deploy、
- * config_update 等）由 consumer 自行管理。
  */
-
-export const CODE_IMPLEMENTATION = 'code_implementation' as const;
-export const FILE_MODIFICATION = 'file_modification' as const;
-export const FILE_CREATION = 'file_creation' as const;
-export const FILE_DELETION = 'file_deletion' as const;
-export const MODULE_CREATION = 'module_creation' as const;
-export const MODULE_MODIFICATION = 'module_modification' as const;
-export const MODULE_DELETION = 'module_deletion' as const;
-export const MODULE_EXTENSION = 'module_extension' as const;
-export const API_CHANGE = 'api_change' as const;
-export const EXPORT_CHANGE = 'export_change' as const;
-export const TEST_CREATION = 'test_creation' as const;
-export const COMMIT = 'commit' as const;
-export const PUSH = 'push' as const;
-export const MERGE = 'merge' as const;
-export const DESIGN_REQUEST = 'design_request' as const;
-export const ARCHITECTURE_CHANGE = 'architecture_change' as const;
-
 export type ConstraintTrigger = string;
 
 /**
@@ -87,33 +63,6 @@ export interface Constraint {
   exceptions?: string[];
 }
 
-// ========================================
-// 向后兼容的类型别名
-// ========================================
-
-/**
- * @deprecated 使用 ConstraintId 代替
- */
-export type IronLawId = ConstraintId;
-
-/**
- * @deprecated 使用 ConstraintLevel 代替
- */
-export type IronLawSeverity = 'error' | 'warning' | 'info';
-
-/**
- * @deprecated 使用 ConstraintTrigger 代替
- */
-export type IronLawTrigger = ConstraintTrigger;
-
-/**
- * @deprecated 使用 Constraint 代替
- */
-export interface IronLaw extends Constraint {
-  /** @deprecated 使用 level 代替 */
-  severity?: IronLawSeverity;
-}
-
 /**
  * 约束检查结果
  */
@@ -138,14 +87,6 @@ export interface ConstraintResult {
   
   /** 检查时间 */
   checkedAt: Date;
-}
-
-/**
- * @deprecated 使用 ConstraintResult 代替
- */
-export interface IronLawResult extends ConstraintResult {
-  /** @deprecated */
-  law?: Constraint;
 }
 
 /**
@@ -284,11 +225,6 @@ export interface ConstraintContext {
 }
 
 /**
- * @deprecated 使用 ConstraintContext 代替
- */
-export type IronLawContext = ConstraintContext;
-
-/**
  * 约束违规错误
  */
 export class ConstraintViolationError extends Error {
@@ -298,16 +234,6 @@ export class ConstraintViolationError extends Error {
     super(result.message || 'Constraint violation');
     this.name = 'ConstraintViolationError';
     this.result = result;
-  }
-}
-
-/**
- * @deprecated 使用 ConstraintViolationError 代替
- */
-export class IronLawViolationError extends ConstraintViolationError {
-  constructor(result: ConstraintResult) {
-    super(result);
-    this.name = 'IronLawViolationError';
   }
 }
 
@@ -333,3 +259,8 @@ export interface ConstraintCheckResult {
   /** 提示数量 */
   tipCount: number;
 }
+
+/**
+ * studio 兼容别名(P0 护栏):等价于 ConstraintContext
+ */
+export type IronLawContext = ConstraintContext;

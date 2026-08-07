@@ -25,6 +25,51 @@ const DEFAULT_CONFIG: ProjectConfig = {
 };
 
 /**
+ * config.yml 原始解析结果的进程级缓存（工单 16）
+ *
+ * 键为解析后的项目路径，条目带 mtimeMs+size 指纹：文件未变则直接复用，
+ * 避免单次 harness check 内多处读取者重复 yaml 解析；文件变更自动失效。
+ */
+const rawConfigCache = new Map<string, { mtimeMs: number; size: number; raw: Record<string, unknown> }>();
+
+/**
+ * 读取并解析 .harness/config.yml（进程级 memoize）
+ *
+ * 文件不存在时返回 undefined；解析失败向上抛出（由各调用方自行兜底）。
+ */
+export function loadRawProjectConfig(projectPath: string): Record<string, unknown> | undefined {
+  const key = path.resolve(projectPath);
+  const configPath = path.join(key, '.harness', 'config.yml');
+
+  let stat: fs.Stats | undefined;
+  try {
+    stat = fs.statSync(configPath);
+  } catch {
+    stat = undefined;
+  }
+  // 文件缺失，或 stat 不可用（如测试 mock）且文件不存在 → 无配置
+  if (!stat?.mtimeMs && !fs.existsSync(configPath)) {
+    rawConfigCache.delete(key);
+    return undefined;
+  }
+
+  // stat 指纹可用时走缓存;不可用则每次直读(不缓存,避免脏数据)
+  if (stat?.mtimeMs !== undefined) {
+    const cached = rawConfigCache.get(key);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.raw;
+    }
+  }
+
+  const loaded = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
+  const raw = loaded as Record<string, unknown>;
+  if (stat?.mtimeMs !== undefined) {
+    rawConfigCache.set(key, { mtimeMs: stat.mtimeMs, size: stat.size, raw });
+  }
+  return raw;
+}
+
+/**
  * 项目配置加载器
  */
 export class ProjectConfigLoader {
@@ -42,12 +87,10 @@ export class ProjectConfigLoader {
    * 加载项目配置
    */
   load(): ProjectConfig {
-    // 1. 加载主配置
-    const configPath = path.join(this.projectPath, '.harness', 'config.yml');
-    if (fs.existsSync(configPath)) {
-      const content = fs.readFileSync(configPath, 'utf-8');
-      const loaded = yaml.load(content) as ProjectConfig;
-      this.config = { ...DEFAULT_CONFIG, ...loaded };
+    // 1. 加载主配置（经进程级 memoize，避免重复 yaml 解析）
+    const raw = loadRawProjectConfig(this.projectPath);
+    if (raw) {
+      this.config = { ...DEFAULT_CONFIG, ...(raw as Partial<ProjectConfig>) };
     }
 
     // 2. 加载自定义约束
@@ -242,11 +285,4 @@ export class ProjectConfigLoader {
       (this.config.constraints !== undefined && Object.keys(this.config.constraints).length > 0)
     );
   }
-}
-
-/**
- * 创建项目配置加载器
- */
-export function createProjectConfigLoader(projectPath?: string): ProjectConfigLoader {
-  return new ProjectConfigLoader(projectPath);
 }

@@ -10,7 +10,6 @@
  */
 
 import type { KnowledgeEntry, LintIssue } from '../knowledge/types';
-import type { ConstraintStats } from '../constraints/types';
 
 // ── 诊断类型 ─────────────────────────────────────────────
 

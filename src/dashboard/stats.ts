@@ -4,7 +4,7 @@
  * 纯函数，从原始数据计算统计指标
  */
 
-import type { KnowledgeEntry, KnowledgeType, MaturityLevel } from '../knowledge/types';
+import type { KnowledgeEntry, KnowledgeType } from '../knowledge/types';
 import type { KnowledgeOverview, KnowledgeFlow } from './types';
 
 /**

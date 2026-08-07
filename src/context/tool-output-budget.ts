@@ -77,7 +77,7 @@ export class ToolOutputBudget {
   /**
    * 应用预算策略
    */
-  applyBudget(output: string, strategy: OutputStrategy, totalBudget?: number): OutputApplyResult {
+  applyBudget(output: string, strategy: OutputStrategy, _totalBudget?: number): OutputApplyResult {
     const originalTokens = TokenEstimator.estimateText(output);
 
     switch (strategy) {

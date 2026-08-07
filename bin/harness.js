@@ -8,54 +8,14 @@
 
 const { Command } = require('commander');
 const { version } = require('../package.json');
-const {
-  check,
-  listLaws,
-  validate,
-  runPassesGate,
-  checkCoverage,
-  init,
-  report,
-  status,
-  flow,
-  specValidate,
-  listSpecTypes,
-  acceptance,
-  listAcceptanceCriteria,
-  performance,
-  security,
-  auditDetails,
-  contract,
-  validateSchema,
-  review,
-  reviewStatus,
-  executeCommand,
-  syncDocs,
-  knowledgeList,
-  knowledgeSearch,
-  knowledgeImport,
-  knowledgeDecay,
-  knowledgeStats,
-  knowledgeUpsert,
-  knowledgeSyncStatus,
-  knowledgeSyncRag,
-  knowledgeAudit,
-  knowledgeSnapshot,
-  knowledgeMigrate,
-  knowledgeHealth,
-  knowledgeIndex,
-  failureList,
-  failureStats,
-  failureClear,
-  postevalPlan,
-  analyzeSessions,
-  updateUserModel,
-  release,
-  constraints,
-  docFreshnessCheck,
-  specBaselineCheck,
-  sddIndex,
-} = require('../dist/cli/commands/index');
+
+/**
+ * 懒加载命令实现（工单 17）：只在 .action 执行时 require 命令桶，
+ * --version/--help 等不触发命令体的调用不再加载全部实现。
+ */
+function cmd(name) {
+  return require('../dist/cli/commands/index')[name];
+}
 
 const program = new Command();
 
@@ -77,9 +37,9 @@ program
   .option('--list', '列出所有铁律')
   .action(async (options) => {
     if (options.list) {
-      listLaws();
+      cmd('listLaws')();
     } else {
-      await check(options);
+      await cmd('check')(options);
     }
   });
 
@@ -93,7 +53,7 @@ program
   .option('-p, --project-path <path>', '项目路径')
   .option('--strict', '严格模式（任何失败都退出）', false)
   .action(async (options) => {
-    await validate(options);
+    await cmd('validate')(options);
   });
 
 // ========================================
@@ -112,11 +72,11 @@ program
   .action(async (options) => {
     if (options.coverage) {
       const threshold = parseInt(options.coverageThreshold, 10);
-      await runPassesGate(options);
+      await cmd('runPassesGate')(options);
       const projectPath = options.projectPath || process.cwd();
-      await checkCoverage(projectPath, threshold);
+      await cmd('checkCoverage')(projectPath, threshold);
     } else {
-      await runPassesGate(options);
+      await cmd('runPassesGate')(options);
     }
   });
 
@@ -134,7 +94,7 @@ program
   .option('--no-github-actions', '不创建 GitHub Actions')
   .option('--print-snippets', '只输出代码片段，不创建文件')
   .action(async (options) => {
-    await init(options);
+    await cmd('init')(options);
   });
 
 // ========================================
@@ -147,7 +107,7 @@ program
   .option('-f, --format <format>', '输出格式 (json/markdown/html)', 'markdown')
   .option('-p, --project-path <path>', '项目路径')
   .action(async (options) => {
-    await report(options);
+    await cmd('report')(options);
   });
 
 // ========================================
@@ -161,7 +121,7 @@ program
   .option('-a, --anomalies', '只显示异常', false)
   .option('--hours <n>', '分析最近 N 小时', '24')
   .action(async (options) => {
-    await status({
+    await cmd('status')({
       projectPath: options.projectPath,
       detail: options.detail,
       anomalies: options.anomalies,
@@ -180,7 +140,7 @@ program
   .option('--auto-apply', '自动应用低风险提案', false)
   .option('--hours <n>', '分析最近 N 小时', '24')
   .action(async (options) => {
-    await flow({
+    await cmd('flow')({
       projectPath: options.projectPath,
       from: options.from,
       autoApply: options.autoApply,
@@ -201,10 +161,10 @@ program
   .option('-v, --verbose', '详细输出', false)
   .action(async (subcommand, options, command) => {
     if (subcommand === 'list') {
-      listSpecTypes();
+      cmd('listSpecTypes')();
     } else {
       // 默认执行 validate
-      await specValidate({
+      await cmd('specValidate')({
         schema: options.schema,
         staged: options.staged,
         file: options.file || (subcommand && !subcommand.startsWith('-') ? subcommand : undefined),
@@ -228,9 +188,9 @@ program
   .option('--run-e2e', '运行 E2E 测试', false)
   .action(async (subcommand, options, command) => {
     if (subcommand === 'list') {
-      await listAcceptanceCriteria(options);
+      await cmd('listAcceptanceCriteria')(options);
     } else {
-      await acceptance(options);
+      await cmd('acceptance')(options);
     }
   });
 
@@ -249,7 +209,7 @@ program
   .option('--benchmark', '运行基准测试', false)
   .option('--benchmark-timeout <n>', '基准测试超时（秒）', '60')
   .action(async (options) => {
-    await performance({
+    await cmd('performance')({
       projectPath: options.projectPath,
       coverage: options.coverage,
       coverageThreshold: parseInt(options.coverageThreshold, 10),
@@ -274,9 +234,9 @@ program
   .option('--scan-command <cmd>', '自定义扫描命令')
   .action(async (subcommand, options, command) => {
     if (subcommand === 'audit') {
-      await auditDetails(options);
+      await cmd('auditDetails')(options);
     } else {
-      await security(options);
+      await cmd('security')(options);
     }
   });
 
@@ -292,9 +252,9 @@ program
   .option('--allow-breaking', '允许破坏性变更', false)
   .action(async (subcommand, options, command) => {
     if (subcommand === 'validate') {
-      await validateSchema(options);
+      await cmd('validateSchema')(options);
     } else {
-      await contract(options);
+      await cmd('contract')(options);
     }
   });
 
@@ -311,9 +271,9 @@ program
   .option('--allowed-reviewers <list>', '允许的审查者（逗号分隔）')
   .action(async (subcommand, options, command) => {
     if (subcommand === 'status') {
-      await reviewStatus(options);
+      await cmd('reviewStatus')(options);
     } else {
-      await review({
+      await cmd('review')({
         projectPath: options.projectPath,
         minReviewers: parseInt(options.minReviewers, 10),
         requireApproval: options.requireApproval,
@@ -334,8 +294,8 @@ program
   .option('--list', '列出所有黑名单规则')
   .option('--json', 'JSON 格式输出')
   .option('--strict', '严格模式（warn 也阻止）')
-  .action(async (cmd, options) => {
-    await executeCommand(cmd, options);
+  .action(async (cmdArg, options) => {
+    await cmd('executeCommand')(cmdArg, options);
   });
 
 // ========================================
@@ -349,7 +309,7 @@ program
   .option('--json', '输出 JSON 格式（供 LLM 消费）', false)
   .option('--agents', '同步 AGENTS.md（agent 导读；PRESERVE 标记段重新生成时保留）', false)
   .action(async (options) => {
-    const ok = await syncDocs(options);
+    const ok = await cmd('syncDocs')(options);
     if (!ok && options.check) {
       process.exit(1);
     }
@@ -384,35 +344,35 @@ program
     switch (subcommand) {
       case 'list':
       case 'ls':
-        await knowledgeList({ ...opts, type: options.type, maturity: options.maturity, tag: options.tag });
+        await cmd('knowledgeList')({ ...opts, type: options.type, maturity: options.maturity, tag: options.tag });
         break;
       case 'search':
       case 's':
         if (!arg) { console.error('请提供搜索关键词'); process.exit(1); }
-        await knowledgeSearch(arg, { ...opts, limit: parseInt(options.limit, 10) });
+        await cmd('knowledgeSearch')(arg, { ...opts, limit: parseInt(options.limit, 10) });
         break;
       case 'import':
       case 'i':
-        await knowledgeImport({ ...opts, sources: options.sources, reset: options.reset });
+        await cmd('knowledgeImport')({ ...opts, sources: options.sources, reset: options.reset });
         break;
       case 'decay':
       case 'd':
-        await knowledgeDecay(opts);
+        await cmd('knowledgeDecay')(opts);
         break;
       case 'stats':
       case 'st':
-        await knowledgeStats(opts);
+        await cmd('knowledgeStats')(opts);
         break;
       case 'sync-rag':
-        await knowledgeSyncRag(opts);
+        await cmd('knowledgeSyncRag')(opts);
         break;
       case 'sync-status':
       case 'sync':
-        await knowledgeSyncStatus(opts);
+        await cmd('knowledgeSyncStatus')(opts);
         break;
       case 'upsert':
       case 'up':
-        await knowledgeUpsert({
+        await cmd('knowledgeUpsert')({
           scope: options.scope || '',
           title: options.title || '',
           content: options.content || '',
@@ -423,7 +383,7 @@ program
         break;
       case 'audit':
       case 'a':
-        await knowledgeAudit({
+        await cmd('knowledgeAudit')({
           ...opts,
           fix: options.fix,
           dryRun: options.dryRun,
@@ -432,18 +392,18 @@ program
         });
         break;
       case 'snapshot':
-        knowledgeSnapshot({ ...opts, dir: options.dir });
+        cmd('knowledgeSnapshot')({ ...opts, dir: options.dir });
         break;
       case 'migrate':
-        knowledgeMigrate({ ...opts, dir: options.dir });
+        cmd('knowledgeMigrate')({ ...opts, dir: options.dir });
         break;
       case 'index':
       case 'idx':
-        knowledgeIndex({ ...opts, dir: options.dir });
+        cmd('knowledgeIndex')({ ...opts, dir: options.dir });
         break;
       case 'health':
       case 'h':
-        await knowledgeHealth({ ...opts, dir: options.dir });
+        await cmd('knowledgeHealth')({ ...opts, dir: options.dir });
         break;
       default:
         // 无子命令时显示帮助
@@ -470,7 +430,7 @@ program
     switch (subcommand) {
       case 'index':
       case 'idx':
-        sddIndex({ ...opts, dir: options.dir });
+        cmd('sddIndex')({ ...opts, dir: options.dir });
         break;
       default:
         if (!subcommand) {
@@ -498,14 +458,14 @@ program
     switch (subcommand) {
       case 'list':
       case 'ls':
-        await failureList({ ...opts, limit: parseInt(options.limit, 10), type: options.type, level: options.level });
+        await cmd('failureList')({ ...opts, limit: parseInt(options.limit, 10), type: options.type, level: options.level });
         break;
       case 'stats':
       case 'st':
-        await failureStats(opts);
+        await cmd('failureStats')(opts);
         break;
       case 'clear':
-        await failureClear(opts);
+        await cmd('failureClear')(opts);
         break;
       default:
         if (!subcommand) {
@@ -524,7 +484,7 @@ program
   .command('posteval-plan <planPath>')
   .description('验证 plan 文件的 checklist items 是否都有对应的 staged diff')
   .action(async (planPath) => {
-    await postevalPlan({ planPath });
+    await cmd('postevalPlan')({ planPath });
   });
 
 // ========================================
@@ -537,7 +497,7 @@ program
   .option('--json', 'JSON 格式输出', false)
   .option('--dry-run', '只显示变化，不更新状态', false)
   .action(async (options) => {
-    await updateUserModel({ json: options.json, dryRun: options.dryRun });
+    await cmd('updateUserModel')({ json: options.json, dryRun: options.dryRun });
   });
 
 // ========================================
@@ -549,7 +509,7 @@ program
   .option('--bump <type>', '版本递增类型', 'patch')
   .option('--dry-run <bool>', '仅模拟执行', 'false')
   .action(async (options) => {
-    await release({ bumpType: options.bump, dryRun: options.dryRun });
+    await cmd('release')({ bumpType: options.bump, dryRun: options.dryRun });
   });
 
 // ========================================
@@ -562,7 +522,7 @@ program
   .option('-d, --days <n>', '分析最近 N 天的会话', '7')
   .option('--json', 'JSON 格式输出', false)
   .action(async (options) => {
-    await analyzeSessions({
+    await cmd('analyzeSessions')({
       days: parseInt(options.days, 10),
       json: options.json,
     });
@@ -576,7 +536,7 @@ program
   .description('输出约束集合元数据（版本、hash、计数、文本大小）')
   .option('--json', '输出 JSON 格式', false)
   .action(async (options) => {
-    await constraints(options);
+    await cmd('constraints')(options);
   });
 
 // ========================================
@@ -589,7 +549,7 @@ program
   .option('--format <format>', '输出格式 (table/json)', 'table')
   .option('-p, --project-path <path>', '项目路径')
   .action(async (docPath, options) => {
-    await docFreshnessCheck(docPath, {
+    await cmd('docFreshnessCheck')(docPath, {
       changedFiles: options.changedFiles,
       format: options.format,
       projectPath: options.projectPath,
@@ -605,7 +565,7 @@ program
   .option('-p, --project-path <path>', '项目路径')
   .option('--json', '输出 JSON 格式', false)
   .action(async (specPath, options) => {
-    await specBaselineCheck(specPath, {
+    await cmd('specBaselineCheck')(specPath, {
       projectPath: options.projectPath,
       json: options.json,
     });

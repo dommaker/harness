@@ -10,7 +10,6 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { CheckpointValidator } from '../../core/validators/checkpoint';
 import type { Checkpoint, CheckpointContext } from '../../types/checkpoint';
-import { detectSourceRoots } from '../../utils/detect-source-roots';
 
 export interface ValidateOptions {
   /** 检查点文件路径 */
@@ -96,9 +95,8 @@ export async function validate(options: ValidateOptions): Promise<void> {
 
   if (failed > 0) {
     console.log(chalk.red(`\n🛑 ${failed} 个检查点未通过`));
-    if (options.strict) {
-      process.exit(1);
-    }
+    // 工单 23：门控语义——检查点失败一律非零退出（此前仅 --strict 退出，钩子/CI 形同虚设）
+    process.exit(1);
   } else {
     console.log(chalk.green('\n✅ 所有检查点验证通过'));
   }
@@ -106,6 +104,9 @@ export async function validate(options: ValidateOptions): Promise<void> {
 
 /**
  * 默认检查点列表（供 init 和 upgrade 共用）
+ *
+ * 注：no-console 检查点已移除（工单 23/24）——CLI 产品 src/ 必然有合法 console 输出，
+ * 且旧配置 expected:'' 语义恒错；output_* 族修复为真正执行 config.command 后该检查会恒失败。
  */
 export const DEFAULT_CHECKPOINTS: Checkpoint[] = [
   {
@@ -132,21 +133,6 @@ export const DEFAULT_CHECKPOINTS: Checkpoint[] = [
       },
     ],
   },
-  {
-    id: 'no-console',
-    name: '无 console.log',
-    checks: [
-      {
-        id: 'check-console',
-        type: 'output_not_contains',
-        config: {
-          command: 'grep -r "console.log" src/ || true',
-          expected: '',
-        },
-        message: '源代码中不应包含 console.log',
-      },
-    ],
-  },
 ];
 
 /**
@@ -167,27 +153,7 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
 
   await fs.mkdir(dir, { recursive: true });
 
-  // 动态替换 no-console 检查点的源目录
-  const roots = detectSourceRoots(projectPath);
-  let checkpoints = DEFAULT_CHECKPOINTS;
-  if (roots.length > 0) {
-    checkpoints = DEFAULT_CHECKPOINTS.map(cp => {
-      if (cp.id === 'no-console') {
-        return {
-          ...cp,
-          checks: cp.checks.map(c => {
-            if (c.id === 'check-console') {
-              return { ...c, config: { command: `grep -r "console.log" ${roots.join(' ')} || true` } };
-            }
-            return c;
-          }),
-        };
-      }
-      return cp;
-    });
-  }
-
-  const content = yaml.dump({ checkpoints }, { indent: 2 });
+  const content = yaml.dump({ checkpoints: DEFAULT_CHECKPOINTS }, { indent: 2 });
   await fs.writeFile(filePath, content, 'utf-8');
 
   console.log(chalk.green(`✅ 已创建示例检查点文件: ${filePath}`));

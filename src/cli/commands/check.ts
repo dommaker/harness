@@ -1,20 +1,20 @@
 /**
  * harness check 命令
- * 
+ *
  * 检查约束是否满足（三层：Iron Laws / Guidelines / Tips）
+ * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder；--preset 接入 applyPreset
  */
 
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, execSync } from 'child_process';
-import { execAsync } from '../../utils/exec';
 import { constraintChecker } from '../../core/constraints/checker';
 import { getTraceCollector } from '../../monitoring/traces';
 import { getAllConstraints, IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
-import { detectSourceRoots } from '../../utils/detect-source-roots';
-import type { ConstraintTrigger, ConstraintContext, ConstraintResult } from '../../types/constraint';
+import { buildConstraintContext } from '../../core/constraints/context-builder';
+import { applyPreset } from '../../presets';
+import type { ConstraintTrigger } from '../../types/constraint';
 
 export interface CheckOptions {
   /** 预设名称 */
@@ -25,79 +25,6 @@ export interface CheckOptions {
   trigger?: ConstraintTrigger;
   /** 项目路径 */
   projectPath?: string;
-}
-
-/**
- * 从 git diff 获取变更的文件
- */
-async function getChangedFiles(staged: boolean): Promise<string[]> {
-  try {
-    const command = staged ? 'git diff --cached --name-only' : 'git diff --name-only';
-    const { stdout } = await execAsync(command);
-    return stdout.trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * 一次性列出 HEAD 中存在的所有目录（工单 18：替代逐文件 git ls-tree）
- *
- * 返回 null 表示命令失败（按惯例视所有目录为"新"）。
- */
-function listHeadDirs(projectPath: string): Set<string> | null {
-  try {
-    const output = execSync('git ls-tree -r --name-only HEAD', { cwd: projectPath, stdio: 'pipe', encoding: 'utf-8' });
-    const dirs = new Set<string>();
-    for (const file of String(output).split('\n')) {
-      if (!file) continue;
-      const parts = file.split('/');
-      for (let i = 1; i < parts.length; i++) {
-        dirs.add(parts.slice(0, i).join('/'));
-      }
-    }
-    return dirs;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 检查文件所在目录是否在 git HEAD 中不存在（即新目录）
- */
-function isNewDirectory(headDirs: Set<string> | null, filePath: string): boolean {
-  if (headDirs === null) return true; // 命令失败 = 假定为新
-  return !headDirs.has(path.dirname(filePath));
-}
-
-/**
- * 检测触发条件
- */
-function detectTrigger(changedFiles: string[], options: CheckOptions): ConstraintTrigger {
-  if (options.trigger) return options.trigger;
-
-  // 根据变更文件推断触发条件
-  // 注意：不自动推断 code_implementation——那是 caller 的语义判断。
-  // pre-commit 无法区分"模板编辑"和"逻辑实现"，保守使用 file_modification。
-  const hasTestChange = changedFiles.some(f =>
-    f.includes('.test.') || f.includes('.spec.') || f.includes('__tests__')
-  );
-  const sourceRoots = detectSourceRoots(options.projectPath || process.cwd());
-  const hasModuleChange = changedFiles.some(f =>
-    sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) && !f.includes('__tests__')
-  );
-  const projectPath = options.projectPath || process.cwd();
-  const headDirs = hasModuleChange ? listHeadDirs(projectPath) : null;
-  const hasModuleCreation = changedFiles.some(f =>
-    sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) &&
-    isNewDirectory(headDirs, f)
-  );
-
-  if (hasTestChange && !hasModuleChange) return 'test_creation';
-  if (hasModuleCreation) return 'module_creation';
-  if (hasModuleChange) return 'module_modification';
-
-  return 'file_modification';
 }
 
 /**
@@ -123,32 +50,30 @@ export async function check(options: CheckOptions): Promise<void> {
       }
     }
 
-    // 获取变更文件
-    const changedFiles = await getChangedFiles(options.staged);
+    // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
+    const context = await buildConstraintContext({
+      projectPath: options.projectPath,
+      staged: options.staged,
+      trigger: options.trigger,
+    });
+    const changedFiles = context.changedFiles ?? [];
     if (changedFiles.length > 0) {
       console.log(chalk.gray(`变更文件: ${changedFiles.length} 个`));
     }
+    console.log(chalk.gray(`触发条件: ${context.operation}`));
 
-    // 检测触发条件
-    const trigger = detectTrigger(changedFiles, options);
-    console.log(chalk.gray(`触发条件: ${trigger}`));
-
-    // 构建上下文
-    const context: ConstraintContext = {
-      operation: trigger,
-      projectPath: options.projectPath || process.cwd(),
-      changedFiles,
-      hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),
-      hasFailingTest: await detectFailingTest(projectPath),
-      hasRootCauseInvestigation: detectRootCauseInvestigation(projectPath),
-      hasVerificationEvidence: await detectVerificationEvidence(projectPath),
-      hasReuseCheck: detectReuseCheck(projectPath),
-      hasRequirement: detectRequirement(projectPath),
-      hasWorktree: detectWorktree(projectPath),
-    };
+    // 预设（工单 23：--preset 真正生效；项目自定义配置优先于预设）
+    let presetConfig;
+    if (!configLoader.hasCustomConfig()) {
+      try {
+        presetConfig = applyPreset(options.preset || 'standard');
+      } catch {
+        presetConfig = undefined; // 未知预设名回退内置全集
+      }
+    }
 
     // 执行三层检查
-    const result = await constraintChecker.checkConstraints(context);
+    const result = await constraintChecker.checkConstraints(context, presetConfig);
 
     // 输出结果
     console.log();
@@ -209,150 +134,6 @@ export async function check(options: CheckOptions): Promise<void> {
     console.log(chalk.red(`❌ 约束检查异常: ${error instanceof Error ? error.message : String(error)}`));
     process.exit(1);
   }
-}
-
-/**
- * 检测是否有失败的测试记录
- * 扫描 .harness/traces/ 中最近的 trace 记录
- */
-async function detectFailingTest(projectPath: string): Promise<boolean> {
-  try {
-    const tracesDir = path.join(projectPath, '.harness', 'traces');
-    if (!fs.existsSync(tracesDir)) return false;
-
-    const traceFile = path.join(tracesDir, 'execution.log');
-    if (!fs.existsSync(traceFile)) return false;
-
-    const content = fs.readFileSync(traceFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-    if (lines.length === 0) return false;
-
-    // 检查最近 20 条记录是否有 fail
-    const recent = lines.slice(-20);
-    return recent.some(line => {
-      try {
-        const trace = JSON.parse(line);
-        return trace.result === 'fail';
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 检测是否有根因分析文档
- * 检查 ROOT_CAUSE.md、.harness/diagnoses/、或 git commit 消息
- */
-function detectRootCauseInvestigation(projectPath: string): boolean {
-  // 检查 ROOT_CAUSE.md
-  if (fs.existsSync(path.join(projectPath, 'ROOT_CAUSE.md'))) return true;
-
-  // 检查 .harness/diagnoses/ 目录
-  const diagnosesDir = path.join(projectPath, '.harness', 'diagnoses');
-  if (fs.existsSync(diagnosesDir)) {
-    try {
-      const files = fs.readdirSync(diagnosesDir);
-      if (files.length > 0) return true;
-    } catch {
-      // ignore
-    }
-  }
-
-  return false;
-}
-
-/**
- * 检测是否有验证证据
- * 检查 .harness/traces/ 中最近的成功验证记录
- */
-async function detectVerificationEvidence(projectPath: string): Promise<boolean> {
-  try {
-    const tracesDir = path.join(projectPath, '.harness', 'traces');
-    if (!fs.existsSync(tracesDir)) return false;
-
-    const traceFile = path.join(tracesDir, 'execution.log');
-    if (!fs.existsSync(traceFile)) return false;
-
-    const content = fs.readFileSync(traceFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-    if (lines.length === 0) return false;
-
-    // 检查最近 10 条记录是否有 pass
-    const recent = lines.slice(-10);
-    return recent.some(line => {
-      try {
-        const trace = JSON.parse(line);
-        return trace.result === 'pass';
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 检测是否有复用检查
- * 检查 .harness/reuse/ 目录或相关文档
- */
-/**
- * 检测是否有需求来源
- * 检查 CLAUDE.md、README.md、specs/、docs/specs/ 等
- */
-function detectRequirement(projectPath: string): boolean {
-  // Check for CLAUDE.md with HARNESS_CONSTRAINTS section
-  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-  if (fs.existsSync(claudeMdPath)) {
-    try {
-      const content = fs.readFileSync(claudeMdPath, 'utf-8');
-      if (content.includes('HARNESS_CONSTRAINTS')) {
-        return true;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const indicators = [
-    'README.md',
-    'specs',
-    'docs/specs',
-    '.specs',
-  ];
-  return indicators.some(f => fs.existsSync(path.join(projectPath, f)));
-}
-
-/**
- * 检测是否在 git worktree 中
- */
-function detectWorktree(projectPath: string): boolean {
-  try {
-    const gitDir = path.join(projectPath, '.git');
-    if (fs.existsSync(gitDir)) {
-      const content = fs.readFileSync(gitDir, 'utf-8');
-      // 实际 worktree 的 .git 是文件（指向主 repo），不是目录
-      return content.startsWith('gitdir:');
-    }
-  } catch { /* ignore */ }
-  return false;
-}
-
-function detectReuseCheck(projectPath: string): boolean {
-  const reuseDir = path.join(projectPath, '.harness', 'reuse');
-  if (fs.existsSync(reuseDir)) {
-    try {
-      const files = fs.readdirSync(reuseDir);
-      if (files.length > 0) return true;
-    } catch {
-      // ignore
-    }
-  }
-
-  return false;
 }
 
 /**

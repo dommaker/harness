@@ -54,11 +54,11 @@ const meta = await import('child_process').then(cp =>
 
 | 层级 | 严重性 | 数量 | 行为 |
 |------|:--:|:--:|------|
-| **Iron Law** | error | 13 | 阻断执行。拦截率 <5% 时自动降为 guideline |
-| **Guideline** | warning | 27 | 注入 Agent context。拦截率 <30% 时降为 tip |
+| **Iron Law** | error | 12 | 阻断执行。拦截率 <5% 时自动降为 guideline |
+| **Guideline** | warning | 28 | 注入 Agent context。拦截率 <30% 时降为 tip |
 | **Tip** | info | 2 | 信息性提示。拦截率 <10% 时标记废弃 |
 
-完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
+约束定义按层级维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines,tips}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 
@@ -85,16 +85,42 @@ active → 拦截率低于阈值 → degrade → deprecated → 写入 Knowledge
 ## CLI
 
 ```bash
-harness check        # 约束检查（pre-commit hook 用）
-harness init         # 初始化 .harness/ 目录
-harness sync-docs    # 同步 CAPABILITIES.md + CONTEXT.md
-harness constraints  # 约束元数据（版本/hash/计数）
-harness status       # 项目健康状态
-harness validate     # 检查点验证
-harness report       # 报告生成
+# 核心
+harness check          # 约束检查（pre-commit hook 用）
+harness validate       # 检查点验证（失败退出码 1，可用于 CI 门控）
+harness init           # 初始化 .harness/ 目录（不覆盖已有运行时配置）
+harness status         # 项目健康状态、统计、异常检测
+harness constraints    # 约束元数据（版本/hash/计数/文本大小）
+harness report         # 生成检查报告
+harness flow           # 一键执行诊断 + 提案流程
+
+# 门禁
+harness passes-gate    # 测试门控（别名 pg）
+harness acceptance     # 验收标准门控
+harness performance    # 性能门控
+harness security       # 安全门控
+harness contract       # API 契约门控（OpenAPI Schema）
+harness review         # 代码审查门控
+harness command        # 命令黑名单检查
+
+# 知识与演化
+harness knowledge      # 知识库管理（list/search/import/decay/stats/audit）
+harness failure        # 失败记录管理（list/stats/clear）
+harness analyze-sessions  # 挖掘会话中的纠正模式，生成规则候选
+harness update-user-model # 增量更新用户思维模型
+
+# 文档与 Spec
+harness sync-docs      # 同步 CAPABILITIES.md + CONTEXT.md + AGENTS.md
+harness doc-freshness-check  # 文档声明新鲜度检查
+harness spec           # Spec 验证
+harness spec-baseline-check  # Spec 前置条件验证
+harness sdd            # SDD 索引管理
+
+# 发布
+harness release        # npm 发布流水线（tsc → dist 验证 → version → push → publish → gh release）
 ```
 
-完整 CLI 见 [CAPABILITIES.md](CAPABILITIES.md)。
+完整参数见各命令 `--help`，能力清单见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 
@@ -115,12 +141,26 @@ preset: standard  # strict | standard | relaxed
 | 知识引擎 | 约束退化 → KnowledgeStore 沉淀，可检索、可追溯 |
 | 门禁系统 | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
 | 安全护栏 | Input/Output/Tool Guardrail + Sandbox (L1-L4) |
-| Hook 系统 | 10 个生命周期 hook |
+| Hook 管线 | 通用 before/after/around hook：注册 → 排序 → 错误隔离 → 采样执行 |
 | 上下文/监控 | Token 预算 + 会话压缩 + Trace 诊断 + 约束进化 |
 
-变更历史见 [CHANGELOG.md](CHANGELOG.md)。
+### 代码结构
+
+```
+src/
+├── core/constraints/       # 约束定义（iron-laws/guidelines/tips）+ checkers/
+├── core/validators/        # 检查点校验器（check-handlers/）
+├── cli/                    # CLI 命令实现（sync-docs/ 模块族等）
+├── constraints/            # ConstraintRegistry + 生命周期执行器
+├── knowledge/              # 知识引擎（存储/检索/衰减/诊断）
+├── gates/                  # 各类门禁实现
+├── safety/                 # 护栏与沙箱
+├── evolution/              # 约束自动演化
+└── monitoring/             # Trace 分析与诊断（规则数据化）
+```
+
+各目录的 `CONTEXT.md` 是权威模块文档。变更历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 
 MIT
-# force CI re-run

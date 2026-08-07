@@ -44,6 +44,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - [执行:types 层去反向依赖](issues/14-types-layer-fix.md) — Diagnosis/Proposal/failure 类型归位 types 层,types 零反向依赖
 - [执行:core↔monitoring 循环消除](issues/15-core-monitoring-decycle.md) — trace 记录器注入化 + evolver 约束集参数化,双向值导入归零
 - [执行:config.yml 解析收敛与缓存](issues/16-config-cache.md) — loadRawProjectConfig 进程级 memoize(mtime+size 指纹),6 处内联解析收敛
+- [执行:CLI 懒加载](issues/17-cli-lazy-load.md) — bin 命令实现 .action 内按需 require,--version 加载模块 173→9
 
 ## Not yet specified
 

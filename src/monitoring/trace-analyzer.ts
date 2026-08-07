@@ -9,8 +9,6 @@
  * - 趋势分析（对比上一周期）
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import type {
   ExecutionTrace,
   TraceSummary,
@@ -19,6 +17,15 @@ import type {
   TraceAnalyzerConfig,
 } from '../types/trace';
 import { TraceCollector } from './traces';
+import {
+  groupByKey,
+  timeRangeOf,
+  findMostCommon,
+  splitByTime,
+  writeSummaryJson,
+  readSummaryJson,
+  MIN_TREND_SAMPLES,
+} from './analyzer-base';
 
 /**
  * 默认配置
@@ -59,7 +66,7 @@ export class TraceAnalyzer {
    */
   summarize(traces: ExecutionTrace[]): TraceSummary[] {
     // 按约束 ID 分组
-    const grouped = this.groupByConstraint(traces);
+    const grouped = groupByKey(traces, t => t.constraintId);
 
     const summaries: TraceSummary[] = [];
 
@@ -68,11 +75,7 @@ export class TraceAnalyzer {
       const level = group[0].level;
 
       // 计算时间范围
-      const timestamps = group.map(t => t.timestamp);
-      const timeRange = {
-        start: Math.min(...timestamps),
-        end: Math.max(...timestamps),
-      };
+      const timeRange = timeRangeOf(group.map(t => t.timestamp));
 
       // 单次遍历计算核心统计
       const totalChecks = group.length;
@@ -93,7 +96,7 @@ export class TraceAnalyzer {
       const exceptionTraces = group.filter(t => t.exceptionApplied);
       const exceptionCount = exceptionTraces.length;
       const exceptionTypes = exceptionTraces.map(t => t.exceptionApplied!);
-      const mostCommonException = this.findMostCommon(exceptionTypes);
+      const mostCommonException = findMostCommon(exceptionTypes);
 
       // 计算趋势
       const recentTrend = this.calculateTrend(group);
@@ -266,37 +269,17 @@ export class TraceAnalyzer {
   }
 
   /**
-   * 按约束 ID 分组
-   */
-  private groupByConstraint(traces: ExecutionTrace[]): Map<string, ExecutionTrace[]> {
-    const grouped = new Map<string, ExecutionTrace[]>();
-
-    for (const trace of traces) {
-      const existing = grouped.get(trace.constraintId) || [];
-      existing.push(trace);
-      grouped.set(trace.constraintId, existing);
-    }
-
-    return grouped;
-  }
-
-  /**
    * 计算趋势
  *
    * 对比前半段和后半段的通过率
    */
   private calculateTrend(traces: ExecutionTrace[]): 'stable' | 'rising' | 'falling' {
-    if (traces.length < 10) {
+    if (traces.length < MIN_TREND_SAMPLES) {
       return 'stable';
     }
 
-    // 按时间排序
-    const sorted = [...traces].sort((a, b) => a.timestamp - b.timestamp);
-
-    // 分成前后两半
-    const half = Math.floor(sorted.length / 2);
-    const firstHalf = sorted.slice(0, half);
-    const secondHalf = sorted.slice(half);
+    // 分成前后两半（按时间排序）
+    const [firstHalf, secondHalf] = splitByTime(traces);
 
     // 计算前半段和后半段的通过率
     const firstPassRate = this.calcPassRate(firstHalf);
@@ -325,55 +308,17 @@ export class TraceAnalyzer {
   }
 
   /**
-   * 找出最常见元素
-   */
-  private findMostCommon(items: string[]): string | undefined {
-    if (items.length === 0) return undefined;
-
-    const counts = new Map<string, number>();
-    for (const item of items) {
-      counts.set(item, (counts.get(item) || 0) + 1);
-    }
-
-    let maxCount = 0;
-    let mostCommon: string | undefined;
-
-    for (const [item, count] of counts) {
-      if (count > maxCount) {
-        maxCount = count;
-        mostCommon = item;
-      }
-    }
-
-    return mostCommon;
-  }
-
-  /**
    * 保存汇总结果
    */
   saveSummary(summaries: TraceSummary[]): void {
-    const dir = path.dirname(this.config.summaryFile!);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(
-      this.config.summaryFile!,
-      JSON.stringify(summaries, null, 2),
-      'utf-8'
-    );
+    writeSummaryJson(this.config.summaryFile!, summaries);
   }
 
   /**
    * 加载上次汇总结果
    */
   loadSummary(): TraceSummary[] | null {
-    if (!fs.existsSync(this.config.summaryFile!)) {
-      return null;
-    }
-
-    const content = fs.readFileSync(this.config.summaryFile!, 'utf-8');
-    return JSON.parse(content) as TraceSummary[];
+    return readSummaryJson<TraceSummary[]>(this.config.summaryFile!);
   }
 
   /**

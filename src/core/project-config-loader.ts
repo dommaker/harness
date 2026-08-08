@@ -13,6 +13,7 @@ import type {
   ProjectConfig,
   CustomConstraintDefinition,
   MergedConstraintsConfig,
+  CapabilitiesConfig,
 } from '../types/project-config';
 import { IRON_LAWS, GUIDELINES, TIPS } from './constraints/definitions';
 
@@ -67,6 +68,29 @@ export function loadRawProjectConfig(projectPath: string): Record<string, unknow
     rawConfigCache.set(key, { mtimeMs: stat.mtimeMs, size: stat.size, raw });
   }
   return raw;
+}
+
+/**
+ * CAPABILITIES.md 登记模式（governance.capabilities.mode）
+ */
+export type CapabilitiesMode = NonNullable<CapabilitiesConfig['mode']>;
+
+/**
+ * 读取 governance.capabilities.mode（缺省 'file'，向后兼容）
+ *
+ * 配置缺失/解析失败/取值非法时一律回落 'file'。
+ */
+export function getCapabilitiesMode(projectPath: string): CapabilitiesMode {
+  try {
+    const raw = loadRawProjectConfig(projectPath);
+    const governance = raw?.governance as Record<string, unknown> | undefined;
+    const capabilities = governance?.capabilities as Record<string, unknown> | undefined;
+    const mode = capabilities?.mode;
+    if (mode === 'file' || mode === 'module' || mode === 'listing') return mode;
+  } catch {
+    // 配置缺失或解析失败，按默认 file 处理
+  }
+  return 'file';
 }
 
 /**

@@ -197,7 +197,7 @@ export const GUIDELINES: Record<string, Constraint> = {
   capability_sync: {
     id: 'capability_sync',
     rule: 'CODE CHANGES MUST UPDATE CAPABILITIES.MD',
-    message: '核心模块变更必须同步功能清单',
+    message: '核心模块变更必须同步功能清单（支持模块级目录条目登记）',
     level: 'guideline',
     trigger: ['module_creation', 'module_modification', 'module_deletion', 'module_extension'],
     enforcement: 'update-capabilities',
@@ -212,7 +212,9 @@ export const GUIDELINES: Record<string, Constraint> = {
 [不强制更新]
 - 内部重构不影响对外接口
 - bug fix 不改变功能
-- 性能优化不改变接口`,
+- 性能优化不改变接口
+
+支持模块级目录条目登记：governance.capabilities.mode=module 时按目录覆盖判定（如 src/core/ 一条目录条目覆盖该目录下所有源文件）。`,
     exceptions: ['internal_refactor', 'bug_fix_only', 'performance_optimization'],
   },
 

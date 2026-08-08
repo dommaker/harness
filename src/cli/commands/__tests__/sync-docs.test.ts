@@ -436,4 +436,167 @@ describe('sync-docs command', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
   });
+
+  describe('module 模式（governance.capabilities.mode=module）', () => {
+    /** 写入 module 模式配置 */
+    const writeModuleConfig = (testDir: string) => {
+      const yaml = require('js-yaml');
+      fs.mkdirSync(path.join(testDir, '.harness'), { recursive: true });
+      fs.writeFileSync(
+        path.join(testDir, '.harness', 'config.yml'),
+        yaml.dump({ governance: { capabilities: { mode: 'module' } } })
+      );
+    };
+
+    it('写入模式不自动加文件行', async () => {
+      const testDir = path.join(tempDir, 'module-no-autorow');
+      writeModuleConfig(testDir);
+      fs.mkdirSync(path.join(testDir, 'src', 'core'), { recursive: true });
+      fs.mkdirSync(path.join(testDir, 'src', 'newdir'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, 'src', 'core', 'a.ts'), 'export const a = 1;');
+      fs.writeFileSync(path.join(testDir, 'src', 'newdir', 'b.ts'), 'export const b = 1;');
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |'
+      );
+
+      const result = await syncDocs({ projectPath: testDir });
+      // 有未覆盖目录，仍报不同步
+      expect(result).toBe(false);
+      // 但不自动给 b.ts 加表格行
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).not.toContain('b.ts');
+      expect(content).toContain('src/core/');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('--check 模式 added 聚合为未覆盖目录', async () => {
+      const testDir = path.join(tempDir, 'module-check-dirs');
+      writeModuleConfig(testDir);
+      fs.mkdirSync(path.join(testDir, 'src', 'core'), { recursive: true });
+      fs.mkdirSync(path.join(testDir, 'src', 'newdir'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, 'src', 'core', 'a.ts'), 'export const a = 1;');
+      fs.writeFileSync(path.join(testDir, 'src', 'newdir', 'b.ts'), 'export const b = 1;');
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |'
+      );
+
+      const result = await syncDocs({ projectPath: testDir, check: true });
+      expect(result).toBe(false);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未登记以下模块（目录）'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('src/newdir/'));
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('--json 模式 added 输出聚合目录', async () => {
+      const testDir = path.join(tempDir, 'module-json-dirs');
+      writeModuleConfig(testDir);
+      fs.mkdirSync(path.join(testDir, 'src', 'core'), { recursive: true });
+      fs.mkdirSync(path.join(testDir, 'src', 'newdir'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, 'src', 'core', 'a.ts'), 'export const a = 1;');
+      fs.writeFileSync(path.join(testDir, 'src', 'newdir', 'b.ts'), 'export const b = 1;');
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |'
+      );
+
+      const result = await syncDocs({ projectPath: testDir, check: true, json: true });
+      expect(result).toBe(false);
+
+      const jsonCall = consoleSpy.mock.calls.find(
+        (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
+      );
+      expect(jsonCall).toBeDefined();
+      const parsed = JSON.parse(jsonCall![0]);
+      expect(parsed.added).toEqual([{ dir: 'src/newdir/' }]);
+      expect(parsed.resolution.some((r: any) => r.action === 'register-capability-dirs')).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('幽灵行仍剔除', async () => {
+      const testDir = path.join(tempDir, 'module-ghost');
+      writeModuleConfig(testDir);
+      fs.mkdirSync(path.join(testDir, 'src', 'a'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, 'src', 'a', 'kept.ts'), 'export const kept = 1;');
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        [
+          '# CAPABILITIES.md', '',
+          '> 最后更新: 2026-01-01', '',
+          '| 模块 | 文件 | 说明 |', '|------|------|------|',
+          '| kept | src/a/kept.ts | 真实文件 |',
+          '| ghost | src/a/ghost.ts | 幽灵条目 |',
+          '',
+        ].join('\n')
+      );
+
+      await syncDocs({ projectPath: testDir });
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('src/a/kept.ts');
+      expect(content).not.toContain('ghost.ts');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('--compact 迁移', () => {
+    it('同目录 ≥2 个文件条目折叠为目录条目，且幂等', async () => {
+      const testDir = path.join(tempDir, 'compact-basic');
+      fs.mkdirSync(testDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        [
+          '# CAPABILITIES.md', '',
+          '> 最后更新: 2026-01-01', '',
+          '<!-- PRESERVE:说明 -->',
+          '手工说明',
+          '<!-- /PRESERVE:说明 -->', '',
+          '| 模块 | 文件 | 说明 |', '|------|------|------|',
+          '| foo | src/core/foo.ts | Foo 模块 |',
+          '| bar | src/core/bar.ts | Bar 模块 |',
+          '| solo | src/utils/solo.ts | 单独文件 |',
+          '',
+        ].join('\n')
+      );
+
+      const result = await syncDocs({ projectPath: testDir, compact: true });
+      expect(result).toBe(true);
+
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      // 折叠为目录条目（说明取组内第一行）
+      expect(content).toContain('| core | src/core/ | Foo 模块 |');
+      expect(content).not.toContain('src/core/bar.ts');
+      // 单独成组的文件行保留
+      expect(content).toContain('src/utils/solo.ts');
+      // 非表格内容原样保留
+      expect(content).toContain('<!-- PRESERVE:说明 -->');
+      expect(content).toContain('手工说明');
+
+      // 幂等：再跑一遍内容不变
+      await syncDocs({ projectPath: testDir, compact: true });
+      const content2 = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content2).toBe(content);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('CAPABILITIES.md 不存在时返回 false', async () => {
+      const testDir = path.join(tempDir, 'compact-missing');
+      fs.mkdirSync(testDir, { recursive: true });
+
+      const result = await syncDocs({ projectPath: testDir, compact: true });
+      expect(result).toBe(false);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
 });

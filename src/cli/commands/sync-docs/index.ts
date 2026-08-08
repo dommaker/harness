@@ -14,7 +14,10 @@
 
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
+import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
+import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
 import type { ModuleInfo, SyncResult } from './project-reader';
 import {
@@ -121,6 +124,24 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       )
       .map(m => getBasename(m.file));
     result.removed = existingFileNames.filter(f => !currentBasenames.includes(f));
+
+    // 幽灵条目清扫（2026-08-08 studio CI 4 连红事故）：上方按 basename 对比，
+    // 同名碰撞时幽灵不可见（如 agent-configs/routes.ts 已删但 agents/routes.ts 仍存在，
+    // basename routes.ts 仍在扫描结果中，永远不会被判 removed）。
+    // 这里按完整路径直接判存在性（与 docs_freshness 检查器同语义：项目根 + 源码根前缀）。
+    const sourceRoots = detectSourceRoots(projectPath);
+    const entryExists = (entry: string): boolean =>
+      existsSync(path.join(projectPath, entry)) ||
+      sourceRoots.some(root => existsSync(path.join(projectPath, root, entry)));
+    for (const entry of readCapabilitiesEntries(capabilitiesPath)) {
+      // 纯文件名条目（无路径）无法用存在性判定，交由上方 basename 对比
+      if (!entry.includes('/') || entryExists(entry)) continue;
+      const basename = entry.split('/').pop()!;
+      // basename 对比已覆盖（无碰撞场景）时不重复加入
+      if (!result.removed.includes(basename) && !result.removed.includes(entry)) {
+        result.removed.push(entry);
+      }
+    }
   }
 
   // 4. 检查 CONTEXT.md（缺失 + 过时）

@@ -405,5 +405,35 @@ describe('sync-docs command', () => {
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
+
+    it('basename 碰撞的幽灵条目（文件已删但同名文件存在）也应被移除', async () => {
+      const testDir = path.join(tempDir, 'ghost-basename-collision');
+      const srcA = path.join(testDir, 'src', 'a');
+      fs.mkdirSync(srcA, { recursive: true });
+
+      // 真实存在的同名文件
+      fs.writeFileSync(path.join(srcA, 'routes.ts'), 'export const routes = 1;');
+
+      // CAPABILITIES.md 另有一条指向不存在路径的 routes.ts（basename 碰撞，
+      // 按 basename 对比时永远不可见 —— 2026-08-08 studio CI 4 连红事故）
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        [
+          '# CAPABILITIES.md', '',
+          '> 最后更新: 2026-01-01', '', '---', '',
+          '| 模块 | 文件 | 说明 |', '|------|------|------|',
+          '| routes | src/a/routes.ts | 真实文件 |',
+          '| routes | src/ghost/routes.ts | 幽灵条目 |',
+          '',
+        ].join('\n'),
+      );
+
+      await syncDocs({ projectPath: testDir });
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('src/a/routes.ts');
+      expect(content).not.toContain('src/ghost/routes.ts');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
   });
 });

@@ -68,3 +68,18 @@ export function readCapabilitiesEntries(capabilitiesPath: string, options: Capab
     return [];
   }
 }
+
+/**
+ * 未覆盖文件的聚合目录（module 模式）
+ *
+ * 规则：取源码根下的第一级子目录（root=src、file=src/core/foo.ts → src/core/）；
+ * 源码根直接下的文件聚到根（file=src/foo.ts → src/）。
+ */
+export function aggregateToSourceSubdir(root: string, file: string): string {
+  if (!root) return file;
+  const prefix = root.endsWith('/') ? root : root + '/';
+  const rest = file.startsWith(prefix) ? file.slice(prefix.length) : file;
+  const idx = rest.indexOf('/');
+  if (idx === -1) return prefix;
+  return prefix + rest.slice(0, idx) + '/';
+}

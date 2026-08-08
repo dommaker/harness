@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.16.9] - 2026-08-08
+
+### Changes
+- feat(capabilities): CAPABILITIES.md 支持策划制模块级清单——新增 `governance.capabilities.mode`（file/module/listing，缺省 file 行为不变）；module 模式下 capability_sync 第二步改为「文件条目精确匹配 OR 目录条目前缀」覆盖判定、sync-docs 不再自动加文件行（幽灵剔除保留）、--check 按目录聚合报告未登记模块
+- feat(sync-docs): 新增 `--compact` 迁移命令，同目录 ≥2 个文件行折叠为一行目录条目（幂等、PRESERVE 块保留）
+- test(checker): 补 capability_sync 第二步全量扫描专项用例（T-058 核心逻辑此前无测试覆盖）
+
 ## [0.16.8] - 2026-08-08
 
 ### Changes

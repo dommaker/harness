@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { ProjectConfigLoader } from '../core/project-config-loader';
+import { ProjectConfigLoader, getCapabilitiesMode } from '../core/project-config-loader';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -122,6 +122,45 @@ custom_rules:
 
       const merged = loader.mergeConstraints();
       expect(merged).toBeDefined();
+    });
+  });
+
+  describe('getCapabilitiesMode', () => {
+    /** 建一个带独立 .harness/config.yml 的临时项目目录（避免进程级缓存串扰） */
+    const setupConfigDir = (name: string, configYaml: string): string => {
+      const dir = path.join(tempDir, name);
+      fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.harness', 'config.yml'), configYaml);
+      return dir;
+    };
+
+    it('未配置时缺省返回 file', () => {
+      const dir = setupConfigDir('caps-default', `preset: standard`);
+      expect(getCapabilitiesMode(dir)).toBe('file');
+    });
+
+    it('mode: module 应该返回 module', () => {
+      const dir = setupConfigDir(
+        'caps-module',
+        `governance:\n  capabilities:\n    mode: module`
+      );
+      expect(getCapabilitiesMode(dir)).toBe('module');
+    });
+
+    it('mode: listing 应该返回 listing', () => {
+      const dir = setupConfigDir(
+        'caps-listing',
+        `governance:\n  capabilities:\n    mode: listing`
+      );
+      expect(getCapabilitiesMode(dir)).toBe('listing');
+    });
+
+    it('非法取值应该回落 file', () => {
+      const dir = setupConfigDir(
+        'caps-invalid',
+        `governance:\n  capabilities:\n    mode: bogus`
+      );
+      expect(getCapabilitiesMode(dir)).toBe('file');
     });
   });
 });

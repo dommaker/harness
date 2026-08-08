@@ -16,8 +16,9 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
+import { aggregateToSourceSubdir, readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
+import { getCapabilitiesMode } from '../../../core/project-config-loader';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
 import type { ModuleInfo, SyncResult } from './project-reader';
 import {
@@ -26,6 +27,7 @@ import {
   checkCapabilityCounts,
   updateCapabilityCounts,
   updateCapabilitiesFile,
+  compactCapabilitiesContent,
 } from './capabilities-syncer';
 import { createContextMd, findExistingContextFiles, getLatestTsMtime } from './context-syncer';
 import { buildAgentsMd } from './agents-syncer';
@@ -42,6 +44,8 @@ export interface SyncDocsOptions {
   json?: boolean;
   /** 同步 AGENTS.md（agent 导读）；PRESERVE 标记段在重新生成时原样保留 */
   agents?: boolean;
+  /** 一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目 */
+  compact?: boolean;
 }
 
 /**
@@ -51,6 +55,26 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   const projectPath = options.projectPath || process.cwd();
   const isCheck = options.check === true;
   const isJson = options.json === true;
+  const capsMode = getCapabilitiesMode(projectPath);
+
+  // --compact：一次性迁移，将文件表格折叠为目录条目后直接返回
+  if (options.compact) {
+    const capsPath = path.join(projectPath, 'CAPABILITIES.md');
+    try {
+      const content = await fs.readFile(capsPath, 'utf-8');
+      const compacted = compactCapabilitiesContent(content);
+      if (compacted !== content) {
+        await fs.writeFile(capsPath, compacted, 'utf-8');
+        if (!isJson) console.log(chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
+      } else {
+        if (!isJson) console.log(chalk.green('✅ CAPABILITIES.md 无需折叠'));
+      }
+      return true;
+    } catch {
+      if (!isJson) console.log(chalk.red('❌ CAPABILITIES.md 不存在，无法折叠'));
+      return false;
+    }
+  }
 
   if (!isJson) {
     if (isCheck) {
@@ -88,7 +112,8 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   let capsIsCapabilityListing = false;
   try {
     capsContent = await fs.readFile(capabilitiesPath, 'utf-8');
-    if (isCapabilityListingFormat(capsContent)) {
+    // mode=listing 是清单格式的显式声明，与嗅探结果等价
+    if (capsMode === 'listing' || isCapabilityListingFormat(capsContent)) {
       capsIsCapabilityListing = true;
     } else {
       existingFiles = await parseCapabilitiesFiles(capabilitiesPath);
@@ -116,13 +141,31 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     // （basename 列表里永远不会有目录，直接对比会把目录行误报为「已删除的模块」）
     const existingDirs = existingFiles.filter(f => f.endsWith('/'));
     const existingFileNames = existingFiles.filter(f => !f.endsWith('/'));
-    result.added = currentModules
-      .filter(
-        m =>
-          !existingDirs.some(d => m.file.startsWith(d)) &&
-          !existingFileNames.includes(getBasename(m.file))
-      )
-      .map(m => getBasename(m.file));
+    if (capsMode === 'module') {
+      // module 模式：文件条目精确匹配或目录条目前缀覆盖；
+      // added 不再是逐文件列表，聚合为「未覆盖目录」（与 capability_sync checker 同规则）
+      const entries = readCapabilitiesEntries(capabilitiesPath, { includeDirs: true });
+      const fileEntries = entries.filter(e => !e.endsWith('/'));
+      const dirEntries = entries.filter(e => e.endsWith('/'));
+      const uncoveredDirs = new Set<string>();
+      for (const m of currentModules) {
+        const covered =
+          fileEntries.includes(m.file) || dirEntries.some(d => m.file.startsWith(d));
+        if (!covered) {
+          const root = srcDirs.find(d => m.file.startsWith(d + '/')) || srcDirs[0] || '';
+          uncoveredDirs.add(aggregateToSourceSubdir(root, m.file));
+        }
+      }
+      result.added = [...uncoveredDirs];
+    } else {
+      result.added = currentModules
+        .filter(
+          m =>
+            !existingDirs.some(d => m.file.startsWith(d)) &&
+            !existingFileNames.includes(getBasename(m.file))
+        )
+        .map(m => getBasename(m.file));
+    }
     result.removed = existingFileNames.filter(f => !currentBasenames.includes(f));
 
     // 幽灵条目清扫（2026-08-08 studio CI 4 连红事故）：上方按 basename 对比，
@@ -235,18 +278,30 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     }
 
     if (!capsIsCapabilityListing && hasTableIssues) {
-      jsonOutput.added = result.added.map(f => {
-        const getBasenameLocal = (s: string) => s.split('/').pop()!;
-        return {
-          file: f,
-          module: currentModules.find(m => getBasenameLocal(m.file) === f),
-        };
-      });
-      jsonOutput.removed = result.removed.map(f => ({ file: f }));
-      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
-        action: 'sync-capabilities',
-        command: 'harness sync-docs',
-      });
+      if (capsMode === 'module') {
+        // module 模式：added 为聚合后的未覆盖目录，需人工登记目录条目
+        jsonOutput.added = result.added.map(d => ({ dir: d }));
+        jsonOutput.removed = result.removed.map(f => ({ file: f }));
+        (jsonOutput.resolution as Array<Record<string, unknown>>).push({
+          action: 'register-capability-dirs',
+          details:
+            '在 CAPABILITIES.md 中为这些目录登记一行目录条目（如 `| 模块名 | src/xxx/ | 说明 |`）',
+          dirs: result.added,
+        });
+      } else {
+        jsonOutput.added = result.added.map(f => {
+          const getBasenameLocal = (s: string) => s.split('/').pop()!;
+          return {
+            file: f,
+            module: currentModules.find(m => getBasenameLocal(m.file) === f),
+          };
+        });
+        jsonOutput.removed = result.removed.map(f => ({ file: f }));
+        (jsonOutput.resolution as Array<Record<string, unknown>>).push({
+          action: 'sync-capabilities',
+          command: 'harness sync-docs',
+        });
+      }
     }
 
     if (hasContextIssues) {
@@ -282,8 +337,16 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   }
 
   if (result.added.length > 0) {
-    console.log(chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
-    result.added.forEach(f => console.log(chalk.gray(`  + ${f}`)));
+    if (capsMode === 'module') {
+      console.log(chalk.yellow(`\n📄 CAPABILITIES.md 未登记以下模块（目录）:`));
+      result.added.forEach(d => console.log(chalk.gray(`  + ${d}`)));
+      console.log(
+        chalk.gray('  请在 CAPABILITIES.md 中为这些目录登记一行目录条目（如 `| 模块名 | src/xxx/ | 说明 |`）')
+      );
+    } else {
+      console.log(chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
+      result.added.forEach(f => console.log(chalk.gray(`  + ${f}`)));
+    }
   }
 
   if (result.removed.length > 0) {
@@ -337,7 +400,7 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   }
 
   if (!capsIsCapabilityListing && hasTableIssues) {
-    await updateCapabilitiesFile(capabilitiesPath, currentModules, existingFiles, result);
+    await updateCapabilitiesFile(capabilitiesPath, currentModules, existingFiles, result, capsMode);
     console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md`));
   }
 

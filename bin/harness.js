@@ -308,6 +308,7 @@ program
   .option('-c, --check', '只检查不修改（CI 模式）', false)
   .option('--json', '输出 JSON 格式（供 LLM 消费）', false)
   .option('--agents', '同步 AGENTS.md（agent 导读；PRESERVE 标记段重新生成时保留）', false)
+  .option('--compact', '一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目', false)
   .action(async (options) => {
     const ok = await cmd('syncDocs')(options);
     if (!ok && options.check) {

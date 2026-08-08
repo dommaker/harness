@@ -7,9 +7,11 @@
  */
 
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../../../core/constraints/definitions';
 import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import { FreshnessRunner } from '../../../core/constraints/doc-freshness/runner';
+import type { CapabilitiesMode } from '../../../core/project-config-loader';
 import type { DocFreshnessCheck } from '../../../types/project-config';
 import type { ModuleInfo, SyncResult } from './project-reader';
 
@@ -137,19 +139,23 @@ export function updateCapabilityCounts(content: string, projectPath: string): st
 
 /**
  * 更新 CAPABILITIES.md 文件
+ *
+ * module 模式（governance.capabilities.mode=module）下不再为新文件自动加表格行
+ * （目录条目需人工策划登记），幽灵行剔除与「最后更新」刷新保留。
  */
 export async function updateCapabilitiesFile(
   capabilitiesPath: string,
   currentModules: ModuleInfo[],
   existingFiles: string[],
   result: SyncResult,
+  mode: CapabilitiesMode = 'file',
 ): Promise<void> {
   let content: string;
   try {
     content = await fs.readFile(capabilitiesPath, 'utf-8');
   } catch {
-    // 文件不存在，创建新的
-    content = generateCapabilitiesContent(currentModules);
+    // 文件不存在，创建新的（module 模式生成按目录聚合的模板）
+    content = generateCapabilitiesContent(currentModules, mode);
     await fs.writeFile(capabilitiesPath, content, 'utf-8');
     return;
   }
@@ -164,8 +170,8 @@ export async function updateCapabilitiesFile(
       content = content.replace(rowRegex, '');
     }
 
-    // 添加新文件的行（在最后一个表格行之后）
-    if (result.added.length > 0) {
+    // 添加新文件的行（在最后一个表格行之后）；module 模式跳过
+    if (mode !== 'module' && result.added.length > 0) {
       const getBasenameLocal = (f: string) => f.split('/').pop()!;
       const addedModules = currentModules.filter(m => result.added.includes(getBasenameLocal(m.file)));
       const tableEndRegex = /(^\|[^|]+\|[^|]+\|[^|]+\|\s*$)/gm;
@@ -186,8 +192,8 @@ export async function updateCapabilitiesFile(
     // 清理多余空行
     content = content.replace(/\n{3,}/g, '\n\n');
   } else {
-    // 没有表格，追加模块表格
-    content += '\n\n' + generateModuleTable(currentModules);
+    // 没有表格，追加模块表格（module 模式按目录聚合）
+    content += '\n\n' + (mode === 'module' ? generateDirTable(currentModules) : generateModuleTable(currentModules));
   }
 
   // 更新最后更新时间
@@ -203,7 +209,7 @@ export async function updateCapabilitiesFile(
 /**
  * 生成 CAPABILITIES.md 内容
  */
-function generateCapabilitiesContent(modules: ModuleInfo[]): string {
+function generateCapabilitiesContent(modules: ModuleInfo[], mode: CapabilitiesMode = 'file'): string {
   const now = new Date().toISOString().split('T')[0];
   return `# CAPABILITIES.md
 
@@ -211,7 +217,7 @@ function generateCapabilitiesContent(modules: ModuleInfo[]): string {
 
 ---
 
-${generateModuleTable(modules)}
+${mode === 'module' ? generateDirTable(modules) : generateModuleTable(modules)}
 `;
 }
 
@@ -226,4 +232,75 @@ function generateModuleTable(modules: ModuleInfo[]): string {
   ).join('\n');
 
   return `| 模块 | 文件 | 说明 |\n|------|------|------|\n${rows}`;
+}
+
+/**
+ * 生成按目录聚合的模块表格（module 模式模板）
+ *
+ * 每个源码子目录一行目录条目（| core | src/core/ | core |），
+ * 文件直接位于源码根时聚到根目录一行。
+ */
+function generateDirTable(modules: ModuleInfo[]): string {
+  if (modules.length === 0) return '';
+
+  const dirs: string[] = [];
+  for (const m of modules) {
+    const dir = path.posix.dirname(m.file);
+    const key = dir === '.' ? '' : dir + '/';
+    if (key && !dirs.includes(key)) dirs.push(key);
+  }
+
+  const rows = dirs.map(d => {
+    const name = d.replace(/\/$/, '').split('/').pop()!;
+    return `| ${name} | ${d} | ${name} |`;
+  }).join('\n');
+
+  return `| 模块 | 文件 | 说明 |\n|------|------|------|\n${rows}`;
+}
+
+/**
+ * 将 CAPABILITIES.md 文件表格折叠为目录条目（--compact 一次性迁移）
+ *
+ * 按文件条目（第二列）的 dirname 分组：同组 ≥2 个文件条目折叠为一行目录条目
+ * （替换组内第一行、删除其余行，说明取组内第一行，为空则用目录名）；
+ * 单独成组的文件行、表头、非表格文本、PRESERVE 块原样保留。
+ * 已折叠的目录条目行不再匹配文件条目，故幂等。
+ */
+export function compactCapabilitiesContent(content: string): string {
+  const lines = content.split('\n');
+  const fileEntryRegex = /\.(?:ts|tsx|js|jsx)$/;
+  const rowRegex = /^\|[^|]+\|[^|]+\|[^|]+\|\s*$/;
+
+  interface TableRow {
+    lineIndex: number;
+    file: string;
+    desc: string;
+  }
+
+  // 收集文件条目行，按 dirname 分组（无目录前缀的条目不参与折叠）
+  const groups = new Map<string, TableRow[]>();
+  for (let i = 0; i < lines.length; i++) {
+    if (!rowRegex.test(lines[i])) continue;
+    const cells = lines[i].split('|').map(c => c.trim());
+    const file = cells[2] ?? '';
+    if (!fileEntryRegex.test(file)) continue;
+    const dir = path.posix.dirname(file);
+    if (dir === '.') continue;
+    const group = groups.get(dir) ?? [];
+    group.push({ lineIndex: i, file, desc: cells[3] ?? '' });
+    groups.set(dir, group);
+  }
+
+  const deleteLines = new Set<number>();
+  for (const [dir, rows] of groups) {
+    if (rows.length < 2) continue;
+    const name = dir.split('/').pop()!;
+    const desc = rows[0].desc || name;
+    lines[rows[0].lineIndex] = `| ${name} | ${dir}/ | ${desc} |`;
+    for (const row of rows.slice(1)) {
+      deleteLines.add(row.lineIndex);
+    }
+  }
+
+  return lines.filter((_, i) => !deleteLines.has(i)).join('\n');
 }

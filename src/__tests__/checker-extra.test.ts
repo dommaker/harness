@@ -364,6 +364,136 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
   });
 
+  describe('checkCapabilitySync module 模式（governance.capabilities.mode）', () => {
+    /** 建一个带 .harness/config.yml + CAPABILITIES.md + 源文件的临时项目 */
+    const setupCapProject = (
+      name: string,
+      mode: 'file' | 'module' | undefined,
+      capContent: string,
+      files: string[]
+    ): string => {
+      const dir = path.join(tempDir, name);
+      fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
+      const yaml = require('js-yaml');
+      const config = mode ? { governance: { capabilities: { mode } } } : {};
+      fs.writeFileSync(path.join(dir, '.harness', 'config.yml'), yaml.dump(config));
+      fs.writeFileSync(path.join(dir, 'CAPABILITIES.md'), capContent);
+      for (const f of files) {
+        const fp = path.join(dir, f);
+        fs.mkdirSync(path.dirname(fp), { recursive: true });
+        fs.writeFileSync(fp, 'export const x = 1;');
+      }
+      return dir;
+    };
+
+    const runCapCheck = (projectPath: string) =>
+      checker.check(
+        {
+          id: 'capability_sync',
+          level: 'guideline',
+          rule: 'CAPABILITY SYNC',
+          message: 'test',
+          trigger: 'commit',
+          enforcement: 'test',
+        },
+        { operation: 'commit', projectPath }
+      );
+
+    beforeAll(() => {
+      // 清理 staged 状态，隔离 step 1（git diff 增量）对本组用例的干扰
+      try {
+        execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
+      } catch {
+        // ignore
+      }
+    });
+
+    it('module 模式：目录条目覆盖源文件应该通过', async () => {
+      const dir = setupCapProject(
+        'capmod-covered',
+        'module',
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |',
+        ['src/core/foo.ts', 'src/core/bar.ts']
+      );
+
+      const result = await runCapCheck(dir);
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('module 模式：文件条目精确匹配也算覆盖', async () => {
+      const dir = setupCapProject(
+        'capmod-file-entry',
+        'module',
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| foo | src/core/foo.ts | foo |',
+        ['src/core/foo.ts']
+      );
+
+      const result = await runCapCheck(dir);
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('module 模式：新目录未登记应该失败', async () => {
+      const dir = setupCapProject(
+        'capmod-uncovered',
+        'module',
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |',
+        ['src/core/foo.ts', 'src/newdir/bar.ts']
+      );
+
+      const result = await runCapCheck(dir);
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('file 模式原行为不变：目录条目不参与覆盖判定', async () => {
+      // file 模式下 step2 要求逐文件精确匹配，src/core/ 目录条目不能 rescue bar.ts
+      const dir = setupCapProject(
+        'capfile-dir-no-rescue',
+        'file',
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| foo | src/core/foo.ts | foo |\n| 目录 | src/core/ | 目录条目 |',
+        ['src/core/foo.ts', 'src/core/bar.ts']
+      );
+
+      const result = await runCapCheck(dir);
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('step2 全量扫描（file 模式）：全部源文件已登记应该通过', async () => {
+      const dir = setupCapProject(
+        'capfile-step2-ok',
+        undefined,
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| foo | src/foo.ts | foo |',
+        ['src/foo.ts']
+      );
+
+      const result = await runCapCheck(dir);
+      expect(result.satisfied).toBe(true);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('step2 全量扫描（file 模式）：有未登记源文件应该失败', async () => {
+      const dir = setupCapProject(
+        'capfile-step2-missing',
+        undefined,
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| foo | src/foo.ts | foo |',
+        ['src/foo.ts', 'src/unlisted.ts']
+      );
+
+      const result = await runCapCheck(dir);
+      expect(result.satisfied).toBe(false);
+
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+  });
+
   describe('findApplicableConstraints', () => {
     it('应该过滤出匹配 trigger 的约束', () => {
       const context: ConstraintContext = {

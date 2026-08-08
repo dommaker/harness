@@ -61,6 +61,19 @@ export interface ContextFilesConfig {
 }
 
 /**
+ * CAPABILITIES.md 登记模式配置
+ */
+export interface CapabilitiesConfig {
+  /**
+   * 登记模式：
+   * - file：逐文件登记（默认，历史行为）
+   * - module：模块级目录条目登记，按目录前缀覆盖判定
+   * - listing：能力清单格式（计数行）的显式声明
+   */
+  mode?: 'file' | 'module' | 'listing';
+}
+
+/**
  * CHANGELOG 配置
  */
 export interface ChangelogConfig {
@@ -182,6 +195,9 @@ export interface GovernanceConfig {
 
   /** CONTEXT.md 配置 */
   context_files?: ContextFilesConfig;
+
+  /** CAPABILITIES.md 登记模式配置 */
+  capabilities?: CapabilitiesConfig;
 
   /** CHANGELOG 配置 */
   changelog?: ChangelogConfig;

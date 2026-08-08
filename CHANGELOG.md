@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.16.8] - 2026-08-08
+
+### Changes
+- fix(sync-docs): CAPABILITIES 幽灵条目全路径清扫 + docs_freshness 报出缺失文件名
+- docs(readme): 深度重构后 README 刷新 (#16)
+- docs(changelog): 补 0.16.7 条目——修复 changelog_version 版本漂移门控
+
 ## [0.16.7] - 2026-08-07
 
 ### Changes

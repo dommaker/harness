@@ -57,8 +57,12 @@ function checkCapabilitiesFreshness(projectPath: string): boolean {
       return false;
     };
 
-    for (const file of listedFiles) {
-      if (!fileExists(file)) return false;
+    const missing = listedFiles.filter(f => !fileExists(f));
+    if (missing.length > 0) {
+      // 报出具体文件名：此前只返回 false，CLI 只能打印通用提示，
+      // 幽灵条目 basename 碰撞时 sync-docs 也不剔除，用户无从定位（2026-08-08 studio CI 4 连红）
+      console.error(`[docs_freshness] CAPABILITIES.md 列出的文件不存在: ${missing.join(', ')}`);
+      return false;
     }
 
     return true;

@@ -48,7 +48,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && cp -r src/tools/definitions dist/tools/definitions",
+    "build": "rm -rf dist && tsc && cp -r src/tools/definitions dist/tools/definitions",
     "dev": "tsc --watch",
     "test": "jest",
     "lint": "eslint src --ext .ts",

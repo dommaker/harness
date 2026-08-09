@@ -283,7 +283,7 @@ describe('status command', () => {
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
       await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harness flow'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harness status --detail'));
     });
   });
 

@@ -5,6 +5,14 @@
  */
 
 /**
+ * 默认 trace 文件路径（相对项目根目录）
+ *
+ * 读写双方必须统一引用此常量；
+ * 需要自定义路径时使用 configureTraceCollector / TraceCollectorConfig.traceFile
+ */
+export const DEFAULT_TRACE_FILE = '.harness/logs/traces.log';
+
+/**
  * 约束执行 Trace
  *
  * 设计原则：
@@ -21,13 +29,13 @@ export interface ExecutionTrace {
   constraintId: string;
 
   /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'tip';
+  level: 'iron_law' | 'guideline' | 'prompt' | 'tip';
 
   /** 检查时间（Unix timestamp） */
   timestamp: number;
 
-  /** 检查结果 */
-  result: 'pass' | 'fail' | 'bypassed';
+  /** 检查结果（skip = 约定未采用/证据未接线，未评估；不计 pass/fail 分母） */
+  result: 'pass' | 'fail' | 'bypassed' | 'skip';
 
   // ========================================
   // 轻量上下文（可选）
@@ -69,7 +77,7 @@ export interface TraceSummary {
   constraintId: string;
 
   /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'tip';
+  level: 'iron_law' | 'guideline' | 'prompt' | 'tip';
 
   /** 统计时间范围 */
   timeRange: {
@@ -92,6 +100,9 @@ export interface TraceSummary {
 
   /** 绕过次数 */
   bypassCount: number;
+
+  /** 跳过次数（ADR-0001：约定未采用/证据未接线；不计入 pass/fail/bypass 率分母） */
+  skipCount?: number;
 
   /** 用户忽略次数 */
   ignoreCount: number;
@@ -150,7 +161,7 @@ export interface TraceAnomaly {
   constraintId: string;
 
   /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'tip';
+  level: 'iron_law' | 'guideline' | 'prompt' | 'tip';
 
   /** 异常描述 */
   message: string;
@@ -177,10 +188,10 @@ export interface TraceFilter {
   constraintId?: string;
 
   /** 约束层级（可选） */
-  level?: 'iron_law' | 'guideline' | 'tip';
+  level?: 'iron_law' | 'guideline' | 'prompt' | 'tip';
 
   /** 结果类型（可选） */
-  result?: 'pass' | 'fail' | 'bypassed';
+  result?: 'pass' | 'fail' | 'bypassed' | 'skip';
 
   /** 时间范围（可选） */
   timeRange?: {

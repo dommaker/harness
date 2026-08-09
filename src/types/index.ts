@@ -15,12 +15,10 @@ export * from './trace';
 // Performance 类型（Performance Trace 系统）
 export * from './performance';
 
-// 诊断和提案类型（定义已归位 types/monitoring-types.ts，monitoring 改从 types 导入）
+// 诊断类型（定义已归位 types/monitoring-types.ts，monitoring 改从 types 导入）
 // 显式再导出（不用 export *）：根入口同时星导出 ./monitoring，星-星歧义会静默丢符号
 export type {
   Diagnosis,
-  ConstraintProposal,
-  ProposalReviewResult,
 } from './monitoring-types';
 
 // Session 类型（排除与 passes-gate 冲突的类型）

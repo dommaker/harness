@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`@dommaker/harness` is a TypeScript framework for enforcing engineering constraints on AI coding agents. It provides a three-tier constraint system (Iron Laws / Guidelines / Tips), quality gates, trace monitoring, and a CLI. Documentation is primarily in Chinese.
+`@dommaker/harness` is a TypeScript framework for enforcing engineering constraints on AI coding agents. It provides a check/prompt dual-model constraint system (ADR-0001), quality gates, trace monitoring, and a CLI. Documentation is primarily in Chinese.
 
 ## Commands
 
@@ -18,22 +18,24 @@ npm run lint           # ESLint on src/
 
 ## Architecture
 
-### Three-Tier Constraint System
+### Check/Prompt Dual-Model Constraint System (ADR-0001)
 
-Constraints are defined in `src/core/constraints/definitions.ts` (42 total):
-- **Iron Laws** (12) — severity: error. Violation throws `ConstraintViolationError`, blocks execution.
-- **Guidelines** (28) — severity: warning. Records warning, allows continuation. Each has exception flags mapped via `EXCEPTION_FIELD_MAP` in `checker.ts`.
-- **Tips** (2) — severity: info. Informational only.
+Constraints are defined in `src/core/constraints/definitions/{iron-laws,guidelines,prompts}.ts` (25 total):
+- **check · Iron Laws** (5) — severity: error. Real checkers; violation throws `ConstraintViolationError`, blocks execution.
+- **check · Guidelines** (4) — severity: warning. Real checkers; records warning, allows continuation.
+- **prompt** (16) — pure text injections with role routing and applicability tags; no check slot, no trace stats.
 
-Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relaxed` enables only Iron Laws.
+`TIPS` is retired (`@deprecated` empty export kept only for in-flight consumer compile compatibility). Every check-layer constraint must reference a registered checker (registry closed loop — build fails otherwise). Convention-probing checks (`capability_sync`/`docs_freshness`/`context_doc_sync`) report `skip` when the project hasn't adopted the convention — no blocking, not counted in pass rate.
+
+`getEffectiveConstraints(projectRoot)` (`src/core/effective-constraints.ts`) is the single source of the effective set: built-ins → preset → config.yml disables → custom additions → scenes filtering. init injection, `check`, and external consumers all go through it.
+
+Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints.
 
 ### Core Singletons
 
 - `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context
 - `ConstraintInterceptor` (`src/core/constraints/interceptor.ts`) — registers enforcement executors, intercepts operations
-- `ConstraintRegistry` (`src/constraints/registry.ts`) — layered constraint registry with deprecation lifecycle
-- `ConstraintLifecycleRunner` (`src/constraints/lifecycle-runner.ts`) — executes evolver proposals against the registry (degrade/rollback/add exception)
-- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL
+- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`)
 
 ### Key Subsystems
 
@@ -41,7 +43,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 |-----------|---------|
 | `src/core/` | Constraint engine, validators (checkpoint, CSO, passes-gate), session management, project config loading |
 | `src/gates/` | Quality gates: acceptance, command blacklist, contract (OpenAPI), performance, review, security |
-| `src/monitoring/` | Trace collection/analysis, performance monitoring, constraint diagnostics, constraint evolution proposals |
+| `src/monitoring/` | Trace collection/analysis, performance monitoring, constraint diagnostics |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
 | `src/context/` | Progressive context loading with worker pool, token budget management |
 | `src/architecture/` | Architecture-level constraint checking, cross-project interface contract checking (API sync, type consistency, breaking changes, doc-code consistency) |
@@ -51,12 +53,11 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
-| `src/evolution/` | Constraint auto-evolution: trace-based degradation/rollback proposals |
 | `src/dashboard/` | Dashboard stats aggregation and data source management |
 | `src/llm/` | LLM adapter layer: unified interface for multi-model switching |
 | `src/tools/` | Tool registry, core tools, loader, path management |
 | `src/verification/` | Rules-based verification engine + loop verification |
-| `src/cli/commands/` | 25 CLI subcommands (check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd) |
+| `src/cli/commands/` | 24 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
 
 ### Entry Points
 
@@ -88,7 +89,7 @@ When making changes to this codebase, follow these rules:
 ### Process
 
 - Every new gate MUST have a corresponding CLI command in `src/cli/commands/` and a test file in `__tests__/`
-- Constraint definitions in `definitions.ts` must include `trigger`, `enforcement`, and `description` fields
+- Constraint definitions in `src/core/constraints/definitions/` must include `trigger`, `enforcement`, and `description` fields
 - Coverage must not decrease — run `npm test -- --coverage` before committing
 - Each `src/` subdirectory's entry point is its `CONTEXT.md` (not README). CONTEXT.md documents responsibilities, exports, dependencies, and conventions.
 - `CAPABILITIES.md` must be updated when adding or modifying gates or constraints

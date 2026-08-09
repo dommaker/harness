@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.17.0] - 2026-08-08
+
+约束体系重构（ADR-0001）：删除自动进化子系统，确立 check/prompt 二元模型。决策依据见 `docs/adr/0001-constraint-system-rearchitecture.md`。
+
+### BREAKING
+- **删除进化子系统**：`src/evolution/`（`autoEvolve`）、`src/constraints/`（`ConstraintRegistry` + `ConstraintLifecycleRunner`）、`src/monitoring/constraint-evolver.ts`（`ConstraintEvolver`）、diagnosis-rules 降级规则全部移除
+- **删除 `flow` 命令**及 `--auto-apply`；trace 统计展示并入 `harness constraints report`
+- **约束清单 42 → 25**（9 check + 16 prompt），定义文件改为 `definitions/{iron-laws,guidelines,prompts}.ts`；`tips.ts` 删除
+- **`TIPS` 导出变化**：恒为空表并标记 `@deprecated`（仅为在途消费者编译兼容保留，后续删除）
+- 退役 5 条（工具链已覆盖）：`no_any_type`、`test_coverage_required`、`no_coverage_decrease`、`readme_required`、`doc_required_for_public_api`
+- 移出内置 2 条（studio 流水线专属，归 studio 自定义约束）：`two_stage_review_required`、`prefer_worktree`
+- 工具淘汰 1 条：`read_before_write`（Edit 类工具已机械强制先读后写）
+- 其余合并：`no_implementation_without_requirement`（吸收 review 变体）、`no_fuzzy_completion_claim`（吸收 no_self_approval/no_claim_without_evidence/no_excuse_patterns）、`no_fix_without_root_cause`（吸收 no_fallback_without_root_cause/analysis_verification_gate/diagnosis_to_fix_gate）、`simplest_solution_first`（吸收 no_creation_without_reuse_check/yagni_check）
+- 使用方 config.yml 中被移除条目的 `enabled: false` 残留无害（生效集计算忽略未知 id，`constraints report` 会提示）
+
+### Added
+- **`harness constraints report`**：check 层使用统计（total/pass/fail/skip、fail 率、首末触发）+ 四类退役候选诊断（零触发/零拦截/不可评估/高噪）+ 配置健康（unknownIds 残留）+ 注入漂移小节；`--export [file]` 输出脱敏 markdown 摘要供回传维护者
+- **`harness constraints retire [id] [--reason]`**：交互选择器 + 一次人确认；落盘 config.yml `enabled: false` + `retired` 元数据（at/reason/stats）；KnowledgeStore 写决策记录（规则原文+原因+历史统计）；自动同步 CLAUDE.md 注入段；删除 config.yml 对应段即可回滚
+- **`getEffectiveConstraints(projectRoot)` 公共 API**：全仓唯一生效集来源——内置 → preset 裁剪 → config.yml 禁用 → custom 追加 → scenes 过滤；init 注入/check/消费方全部走它（`src/core/effective-constraints.ts`，附 `lintEffectiveConfig` 诊断）
+- **skip 语义**：约定未采用（`capability_sync`/`docs_freshness`/`context_doc_sync` 存在性探测）或 flag 未接线 → skipped（satisfied=true，不阻断、不计入通率），trace 记 `result:'skip'`；`detectTrigger` 补 `code_implementation` 推断（代码文件变更），新增 `extraTriggers`
+- **注入漂移校验**：`check` 警告不阻断（版本漂移 ⚠️ 单独显眼提示），`report` 给条目级 diff（`injection-drift.ts`）
+- **config.yml 新增 `scenes: string[]`**：场景专属 prompt（`no_skill_without_test`、`no_model_for_deterministic`）仅在 scenes 命中时进入生效集
+- **`no_hardcoded_credentials` 真 checker**：凭证模式扫描 staged diff（接入 sensitive-check）
+- init：注入段只渲染生效集；Output Style 段标记化（HARNESS_OUTPUT_STYLE_START/END）；幂等修复
+
+### Changed（行为变化，发版须知）
+- config.yml 的 `preset` 字段现在**真正影响运行时检查**；`relaxed` = 仅 5 条 check（3 iron + 2 guideline），prompt 全禁用
+- init 注入尊重配置：禁用/裁剪后的约束不再出现在 CLAUDE.md 注入段（注入条目 ~38 → ~21）
+- trace 读写路径统一为 `.harness/logs/traces.log`（`DEFAULT_TRACE_FILE`，`src/types/trace.ts`）
+- `harness check` 输出可能新增注入漂移警告（不阻断）
+
+### Fixed
+- `capability_sync` checker 三处校验缺陷：step1 改为要求每个变更文件都被覆盖（every 而非 some，杜绝漏网）；修复 endsWith 后缀碰撞（xfoo.ts 误被 foo.ts 覆盖）与 includes 子串误配（docs/src/foo.tsx 误被 src/foo.ts 覆盖）（含回归测试）
+
 ## [0.16.9] - 2026-08-08
 
 ### Changes

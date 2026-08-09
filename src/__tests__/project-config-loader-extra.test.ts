@@ -29,9 +29,9 @@ describe('ProjectConfigLoader - 补充覆盖', () => {
         path.join(harnessDir, 'config.yml'),
         `
 constraints:
-  no_any_type:
+  legacy_disabled_a:
     enabled: false
-  no_self_approval:
+  legacy_disabled_b:
     enabled: false
 `
       );
@@ -40,8 +40,8 @@ constraints:
       loader.load();
       const merged = loader.mergeConstraints();
 
-      expect(merged.disabled).toContain('no_any_type');
-      expect(merged.disabled).toContain('no_self_approval');
+      expect(merged.disabled).toContain('legacy_disabled_a');
+      expect(merged.disabled).toContain('legacy_disabled_b');
     });
   });
 

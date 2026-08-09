@@ -163,7 +163,7 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
  * 默认 Resolutions（RKB — 约束 → 已知解法映射）
  */
 const DEFAULT_RESOLUTIONS = {
-  no_claim_without_evidence: {
+  no_fuzzy_completion_claim: {
     title: 'commit message 缺少验证证据',
     fix: '在 commit message body 中附上验证输出:\n`npx harness check --staged` | `npx harness validate` | `npm test -- --coverage`\n确认全部通过后重新 commit。',
   },
@@ -174,10 +174,6 @@ const DEFAULT_RESOLUTIONS = {
   context_doc_sync: {
     title: '关键目录缺少 CONTEXT.md',
     fix: '在 required_dirs 目录下创建 CONTEXT.md。运行 `npx harness sync-docs` 可自动生成模板。',
-  },
-  no_coverage_decrease: {
-    title: '测试覆盖率下降',
-    fix: '运行 `npm test -- --coverage` 查看当前覆盖率。新增文件必须有对应的测试文件。',
   },
 };
 

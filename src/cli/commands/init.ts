@@ -11,7 +11,12 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { createExampleCheckpoint, createExampleResolutions } from './validate';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { getEffectiveConstraints } from '../../core/effective-constraints';
+import {
+  CONSTRAINTS_START_MARKER,
+  CONSTRAINTS_END_MARKER,
+  renderConstraintsSection,
+} from '../../core/constraints/injection-renderer';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -507,18 +512,15 @@ custom_constraints:
 }
 
 /**
- * 在 CLAUDE.md 中写入/更新 Governance Rules 约束段
- *
- * - 如果 CLAUDE.md 不存在，创建并写入完整约束段
- * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
- * - 如果不存在标记，在文件末尾追加约束段
- *
-/**
- * 在 CLAUDE.md 顶部写入 Output Style 段（仅首次创建，后续不覆盖）
+ * Output Style 段标记（ADR-0001：init 只写标记区间内，标记外只读）
  */
-const OUTPUT_STYLE_SECTION = [
-  '## Output Style',
-  '',
+const OUTPUT_STYLE_START = '<!-- HARNESS_OUTPUT_STYLE_START -->';
+const OUTPUT_STYLE_END = '<!-- HARNESS_OUTPUT_STYLE_END -->';
+
+/** 旧版 harness 无标记 Output Style 段的特征串（用于区分 harness 写入 vs 用户自写） */
+const LEGACY_OUTPUT_STYLE_FINGERPRINT = 'Terse like caveman';
+
+const OUTPUT_STYLE_BODY = [
   'Terse like caveman. Technical substance exact. Only fluff die.',
   'Drop: articles, filler (just/really/basically), pleasantries (sure/certainly/happy to), hedging.',
   'Fragments OK. Short synonyms. Code blocks unchanged. Error messages quoted exact.',
@@ -527,25 +529,87 @@ const OUTPUT_STYLE_SECTION = [
   'Read existing files before writing. Don\'t re-read unless changed.',
   'Skip files over 100KB unless required.',
   'Don\'t guess APIs, versions, flags, commit SHAs, or package names. Verify before asserting.',
-  '',
 ].join('\n');
 
-async function setupClaudeMdOutputStyle(projectPath: string): Promise<void> {
-  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-  try {
-    const content = await fs.readFile(claudeMdPath, 'utf-8');
-    if (content.includes('## Output Style')) return; // 已存在，不覆盖
-    const newContent = OUTPUT_STYLE_SECTION + '\n' + content;
-    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
-  } catch {
-    // CLAUDE.md 不存在——setupClaudeMdConstraints 会创建它
-  }
+/** 渲染带标记的 Output Style 段（含 `## Output Style` 标题，以换行结尾） */
+function renderOutputStyleSection(): string {
+  return `${OUTPUT_STYLE_START}\n## Output Style\n\n${OUTPUT_STYLE_BODY}\n${OUTPUT_STYLE_END}\n`;
 }
 
 /**
- * 只写入包含 promptInjection 文本的约束
+ * 在 CLAUDE.md 顶部写入 Output Style 段（标记化、幂等）
+ *
+ * - 已有 HARNESS_OUTPUT_STYLE 标记：替换标记间内容
+ * - 无标记但存在旧版 harness 写入的无标记段（特征串匹配）：原位置换为标记版
+ * - 无标记且 `## Output Style` 段为用户自写（特征串不匹配）：跳过并提示，不重复追加
+ * - 完全没有该段：在文件顶部插入标记版
  */
-async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
+export async function setupClaudeMdOutputStyle(projectPath: string): Promise<void> {
+  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+  let content: string;
+  try {
+    content = await fs.readFile(claudeMdPath, 'utf-8');
+  } catch {
+    // CLAUDE.md 不存在——setupClaudeMdConstraints 会创建它
+    return;
+  }
+
+  const section = renderOutputStyleSection();
+  const startIdx = content.indexOf(OUTPUT_STYLE_START);
+  const endIdx = content.indexOf(OUTPUT_STYLE_END);
+
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    // 替换标记间内容（标记本身也替换，保持最新文本）。
+    // 尾部换行规范化：标记后恰好保留一个换行分隔，保证重复运行幂等。
+    const after = content.slice(endIdx + OUTPUT_STYLE_END.length).replace(/^\n+/, '');
+    const newContent = content.slice(0, startIdx) + section + (after ? '\n' + after : '');
+    if (newContent !== content) {
+      await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+      console.log(chalk.green('✅ 已更新 CLAUDE.md Output Style 段'));
+    }
+    return;
+  }
+
+  // 检测旧版无标记 `## Output Style` 段
+  const legacyMatch = /^## Output Style[ \t]*$/m.exec(content);
+  if (legacyMatch) {
+    const sectionStart = legacyMatch.index;
+    const afterHeading = sectionStart + legacyMatch[0].length;
+    const nextHeadingOffset = content.slice(afterHeading).search(/^#{1,6} /m);
+    const sectionEnd = nextHeadingOffset === -1 ? content.length : afterHeading + nextHeadingOffset;
+    const legacySection = content.slice(sectionStart, sectionEnd);
+
+    if (!legacySection.includes(LEGACY_OUTPUT_STYLE_FINGERPRINT)) {
+      // 用户自写的同名 section：不动，也不追加（避免重复）
+      console.log(chalk.yellow('⚠️  CLAUDE.md 已存在自定义 "## Output Style" 段，跳过 harness Output Style 注入'));
+      return;
+    }
+
+    // 旧版 harness 写入：原位置换为标记版
+    const before = content.slice(0, sectionStart);
+    const after = content.slice(sectionEnd);
+    const newContent = before + section + (after.length > 0 ? '\n' + after : '');
+    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+    console.log(chalk.green('✅ 已将 CLAUDE.md Output Style 段迁移为标记化管理'));
+    return;
+  }
+
+  // 完全没有该段：插入文件顶部
+  await fs.writeFile(claudeMdPath, section + '\n' + content, 'utf-8');
+  console.log(chalk.green('✅ 已在 CLAUDE.md 顶部写入 Output Style 段'));
+}
+
+/**
+ * 在 CLAUDE.md 中写入/更新 Governance Rules 约束段
+ *
+ * - 约束集来自 getEffectiveConstraints（ADR-0001）：preset 裁剪、config.yml
+ *   禁用、custom 追加、scenes 过滤全部反映在注入文本里
+ * - 期望段文本由纯函数 renderConstraintsSection 渲染（P6 漂移校验复用）
+ * - 如果 CLAUDE.md 不存在，创建并写入完整约束段
+ * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
+ * - 如果不存在标记，在文件末尾追加约束段
+ */
+export async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
 
   // 读取 harness 版本
@@ -558,44 +622,10 @@ async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
     // fallback to 'unknown'
   }
 
-  // 构建约束段正文（不含 ## Governance Rules 标题，因为替换时标题已在外部）
-  const bodyLines: string[] = [];
-  bodyLines.push('<!-- HARNESS_CONSTRAINTS_START -->');
-  bodyLines.push(`<!-- version: ${version} -->`);
-
-  // Iron Laws
-  const ironLawItems = Object.entries(IRON_LAWS).filter(([, c]) => c.promptInjection);
-  if (ironLawItems.length > 0) {
-    bodyLines.push('### Iron Laws (违反将阻断)');
-    for (const [id, c] of ironLawItems) {
-      bodyLines.push(`- **${id}**: ${c.promptInjection}`);
-    }
-  }
-
-  // Guidelines
-  const guidelineItems = Object.entries(GUIDELINES).filter(([, c]) => c.promptInjection);
-  if (guidelineItems.length > 0) {
-    bodyLines.push('');
-    bodyLines.push('### Guidelines (应遵循)');
-    for (const [id, c] of guidelineItems) {
-      bodyLines.push(`- **${id}**: ${c.promptInjection}`);
-    }
-  }
-
-  // Tips
-  const tipItems = Object.entries(TIPS).filter(([, c]) => c.promptInjection);
-  if (tipItems.length > 0) {
-    bodyLines.push('');
-    bodyLines.push('### Tips');
-    for (const [id, c] of tipItems) {
-      bodyLines.push(`- **${id}**: ${c.promptInjection}`);
-    }
-  }
-
-  bodyLines.push('<!-- HARNESS_CONSTRAINTS_END -->');
-
-  const fullSection = '## Governance Rules\n' + bodyLines.join('\n') + '\n';
-  const bodyOnly = bodyLines.join('\n') + '\n';
+  // 生效约束集 → 渲染期望段（纯函数，与写文件分离）
+  const constraints = getEffectiveConstraints(projectPath);
+  const bodyOnly = renderConstraintsSection(constraints, version);
+  const fullSection = '## Governance Rules\n' + bodyOnly;
 
   // 检查 CLAUDE.md 是否存在
   let existingContent: string;
@@ -607,9 +637,6 @@ async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
     existingContent = '';
   }
 
-  const startMarker = '<!-- HARNESS_CONSTRAINTS_START -->';
-  const endMarker = '<!-- HARNESS_CONSTRAINTS_END -->';
-
   if (!fileExists) {
     // 创建新文件
     await fs.writeFile(claudeMdPath, fullSection, 'utf-8');
@@ -617,14 +644,15 @@ async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
     return;
   }
 
-  const startIdx = existingContent.indexOf(startMarker);
-  const endIdx = existingContent.indexOf(endMarker);
+  const startIdx = existingContent.indexOf(CONSTRAINTS_START_MARKER);
+  const endIdx = existingContent.indexOf(CONSTRAINTS_END_MARKER);
 
   if (startIdx !== -1 && endIdx !== -1) {
-    // 替换标记间内容（标记本身也替换，保持包括最新版本号）
+    // 替换标记间内容（标记本身也替换，保持包括最新版本号）。
+    // 尾部换行规范化：标记后恰好保留一个换行分隔，保证重复运行幂等。
     const before = existingContent.slice(0, startIdx);
-    const after = existingContent.slice(endIdx + endMarker.length);
-    const newContent = before + bodyOnly + after;
+    const after = existingContent.slice(endIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n+/, '');
+    const newContent = before + bodyOnly + (after ? '\n' + after : '');
     await fs.writeFile(claudeMdPath, newContent, 'utf-8');
     console.log(chalk.green(`✅ 已更新 CLAUDE.md 治理约束 (v${version})`));
   } else {

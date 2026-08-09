@@ -38,8 +38,8 @@ custom_constraints:
     loader.load();
     const merged = loader.mergeConstraints();
 
-    // 注意：no_fix_without_root_cause 是 GUIDELINE
-    const constraint = merged.guidelines['no_fix_without_root_cause'];
+    // 注意：no_fix_without_root_cause 是 prompt 层约束（ADR-0001）
+    const constraint = merged.prompts!['no_fix_without_root_cause'];
     expect(constraint).toBeDefined();
     // 应该包含内置例外
     expect(constraint?.exceptions).toContain('simple_typo');
@@ -135,7 +135,7 @@ custom_constraints:
     loader.load();
     const merged = loader.mergeConstraints();
 
-    const constraint = merged.guidelines['no_fix_without_root_cause'];
+    const constraint = merged.prompts!['no_fix_without_root_cause'];
     expect(constraint).toBeDefined();
     // 应该保留内置约束的 rule
     expect(constraint?.rule).toBeTruthy();

@@ -1,8 +1,9 @@
 /**
  * harness check 命令
  *
- * 检查约束是否满足（三层：Iron Laws / Guidelines / Tips）
- * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder；--preset 接入 applyPreset
+ * 检查约束是否满足（check 层：Iron Laws / Guidelines；prompt 层仅注入不检查）
+ * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder；--preset 经 mergeConstraints 生效
+ * ADR-0001：约束集统一走 mergeConstraints 生效集链路（preset/config 禁用/custom/scenes）
  */
 
 import chalk from 'chalk';
@@ -10,10 +11,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { constraintChecker } from '../../core/constraints/checker';
 import { getTraceCollector } from '../../monitoring/traces';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
-import { applyPreset } from '../../presets';
+import { detectInjectionDrift } from '../../core/constraints/injection-drift';
+import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ConstraintTrigger } from '../../types/constraint';
 
 export interface CheckOptions {
@@ -41,13 +43,22 @@ export async function check(options: CheckOptions): Promise<void> {
     configLoader.load();
     constraintChecker.setTraceRecorder(getTraceCollector());
 
-    if (configLoader.hasCustomConfig()) {
-      const merged = configLoader.mergeConstraints();
-      constraintChecker.setCustomConfig(merged);
+    // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
+    // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（保持工单 23 语义：
+    // 项目自定义配置优先于 CLI 预设）。
+    const merged = configLoader.hasCustomConfig()
+      ? configLoader.mergeConstraints()
+      : configLoader.mergeConstraints({ preset: options.preset || 'standard' });
+    constraintChecker.setCustomConfig(merged);
+    if (merged.custom.length > 0) {
       console.log(chalk.gray(`自定义约束: ${merged.custom.length} 条`));
-      if (merged.disabled.length > 0) {
-        console.log(chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
-      }
+    }
+    if (merged.disabled.length > 0) {
+      console.log(chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
+    }
+    const unknownIds = merged.unknownIds ?? [];
+    if (unknownIds.length > 0) {
+      console.log(chalk.yellow(`⚠️  配置中存在未知约束 id（已忽略，可清理）: ${unknownIds.join(', ')}`));
     }
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
@@ -60,28 +71,26 @@ export async function check(options: CheckOptions): Promise<void> {
     if (changedFiles.length > 0) {
       console.log(chalk.gray(`变更文件: ${changedFiles.length} 个`));
     }
-    console.log(chalk.gray(`触发条件: ${context.operation}`));
-
-    // 预设（工单 23：--preset 真正生效；项目自定义配置优先于预设）
-    let presetConfig;
-    if (!configLoader.hasCustomConfig()) {
-      try {
-        presetConfig = applyPreset(options.preset || 'standard');
-      } catch {
-        presetConfig = undefined; // 未知预设名回退内置全集
-      }
-    }
+    console.log(chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
     // 执行三层检查
-    const result = await constraintChecker.checkConstraints(context, presetConfig);
+    const result = await constraintChecker.checkConstraints(context);
 
     // 输出结果
     console.log();
 
+    // skipped（约定未采用/证据未接线）单独列示，不进 pass/fail 统计（ADR-0001）
+    const skippedResults = [
+      ...result.ironLaws,
+      ...result.guidelines,
+      ...result.tips,
+    ].filter(r => r.skipped);
+
     // Iron Laws
-    const ironLawViolations = result.ironLaws.filter(r => !r.satisfied);
-    if (ironLawViolations.length === 0 && result.ironLaws.length > 0) {
-      console.log(chalk.green(`✅ 铁律: 全部通过 (${result.ironLaws.length} 条)`));
+    const evaluatedIronLaws = result.ironLaws.filter(r => !r.skipped);
+    const ironLawViolations = evaluatedIronLaws.filter(r => !r.satisfied);
+    if (ironLawViolations.length === 0 && evaluatedIronLaws.length > 0) {
+      console.log(chalk.green(`✅ 铁律: 全部通过 (${evaluatedIronLaws.length} 条)`));
     } else if (ironLawViolations.length > 0) {
       console.log(chalk.red(`❌ 铁律违规: ${ironLawViolations.length} 条`));
       ironLawViolations.forEach(r => {
@@ -104,8 +113,9 @@ export async function check(options: CheckOptions): Promise<void> {
         }
       });
     } else if (result.guidelines.length > 0) {
-      const passedGuidelines = result.guidelines.filter(r => r.satisfied).length;
-      console.log(chalk.green(`✅ 指导原则: ${passedGuidelines}/${result.guidelines.length} 通过`));
+      const evaluatedGuidelines = result.guidelines.filter(r => !r.skipped);
+      const passedGuidelines = evaluatedGuidelines.filter(r => r.satisfied).length;
+      console.log(chalk.green(`✅ 指导原则: ${passedGuidelines}/${evaluatedGuidelines.length} 通过`));
     }
 
     // Tips
@@ -116,6 +126,36 @@ export async function check(options: CheckOptions): Promise<void> {
           console.log(chalk.blue(`   - ${r.constraint.id}: ${r.constraint.message}`));
         }
       });
+    }
+
+    // Skipped：约定未采用 / 证据未接线，未评估（不计通过/失败）
+    if (skippedResults.length > 0) {
+      console.log(chalk.gray(`⏭️  跳过评估: ${skippedResults.length} 条（约定未采用或证据未接线，不计通过/失败）`));
+      skippedResults.forEach(r => {
+        console.log(chalk.gray(`   - ${r.id}`));
+      });
+    }
+
+    // 注入漂移校验（ADR-0001 决策 7）：黄色警告块，不改 exit code、不影响门禁结果。
+    // 无漂移/未注入零输出；漂移检测自身异常静默吞掉，绝不影响 check。
+    try {
+      const drift = detectInjectionDrift(projectPath);
+      if (drift.hasDrift) {
+        console.log();
+        console.log(chalk.yellow('⚠️  检测到 CLAUDE.md 约束注入漂移（仅警告，不阻断）:'));
+        if (drift.versionDrift) {
+          console.log(chalk.yellow(`   ⚠️⚠️ 注入段版本 (${drift.versionDrift.actual}) ≠ 已安装 harness 版本 (${drift.versionDrift.expected})：agent 上下文中的规则与已安装 harness 版本不一致`));
+        }
+        if (drift.contentDrift) {
+          console.log(chalk.yellow(`   内容漂移: 缺失 ${drift.contentDrift.missing.length} 条 / 多余 ${drift.contentDrift.extra.length} 条（条目级差异见 harness constraints report）`));
+        }
+        if (drift.duplicateHeading) {
+          console.log(chalk.yellow('   检测到重复的 "## Governance Rules" 章节'));
+        }
+        console.log(chalk.yellow(`   修复: ${drift.fixHint}`));
+      }
+    } catch {
+      // 漂移检测失败不影响 check 结果
     }
 
     console.log();
@@ -140,7 +180,7 @@ export async function check(options: CheckOptions): Promise<void> {
  * 智能提示：检查是否需要提示用户下一步操作
  */
 async function getSmartHint(projectPath: string): Promise<string | null> {
-  const tracesPath = path.join(projectPath, '.harness', 'traces', 'execution.log');
+  const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
   const statePath = path.join(projectPath, '.harness', '.state.json');
   
   // 检查 trace 文件是否存在
@@ -172,13 +212,7 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
     state.shownHints.push('trace_50');
   }
   
-  // 条件 2: 记录数达到 100 且从未运行过诊断
-  if (traceCount >= 100 && !state.lastDiagnoseRun && !state.shownHints.includes('flow_suggest')) {
-    hints.push('💡 数据充足，建议运行 harness flow 查看诊断');
-    state.shownHints.push('flow_suggest');
-  }
-  
-  // 条件 3: 检查异常趋势（简单检查绕过率）
+  // 条件 2: 检查异常趋势（简单检查绕过率）
   const bypassCount = lines.filter(line => {
     try {
       const trace = JSON.parse(line);
@@ -231,9 +265,9 @@ export function listLaws(): void {
     console.log();
   });
 
-  // Tips
-  console.log(chalk.blue('🔵 提示 (Tips) - 信息性，可忽略:\n'));
-  Object.values(TIPS).forEach(constraint => {
+  // Prompts（ADR-0001：纯注入层，不执行检查）
+  console.log(chalk.blue('🔵 提示 (Prompts) - 纯文本注入，不参与检查:\n'));
+  Object.values(PROMPTS).forEach(constraint => {
     console.log(chalk.blue(`  ${constraint.id}`));
     console.log(chalk.gray(`    ${constraint.rule}`));
     console.log(chalk.gray(`    ${constraint.message}`));

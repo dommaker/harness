@@ -74,7 +74,7 @@ describe('ConstraintDoctor', () => {
     it('应该返回诊断结果', async () => {
       const anomaly: TraceAnomaly = {
         type: 'rising_fail_rate',
-        constraintId: 'no_self_approval',
+        constraintId: 'no_completion_without_verification',
         level: 'iron_law',
         message: '失败率上升',
         data: {
@@ -178,7 +178,7 @@ describe('ConstraintDoctor', () => {
     it('应该诊断 low_pass_rate', async () => {
       const anomaly: TraceAnomaly = {
         type: 'low_pass_rate',
-        constraintId: 'no_any_type',
+        constraintId: 'capability_sync',
         level: 'guideline',
         message: '通过率过低',
         data: { currentRate: 0.1, threshold: 0.5 },
@@ -211,7 +211,7 @@ describe('ConstraintDoctor', () => {
     it('rising_fail_rate 应该设置 severity 为 high 当 iron_law', async () => {
       const anomaly: TraceAnomaly = {
         type: 'rising_fail_rate',
-        constraintId: 'no_self_approval',
+        constraintId: 'no_completion_without_verification',
         level: 'iron_law',
         message: '失败率上升',
         data: { currentRate: 0.7, threshold: 0.3, trend: 'rising' },
@@ -237,7 +237,7 @@ describe('ConstraintDoctor', () => {
         },
         {
           type: 'low_pass_rate',
-          constraintId: 'no_any_type',
+          constraintId: 'capability_sync',
           level: 'guideline',
           message: '通过率过低',
           data: { currentRate: 0.1, threshold: 0.5 },
@@ -249,7 +249,7 @@ describe('ConstraintDoctor', () => {
 
       expect(results.length).toBe(2);
       expect(results[0].constraintId).toBe('no_fix_without_root_cause');
-      expect(results[1].constraintId).toBe('no_any_type');
+      expect(results[1].constraintId).toBe('capability_sync');
     });
   });
 

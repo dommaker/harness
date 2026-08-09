@@ -1,12 +1,14 @@
 /**
  * 约束预设
- * 
+ *
  * 预设定义哪些约束被启用
+ *
+ * ADR-0001：tips 维度退役，替换为 prompts（纯注入层）。
  */
 
 import type { Constraint } from '../types/constraint';
 import type { MergedConstraintsConfig } from '../types/project-config';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../core/constraints/definitions';
+import { IRON_LAWS, GUIDELINES, PROMPTS } from '../core/constraints/definitions';
 
 /**
  * 预设配置
@@ -22,7 +24,7 @@ export interface PresetConfig {
   guidelines: string[] | null;
 
   /** 启用的提示 ID 列表（null 表示全部启用） */
-  tips: string[] | null;
+  prompts: string[] | null;
 }
 
 /**
@@ -68,57 +70,64 @@ export function applyPreset(
       if (!cfg.guidelines.includes(id)) disabled.push(id);
     }
   }
+  if (cfg.prompts !== null) {
+    for (const id of Object.keys(PROMPTS)) {
+      if (!cfg.prompts.includes(id)) disabled.push(id);
+    }
+  }
 
   return {
     ironLaws: filterByIds(IRON_LAWS, cfg.ironLaws),
     guidelines: filterByIds(GUIDELINES, cfg.guidelines),
-    tips: filterByIds(TIPS, cfg.tips),
+    tips: {},
+    prompts: filterByIds(PROMPTS, cfg.prompts),
     disabled,
     custom: [],
+    unknownIds: [],
   };
 }
 
 /**
  * 严格预设
- * 
+ *
  * 所有约束全部启用
  */
 export const STRICT_PRESET: PresetConfig = {
   name: 'strict',
   ironLaws: null,    // 全部启用
   guidelines: null,  // 全部启用
-  tips: null,        // 全部启用
+  prompts: null,     // 全部启用
 };
 
 /**
  * 标准预设
- * 
+ *
  * 铁律全部启用，指导原则和提示选择性启用
  */
 export const STANDARD_PRESET: PresetConfig = {
   name: 'standard',
   ironLaws: null,    // 全部启用
   guidelines: null,  // 全部启用
-  tips: null,        // 全部启用
+  prompts: null,     // 全部启用
 };
 
 /**
  * 宽松预设
- * 
+ *
  * 仅启用核心铁律，禁用提示
  */
 export const RELAXED_PRESET: PresetConfig = {
   name: 'relaxed',
   ironLaws: [
-    'no_bypass_checkpoint',
-    'no_self_approval',
     'no_completion_without_verification',
+    'incremental_progress',
+    'no_implementation_without_requirement',
   ],
   guidelines: [
-    'no_fix_without_root_cause',
-    'no_code_without_test',
+    'no_bypass_checkpoint',
+    'no_hardcoded_credentials',
   ],
-  tips: [],  // 禁用提示
+  prompts: [],  // 禁用提示
 };
 
 /**

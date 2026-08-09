@@ -37,7 +37,7 @@
 
 ## 约定
 - 知识条目有明确的生命周期状态（按 consumptionMode 分化）
-- 约束退化时自动写入 KnowledgeStore
+- 约束退役（`harness constraints retire`，人确认）时写入 KnowledgeStore：规则原文 + 退役原因 + 历史统计
 - Linter 检查完整性/一致性/时效性三个维度
 - Audit 6 维度评分：D1结构 D2内容 D3去重 D4成熟度 D5新鲜度 D6飞轮
 - Ingest gate: ingestEntry() 先经 audit.validate() 检查，reject 不入库
@@ -46,6 +46,6 @@
 
 ## 注意事项
 - Phase 1+4 实现的知识引擎核心
-- 约束"退化不删除"——降级时保留规则原文 + 退化原因 + 历史数据
+- 约束"退役不删除"——retire 落盘 config.yml `enabled: false` + retired 元数据，保留规则原文 + 退役原因 + 历史统计（可回滚）
 - `MaturityLevel` 包含 6 个值: draft/verified/proven/archived/active/deprecated
 - `excludeArchived` 同时排除 archived 和 deprecated

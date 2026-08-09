@@ -15,7 +15,8 @@ import type {
   MergedConstraintsConfig,
   CapabilitiesConfig,
 } from '../types/project-config';
-import { IRON_LAWS, GUIDELINES, TIPS } from './constraints/definitions';
+import { IRON_LAWS, GUIDELINES, PROMPTS } from './constraints/definitions';
+import { applyPreset } from '../presets';
 
 /**
  * 默认配置
@@ -152,26 +153,50 @@ export class ProjectConfigLoader {
   }
 
   /**
-   * 合并内置约束和自定义约束
+   * 合并内置约束和自定义约束（ADR-0001 生效集完整链路）
+   *
+   * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
+   * 删除 → custom-constraints 追加/extend_exceptions → scenes 过滤
+   * （带 appliesTo 的 prompt 仅当 scenes 交集非空时保留）。
+   *
+   * config.yml 中未知约束 id（如已移除约束的禁用残留）静默忽略，
+   * 记录在结果 unknownIds 中供诊断。
+   *
+   * @param options.preset 覆盖 config.yml 的 preset（CLI --preset 用）
    */
-  mergeConstraints(): MergedConstraintsConfig {
+  mergeConstraints(options?: { preset?: string }): MergedConstraintsConfig {
+    // 0. preset 裁剪（未知预设名由 applyPreset 回落 standard）
+    const presetMerged = applyPreset(options?.preset ?? this.config.preset ?? 'standard');
+    const unknownIds: string[] = [];
     const result: MergedConstraintsConfig = {
-      ironLaws: { ...IRON_LAWS },
-      guidelines: { ...GUIDELINES },
-      tips: { ...TIPS },
-      disabled: [],
+      ironLaws: presetMerged.ironLaws,
+      guidelines: presetMerged.guidelines,
+      tips: {},
+      prompts: presetMerged.prompts ?? {},
+      disabled: [...presetMerged.disabled],
       custom: [],
+      unknownIds,
     };
 
     // 1. 处理启用/禁用配置
     if (this.config.constraints) {
       for (const [constraintId, config] of Object.entries(this.config.constraints)) {
+        const isKnown =
+          !!IRON_LAWS[constraintId] ||
+          !!GUIDELINES[constraintId] ||
+          !!PROMPTS[constraintId] ||
+          !!this.customConstraints[constraintId];
+        if (!isKnown) {
+          // 未知 id（如已移除约束的禁用残留）：不报错，记录供诊断
+          unknownIds.push(constraintId);
+        }
         if (config.enabled === false) {
           result.disabled.push(constraintId);
           // 从对应层级中移除
           delete result.ironLaws[constraintId];
           delete result.guidelines[constraintId];
           delete result.tips[constraintId];
+          delete result.prompts![constraintId];
         }
       }
     }
@@ -195,6 +220,7 @@ export class ProjectConfigLoader {
           if (result.ironLaws[id]) result.ironLaws[id] = constraint;
           if (result.guidelines[id]) result.guidelines[id] = constraint;
           if (result.tips[id]) result.tips[id] = constraint;
+          if (result.prompts![id]) result.prompts![id] = constraint;
           continue;
         }
       }
@@ -220,9 +246,26 @@ export class ProjectConfigLoader {
         case 'guideline':
           result.guidelines[id] = constraint;
           break;
+        case 'prompt':
+          result.prompts![id] = constraint;
+          break;
         case 'tip':
           result.tips[id] = constraint;
           break;
+      }
+    }
+
+    // 3. scenes 过滤（ADR-0001）：带 appliesTo 标签的 prompt 仅当项目 scenes
+    // 与其交集非空时保留；无 appliesTo 的条目不受影响。缺省 scenes=[] 即
+    // 场景专属 prompt 默认不进入生效集。
+    const scenes = this.config.scenes ?? [];
+    for (const [id, constraint] of Object.entries(result.prompts!)) {
+      if (
+        constraint.appliesTo &&
+        constraint.appliesTo.length > 0 &&
+        !constraint.appliesTo.some(scene => scenes.includes(scene))
+      ) {
+        delete result.prompts![id];
       }
     }
 
@@ -236,16 +279,22 @@ export class ProjectConfigLoader {
     id: string,
     merged: MergedConstraintsConfig
   ): Constraint | undefined {
-    return merged.ironLaws[id] || merged.guidelines[id] || merged.tips[id];
+    return merged.ironLaws[id] || merged.guidelines[id] || merged.tips[id] || merged.prompts?.[id];
   }
 
   /**
    * 将自定义约束定义转换为 Constraint
+   *
+   * kind 推导（ADR-0001）：自定义约束没有注册表中的 checker，统一归为
+   * kind='prompt'（不执行 checker，check() 短路通过），level 仅决定其所在
+   * 桶与严重性行为，保持与历史"未注册默认通过"相同的执行语义。
    */
   private toConstraint(def: CustomConstraintDefinition, defaultId: string): Constraint {
+    const level = def.level || 'guideline';
     return {
       id: def.id || defaultId,
-      level: def.level || 'guideline',
+      kind: 'prompt',
+      level,
       rule: def.rule || '',
       message: def.message || '',
       trigger: (def.trigger || 'manual') as ConstraintTrigger | ConstraintTrigger[],

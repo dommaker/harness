@@ -1,13 +1,12 @@
 # monitoring/
 
 ## 职责
-运行时监控：Execution Trace(收集/分析/诊断)、Performance Trace(收集/分析)、约束进化提案、知识进化、上下文追踪。
+运行时监控：Execution Trace(收集/分析/诊断)、Performance Trace(收集/分析)、知识进化、上下文追踪。
 
 ## 核心导出
-- `TraceCollector` — 执行追踪收集(append-only JSONL)
+- `TraceCollector` — 执行追踪收集(append-only JSONL，`.harness/logs/traces.log`)
 - `TraceAnalyzer` — 追踪统计分析 + 异常检测
 - `ConstraintDoctor` — 约束诊断接口(Agent 消费)
-- `ConstraintEvolver` — 约束进化提案流程
 - `PerformanceCollector` — 性能日志收集
 - `PerformanceAnalyzer` — 性能统计分析
 - `ContextTracker` — 上下文追踪
@@ -25,5 +24,5 @@
 - 零 Token 成本：不调用 LLM
 
 ## 注意事项
-- 追踪数据用于约束退化分析(拦截率 < 阈值 → 自动降级)
+- 追踪数据供 `harness constraints report` 统计与退役候选诊断消费（观测用途，不做自动降级）
 - PerformanceCollector 和 TraceCollector 独立运作

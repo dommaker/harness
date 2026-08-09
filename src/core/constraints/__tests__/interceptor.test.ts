@@ -24,6 +24,7 @@ describe('ConstraintInterceptor', () => {
 
   const mockIronLaw = {
     id: 'test_iron_law',
+    kind: 'check' as const,
     rule: 'Test Iron Law',
     message: 'Test iron law message',
     level: 'iron_law' as const,
@@ -34,6 +35,7 @@ describe('ConstraintInterceptor', () => {
 
   const mockGuideline = {
     id: 'test_guideline',
+    kind: 'check' as const,
     rule: 'Test Guideline',
     message: 'Test guideline message',
     level: 'guideline' as const,
@@ -63,6 +65,7 @@ describe('ConstraintInterceptor', () => {
       ironLaws: { test_iron_law: mockIronLaw },
       guidelines: { test_guideline: mockGuideline },
       tips: {},
+      prompts: {},
     });
   });
 
@@ -200,6 +203,7 @@ describe('ConstraintInterceptor', () => {
         ironLaws: {},
         guidelines: {},
         tips: {},
+        prompts: {},
       });
 
       const result = await interceptor.intercept('code_implementation', mockContext);

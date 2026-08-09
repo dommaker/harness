@@ -6,7 +6,6 @@ import { check, listLaws } from '../check';
 import * as fs from 'fs';
 import { constraintChecker } from '../../../core/constraints/checker';
 import { ProjectConfigLoader } from '../../../core/project-config-loader';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../../../core/constraints/definitions';
 import { execAsync } from '../../../utils/exec';
 
 // Mock fs
@@ -88,7 +87,7 @@ describe('check command', () => {
     it('应该通过所有约束检查', async () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,
-        ironLaws: [{ id: 'test', level: 'iron_law', satisfied: true, checkedAt: new Date(), constraint: { id: 'test', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
+        ironLaws: [{ id: 'test', level: 'iron_law', satisfied: true, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
         guidelines: [],
         tips: [],
         warningCount: 0,
@@ -102,7 +101,7 @@ describe('check command', () => {
     it('应该显示铁律违规', async () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: false,
-        ironLaws: [{ id: 'no_bypass_checkpoint', level: 'iron_law', satisfied: false, checkedAt: new Date(), constraint: { id: 'no_bypass_checkpoint', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
+        ironLaws: [{ id: 'no_bypass_checkpoint', level: 'iron_law', satisfied: false, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'no_bypass_checkpoint', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
         guidelines: [],
         tips: [],
         warningCount: 0,
@@ -120,7 +119,7 @@ describe('check command', () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: false,
         ironLaws: [],
-        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
+        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: false, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
         tips: [],
         warningCount: 1,
         tipCount: 0,
@@ -157,7 +156,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [{ id: 'test_tip', level: 'tip', satisfied: false, checkedAt: new Date(), constraint: { id: 'test_tip', rule: 'test', message: 'test tip', level: 'tip', trigger: 'code_implementation', enforcement: 'info' } }],
+        tips: [{ id: 'test_tip', level: 'tip', satisfied: false, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test_tip', rule: 'test', message: 'test tip', level: 'tip', trigger: 'code_implementation', enforcement: 'info' } }],
         warningCount: 0,
         tipCount: 1,
       });
@@ -170,7 +169,7 @@ describe('check command', () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,
         ironLaws: [],
-        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: { id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
+        guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
         tips: [],
         warningCount: 0,
         tipCount: 0,
@@ -352,6 +351,7 @@ describe('check command', () => {
           satisfied: false,
           checkedAt: new Date(),
           constraint: {
+            kind: 'check' as const,
             id: 'no_bypass_checkpoint',
             rule: 'NO BYPASSING CHECKPOINTS',
             message: '禁止跳过检查点验证',
@@ -384,6 +384,7 @@ describe('check command', () => {
           satisfied: false,
           checkedAt: new Date(),
           constraint: {
+            kind: 'check' as const,
             id: 'prefer_composition',
             rule: 'PREFER COMPOSITION OVER INHERITANCE',
             message: '优先使用组合而非继承',
@@ -413,6 +414,7 @@ describe('check command', () => {
           satisfied: false,
           checkedAt: new Date(),
           constraint: {
+            kind: 'check' as const,
             id: 'consider_reuse',
             rule: 'CONSIDER REUSE',
             message: '考虑复用',
@@ -455,7 +457,7 @@ describe('check command', () => {
     it('应该在 trace 数达到 50 时提示查看统计', async () => {
       const traces = Array(50).fill('{"result":"pass"}').join('\n');
       mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
+        if (p.includes('traces.log')) return true;
         if (p.includes('.state.json')) return false;
         return false;
       });
@@ -465,19 +467,6 @@ describe('check command', () => {
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('记录已足够'));
     });
 
-    it('应该在 trace 数达到 100 且无诊断历史时提示运行 flow', async () => {
-      const traces = Array(100).fill('{"result":"pass"}').join('\n');
-      mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
-        if (p.includes('.state.json')) return false;
-        return false;
-      });
-      mockFs.readFileSync.mockReturnValue(traces);
-
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('建议运行 harness flow'));
-    });
-
     it('应该在绕过率高时提示查看详情', async () => {
       // 20 条记录，15 条 bypassed (75% > 30%)
       const traces = [
@@ -485,7 +474,7 @@ describe('check command', () => {
         ...Array(15).fill('{"result":"bypassed"}'),
       ].join('\n');
       mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
+        if (p.includes('traces.log')) return true;
         if (p.includes('.state.json')) return false;
         return false;
       });
@@ -513,7 +502,7 @@ describe('check command', () => {
     it('应该在 trace 数少于 50 时不提示', async () => {
       const traces = Array(10).fill('{"result":"pass"}').join('\n');
       mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
+        if (p.includes('traces.log')) return true;
         if (p.includes('.state.json')) return false;
         return false;
       });
@@ -531,7 +520,7 @@ describe('check command', () => {
         ...Array(2).fill('{"result":"bypassed"}'),
       ].join('\n');
       mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
+        if (p.includes('traces.log')) return true;
         if (p.includes('.state.json')) return false;
         return false;
       });
@@ -550,7 +539,7 @@ describe('check command', () => {
         ...Array(10).fill('{"result":"bypassed"}'),
       ].join('\n');
       mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
+        if (p.includes('traces.log')) return true;
         if (p.includes('.state.json')) return false;
         return false;
       });
@@ -564,7 +553,7 @@ describe('check command', () => {
     it('应该保存状态文件当有提示时', async () => {
       const traces = Array(50).fill('{"result":"pass"}').join('\n');
       mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('execution.log')) return true;
+        if (p.includes('traces.log')) return true;
         if (p.includes('.state.json')) return false;
         return false;
       });

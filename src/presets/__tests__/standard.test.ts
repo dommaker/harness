@@ -12,7 +12,7 @@ describe('getPreset', () => {
     expect(preset.name).toBe('strict');
     expect(preset.ironLaws).toBeNull();
     expect(preset.guidelines).toBeNull();
-    expect(preset.tips).toBeNull();
+    expect(preset.prompts).toBeNull();
   });
 
   it('returns standard preset', () => {
@@ -25,7 +25,7 @@ describe('getPreset', () => {
     expect(preset.name).toBe('relaxed');
     expect(preset.ironLaws).toHaveLength(3);
     expect(preset.guidelines).toHaveLength(2);
-    expect(preset.tips).toEqual([]);
+    expect(preset.prompts).toEqual([]);
   });
 
   it('defaults to standard for unknown preset name', () => {
@@ -47,8 +47,9 @@ describe('applyPreset with string preset names', () => {
   it('relaxed enables only specific constraints', () => {
     const config = applyPreset('relaxed');
     expect(config.ironLaws).toBeDefined();
-    expect(config.ironLaws.no_self_approval).toBeDefined();
+    expect(config.ironLaws.no_completion_without_verification).toBeDefined();
     expect(Object.keys(config.tips).length).toBe(0);
+    expect(Object.keys(config.prompts ?? {}).length).toBe(0);
     expect(config.disabled.length).toBeGreaterThan(0);
   });
 });
@@ -57,13 +58,13 @@ describe('applyPreset with PresetConfig object', () => {
   it('filters iron laws when ids are provided', () => {
     const config = applyPreset({
       name: 'custom',
-      ironLaws: ['no_self_approval', 'no_completion_without_verification'],
+      ironLaws: ['no_completion_without_verification', 'incremental_progress'],
       guidelines: null,
-      tips: null,
+      prompts: null,
     });
     expect(Object.keys(config.ironLaws)).toHaveLength(2);
-    expect(config.ironLaws.no_self_approval).toBeDefined();
-    expect(config.ironLaws.no_fix_without_root_cause).toBeUndefined();
+    expect(config.ironLaws.no_completion_without_verification).toBeDefined();
+    expect(config.ironLaws.no_implementation_without_requirement).toBeUndefined();
   });
 
   it('includes all guidelines when null', () => {
@@ -71,10 +72,11 @@ describe('applyPreset with PresetConfig object', () => {
       name: 'custom',
       ironLaws: null,
       guidelines: null,
-      tips: [],
+      prompts: [],
     });
     expect(Object.keys(config.guidelines).length).toBeGreaterThan(0);
     expect(Object.keys(config.tips).length).toBe(0);
+    expect(Object.keys(config.prompts ?? {}).length).toBe(0);
   });
 
   it('creates disabled list for omitted constraints', () => {
@@ -82,7 +84,7 @@ describe('applyPreset with PresetConfig object', () => {
       name: 'custom',
       ironLaws: [],
       guidelines: [],
-      tips: [],
+      prompts: [],
     });
     expect(config.disabled.length).toBeGreaterThan(0);
   });

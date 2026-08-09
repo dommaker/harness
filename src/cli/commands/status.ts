@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TraceCollector } from '../../monitoring/traces';
 import { TraceAnalyzer } from '../../monitoring/trace-analyzer';
+import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { TraceSummary, TraceAnomaly } from '../../types/trace';
 
 export interface StatusOptions {
@@ -28,7 +29,7 @@ export interface StatusOptions {
 export async function status(options: StatusOptions): Promise<void> {
   const projectPath = options.projectPath || process.cwd();
   const harnessDir = path.join(projectPath, '.harness');
-  const tracesPath = path.join(harnessDir, 'traces', 'execution.log');
+  const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
   const statePath = path.join(harnessDir, '.state.json');
 
   console.log(chalk.blue('📊 Harness 状态'));
@@ -91,8 +92,7 @@ export async function status(options: StatusOptions): Promise<void> {
 
       // 下一步建议
       console.log(chalk.blue('💡 下一步建议:'));
-      console.log(chalk.gray('  1. 运行 harness flow 一键诊断 + 提案'));
-      console.log(chalk.gray('  2. 运行 harness status --detail 查看详情'));
+      console.log(chalk.gray('  运行 harness status --detail 查看详情'));
     }
     return;
   }
@@ -159,7 +159,6 @@ export async function status(options: StatusOptions): Promise<void> {
   // 下一步建议
   console.log(chalk.blue('💡 下一步建议:'));
   if (anomalies.length > 0) {
-    console.log(chalk.gray('  harness flow            # 一键执行诊断+提案'));
     console.log(chalk.gray('  harness status --detail # 查看详细状态'));
   } else if (traceCount >= 100) {
     console.log(chalk.gray('  • 状态良好，继续保持！'));

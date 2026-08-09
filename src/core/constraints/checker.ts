@@ -1,10 +1,10 @@
 /**
  * 约束检查引擎
- * 
- * 三层约束体系检查：
- * - Iron Laws：检查失败立即抛出异常
- * - Guidelines：检查失败记录警告
- * - Tips：检查失败记录提示
+ *
+ * kind 二元模型（ADR-0001）：
+ * - check · Iron Laws：检查失败立即抛出异常
+ * - check · Guidelines：检查失败记录警告
+ * - prompt：不执行 checker，仅参与注入
  */
 
 import {
@@ -17,14 +17,14 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { IRON_LAWS, GUIDELINES, TIPS } from './definitions';
+import { IRON_LAWS, GUIDELINES, TIPS, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
-import { getConstraintCheck, type CheckEnv } from './checkers';
+import { getConstraintCheck, type CheckEnv, type CheckOutcome } from './checkers';
 
 /**
  * 例外名称 → ConstraintContext 中布尔字段的映射
@@ -158,11 +158,12 @@ export class ConstraintChecker {
     ironLaws: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     guidelines: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     tips: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
+    prompts: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
   } {
     const config = customConfig ?? this.customConfig;
     const source = config
-      ? { ironLaws: config.ironLaws, guidelines: config.guidelines, tips: config.tips }
-      : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, tips: TIPS };
+      ? { ironLaws: config.ironLaws, guidelines: config.guidelines, tips: config.tips, prompts: config.prompts ?? PROMPTS }
+      : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, tips: TIPS, prompts: PROMPTS };
 
     // Wire unified check() method on every constraint
     const wire = (constraints: Record<string, Constraint>) => {
@@ -171,7 +172,12 @@ export class ConstraintChecker {
       }
       return constraints as Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     };
-    return { ironLaws: wire(source.ironLaws), guidelines: wire(source.guidelines), tips: wire(source.tips) };
+    return {
+      ironLaws: wire(source.ironLaws),
+      guidelines: wire(source.guidelines),
+      tips: wire(source.tips),
+      prompts: wire(source.prompts),
+    };
   }
 
   /**
@@ -181,6 +187,17 @@ export class ConstraintChecker {
     constraint: Constraint,
     context: ConstraintContext
   ): Promise<ConstraintResult> {
+    // prompt 类约束不参与 checker 执行（ADR-0001：仅参与注入）
+    if (constraint.kind === 'prompt') {
+      return {
+        id: constraint.id,
+        level: constraint.level,
+        satisfied: true,
+        constraint,
+        checkedAt: new Date(),
+      };
+    }
+
     // 检查例外条件（仅 Guidelines 有效）
     if (constraint.level === 'guideline' && constraint.exceptions) {
       if (this.checkException(constraint, context)) {
@@ -195,8 +212,22 @@ export class ConstraintChecker {
       }
     }
 
-    // 检查前置条件
-    const satisfied = await this.checkPrecondition(constraint, context);
+    // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
+    const outcome = await this.checkPrecondition(constraint, context);
+
+    if (outcome === 'skip') {
+      return {
+        id: constraint.id,
+        level: constraint.level,
+        satisfied: true,
+        skipped: true,
+        constraint,
+        message: `约束 ${constraint.id} 跳过评估（约定未采用或证据未接线）`,
+        checkedAt: new Date(),
+      };
+    }
+
+    const satisfied = outcome;
 
     return {
       id: constraint.id,
@@ -228,6 +259,7 @@ export class ConstraintChecker {
         return 'error';
       case 'guideline':
         return 'warning';
+      case 'prompt':
       case 'tip':
         return 'info';
       default:
@@ -237,10 +269,14 @@ export class ConstraintChecker {
 
   /**
    * 判断约束是否匹配当前触发条件
+   *
+   * context.operation 为主触发条件，context.extraTriggers 为次级推断
+   * （ADR-0001：pre-commit 代码变更附加 code_implementation），任一命中即匹配。
    */
-  private matchesTrigger(constraint: Constraint, operation: ConstraintTrigger): boolean {
+  private matchesTrigger(constraint: Constraint, context: ConstraintContext): boolean {
     const triggers = normalizeTriggers<ConstraintTrigger>(constraint.trigger);
-    return triggers.includes(operation);
+    const operations = [context.operation, ...(context.extraTriggers ?? [])];
+    return operations.some(op => triggers.includes(op));
   }
 
   /**
@@ -256,7 +292,7 @@ export class ConstraintChecker {
       constraintId: constraint.id,
       level: constraint.level,
       timestamp: Date.now(),
-      result: checkResult.satisfied ? 'pass' : 'fail',
+      result: checkResult.skipped ? 'skip' : checkResult.satisfied ? 'pass' : 'fail',
       operation: context.operation,
       severity: this.getSeverity(constraint.level),
       exceptionApplied: checkResult.message?.includes('豁免')
@@ -270,14 +306,20 @@ export class ConstraintChecker {
   /**
    * 检查约束前置条件（工单 21：分发至 checkers/ 注册表）
    *
-   * 未注册的约束默认通过（保持历史 default 分支语义）。
+   * 注册表闭环（ADR-0001）：kind='check' 未注册 checker 直接抛错，
+   * 不再有"未注册默认通过"路径；kind='prompt' 在 check() 入口已短路。
    */
   private async checkPrecondition(
     constraint: Constraint,
     context: ConstraintContext
-  ): Promise<boolean> {
+  ): Promise<CheckOutcome> {
     const impl = getConstraintCheck(constraint.id);
-    if (!impl) return true;
+    if (!impl) {
+      throw new Error(
+        `[harness] 约束 "${constraint.id}" (kind='check') 未注册 checker，拒绝静默通过。` +
+        `请在 checkers/ 注册实现，或将约束改为 kind='prompt'。`
+      );
+    }
 
     const projectPath = context.projectPath || process.cwd();
     const env: CheckEnv = {
@@ -309,8 +351,9 @@ export class ConstraintChecker {
     ironLaws: Constraint[];
     guidelines: Constraint[];
     tips: Constraint[];
+    prompts: Constraint[];
   } {
-    const trigger = context.operation;
+    const operations = [context.operation, ...(context.extraTriggers ?? [])];
     const constraints = this.getConstraints(customConfig);
 
     const filterByTrigger = (constraintSet: Record<string, Constraint>): Constraint[] => {
@@ -318,7 +361,7 @@ export class ConstraintChecker {
         const triggers = Array.isArray(constraint.trigger)
           ? constraint.trigger
           : [constraint.trigger];
-        return triggers.includes(trigger);
+        return operations.some(op => triggers.includes(op));
       });
     };
 
@@ -326,6 +369,7 @@ export class ConstraintChecker {
       ironLaws: filterByTrigger(constraints.ironLaws),
       guidelines: filterByTrigger(constraints.guidelines),
       tips: filterByTrigger(constraints.tips),
+      prompts: filterByTrigger(constraints.prompts),
     };
   }
 
@@ -362,7 +406,7 @@ export class ConstraintChecker {
 
       // 1. Iron Laws: 必须全部通过
       for (const constraint of Object.values(constraints.ironLaws)) {
-        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        if (!this.matchesTrigger(constraint, context)) continue;
 
         const checkResult = await this.check(constraint, context);
         result.ironLaws.push(checkResult);
@@ -376,7 +420,7 @@ export class ConstraintChecker {
 
       // 2. Guidelines: 记录警告
       for (const constraint of Object.values(constraints.guidelines)) {
-        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        if (!this.matchesTrigger(constraint, context)) continue;
 
         const checkResult = await this.check(constraint, context);
         result.guidelines.push(checkResult);
@@ -389,7 +433,7 @@ export class ConstraintChecker {
 
       // 3. Tips: 仅记录
       for (const constraint of Object.values(constraints.tips)) {
-        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        if (!this.matchesTrigger(constraint, context)) continue;
 
         const checkResult = await this.check(constraint, context);
         result.tips.push(checkResult);
@@ -434,7 +478,7 @@ export class ConstraintChecker {
       const constraints = this.getConstraints(customConfig);
 
       for (const constraint of Object.values(constraints.ironLaws)) {
-        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        if (!this.matchesTrigger(constraint, context)) continue;
         const checkResult = await this.check(constraint, context);
         result.ironLaws.push(checkResult);
         this.recordTrace(traceCollector, constraint, checkResult, context);
@@ -442,7 +486,7 @@ export class ConstraintChecker {
       }
 
       for (const constraint of Object.values(constraints.guidelines)) {
-        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        if (!this.matchesTrigger(constraint, context)) continue;
         const checkResult = await this.check(constraint, context);
         result.guidelines.push(checkResult);
         this.recordTrace(traceCollector, constraint, checkResult, context);
@@ -450,7 +494,7 @@ export class ConstraintChecker {
       }
 
       for (const constraint of Object.values(constraints.tips)) {
-        if (!this.matchesTrigger(constraint, context.operation)) continue;
+        if (!this.matchesTrigger(constraint, context)) continue;
         const checkResult = await this.check(constraint, context);
         result.tips.push(checkResult);
         this.recordTrace(traceCollector, constraint, checkResult, context);
@@ -475,7 +519,7 @@ export class ConstraintChecker {
     customConfig?: MergedConstraintsConfig | null
   ): Promise<void> {
     const constraints = this.getConstraints(customConfig);
-    const operations = normalizeTriggers(context.operation);
+    const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
     for (const constraint of Object.values(constraints.ironLaws)) {
       if (!normalizeTriggers(constraint.trigger).some((t) => operations.includes(t))) continue;
@@ -505,7 +549,8 @@ export async function checkConstraint(
   const constraint =
     constraints.ironLaws[constraintId] ||
     constraints.guidelines[constraintId] ||
-    constraints.tips[constraintId];
+    constraints.tips[constraintId] ||
+    constraints.prompts[constraintId];
 
   if (!constraint) {
     return {

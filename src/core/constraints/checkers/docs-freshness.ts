@@ -1,6 +1,7 @@
 /**
  * docs_freshness：CAPABILITIES.md 文件表 + 能力清单格式 + CLAUDE.md + CHANGELOG（工单 21）
  *
+ * 0. 存在性探测（ADR-0001）：项目无任何 freshness 配置/目标时 skip，不计 pass/fail
  * 1. 文件表格式：CAPABILITIES.md 中列出的文件必须仍存在（防过期引用）
  * 2. 能力清单格式：FreshnessRunner 配置驱动检查
  * 3. 无配置时注入内置默认配置（等价旧硬编码行为）
@@ -71,10 +72,52 @@ function checkCapabilitiesFreshness(projectPath: string): boolean {
   }
 }
 
+/**
+ * ADR-0001 存在性探测：项目是否存在任何 freshness 配置/检查目标。
+ *
+ * 判定信号（任一命中即视为采用了文档新鲜度约定）：
+ * - 配置了 governance.doc_freshness.checks
+ * - 配置了 governance.context_files（enabled + 非空 required_dirs）
+ * - 项目根存在 CAPABILITIES.md
+ * - 项目根存在 CHANGELOG.md / CHANGELOG
+ *
+ * 全部缺失 → 项目未采用该约定，调用方应 skip 而非评估内置默认配置。
+ */
+function hasFreshnessTargets(projectPath: string): boolean {
+  if (existsSync(join(projectPath, 'CAPABILITIES.md'))) return true;
+  if (existsSync(join(projectPath, 'CHANGELOG.md')) || existsSync(join(projectPath, 'CHANGELOG'))) {
+    return true;
+  }
+
+  try {
+    const raw = loadRawProjectConfig(projectPath);
+    const governance = raw?.governance as Record<string, unknown> | undefined;
+
+    const freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
+    if (freshnessConfig?.checks && freshnessConfig.checks.length > 0) return true;
+
+    const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
+    if (
+      contextFiles?.enabled &&
+      Array.isArray(contextFiles.required_dirs) &&
+      (contextFiles.required_dirs as string[]).length > 0
+    ) {
+      return true;
+    }
+  } catch {
+    // 配置不可读视为无配置
+  }
+
+  return false;
+}
+
 export const docsFreshness: ConstraintCheck = {
   id: 'docs_freshness',
   async evaluate(env) {
     const projectPath = env.projectPath;
+
+    // ADR-0001 存在性探测：项目无任何 freshness 配置/目标 → skip（不计 pass/fail）
+    if (!hasFreshnessTargets(projectPath)) return 'skip';
 
     // Step 1: 文件表格式 — 检查列出的文件是否还存在
     if (!checkCapabilitiesFreshness(projectPath)) return false;

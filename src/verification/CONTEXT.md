@@ -11,7 +11,7 @@
 ## 依赖关系
 - 依赖 `src/core/constraints/` 约束检查
 - 依赖 `src/core/validators/` 验证器
-- 被 CLI flow 命令消费
+- 经 `src/index.ts` 导出供外部调用方消费（无内置 CLI 命令）
 
 ## 约定
 - 验证规则可配置

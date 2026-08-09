@@ -111,17 +111,18 @@ export class ConstraintInterceptor {
     };
 
     const constraints = constraintChecker.getConstraints();
+    // prompt 类约束不参与拦截执行（ADR-0001：仅参与注入）
     const allConstraints = [
       ...Object.values(constraints.ironLaws),
       ...Object.values(constraints.guidelines),
       ...Object.values(constraints.tips),
-    ];
+    ].filter(c => c.kind !== 'prompt');
 
     const applicableConstraints = allConstraints.filter(
       (c) => normalizeTriggers<ConstraintTrigger>(c.trigger).includes(trigger)
     );
 
-    const order: Record<ConstraintLevel, number> = { iron_law: 0, guideline: 1, tip: 2 };
+    const order: Record<ConstraintLevel, number> = { iron_law: 0, guideline: 1, prompt: 2, tip: 3 };
     const ordered = applicableConstraints.sort((a, b) => order[a.level] - order[b.level]);
 
     for (const constraint of ordered) {

@@ -130,25 +130,6 @@ program
   });
 
 // ========================================
-// harness flow
-// ========================================
-program
-  .command('flow')
-  .description('一键执行诊断 + 提案流程')
-  .option('-p, --project-path <path>', '项目路径')
-  .option('--from <step>', '从哪个步骤开始 (analyze/diagnose/propose)')
-  .option('--auto-apply', '自动应用低风险提案', false)
-  .option('--hours <n>', '分析最近 N 小时', '24')
-  .action(async (options) => {
-    await cmd('flow')({
-      projectPath: options.projectPath,
-      from: options.from,
-      autoApply: options.autoApply,
-      hours: parseInt(options.hours, 10),
-    });
-  });
-
-// ========================================
 // harness spec
 // ========================================
 program
@@ -532,12 +513,44 @@ program
 // ========================================
 // harness constraints
 // ========================================
-program
+const constraintsCmd = program
   .command('constraints')
   .description('输出约束集合元数据（版本、hash、计数、文本大小）')
   .option('--json', '输出 JSON 格式', false)
   .action(async (options) => {
     await cmd('constraints')(options);
+  });
+
+constraintsCmd
+  .command('report')
+  .description('约束使用报告：check 层统计表、退役候选诊断、prompt 注入清单、配置健康（只读）')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--export [file]', '导出脱敏 markdown 摘要（缺省 .harness/reports/constraints-<YYYYMMDD>.md）')
+  .option('--json', '输出 JSON 格式', false)
+  .option('--zero-intercept-min <n>', '零拦截候选的最小评估样本数', '50')
+  .option('--noise-fail-rate <rate>', '高噪候选 fail 率阈值', '0.8')
+  .option('--noise-min-total <n>', '高噪候选最小评估样本数', '20')
+  .action(async (options) => {
+    await cmd('constraintsReport')({
+      projectPath: options.projectPath,
+      export: options.export,
+      json: options.json,
+      zeroInterceptMin: parseInt(options.zeroInterceptMin, 10),
+      noiseFailRate: parseFloat(options.noiseFailRate),
+      noiseMinTotal: parseInt(options.noiseMinTotal, 10),
+    });
+  });
+
+constraintsCmd
+  .command('retire [id]')
+  .description('退役约束：无 id 进入交互式候选选择；带 id 直接退役（写 config.yml + KnowledgeStore + 同步 CLAUDE.md 注入段）')
+  .option('-p, --project-path <path>', '项目路径')
+  .option('--reason <text>', '退役原因')
+  .action(async (id, options) => {
+    await cmd('constraintsRetire')(id, {
+      projectPath: options.projectPath,
+      reason: options.reason,
+    });
   });
 
 // ========================================

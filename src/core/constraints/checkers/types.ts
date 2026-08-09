@@ -27,13 +27,21 @@ export interface CheckEnv {
 }
 
 /**
+ * 检查结果三态（ADR-0001 存在性探测 / flag 未接线）：
+ * - true = 满足（pass）
+ * - false = 违反（fail）
+ * - 'skip' = 未评估（项目未采用对应约定，或证据 flag 未接线），不计 pass/fail
+ */
+export type CheckOutcome = boolean | 'skip';
+
+/**
  * 单条约束检查实现
  */
 export interface ConstraintCheck {
   /** 约束 ID（与 definitions 一致） */
   id: string;
-  /** 检查主体：true = 满足 */
-  evaluate(env: CheckEnv): Promise<boolean> | boolean;
+  /** 检查主体：true = 满足；false = 违反；'skip' = 未评估 */
+  evaluate(env: CheckEnv): Promise<CheckOutcome> | CheckOutcome;
 }
 
 /**
@@ -47,8 +55,22 @@ export function contextFlag(
 }
 
 /**
- * 构造恒通过检查（promptInjection 驱动 / 仅提示类约束）
+ * 构造证据标志检查（ADR-0001：flag 未接线 = skip 而非 fail）
+ *
+ * - flag === undefined：调用方未接线该证据 → 'skip'（不评估，不误报违规）
+ * - flag === false：显式无证据 → fail
+ * - flag === true：有证据 → pass
  */
-export function alwaysPass(id: string): ConstraintCheck {
-  return { id, evaluate: () => true };
+export function contextEvidenceFlag(
+  id: string,
+  pick: (context: ConstraintContext) => boolean | undefined
+): ConstraintCheck {
+  return {
+    id,
+    evaluate: (env) => {
+      const value = pick(env.context);
+      if (value === undefined) return 'skip';
+      return value;
+    },
+  };
 }

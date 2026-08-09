@@ -1,55 +1,110 @@
 /**
- * 约束系统测试
+ * 约束系统测试（ADR-0001：kind 二元模型，25 条清单构成 + 注册表闭环）
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { 
-  IRON_LAWS, 
-  GUIDELINES, 
-  TIPS, 
-  getAllConstraints, 
-  findConstraintsByTrigger, 
-  getConstraint 
+import {
+  IRON_LAWS,
+  GUIDELINES,
+  PROMPTS,
+  getAllConstraints,
+  findConstraintsByTrigger,
+  getConstraint
 } from '../core/constraints/definitions';
 import { constraintChecker } from '../core/constraints/checker';
+import { getConstraintCheck, registeredCheckCount } from '../core/constraints/checkers';
 import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
-  describe('Iron Laws', () => {
-    it('should have 12 iron laws defined', () => {
-      expect(Object.keys(IRON_LAWS).length).toBeGreaterThan(0); // 数量随版本变动
+  describe('清单构成（ADR-0001：42 → 25）', () => {
+    it('getAllConstraints 返回 25 条：9 check + 16 prompt', () => {
+      const all = getAllConstraints();
+      expect(all).toHaveLength(25);
+      expect(all.filter(c => c.kind === 'check')).toHaveLength(9);
+      expect(all.filter(c => c.kind === 'prompt')).toHaveLength(16);
     });
 
-    it('should have no exceptions for iron laws', () => {
-      Object.values(IRON_LAWS).forEach(law => {
-        expect(law.exceptions).toBeUndefined();
+    it('check 层 = 5 iron + 4 guideline', () => {
+      expect(Object.keys(IRON_LAWS)).toHaveLength(5);
+      expect(Object.keys(GUIDELINES)).toHaveLength(4);
+      Object.values(IRON_LAWS).forEach(c => {
+        expect(c.kind).toBe('check');
+        expect(c.level).toBe('iron_law');
+      });
+      Object.values(GUIDELINES).forEach(c => {
+        expect(c.kind).toBe('check');
+        expect(c.level).toBe('guideline');
       });
     });
-  });
 
-  describe('Guidelines', () => {
-    it('should have guidelines defined', () => {
-      expect(Object.keys(GUIDELINES).length).toBeGreaterThan(0);
+    it('prompt 层 16 条，level 统一为 prompt', () => {
+      expect(Object.keys(PROMPTS)).toHaveLength(16);
+      Object.values(PROMPTS).forEach(c => {
+        expect(c.kind).toBe('prompt');
+        expect(c.level).toBe('prompt');
+      });
     });
 
-    it('should have exceptions for some guidelines', () => {
-      const withExceptions = Object.values(GUIDELINES).filter(g => g.exceptions && g.exceptions.length > 0);
-      expect(withExceptions.length).toBeGreaterThan(0);
+    it('被删除的 8 条不再存在', () => {
+      const retired = [
+        'no_any_type',
+        'test_coverage_required',
+        'no_coverage_decrease',
+        'readme_required',
+        'doc_required_for_public_api',
+        'two_stage_review_required',
+        'prefer_worktree',
+        'read_before_write',
+      ];
+      for (const id of retired) {
+        expect(getConstraint(id)).toBeUndefined();
+      }
+    });
+
+    it('被吸收的成员不再单独存在', () => {
+      const absorbed = [
+        'no_self_approval',
+        'no_claim_without_evidence',
+        'no_excuse_patterns',
+        'no_fallback_without_root_cause',
+        'analysis_verification_gate',
+        'diagnosis_to_fix_gate',
+        'no_creation_without_reuse_check',
+        'yagni_check',
+        'no_implementation_without_requirement_review',
+      ];
+      for (const id of absorbed) {
+        expect(getConstraint(id)).toBeUndefined();
+      }
+    });
+
+    it('场景标签：no_skill_without_test / no_model_for_deterministic', () => {
+      expect(PROMPTS['no_skill_without_test'].appliesTo).toEqual(['agent-skill']);
+      expect(PROMPTS['no_model_for_deterministic'].appliesTo).toEqual(['llm-app']);
     });
   });
 
-  describe('Tips', () => {
-    it('should have 2 tips defined', () => {
-      expect(Object.keys(TIPS)).toHaveLength(2);
+  describe('注册表闭环', () => {
+    it('每条 kind=check 约束都有已注册 checker', () => {
+      const checks = getAllConstraints().filter(c => c.kind === 'check');
+      for (const c of checks) {
+        expect(getConstraintCheck(c.id)).toBeDefined();
+      }
+    });
+
+    it('注册表数量与 check 约束数量一致（无孤儿 checker）', () => {
+      const checkCount = getAllConstraints().filter(c => c.kind === 'check').length;
+      expect(registeredCheckCount()).toBe(checkCount);
+    });
+
+    it('prompt 约束不注册 checker', () => {
+      for (const c of Object.values(PROMPTS)) {
+        expect(getConstraintCheck(c.id)).toBeUndefined();
+      }
     });
   });
 
   describe('Helper Functions', () => {
-    it('should get all constraints', () => {
-      const all = getAllConstraints();
-      expect(all.length).toBeGreaterThan(0); // 约束数量随版本变动
-    });
-
     it('should find constraints by trigger', () => {
       const constraints = findConstraintsByTrigger('code_implementation');
       expect(constraints.length).toBeGreaterThan(0);
@@ -58,7 +113,8 @@ describe('Constraint System', () => {
     it('should get single constraint by id', () => {
       const constraint = getConstraint('no_fix_without_root_cause');
       expect(constraint).toBeDefined();
-      expect(constraint?.level).toBe('guideline');
+      expect(constraint?.kind).toBe('prompt');
+      expect(constraint?.level).toBe('prompt');
     });
 
     it('should return undefined for unknown constraint', () => {
@@ -80,54 +136,59 @@ describe('Constraint Checker', () => {
     };
 
     const result = constraintChecker.findApplicableConstraints(context);
-    expect(result.ironLaws.length + result.guidelines.length + result.tips.length).toBeGreaterThan(0);
+    expect(result.ironLaws.length + result.guidelines.length).toBeGreaterThan(0);
   });
 
-  it('should check constraint', async () => {
+  it('prompt 约束 check() 短路 satisfied，不查注册表', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
-      hasRootCauseInvestigation: false,
     };
 
-    const result = await constraintChecker.check(GUIDELINES['no_fix_without_root_cause'], context);
-    expect(result.satisfied).toBe(false);
-  });
-
-  it('should check constraint with satisfied precondition', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-      hasRootCauseInvestigation: true,
-    };
-
-    const result = await constraintChecker.check(GUIDELINES['no_fix_without_root_cause'], context);
+    const result = await constraintChecker.check(PROMPTS['no_fix_without_root_cause'], context);
     expect(result.satisfied).toBe(true);
+  });
+
+  it('kind=check 但未注册 checker 的约束应抛错（不许静默 pass）', async () => {
+    const context: ConstraintContext = {
+      operation: 'code_implementation',
+    };
+
+    await expect(
+      constraintChecker.check(
+        {
+          id: 'ghost_check_constraint',
+          kind: 'check',
+          level: 'guideline',
+          rule: 'GHOST',
+          message: 'test',
+          trigger: 'code_implementation',
+          enforcement: 'test',
+        },
+        context
+      )
+    ).rejects.toThrow(/未注册 checker/);
   });
 
   it('should check all constraints', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
       hasRequirement: true,
-      hasWorktree: true,
-      hasTest: true,
       hasVerificationEvidence: true,
-      taskDescription: 'Test task',
       hasSingleTask: true,
-      hasRequirementReview: true,
-      hasTwoStageReview: true,
-      completionClaimText: '142 tests passed, coverage 87%',
     };
 
     const result = await constraintChecker.checkConstraints(context);
-    expect(result.ironLaws.length + result.guidelines.length + result.tips.length).toBeGreaterThan(0);
+    expect(result.ironLaws.length + result.guidelines.length).toBeGreaterThan(0);
   });
 
-  it('should fail incremental_progress when hasSingleTask is undefined', async () => {
+  it('should skip incremental_progress when hasSingleTask is undefined（未接线不评估）', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
     };
 
     const result = await constraintChecker.check(IRON_LAWS['incremental_progress'], context);
-    expect(result.satisfied).toBe(false);
+    expect(result.skipped).toBe(true);
+    expect(result.satisfied).toBe(true);
   });
 
   it('should pass incremental_progress when hasSingleTask is true', async () => {
@@ -140,51 +201,14 @@ describe('Constraint Checker', () => {
     expect(result.satisfied).toBe(true);
   });
 
-  it('should fail verify_external_capability when hasExternalCapabilityVerification is undefined', async () => {
-    const context: ConstraintContext = {
-      operation: 'api_change',
-    };
-
-    const result = await constraintChecker.check(IRON_LAWS['verify_external_capability'], context);
-    expect(result.satisfied).toBe(false);
-  });
-
-  it('should pass verify_external_capability when hasExternalCapabilityVerification is true', async () => {
-    const context: ConstraintContext = {
-      operation: 'api_change',
-      hasExternalCapabilityVerification: true,
-    };
-
-    const result = await constraintChecker.check(IRON_LAWS['verify_external_capability'], context);
-    expect(result.satisfied).toBe(true);
-  });
-
-  it('should fail no_implementation_without_requirement_review when hasRequirementReview is undefined', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-    };
-
-    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement_review'], context);
-    expect(result.satisfied).toBe(false);
-  });
-
-  it('should pass no_implementation_without_requirement_review when hasRequirementReview is true', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-      hasRequirementReview: true,
-    };
-
-    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement_review'], context);
-    expect(result.satisfied).toBe(true);
-  });
-
-  it('should fail no_implementation_without_requirement when hasRequirement is undefined', async () => {
+  it('should skip no_implementation_without_requirement when hasRequirement is undefined（未接线不评估）', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
     };
 
     const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement'], context);
-    expect(result.satisfied).toBe(false);
+    expect(result.skipped).toBe(true);
+    expect(result.satisfied).toBe(true);
   });
 
   it('should pass no_implementation_without_requirement when hasRequirement is true', async () => {
@@ -211,9 +235,9 @@ describe('Constraint Levels', () => {
     });
   });
 
-  it('should have correct level for tips', () => {
-    Object.values(TIPS).forEach(tip => {
-      expect(tip.level).toBe('tip');
+  it('should have correct level for prompts', () => {
+    Object.values(PROMPTS).forEach(prompt => {
+      expect(prompt.level).toBe('prompt');
     });
   });
 });

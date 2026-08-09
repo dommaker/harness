@@ -21,3 +21,6 @@ export type {
 
 // 项目配置加载器
 export * from './project-config-loader';
+
+// 生效约束集（ADR-0001：唯一生效集来源）
+export * from './effective-constraints';

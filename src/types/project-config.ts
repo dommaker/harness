@@ -221,6 +221,14 @@ export interface ProjectConfig {
   /** 使用预设 */
   preset?: 'strict' | 'standard' | 'relaxed';
 
+  /**
+   * 项目适用场景标签（ADR-0001，如 'agent-skill'、'llm-app'）
+   *
+   * 带 appliesTo 标签的 prompt 仅当 scenes 与其交集非空时进入生效集；
+   * 无 appliesTo 的条目不受影响。缺省为空 = 场景专属 prompt 默认不注入。
+   */
+  scenes?: string[];
+
   /** 治理配置 */
   governance?: GovernanceConfig;
 
@@ -256,12 +264,24 @@ export interface MergedConstraintsConfig {
   /** Guidelines（合并后） */
   guidelines: Record<string, Constraint>;
 
-  /** Tips（合并后） */
+  /** Tips（合并后）—— 已退役（ADR-0001），内置侧恒为空表，仅兼容历史调用方 */
   tips: Record<string, Constraint>;
+
+  /** Prompts（合并后，ADR-0001 新增；可选以兼容旧调用方，缺省回落内置 PROMPTS） */
+  prompts?: Record<string, Constraint>;
 
   /** 禁用的约束 ID */
   disabled: string[];
 
   /** 自定义约束 ID */
   custom: string[];
+
+  /**
+   * config.yml `constraints.<id>` 中既非内置也非自定义的未知 id（ADR-0001）
+   *
+   * 例如禁用了已被本版移除的约束 id 的残留配置。生效集计算静默忽略，
+   * 在此列出供诊断（lintEffectiveConfig / report）使用。
+   * 可选以兼容手工构造 MergedConstraintsConfig 的历史调用方。
+   */
+  unknownIds?: string[];
 }

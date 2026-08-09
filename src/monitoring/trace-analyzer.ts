@@ -76,20 +76,22 @@ export class TraceAnalyzer {
       // 计算时间范围
       const timeRange = timeRangeOf(group.map(t => t.timestamp));
 
-      // 单次遍历计算核心统计
+      // 单次遍历计算核心统计（skip 单独计数，不计入 pass/fail/bypass 率分母，ADR-0001）
       const totalChecks = group.length;
-      let passCount = 0, failCount = 0, bypassCount = 0, ignoreCount = 0;
+      let passCount = 0, failCount = 0, bypassCount = 0, ignoreCount = 0, skipCount = 0;
       for (const t of group) {
         if (t.result === 'pass') passCount++;
         else if (t.result === 'fail') failCount++;
         else if (t.result === 'bypassed') bypassCount++;
+        else if (t.result === 'skip') skipCount++;
         if (t.userAction === 'ignore') ignoreCount++;
       }
 
-      // 计算比率
-      const passRate = totalChecks > 0 ? passCount / totalChecks : 0;
-      const failRate = totalChecks > 0 ? failCount / totalChecks : 0;
-      const bypassRate = totalChecks > 0 ? bypassCount / totalChecks : 0;
+      // 计算比率（分母 = 实际评估次数，skip 未评估不计入）
+      const evaluatedChecks = totalChecks - skipCount;
+      const passRate = evaluatedChecks > 0 ? passCount / evaluatedChecks : 0;
+      const failRate = evaluatedChecks > 0 ? failCount / evaluatedChecks : 0;
+      const bypassRate = evaluatedChecks > 0 ? bypassCount / evaluatedChecks : 0;
 
       // 计算例外统计
       const exceptionTraces = group.filter(t => t.exceptionApplied);
@@ -108,6 +110,7 @@ export class TraceAnalyzer {
         passCount,
         failCount,
         bypassCount,
+        skipCount,
         ignoreCount,
         passRate,
         failRate,
@@ -298,12 +301,13 @@ export class TraceAnalyzer {
   }
 
   /**
-   * 计算通过率
+   * 计算通过率（skip 未评估，不计入分母）
    */
   private calcPassRate(traces: ExecutionTrace[]): number {
-    if (traces.length === 0) return 0;
-    const passCount = traces.filter(t => t.result === 'pass').length;
-    return passCount / traces.length;
+    const evaluated = traces.filter(t => t.result !== 'skip');
+    if (evaluated.length === 0) return 0;
+    const passCount = evaluated.filter(t => t.result === 'pass').length;
+    return passCount / evaluated.length;
   }
 
   /**
@@ -374,6 +378,7 @@ export class TraceAnalyzer {
       const levelEmoji = {
         iron_law: '🔴',
         guideline: '🟡',
+        prompt: '🟣',
         tip: '🔵',
       }[summary.level];
 

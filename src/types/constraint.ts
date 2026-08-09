@@ -1,10 +1,14 @@
 /**
  * 约束类型定义
- * 
- * 三层约束体系：
- * - Iron Laws：绝对禁止，无例外，违背即阻止执行
- * - Guidelines：优先建议，有例外，违背发警告但不阻止
- * - Tips：信息性提示，可忽略
+ *
+ * kind 二元模型（ADR-0001）：
+ * - check：必须带真实 checker，参与运行时检查与 trace 统计
+ *   - iron_law：绝对禁止，无例外，违背即阻止执行
+ *   - guideline：优先建议，有例外，违背发警告但不阻止
+ * - prompt：纯文本提示，仅参与 prompt 注入，不占检查位、不产生 trace
+ *
+ * 'tip' 层级已随 TIPS 退役（ADR-0001），仅保留在类型上以兼容
+ * ConstraintCheckResult.tips 等历史结果形态，不再有新定义使用。
  */
 
 /**
@@ -13,9 +17,17 @@
 export type ConstraintId = string;
 
 /**
- * 约束层级
+ * 约束类别：check = 可执行检查；prompt = 纯文本注入
  */
-export type ConstraintLevel = 'iron_law' | 'guideline' | 'tip';
+export type ConstraintKind = 'check' | 'prompt';
+
+/**
+ * 约束层级
+ *
+ * check 层只使用 'iron_law' | 'guideline'；prompt 类统一为 'prompt'。
+ * 'tip' 已退役，仅为历史结果结构兼容保留。
+ */
+export type ConstraintLevel = 'iron_law' | 'guideline' | 'prompt' | 'tip';
 
 /**
  * 约束触发条件（开放扩展）
@@ -31,7 +43,14 @@ export type ConstraintTrigger = string;
 export interface Constraint {
   /** 约束 ID */
   id: ConstraintId;
-  
+
+  /**
+   * 约束类别（ADR-0001）：
+   * - check：必须带真实 checker，参与运行时检查
+   * - prompt：纯文本提示，仅参与注入，不执行 checker
+   */
+  kind: ConstraintKind;
+
   /** 约束规则（英文） */
   rule: string;
   
@@ -61,6 +80,12 @@ export interface Constraint {
 
   /** 例外条件（仅 Guidelines 有效） */
   exceptions?: string[];
+
+  /**
+   * 适用场景标签（prompt 类专用，如 'agent-skill'、'llm-app'）。
+   * 未标注表示通用场景。消费端（init 注入 / studio 路由）可按标签过滤。
+   */
+  appliesTo?: string[];
 }
 
 /**
@@ -75,6 +100,15 @@ export interface ConstraintResult {
   
   /** 是否满足 */
   satisfied: boolean;
+
+  /**
+   * 是否跳过评估（ADR-0001 三态语义）
+   *
+   * skip = 约定未采用（存在性探测未命中）或证据 flag 未接线（undefined）。
+   * skip 时 satisfied 恒为 true（fail-open，不阻断、不计警告），
+   * 但不计入 pass/fail 统计；trace 记录为 result: 'skip'。
+   */
+  skipped?: boolean;
   
   /** 约束定义 */
   constraint?: Constraint;
@@ -95,6 +129,14 @@ export interface ConstraintResult {
 export interface ConstraintContext {
   /** 当前操作类型 */
   operation: ConstraintTrigger;
+
+  /**
+   * 附加触发条件（ADR-0001：detectTrigger 的次级推断）
+   *
+   * pre-commit 变更包含代码文件时，operation 保持主推断（如 module_modification），
+   * code_implementation 记录在此；匹配约束时 operation 与 extraTriggers 一并参与。
+   */
+  extraTriggers?: ConstraintTrigger[];
   
   /** 工作流 ID */
   workflowId?: string;
@@ -152,25 +194,25 @@ export interface ConstraintContext {
   /** 是否只处理单个任务（用于 incremental_progress） */
   hasSingleTask?: boolean;
   
-  /** 是否已验证外部能力（用于 verify_external_capability） */
+  /** 是否已验证外部能力（对应约束已降级为 prompt，字段保留兼容） */
   hasExternalCapabilityVerification?: boolean;
 
-  /** 是否已对比需求验证（用于 no_implementation_without_requirement_review） */
+  /** 是否已对比需求验证（review 变体已并入主约束，字段保留兼容） */
   hasRequirementReview?: boolean;
 
   /** 是否有需求文档（用于 no_implementation_without_requirement） */
   hasRequirement?: boolean;
 
-  /** 是否在 worktree 中执行（用于 prefer_worktree） */
+  /** 是否在 worktree 中执行（对应约束已移出内置，字段保留兼容） */
   hasWorktree?: boolean;
 
   /** worktree 路径（用于 worktree 相关检查） */
   worktreePath?: string;
 
-  /** 完成声明文本（用于 fuzzy/excuse 检查） */
+  /** 完成声明文本（对应检查已并入 prompt 层，字段保留兼容） */
   completionClaimText?: string;
 
-  /** 是否完成两阶段审查（用于 two_stage_review_required） */
+  /** 是否完成两阶段审查（对应约束已移出内置，字段保留兼容） */
   hasTwoStageReview?: boolean;
   
   // ========================================
@@ -194,7 +236,7 @@ export interface ConstraintContext {
   isSimpleAccessor?: boolean;
   isPureDisplayComponent?: boolean;
   
-  // no_any_type 例外
+  // any 类型相关例外（对应约束已退役，字段保留兼容）
   isJsonParseResult?: boolean;
   isThirdPartyNoTypes?: boolean;
   isLegacyMigration?: boolean;
@@ -238,7 +280,10 @@ export class ConstraintViolationError extends Error {
 }
 
 /**
- * 三层约束检查结果
+ * 约束检查结果（check 层）
+ *
+ * tips/tipCount 已随 TIPS 退役（ADR-0001），保留字段以兼容历史调用方，
+ * 内置约束下恒为空数组 / 0。
  */
 export interface ConstraintCheckResult {
   /** 铁律检查结果（必须全部通过） */

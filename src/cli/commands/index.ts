@@ -8,7 +8,6 @@ export { runPassesGate, checkCoverage, type PassesGateOptions } from './passes-g
 export { init, type InitOptions } from './init';
 export { report, type ReportOptions } from './report';
 export { status, type StatusOptions } from './status';
-export { flow, type FlowOptions } from './flow';
 export { specValidate, listSpecTypes, type SpecValidateOptions } from './spec';
 export { acceptance, listAcceptanceCriteria, type AcceptanceOptions } from './acceptance';
 export { performance, type PerformanceOptions } from './performance';
@@ -24,6 +23,8 @@ export { release, type ReleaseOptions } from './release';
 export { analyzeSessions, type AnalyzeSessionsOptions } from './analyze-sessions';
 export { updateUserModel, type UpdateUserModelOptions } from './update-user-model';
 export { constraints, getConstraintsMeta, type ConstraintsMeta } from './constraints';
+export { constraintsReport, renderExportMarkdown, type ConstraintsReportOptions } from './constraints-report';
+export { constraintsRetire, retireConstraint, runRetireInteractive, printRetireResult, type ConstraintsRetireOptions, type RetireResult, type RetireStatus } from './constraints-retire';
 export { docFreshnessCheck, extractClaims, verifyClaims, type DocFreshnessCheckOptions, type ClaimResult, type ClaimType } from './doc-freshness-check';
 export { specBaselineCheck, extractBaselineSection, type SpecBaselineCheckOptions, type PrerequisiteResult } from './spec-baseline-check';
 export { sddIndex, type SDDOptions } from './sdd';

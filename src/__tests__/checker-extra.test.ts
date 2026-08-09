@@ -1,16 +1,17 @@
 /**
  * checker.ts 补充测试
  * 
- * 目标：覆盖 checkTestCoverage、checkNoSimplificationWithoutApproval、
- *       checkCapabilitySync 完整流程、beforeExecution、findApplicableConstraints
+ * 目标：覆盖 checkCapabilitySync 完整流程、beforeExecution、findApplicableConstraints
+ * （ADR-0001：已退役 checker 的用例随约束数据模型 v2 移除）
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 import {
   ConstraintChecker,
   checkConstraints,
   checkBeforeExecution,
 } from '../core/constraints/checker';
+import { getConstraintCheck, type CheckEnv } from '../core/constraints/checkers';
 import type { ConstraintContext } from '../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -42,199 +43,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
     }
   });
 
-  describe('checkTestCoverage', () => {
-    it('无 coverage 报告应该通过', async () => {
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_coverage_required',
-          level: 'guideline',
-          rule: 'COVERAGE',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-    });
-
-    it('有 coverage-summary.json 且达标应该通过', async () => {
-      // 创建 coverage 目录和报告
-      const coverageDir = path.join(tempDir, 'coverage');
-      fs.mkdirSync(coverageDir, { recursive: true });
-
-      const summaryPath = path.join(coverageDir, 'coverage-summary.json');
-      fs.writeFileSync(
-        summaryPath,
-        JSON.stringify({
-          total: {
-            lines: { pct: 80 },
-            statements: { pct: 80 },
-            branches: { pct: 75 },
-            functions: { pct: 85 },
-          },
-        })
-      );
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_coverage_required',
-          level: 'guideline',
-          rule: 'COVERAGE',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-
-      // 清理
-      fs.rmSync(coverageDir, { recursive: true, force: true });
-    });
-
-    it('覆盖率低于 50% 应该失败', async () => {
-      const coverageDir = path.join(tempDir, 'coverage');
-      fs.mkdirSync(coverageDir, { recursive: true });
-
-      const summaryPath = path.join(coverageDir, 'coverage-summary.json');
-      fs.writeFileSync(
-        summaryPath,
-        JSON.stringify({
-          total: {
-            lines: { pct: 30 },
-          },
-        })
-      );
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_coverage_required',
-          level: 'guideline',
-          rule: 'COVERAGE',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(false);
-
-      fs.rmSync(coverageDir, { recursive: true, force: true });
-    });
-
-    it('coverage-summary.json 解析失败应该通过', async () => {
-      const coverageDir = path.join(tempDir, 'coverage');
-      fs.mkdirSync(coverageDir, { recursive: true });
-
-      const summaryPath = path.join(coverageDir, 'coverage-summary.json');
-      fs.writeFileSync(summaryPath, 'invalid json {');
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_coverage_required',
-          level: 'guideline',
-          rule: 'COVERAGE',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      // 解析失败默认通过
-      expect(result.satisfied).toBe(true);
-
-      fs.rmSync(coverageDir, { recursive: true, force: true });
-    });
-  });
-
-  describe('checkNoSimplificationWithoutApproval', () => {
-    it('正常 diff 应该通过', async () => {
-      // clean state
-      execSync('git checkout .', { cwd: tempDir, stdio: 'pipe' });
-      
-      const normalFile = path.join(tempDir, 'normal.ts');
-      fs.writeFileSync(normalFile, 'export const x = 1;');
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'no_simplification_without_approval',
-          level: 'guideline',
-          rule: 'NO SIMPLIFICATION',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-    });
-
-    it('包含简化关键词应该失败', async () => {
-      // 先完成之前的提交
-      execSync('git add .', { cwd: tempDir });
-      execSync('git commit -m "cleanup" --allow-empty', { cwd: tempDir });
-      
-      // 创建包含简化关键词的文件并 stage
-      const simplifyFile = path.join(tempDir, 'simplify-msg.ts');
-      fs.writeFileSync(simplifyFile, '// removed test for simplicity\nexport const y = 2;');
-      execSync('git add .', { cwd: tempDir });
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'no_simplification_without_approval',
-          level: 'guideline',
-          rule: 'NO SIMPLIFICATION',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(false);
-      
-      // cleanup - unstage and remove
-      execSync('git reset HEAD -- ' + simplifyFile, { cwd: tempDir, stdio: 'pipe' });
-      fs.rmSync(simplifyFile, { force: true });
-    });
-  });
-
   describe('checkCapabilitySync', () => {
     it('无代码变更应该通过', async () => {
       // 清理 staged changes
@@ -248,6 +56,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'capability_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CAPABILITY SYNC',
           message: 'test',
@@ -278,6 +87,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'capability_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CAPABILITY SYNC',
           message: 'test',
@@ -311,6 +121,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'capability_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CAPABILITY SYNC',
           message: 'test',
@@ -327,13 +138,13 @@ describe('ConstraintChecker - 补充覆盖', () => {
       execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
     });
 
-    it('有代码变更但无 CAPABILITIES.md 应该失败', async () => {
+    it('有代码变更但无 CAPABILITIES.md 应该跳过（ADR-0001 存在性探测）', async () => {
       // 确保 CAPABILITIES.md 不存在
       const capFile = path.join(tempDir, 'CAPABILITIES.md');
       if (fs.existsSync(capFile)) {
         fs.rmSync(capFile, { force: true });
       }
-      
+
       // 创建新的代码文件并 stage
       const newCodeFile = path.join(tempDir, 'newfeature.ts');
       fs.writeFileSync(newCodeFile, 'export function newfeature() {}');
@@ -347,6 +158,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'capability_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CAPABILITY SYNC',
           message: 'test',
@@ -356,8 +168,9 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      // 没有 CAPABILITIES.md，应该失败
-      expect(result.satisfied).toBe(false);
+      // 未采用 CAPABILITIES.md 约定 → skip（不计 pass/fail，不阻断）
+      expect(result.skipped).toBe(true);
+      expect(result.satisfied).toBe(true);
 
       // Cleanup
       execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
@@ -390,6 +203,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       checker.check(
         {
           id: 'capability_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CAPABILITY SYNC',
           message: 'test',
@@ -494,17 +308,178 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
   });
 
+  describe('checkCapabilitySync 遗留问题回归（2026-08-08 评估稿第四节）', () => {
+    const capCheck = getConstraintCheck('capability_sync')!;
+
+    const setupDir = (name: string, capContent: string, files: string[] = []): string => {
+      const dir = path.join(tempDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'CAPABILITIES.md'), capContent);
+      for (const f of files) {
+        const fp = path.join(dir, f);
+        fs.mkdirSync(path.dirname(fp), { recursive: true });
+        fs.writeFileSync(fp, 'export const x = 1;');
+      }
+      return dir;
+    };
+
+    /** 直接构造 CheckEnv：stub stagedDiffNames / srcScan，不走真实 git */
+    const makeEnv = (
+      projectPath: string,
+      staged: string[],
+      scan: Record<string, string[]> = {}
+    ): CheckEnv => ({
+      context: { operation: 'commit', projectPath },
+      projectPath,
+      stagedDiff: async () => '',
+      stagedDiffNames: async () => staged.join('\n'),
+      srcScan: (root: string) => scan[root] ?? [],
+    });
+
+    const tableWith = (row: string): string =>
+      '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n' + row + '\n';
+
+    const EMPTY_TABLE = '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n';
+
+    it('问题1：step1 应要求每个变更文件都被覆盖（every 而非 some）', async () => {
+      // 文档登记 src/foo.ts；同时 staged 已登记的 src/foo.ts 与未登记的 scripts/bar.ts
+      // some() 下只要有 foo.ts 命中即整体通过，bar.ts 漏网
+      const dir = setupDir('legacy-step1-some', tableWith('| foo | src/foo.ts | foo |'));
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, ['src/foo.ts', 'scripts/bar.ts']))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('问题3a：step1 不得因 endsWith 造成后缀碰撞（xfoo.ts 不应被 foo.ts 覆盖）', async () => {
+      const dir = setupDir('legacy-step1-endswith', tableWith('| foo | foo.ts | foo |'));
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, ['web/xfoo.ts']))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('问题3b：step1 不得因 includes 造成子串误配（docs/src/foo.tsx 不应被 src/foo.ts 覆盖）', async () => {
+      const dir = setupDir('legacy-step1-includes', tableWith('| foo | src/foo.ts | foo |'));
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, ['docs/src/foo.tsx']))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('兼容：basename 条目仍可按路径边界后缀匹配（src/foo.ts 被 foo.ts 覆盖）', async () => {
+      const dir = setupDir('legacy-step1-suffix-ok', tableWith('| foo | foo.ts | foo |'));
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, ['src/foo.ts']))).toBe(true);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('问题2：空表格 + 有 staged 变更时不得直接放行', async () => {
+      const dir = setupDir('legacy-empty-table-diff', EMPTY_TABLE);
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, ['src/foo.ts']))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('问题2：空表格 + 源码根有文件时 step2 不得直接放行', async () => {
+      const dir = setupDir('legacy-empty-table-scan', EMPTY_TABLE, ['src/foo.ts']);
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, [], { src: ['src/foo.ts'] }))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('问题2 兼容：清单格式（计数行）无文件表，仍直接放行', async () => {
+      const dir = setupDir(
+        'legacy-listing-format',
+        '# Harness Capabilities\n\n## CLI Commands (25)\ncheck, validate\n'
+      );
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, ['src/foo.ts']))).toBe(true);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('问题4：检查异常默认放行时应输出 warn 而非静默吞错', async () => {
+      const dir = setupDir('legacy-failopen', tableWith('| foo | src/foo.ts | foo |'));
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const env: CheckEnv = {
+          ...makeEnv(dir, []),
+          stagedDiffNames: async () => {
+            throw new Error('git boom');
+          },
+        };
+        // fail-open 语义保留：异常时仍放行
+        expect(await capCheck.evaluate(env)).toBe(true);
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('step2（file 模式）与 step1 语义一致：basename 条目可按路径边界后缀覆盖', async () => {
+      // 文档第二列写 basename foo.ts；step1 认可它（边界后缀），
+      // step2 裸精确匹配却永远不命中 srcScan 返回的 src/foo.ts → 永远红
+      const dir = setupDir('legacy-step2-basename', tableWith('| foo | foo.ts | foo |'), [
+        'src/foo.ts',
+      ]);
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, [], { src: ['src/foo.ts'] }))).toBe(true);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('step2（file 模式）：不同路径的同后缀文件不得被误覆盖（lib/foo.ts 不覆盖 src/foo.ts）', async () => {
+      const dir = setupDir('legacy-step2-boundary', tableWith('| foo | lib/foo.ts | foo |'), [
+        'src/foo.ts',
+      ]);
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, [], { src: ['src/foo.ts'] }))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('step2（module 模式）文件条目同样按路径边界后缀覆盖', async () => {
+      const dir = setupDir('legacy-step2-module-suffix', tableWith('| foo | foo.ts | foo |'), [
+        'src/foo.ts',
+      ]);
+      fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, '.harness', 'config.yml'),
+        'governance:\n  capabilities:\n    mode: module\n'
+      );
+      try {
+        expect(await capCheck.evaluate(makeEnv(dir, [], { src: ['src/foo.ts'] }))).toBe(true);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('findApplicableConstraints', () => {
     it('应该过滤出匹配 trigger 的约束', () => {
       const context: ConstraintContext = {
-        operation: 'task_completion_claim',
+        operation: 'code_implementation',
       };
 
       const result = checker.findApplicableConstraints(context);
 
       expect(result.ironLaws.length).toBeGreaterThan(0);
       expect(
-        result.ironLaws.some((c: any) => c.id === 'no_self_approval')
+        result.ironLaws.some((c: any) => c.id === 'no_completion_without_verification')
       ).toBe(true);
     });
 
@@ -604,6 +579,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'test_severity_iron',
+          kind: 'prompt',
           level: 'iron_law',
           rule: 'TEST',
           message: 'test',
@@ -624,6 +600,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'test_severity_guideline',
+          kind: 'prompt',
           level: 'guideline',
           rule: 'TEST',
           message: 'test',
@@ -644,6 +621,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'test_severity_tip',
+          kind: 'prompt',
           level: 'tip',
           rule: 'TEST',
           message: 'test',
@@ -666,9 +644,10 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       const result = await checker.check(
         {
-          id: 'no_fix_without_root_cause',
+          id: 'incremental_progress',
+          kind: 'check',
           level: 'guideline',
-          rule: 'NO FIXES WITHOUT ROOT CAUSE',
+          rule: 'ONE TASK PER SESSION',
           message: 'test',
           trigger: 'code_implementation',
           enforcement: 'test',
@@ -690,9 +669,10 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       const result = await checker.check(
         {
-          id: 'no_fix_without_root_cause',
+          id: 'incremental_progress',
+          kind: 'check',
           level: 'guideline',
-          rule: 'NO FIXES WITHOUT ROOT CAUSE',
+          rule: 'ONE TASK PER SESSION',
           message: 'test',
           trigger: 'code_implementation',
           enforcement: 'test',
@@ -701,20 +681,23 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      // hasSingleTask 未接线（undefined）→ skip（ADR-0001：flag 未接线不评估，不误报违规）
+      expect(result.skipped).toBe(true);
+      expect(result.satisfied).toBe(true);
     });
 
     it('iron_law 不应该检查例外条件', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasTest: false,
+        isSimpleTypo: true,
       };
 
       const result = await checker.check(
         {
-          id: 'no_self_approval',
+          id: 'incremental_progress',
+          kind: 'check',
           level: 'iron_law',
-          rule: 'NO SELF APPROVAL',
+          rule: 'ONE TASK PER SESSION',
           message: 'test',
           trigger: 'code_implementation',
           enforcement: 'test',
@@ -723,20 +706,23 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result.satisfied).toBe(false);
+      // iron_law 不适用例外；hasSingleTask 未接线（undefined）→ skip（ADR-0001）
+      expect(result.skipped).toBe(true);
+      expect(result.satisfied).toBe(true);
     });
 
     it('无 exceptions 字段应该正常检查', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasRootCauseInvestigation: true,
+        hasVerificationEvidence: true,
       };
 
       const result = await checker.check(
         {
-          id: 'no_fix_without_root_cause',
-          level: 'guideline',
-          rule: 'NO FIXES WITHOUT ROOT CAUSE',
+          id: 'no_completion_without_verification',
+          kind: 'check',
+          level: 'iron_law',
+          rule: 'NO COMPLETION WITHOUT VERIFICATION',
           message: 'test',
           trigger: 'code_implementation',
           enforcement: 'test',
@@ -763,6 +749,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'no_bypass_checkpoint',
+          kind: 'check',
           level: 'iron_law',
           rule: 'NO BYPASS',
           message: 'test',
@@ -792,6 +779,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'no_bypass_checkpoint',
+          kind: 'check',
           level: 'iron_law',
           rule: 'NO BYPASS',
           message: 'test',
@@ -805,120 +793,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       fs.unlinkSync(cleanFile);
       execSync('git reset HEAD -- ' + cleanFile, { cwd: tempDir, stdio: 'pipe' });
-    });
-  });
-
-  describe('checkNoAnyType 文件检查', () => {
-    it('.ts 文件包含 : any 应该失败', async () => {
-      const anyFile = path.join(tempDir, 'any-test.ts');
-      fs.writeFileSync(anyFile, 'const x: any = {};');
-
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        projectPath: tempDir,
-        changedFiles: [anyFile],
-      };
-
-      const result = await checker.check(
-        {
-          id: 'no_any_type',
-          level: 'guideline',
-          rule: 'NO ANY',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(false);
-
-      fs.unlinkSync(anyFile);
-    });
-
-    it('.ts 文件注释中的 : any 应该被忽略', async () => {
-      const commentFile = path.join(tempDir, 'comment-any.ts');
-      fs.writeFileSync(commentFile, '// const x: any = {};\nconst y: string = "ok";');
-
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        projectPath: tempDir,
-        changedFiles: [commentFile],
-      };
-
-      const result = await checker.check(
-        {
-          id: 'no_any_type',
-          level: 'guideline',
-          rule: 'NO ANY',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-
-      fs.unlinkSync(commentFile);
-    });
-
-    it('非 .ts 文件应该跳过检查', async () => {
-      const jsFile = path.join(tempDir, 'any-test.js');
-      fs.writeFileSync(jsFile, 'const x = {};');
-
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        projectPath: tempDir,
-        changedFiles: [jsFile],
-      };
-
-      const result = await checker.check(
-        {
-          id: 'no_any_type',
-          level: 'guideline',
-          rule: 'NO ANY',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-
-      fs.unlinkSync(jsFile);
-    });
-  });
-
-  describe('checkTestCoverage coverage-final.json', () => {
-    it('只有 coverage-final.json 应该通过', async () => {
-      const coverageDir = path.join(tempDir, 'coverage');
-      fs.mkdirSync(coverageDir, { recursive: true });
-
-      const finalPath = path.join(coverageDir, 'coverage-final.json');
-      fs.writeFileSync(finalPath, JSON.stringify({}));
-
-      const context: ConstraintContext = {
-        operation: 'commit',
-        projectPath: tempDir,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_coverage_required',
-          level: 'guideline',
-          rule: 'COVERAGE',
-          message: 'test',
-          trigger: 'commit',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-
-      fs.rmSync(coverageDir, { recursive: true, force: true });
     });
   });
 
@@ -940,11 +814,11 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasTest: true,
+        hasVerificationEvidence: true,
       };
 
-      const result = await checkConstraint('no_self_approval', context);
-      expect(result.id).toBe('no_self_approval');
+      const result = await checkConstraint('no_completion_without_verification', context);
+      expect(result.id).toBe('no_completion_without_verification');
       expect(result.satisfied).toBe(true);
     });
   });
@@ -975,6 +849,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'no_test_simplification',
+          kind: 'check',
           level: 'iron_law',
           rule: 'NO SIMPLIFY',
           message: 'test',
@@ -1004,6 +879,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'context_doc_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CONTEXT DOC SYNC',
           message: 'test',
@@ -1048,6 +924,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'context_doc_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CONTEXT DOC SYNC',
           message: 'test',
@@ -1089,6 +966,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'context_doc_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CONTEXT DOC SYNC',
           message: 'test',
@@ -1127,6 +1005,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'context_doc_sync',
+          kind: 'check',
           level: 'guideline',
           rule: 'CONTEXT DOC SYNC',
           message: 'test',
@@ -1155,6 +1034,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1182,6 +1062,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1218,6 +1099,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1255,6 +1137,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1291,6 +1174,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1324,6 +1208,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1356,6 +1241,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1391,6 +1277,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1423,6 +1310,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1455,6 +1343,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1481,6 +1370,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',
@@ -1549,6 +1439,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         ironLaws: {
           test_only: {
             id: 'test_only',
+            kind: 'prompt' as const,
             level: 'iron_law' as const,
             rule: 'TEST',
             message: 'test',
@@ -1582,6 +1473,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         ironLaws: {
           rule_a: {
             id: 'rule_a',
+            kind: 'prompt' as const,
             level: 'iron_law' as const,
             rule: 'A',
             message: 'project A',
@@ -1599,6 +1491,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         ironLaws: {
           rule_b: {
             id: 'rule_b',
+            kind: 'prompt' as const,
             level: 'iron_law' as const,
             rule: 'B',
             message: 'project B',
@@ -1648,7 +1541,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const defaultKeys = Object.keys(defaultConstraints.ironLaws);
 
       const customConfig = {
-        ironLaws: { compat_test: { id: 'compat_test', level: 'iron_law' as const, rule: 'C', message: 'compat', trigger: 'file_modification', enforcement: 'test' } },
+        ironLaws: { compat_test: { id: 'compat_test', kind: 'prompt' as const, level: 'iron_law' as const, rule: 'C', message: 'compat', trigger: 'file_modification', enforcement: 'test' } },
         guidelines: {},
         tips: {},
         disabled: [] as string[],
@@ -1672,6 +1565,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
         ironLaws: {
           custom_rule: {
             id: 'custom_rule',
+            kind: 'prompt' as const,
             level: 'iron_law' as const,
             rule: 'CUSTOM',
             message: 'custom',
@@ -1710,6 +1604,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'docs_freshness',
+          kind: 'check',
           level: 'guideline',
           rule: 'DOCS FRESHNESS',
           message: 'test',

@@ -9,7 +9,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { IRON_LAWS, GUIDELINES, TIPS } from '../../../core/constraints/definitions';
-import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
+import { isCapabilityListingFormat, readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import { FreshnessRunner } from '../../../core/constraints/doc-freshness/runner';
 import type { CapabilitiesMode } from '../../../core/project-config-loader';
 import type { DocFreshnessCheck } from '../../../types/project-config';
@@ -35,13 +35,11 @@ export async function parseCapabilitiesFiles(capabilitiesPath: string): Promise<
 
 /**
  * 检测 CAPABILITIES.md 是否使用能力清单格式（计数行），而非文件表格格式
+ *
+ * @deprecated 实现已收敛到 core/constraints/capabilities-parser（与工单 19-B 同方向），
+ * 此处保留 re-export 兼容现有调用方
  */
-export function isCapabilityListingFormat(content: string): boolean {
-  // 能力清单格式特征：包含 "CLI Commands (N)" / "Iron Laws (N)" 等计数行
-  return /CLI Commands\s*\(\d+\)/.test(content) ||
-    /Iron Laws?\s*\(\d+\)/.test(content) ||
-    /Guidelines?\s*\(\d+\)/.test(content);
-}
+export { isCapabilityListingFormat };
 
 /**
  * 构建 CAPABILITIES.md 能力清单格式的检查配置

@@ -4,7 +4,7 @@
 
 import { DashboardDataProvider } from '../data';
 import type { KnowledgeEntry } from '../../knowledge/types';
-import type { ConstraintStats } from '../../constraints/types';
+import type { ConstraintStats } from '../types';
 
 function makeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
   return {
@@ -50,7 +50,7 @@ describe('DashboardDataProvider', () => {
 
     it('应该接受约束统计', () => {
       const stats: ConstraintStats[] = [{
-        constraintId: 'no_any_type',
+        constraintId: 'no_bypass_checkpoint',
         triggerCount: 100,
         passCount: 78,
         interceptCount: 22,
@@ -60,7 +60,7 @@ describe('DashboardDataProvider', () => {
 
       const data = provider.generate([], stats);
       const heatmap = data.constraintHeatmap;
-      const entry = heatmap.constraints.find(c => c.id === 'no_any_type');
+      const entry = heatmap.constraints.find(c => c.id === 'no_bypass_checkpoint');
       expect(entry?.trigger).toBe(100);
       expect(entry?.intercept).toBe(22);
     });
@@ -87,7 +87,7 @@ describe('DashboardDataProvider', () => {
 
     it('应该检测拦截率下降的约束', () => {
       const stats: ConstraintStats[] = [{
-        constraintId: 'no_any_type',
+        constraintId: 'no_bypass_checkpoint',
         triggerCount: 100,
         passCount: 90,
         interceptCount: 10,
@@ -95,7 +95,7 @@ describe('DashboardDataProvider', () => {
       }];
 
       const heatmap = provider.getConstraintHeatmap(stats);
-      expect(heatmap.decliningInterceptRate.some(c => c.id === 'no_any_type')).toBe(true);
+      expect(heatmap.decliningInterceptRate.some(c => c.id === 'no_bypass_checkpoint')).toBe(true);
     });
   });
 
@@ -106,13 +106,6 @@ describe('DashboardDataProvider', () => {
       expect(loop.push).toBeDefined();
       expect(loop.external).toBeDefined();
       expect(loop.feedbackToKnowledge).toBeDefined();
-    });
-  });
-
-  describe('getRegistry', () => {
-    it('应该返回约束注册表', () => {
-      expect(provider.getRegistry()).toBeDefined();
-      expect(provider.getRegistry().getAll().length).toBeGreaterThan(0);
     });
   });
 });

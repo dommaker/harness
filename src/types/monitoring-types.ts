@@ -1,7 +1,7 @@
 /**
- * 监控域类型（诊断 / 提案）
+ * 监控域类型（诊断）
  *
- * 原定义位于 monitoring/constraint-doctor.ts 与 monitoring/constraint-evolver.ts，
+ * 原定义位于 monitoring/constraint-doctor.ts，
  * 但被 types/index.ts 反向再导出（类型层依赖业务模块，分层倒挂）。
  * 工单 14 将类型定义归位到 types 层，monitoring 改从 types 导入。
  */
@@ -65,86 +65,4 @@ export interface Diagnosis {
 
   /** 紧急程度 */
   urgency: 'low' | 'medium' | 'high';
-}
-
-/**
- * 约束提案
- */
-export interface ConstraintProposal {
-  /** 提案 ID */
-  id: string;
-
-  /** 提案时间 */
-  proposedAt: number;
-
-  /** 来源诊断 */
-  diagnosisId: string;
-
-  /** 约束 ID */
-  constraintId: string;
-
-  /** 提案类型 */
-  type: 'add_exception' | 'remove_exception' | 'adjust_trigger' | 'change_level' | 'modify_message' | 'new_constraint';
-
-  /** 提案内容 */
-  content: {
-    /** 当前值（如果有） */
-    current?: any;
-
-    /** 建议值 */
-    proposed: any;
-
-    /** 变更描述 */
-    description: string;
-  };
-
-  /** 理由 */
-  reasoning: string;
-
-  /** 预期效果 */
-  expectedOutcome: string;
-
-  /** 风险评估 */
-  risk: {
-    /** 风险等级 */
-    level: 'low' | 'medium' | 'high';
-
-    /** 风险描述 */
-    description: string;
-
-    /** 回滚方案 */
-    rollbackPlan?: string;
-  };
-
-  /** 实施信息 */
-  implementation: {
-    /** 改动文件 */
-    files: string[];
-
-    /** 改动量估计 */
-    linesChanged: number;
-
-    /** 测试要求 */
-    testsRequired: boolean;
-  };
-
-  /** 状态 */
-  status: 'proposed' | 'reviewing' | 'accepted' | 'rejected' | 'implemented';
-
-  /** 审核意见 */
-  reviewComment?: string;
-}
-
-/**
- * 提案审核结果
- */
-export interface ProposalReviewResult {
-  /** 是否接受 */
-  accepted: boolean;
-
-  /** 审核意见 */
-  comment: string;
-
-  /** 修改建议（如果拒绝） */
-  modifications?: Partial<ConstraintProposal>;
 }

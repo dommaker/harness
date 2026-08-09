@@ -74,13 +74,6 @@ export * from './safety';
 export * from './verification';
 
 // ========================================
-// 约束分层导出
-// ========================================
-export * from './constraints/types';
-export { ConstraintRegistry } from './constraints/registry';
-export { ConstraintLifecycleRunner } from './constraints/lifecycle-runner';
-
-// ========================================
 // Dashboard 数据导出
 // ========================================
 export * from './dashboard';
@@ -113,11 +106,6 @@ export * from './agents';
 // 预设导出
 // ========================================
 export * from './presets';
-
-// ========================================
-// 约束进化导出
-// ========================================
-export * from './evolution';
 
 // ========================================
 // 便捷 API

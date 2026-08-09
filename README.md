@@ -2,7 +2,7 @@
 
 通用 AI Agent 工程约束框架。
 
-约束即知识，随模型进化而沉淀。铁律可退化，指南可演化，一切可追溯。
+约束即知识：运行时检查守住底线，治理回路沉淀经验，一切可追溯。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -13,8 +13,8 @@
 Agent 能力强但不可靠。它会跳过测试、声称完成、反复循环、调用危险工具。传统做法是写更长的 Prompt——但 Prompt 只是建议，Agent 可以忽略。
 
 Harness 提供两层核心价值：
-1. **运行时约束** — Agent 行动前的代码级检查，不是 Prompt 级建议
-2. **知识沉淀** — 当模型内化了某条规则，约束自动降级为知识记录（KnowledgeStore），保留"这个规则曾经保护过什么"
+1. **运行时约束** — Agent 行动前的代码级检查，不是 Prompt 级建议。check 层约束带真实 checker（diff 扫描、存在性探测、门控校验），fail 即阻断或告警。对未采用对应约定的项目（如无 CAPABILITIES.md），检查诚实报告 `skip`——不阻断、不计入通过率，绝不拿恒过桩凑数
+2. **知识沉淀** — 当模型内化了某条规则，人确认后用 `harness constraints retire` 将其退役：规则原文 + 退役原因 + 历史拦截统计一并写入 KnowledgeStore。模型内化了什么，有据可查
 
 ---
 
@@ -43,42 +43,40 @@ await checkBeforeExecution({
 const meta = await import('child_process').then(cp =>
   JSON.parse(cp.execSync('npx harness constraints --json', { encoding: 'utf-8' }))
 );
-// { version, hash, counts: { ironLaws, guidelines, tips }, textSize }
+// { version, hash, counts: { ironLaws, guidelines, prompts }, textSize }
 ```
 
 > Agent prompt 注入约束由 `@dommaker/studio-shared` 提供（`formatConstraintsForPrompt(role)`）。
 
 ---
 
-## 三层约束体系
+## 约束体系：check / prompt 二元模型
 
-| 层级 | 严重性 | 数量 | 行为 |
-|------|:--:|:--:|------|
-| **Iron Law** | error | 12 | 阻断执行。拦截率 <5% 时自动降为 guideline |
-| **Guideline** | warning | 28 | 注入 Agent context。拦截率 <30% 时降为 tip |
-| **Tip** | info | 2 | 信息性提示。拦截率 <10% 时标记废弃 |
+| 类别 | 数量 | 行为 |
+|------|:--:|------|
+| **check · Iron Law** | 5 | 代码级检查，违规 throw `ConstraintViolationError` 阻断执行 |
+| **check · Guideline** | 4 | 代码级检查，违规记录 warning 放行 |
+| **prompt** | 16 | 纯文本行为约束，注入 Agent context，不占检查位、不产生 trace 统计 |
 
-约束定义按层级维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines,tips}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
+- check 层每条必须带真实 checker（注册表闭环，引用未注册 checker 构建报错）；`capability_sync`/`docs_freshness`/`context_doc_sync` 为存在性探测——项目未采用对应约定文件时 skip（不阻断、不计 pass/fail）。
+- prompt 层带角色路由与适用性标签；场景专属条目仅在 config.yml `scenes` 命中时进入生效集。
+- 生效集由 `getEffectiveConstraints(projectRoot)` 统一计算：内置 → preset 裁剪 → config.yml 禁用 → custom 追加 → scenes 过滤。init 注入、`harness check`、外部消费者全部走它。
+
+约束定义按类别维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines,prompts}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 
-## 约束生命周期
+## 约束治理回路
 
-约束是知识，不是教条。随着模型能力提升，约束会自动降级为知识沉淀：
+约束是知识，不是教条。约束的进化发生在外环——数据不出门，人确认每一步：
 
 ```
-active → 拦截率低于阈值 → degrade → deprecated → 写入 KnowledgeStore
-                                ← rollback (可回滚)
+report 观测 → retire（人确认）→ 知识沉淀 → --export 回传 → 维护者发版演进内置集
 ```
 
-| 层级 | 退化阈值 | 退化目标 |
-|------|---------|---------|
-| Iron Law | 拦截率 < 5%（≥100 次检查） | → guideline |
-| Guideline | 拦截率 < 30%（≥10 次检查） | → tip |
-| Tip | 拦截率 < 10%（≥10 次检查） | → info → deprecated |
-
-- 退化基于拦截率，不基于日历时间。可手动回滚恢复原级别。
-- 降级时写入 **KnowledgeStore**（知识引擎的存储层）——保留规则原文 + 退化原因 + 历史拦截数据。模型内化了什么，有据可查。
+- `harness constraints report` — 只读观测：check 层统计、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、配置健康、注入漂移；`--export` 输出脱敏 markdown 摘要，供使用方回传给维护者。
+- `harness constraints retire` — 交互选择退役候选，**执行前保留一次人确认**。落盘为 config.yml `enabled: false` + `retired` 元数据，同时写入 **KnowledgeStore**（规则原文 + 退役原因 + 历史统计），并自动同步 CLAUDE.md 注入段。退役不是删除——删除 config.yml 中对应段即可回滚。
+- 维护者收到回传摘要后编辑内置 definitions 并发版，内置集由此演进。不使用遥测，不做自动降级。
 
 ---
 
@@ -91,8 +89,9 @@ harness validate       # 检查点验证（失败退出码 1，可用于 CI 门�
 harness init           # 初始化 .harness/ 目录（不覆盖已有运行时配置）
 harness status         # 项目健康状态、统计、异常检测
 harness constraints    # 约束元数据（版本/hash/计数/文本大小）
+harness constraints report   # 约束使用报告：统计 + 退役候选诊断 + 配置健康 + 注入漂移（--export 脱敏）
+harness constraints retire   # 约束退役：交互选择 + 人确认 → config.yml + KnowledgeStore + 注入段同步
 harness report         # 生成检查报告
-harness flow           # 一键执行诊断 + 提案流程
 
 # 门禁
 harness passes-gate    # 测试门控（别名 pg）
@@ -128,8 +127,11 @@ harness release        # npm 发布流水线（tsc → dist 验证 → version �
 
 ```yaml
 # .harness/config.yml
-preset: standard  # strict | standard | relaxed
+preset: standard  # strict | standard | relaxed（relaxed 仅启用 5 条 check 约束）
+scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
 ```
+
+`preset` 真实影响运行时检查与注入；`constraints.<id>.enabled: false` 可单独禁用。
 
 ---
 
@@ -137,26 +139,25 @@ preset: standard  # strict | standard | relaxed
 
 | 模块 | 说明 |
 |------|------|
-| 约束引擎 | 三层约束 + 生命周期（自动退化/回滚） |
-| 知识引擎 | 约束退化 → KnowledgeStore 沉淀，可检索、可追溯 |
+| 约束引擎 | check/prompt 二元约束 + 生效集合并（`getEffectiveConstraints`）+ 注入渲染/漂移校验 |
+| 知识引擎 | 约束退役 → KnowledgeStore 沉淀（规则原文 + 原因 + 历史统计），可检索、可追溯 |
 | 门禁系统 | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
 | 安全护栏 | Input/Output/Tool Guardrail + Sandbox (L1-L4) |
 | Hook 管线 | 通用 before/after/around hook：注册 → 排序 → 错误隔离 → 采样执行 |
-| 上下文/监控 | Token 预算 + 会话压缩 + Trace 诊断 + 约束进化 |
+| 上下文/监控 | Token 预算 + 会话压缩 + Trace 收集/分析 + 约束诊断（ConstraintDoctor） |
 
 ### 代码结构
 
 ```
 src/
-├── core/constraints/       # 约束定义（iron-laws/guidelines/tips）+ checkers/
+├── core/constraints/       # 约束定义（definitions/{iron-laws,guidelines,prompts}）+ checkers/ + 注入渲染/漂移校验 + 使用统计
+├── core/effective-constraints.ts  # 生效集唯一来源（内置→preset→config→custom→scenes）
 ├── core/validators/        # 检查点校验器（check-handlers/）
 ├── cli/                    # CLI 命令实现（sync-docs/ 模块族等）
-├── constraints/            # ConstraintRegistry + 生命周期执行器
 ├── knowledge/              # 知识引擎（存储/检索/衰减/诊断）
 ├── gates/                  # 各类门禁实现
 ├── safety/                 # 护栏与沙箱
-├── evolution/              # 约束自动演化
-└── monitoring/             # Trace 分析与诊断（规则数据化）
+└── monitoring/             # Trace 收集/分析与诊断（规则数据化）
 ```
 
 各目录的 `CONTEXT.md` 是权威模块文档。变更历史见 [CHANGELOG.md](CHANGELOG.md)。

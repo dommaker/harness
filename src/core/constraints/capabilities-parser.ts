@@ -70,6 +70,19 @@ export function readCapabilitiesEntries(capabilitiesPath: string, options: Capab
 }
 
 /**
+ * 检测 CAPABILITIES.md 是否使用能力清单格式（计数行），而非文件表格格式
+ *
+ * 清单格式没有文件表可核对，计数由 sync-docs 自动维护，
+ * checker 与 sync-docs 都应按此跳过条目级比对。
+ */
+export function isCapabilityListingFormat(content: string): boolean {
+  // 能力清单格式特征：包含 "CLI Commands (N)" / "Iron Laws (N)" 等计数行
+  return /CLI Commands\s*\(\d+\)/.test(content) ||
+    /Iron Laws?\s*\(\d+\)/.test(content) ||
+    /Guidelines?\s*\(\d+\)/.test(content);
+}
+
+/**
  * 未覆盖文件的聚合目录（module 模式）
  *
  * 规则：取源码根下的第一级子目录（root=src、file=src/core/foo.ts → src/core/）；

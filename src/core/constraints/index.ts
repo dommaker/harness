@@ -2,10 +2,11 @@
  * 约束模块入口
  */
 
-// 三层约束定义
+// 约束定义（kind 二元：check 层 + prompt 层；TIPS 已退役，空表仅为在途兼容保留）
 export {
   IRON_LAWS,
   GUIDELINES,
+  PROMPTS,
   TIPS,
   getAllConstraints,
   findConstraintsByTrigger,
@@ -21,9 +22,17 @@ export {
   constraintChecker,
 } from './checker';
 
+// CLAUDE.md 约束注入段渲染（纯函数，init 注入与漂移校验共用）
+export {
+  CONSTRAINTS_START_MARKER,
+  CONSTRAINTS_END_MARKER,
+  renderConstraintsSection,
+} from './injection-renderer';
+
 // 类型导出
 export type {
   ConstraintId,
+  ConstraintKind,
   ConstraintLevel,
   ConstraintTrigger,
   Constraint,

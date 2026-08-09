@@ -5,7 +5,24 @@
  */
 
 import type { KnowledgeType } from '../knowledge/types';
-import type { ConstraintLayer, DeprecationStatus } from '../constraints/types';
+
+// ── 约束分层（原 src/constraints/types，约束分层子系统删除后归位 dashboard）──
+
+/** 约束分层 */
+export type ConstraintLayer = 'safety' | 'quality';
+
+/** 退化状态（生命周期机制已删除，保留字段供消费方兼容，恒为 active） */
+export type DeprecationStatus = 'active' | 'scheduled' | 'deprecated' | 'removed';
+
+/** 约束拦截统计（generate/getConstraintHeatmap 的输入） */
+export interface ConstraintStats {
+  constraintId: string;
+  triggerCount: number;
+  passCount: number;
+  interceptCount: number;
+  interceptRate: number;
+  lastTriggered?: string;
+}
 
 // ── 知识库全景 ───────────────────────────────────────────
 

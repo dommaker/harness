@@ -1,15 +1,27 @@
 # Harness Capabilities
 
-## CLI Commands (25)
-check, validate, passes-gate, init, report, status, flow, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd
+## CLI Commands (26)
+check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, posteval-plan, update-user-model, release, analyze-sessions, constraints, doc-freshness-check, spec-baseline-check
+
+约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役，写 config.yml retired 元数据 + KnowledgeStore 沉淀 + CLAUDE.md 注入段同步，可回滚）。
 
 ## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
 
-## Constraint Layers
-- Iron Laws (12): 绝对禁止，无例外
-- Guidelines (28): 优先建议，有例外
-- Tips (2): 信息性提示
+## Constraint Model (kind 二元, ADR-0001)
+- check (9)：必须带真实 checker，注册表闭环。Iron Laws (5) 违规阻断；Guidelines (4) 违规告警。
+- prompt (16)：纯文本行为约束，带角色路由与适用性标签，不占检查位、不产生 trace 统计。
+- skip 语义：约定未采用（capability_sync/docs_freshness/context_doc_sync 存在性探测）或 flag 未接线 → skipped（satisfied=true，不阻断、不计入通率），trace 记 result:'skip'。
+- TIPS 已退役（@deprecated 空表，仅为在途消费者编译兼容保留，后续删除）。
+
+## Effective Constraints
+getEffectiveConstraints(projectRoot)：全仓唯一生效集来源——内置 → preset 裁剪 → config.yml 禁用 → custom 追加 → scenes 过滤。init 注入、check、外部消费者全部消费它。lintEffectiveConfig 提供 unknownIds/scenes 诊断。
+
+## Injection
+renderConstraintsSection（标记区间 HARNESS_CONSTRAINTS_START/END，Output Style 段 HARNESS_OUTPUT_STYLE_START/END，init 幂等修复）；detectInjectionDrift（版本漂移/内容漂移条目级 diff/重复章节；check 警告不阻断，详细 diff 进 report）。
+
+## Constraint Usage Report
+buildConstraintsUsageReport：check 层统计表（total/pass/fail/skip、fail 率、首末触发）、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、prompt 注入清单、配置健康；report 与 retire 共用此数据层，只读。
 
 ## Monitoring
 TraceCollector, TraceAnalyzer, PerformanceMonitor, ConstraintDiagnostics
@@ -21,16 +33,13 @@ KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/co
 harness-knowledge-track.sh/js, harness-knowledge-check.js, harness-knowledge-capture.js, harness-sensitive-check.sh
 
 ## Architecture
-ArchitectureEngine, CrossProjectChecker, ConstraintEvolver
+ArchitectureEngine, CrossProjectChecker
 
 ## Safety
 Sandbox, ToolGuardrail, OutputGuardrail
 
 ## Agent Infrastructure
 AgentLifecycle (init→running→paused→completed→failed)
-
-## Evolution
-autoEvolve (constraint degradation/rollback based on intercept rate)
 
 ## Governance
 GovernanceExecutor (doc-code-config drift detection, detect-only)

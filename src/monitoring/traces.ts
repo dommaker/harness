@@ -11,17 +11,21 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type {
-  ExecutionTrace,
-  TraceFilter,
-  TraceCollectorConfig,
+import {
+  DEFAULT_TRACE_FILE,
+  type ExecutionTrace,
+  type TraceFilter,
+  type TraceCollectorConfig,
 } from '../types/trace';
+
+// 路径常量再导出，保持既有从 monitoring/traces 导入的用法不破
+export { DEFAULT_TRACE_FILE };
 
 /**
  * 默认配置
  */
 const DEFAULT_CONFIG: TraceCollectorConfig = {
-  traceFile: '.harness/logs/traces.log',
+  traceFile: DEFAULT_TRACE_FILE,
   maxFileSize: 10 * 1024 * 1024, // 10MB
   enabled: true,
 };
@@ -260,7 +264,7 @@ export class TraceCollector {
     }
 
     const files = fs.readdirSync(dir);
-    const backupFiles = files.filter(f => f.endsWith('.log') && f !== 'execution.log');
+    const backupFiles = files.filter(f => f.endsWith('.log') && f !== path.basename(this.traceFile));
 
     const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;
     let deletedCount = 0;

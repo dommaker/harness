@@ -1,10 +1,12 @@
 # cli/commands/
 
 ## 职责
-CLI 子命令实现：25 个命令覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布/会话分析等。
+CLI 子命令实现：24 个顶层命令 + constraints 治理子命令 report/retire（共 26 个命令文件），覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布/会话分析等。
 
-## 核心导出(25 命令)
-check / validate / passes-gate / init / report / status / flow / spec / acceptance / performance / security / contract / review / command / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / doc-freshness-check / spec-baseline-check
+## 核心导出(24 顶层命令)
+check / validate / passes-gate / init / report / status / spec / acceptance / performance / security / contract / review / command / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / doc-freshness-check / spec-baseline-check
+
+`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏）、`constraints retire`（交互选择 + 人确认退役，config.yml retired 元数据 + KnowledgeStore 沉淀 + CLAUDE.md 注入段同步）。
 
 ## 依赖关系
 - 依赖 `src/core/constraints/` 约束引擎

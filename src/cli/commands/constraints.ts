@@ -13,7 +13,7 @@ import { getAllConstraints } from '../../core/constraints/definitions';
 export interface ConstraintsMeta {
   version: string;
   hash: string;
-  counts: { ironLaws: number; guidelines: number; tips: number };
+  counts: { ironLaws: number; guidelines: number; prompts: number };
   textSize: { total: number; perConstraint: number };
 }
 
@@ -40,7 +40,7 @@ export function getConstraintsMeta(): ConstraintsMeta {
 
   const ironLaws = constraints.filter(c => c.level === 'iron_law');
   const guidelines = constraints.filter(c => c.level === 'guideline');
-  const tips = constraints.filter(c => c.level === 'tip');
+  const prompts = constraints.filter(c => c.level === 'prompt');
 
   // 计算总 promptInjection 文本长度（字符数，可估算 token）
   const totalTextSize = constraints
@@ -51,7 +51,7 @@ export function getConstraintsMeta(): ConstraintsMeta {
   const hashInput = JSON.stringify({
     ironLaws: ironLaws.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
     guidelines: guidelines.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
-    tips: tips.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
+    prompts: prompts.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
   });
   const hash = createHash('sha256').update(hashInput).digest('hex');
 
@@ -61,7 +61,7 @@ export function getConstraintsMeta(): ConstraintsMeta {
     counts: {
       ironLaws: ironLaws.length,
       guidelines: guidelines.length,
-      tips: tips.length,
+      prompts: prompts.length,
     },
     textSize: {
       total: totalTextSize,
@@ -80,7 +80,7 @@ export async function constraints(options: { json?: boolean }): Promise<void> {
   } else {
     console.log(`version: ${meta.version}`);
     console.log(`hash: ${meta.hash}`);
-    console.log(`ironLaws: ${meta.counts.ironLaws}, guidelines: ${meta.counts.guidelines}, tips: ${meta.counts.tips}`);
+    console.log(`ironLaws: ${meta.counts.ironLaws}, guidelines: ${meta.counts.guidelines}, prompts: ${meta.counts.prompts}`);
     console.log(`textSize: ${meta.textSize.total} chars total, ~${meta.textSize.perConstraint} chars/constraint`);
   }
 }

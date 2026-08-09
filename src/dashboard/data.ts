@@ -11,19 +11,14 @@ import type {
   ConstraintHeatmap,
   KnowledgeFlow,
   FeedbackLoopStatus,
+  ConstraintStats,
+  ConstraintLayer,
 } from './types';
 import type { KnowledgeEntry } from '../knowledge/types';
-import type { ConstraintStats } from '../constraints/types';
 import { computeKnowledgeOverview, computeKnowledgeFlow, computeInterceptRate } from './stats';
-import { ConstraintRegistry } from '../constraints/registry';
+import { getAllConstraints } from '../core/constraints/definitions';
 
 export class DashboardDataProvider {
-  private registry: ConstraintRegistry;
-
-  constructor(registry?: ConstraintRegistry) {
-    this.registry = registry ?? new ConstraintRegistry();
-  }
-
   /**
    * 生成完整 Dashboard 数据
    */
@@ -52,19 +47,21 @@ export class DashboardDataProvider {
    * 约束执行热力图
    */
   getConstraintHeatmap(stats: ConstraintStats[]): ConstraintHeatmap {
-    const allConstraints = this.registry.getAll();
+    // P1：直接读 definitions；prompt 类不产生 trace 统计，热力图只含 check 层
+    const allConstraints = getAllConstraints().filter(c => c.kind === 'check');
 
     const constraints = allConstraints.map(c => {
       const stat = stats.find(s => s.constraintId === c.id);
+      const layer: ConstraintLayer = c.level === 'iron_law' ? 'safety' : 'quality';
       return {
         id: c.id,
-        layer: c.layer,
+        layer,
         trigger: stat?.triggerCount ?? 0,
         pass: stat?.passCount ?? 0,
         intercept: stat?.interceptCount ?? 0,
         interceptRate: stat ? computeInterceptRate(stat.triggerCount, stat.interceptCount) : 0,
-        deprecationStatus: c.deprecationStatus,
-        permanent: c.permanent,
+        deprecationStatus: 'active' as const,
+        permanent: false,
       };
     });
 
@@ -102,12 +99,5 @@ export class DashboardDataProvider {
       external: { active: 0 },
       feedbackToKnowledge: { total: 0, pending: 0 },
     };
-  }
-
-  /**
-   * 获取约束注册表
-   */
-  getRegistry(): ConstraintRegistry {
-    return this.registry;
   }
 }

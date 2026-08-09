@@ -11,7 +11,7 @@ describe('Presets', () => {
       expect(STRICT_PRESET.name).toBe('strict');
       expect(STRICT_PRESET.ironLaws).toBeNull();
       expect(STRICT_PRESET.guidelines).toBeNull();
-      expect(STRICT_PRESET.tips).toBeNull();
+      expect(STRICT_PRESET.prompts).toBeNull();
     });
   });
 
@@ -20,7 +20,7 @@ describe('Presets', () => {
       expect(STANDARD_PRESET.name).toBe('standard');
       expect(STANDARD_PRESET.ironLaws).toBeNull();
       expect(STANDARD_PRESET.guidelines).toBeNull();
-      expect(STANDARD_PRESET.tips).toBeNull();
+      expect(STANDARD_PRESET.prompts).toBeNull();
     });
   });
 
@@ -29,15 +29,15 @@ describe('Presets', () => {
       expect(RELAXED_PRESET.name).toBe('relaxed');
       expect(RELAXED_PRESET.ironLaws).not.toBeNull();
       expect(RELAXED_PRESET.guidelines).not.toBeNull();
-      expect(RELAXED_PRESET.tips).toEqual([]);
+      expect(RELAXED_PRESET.prompts).toEqual([]);
+    });
+
+    it('应该包含 no_completion_without_verification', () => {
+      expect(RELAXED_PRESET.ironLaws).toContain('no_completion_without_verification');
     });
 
     it('应该包含 no_bypass_checkpoint', () => {
-      expect(RELAXED_PRESET.ironLaws).toContain('no_bypass_checkpoint');
-    });
-
-    it('应该包含 no_self_approval', () => {
-      expect(RELAXED_PRESET.ironLaws).toContain('no_self_approval');
+      expect(RELAXED_PRESET.guidelines).toContain('no_bypass_checkpoint');
     });
   });
 

@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { getTraceCollector } from '../../monitoring/traces';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../../core/constraints/definitions';
+import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { executeWithCollect } from '../../failure/constraint-handler';
 import type { ConstraintContext } from '../../types/constraint';
 
@@ -28,7 +28,7 @@ interface ReportData {
     total: number;
     ironLaws: number;
     guidelines: number;
-    tips: number;
+    prompts: number;
     passed: number;
     failed: number;
     warnings: number;
@@ -50,7 +50,7 @@ export async function report(options: ReportOptions): Promise<void> {
   const checker = ConstraintChecker.getInstance();
   checker.setTraceRecorder(getTraceCollector());
 
-  const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...TIPS };
+  const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...PROMPTS };
   const totalConstraints = Object.keys(allConstraints).length;
 
   const context: ConstraintContext = {
@@ -81,7 +81,7 @@ export async function report(options: ReportOptions): Promise<void> {
       total: totalConstraints,
       ironLaws: Object.keys(IRON_LAWS).length,
       guidelines: Object.keys(GUIDELINES).length,
-      tips: Object.keys(TIPS).length,
+      prompts: Object.keys(PROMPTS).length,
       passed: result.passed ? totalConstraints : totalConstraints - violations.length,
       failed: failedIronLaws.length,
       warnings: failedGuidelines.length,
@@ -129,7 +129,7 @@ function generateMarkdownReport(data: ReportData): string {
     `| 总约束 | ${data.constraints.total} |`,
     `| Iron Laws | ${data.constraints.ironLaws} |`,
     `| Guidelines | ${data.constraints.guidelines} |`,
-    `| Tips | ${data.constraints.tips} |`,
+    `| Prompts | ${data.constraints.prompts} |`,
     `| 通过 | ${data.constraints.passed} |`,
     `| 失败 (error) | ${data.constraints.failed} |`,
     `| 警告 (warning) | ${data.constraints.warnings} |`,
@@ -184,7 +184,7 @@ function generateHtmlReport(data: ReportData): string {
     <tr><td>总约束</td><td>${data.constraints.total}</td></tr>
     <tr><td>Iron Laws</td><td>${data.constraints.ironLaws}</td></tr>
     <tr><td>Guidelines</td><td>${data.constraints.guidelines}</td></tr>
-    <tr><td>Tips</td><td>${data.constraints.tips}</td></tr>
+    <tr><td>Prompts</td><td>${data.constraints.prompts}</td></tr>
     <tr><td>通过</td><td class="passed">${data.constraints.passed}</td></tr>
     <tr><td>失败</td><td class="failed">${data.constraints.failed}</td></tr>
     <tr><td>警告</td><td>${data.constraints.warnings}</td></tr>

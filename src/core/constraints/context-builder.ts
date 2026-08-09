@@ -11,6 +11,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { execAsync } from '../../utils/exec';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ConstraintContext, ConstraintTrigger } from '../../types/constraint';
 
 /**
@@ -59,20 +60,30 @@ export function isNewDirectory(headDirs: Set<string> | null, filePath: string): 
 }
 
 /**
+ * 代码文件扩展名（ADR-0001：code_implementation 推断信号）
+ *
+ * 纯文档/配置（.md/.json/.yml 等）不算代码变更。
+ */
+const CODE_FILE_REGEX = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|rb|php|cs|cpp|cc|c|h|vue|svelte)$/i;
+
+/**
  * 检测触发条件
+ *
+ * ADR-0001：变更包含代码文件时，在主推断之外附加 code_implementation
+ * （返回数组 [主推断, 'code_implementation']；主推断逻辑保持不变）。
  */
 export function detectTrigger(
   changedFiles: string[],
   options: { trigger?: ConstraintTrigger; projectPath?: string }
-): ConstraintTrigger {
+): ConstraintTrigger | ConstraintTrigger[] {
   if (options.trigger) return options.trigger;
 
   // 根据变更文件推断触发条件
-  // 注意：不自动推断 code_implementation——那是 caller 的语义判断。
-  // pre-commit 无法区分"模板编辑"和"逻辑实现"，保守使用 file_modification。
   const hasTestChange = changedFiles.some(f =>
     f.includes('.test.') || f.includes('.spec.') || f.includes('__tests__')
   );
+  // pre-commit 场景下变更含代码文件 → 附加 code_implementation 推断
+  const hasCodeChange = changedFiles.some(f => CODE_FILE_REGEX.test(f));
   const projectPath = options.projectPath || process.cwd();
   const sourceRoots = detectSourceRoots(projectPath);
   const hasModuleChange = changedFiles.some(f =>
@@ -84,23 +95,22 @@ export function detectTrigger(
     isNewDirectory(headDirs, f)
   );
 
-  if (hasTestChange && !hasModuleChange) return 'test_creation';
-  if (hasModuleCreation) return 'module_creation';
-  if (hasModuleChange) return 'module_modification';
+  let primary: ConstraintTrigger;
+  if (hasTestChange && !hasModuleChange) primary = 'test_creation';
+  else if (hasModuleCreation) primary = 'module_creation';
+  else if (hasModuleChange) primary = 'module_modification';
+  else primary = 'file_modification';
 
-  return 'file_modification';
+  return hasCodeChange ? [primary, 'code_implementation'] : primary;
 }
 
 /**
  * 检测是否有失败的测试记录
- * 扫描 .harness/traces/ 中最近的 trace 记录
+ * 扫描 trace 文件（DEFAULT_TRACE_FILE）中最近的记录
  */
 export async function detectFailingTest(projectPath: string): Promise<boolean> {
   try {
-    const tracesDir = path.join(projectPath, '.harness', 'traces');
-    if (!fs.existsSync(tracesDir)) return false;
-
-    const traceFile = path.join(tracesDir, 'execution.log');
+    const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
     if (!fs.existsSync(traceFile)) return false;
 
     const content = fs.readFileSync(traceFile, 'utf-8');
@@ -146,14 +156,11 @@ export function detectRootCauseInvestigation(projectPath: string): boolean {
 
 /**
  * 检测是否有验证证据
- * 检查 .harness/traces/ 中最近的成功验证记录
+ * 检查 trace 文件（DEFAULT_TRACE_FILE）中最近的成功验证记录
  */
 export async function detectVerificationEvidence(projectPath: string): Promise<boolean> {
   try {
-    const tracesDir = path.join(projectPath, '.harness', 'traces');
-    if (!fs.existsSync(tracesDir)) return false;
-
-    const traceFile = path.join(tracesDir, 'execution.log');
+    const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
     if (!fs.existsSync(traceFile)) return false;
 
     const content = fs.readFileSync(traceFile, 'utf-8');
@@ -245,10 +252,12 @@ export async function buildConstraintContext(options: {
 }): Promise<ConstraintContext> {
   const projectPath = options.projectPath || process.cwd();
   const changedFiles = await getChangedFiles(options.staged, options.projectPath);
-  const trigger = detectTrigger(changedFiles, { trigger: options.trigger, projectPath });
+  const inferred = detectTrigger(changedFiles, { trigger: options.trigger, projectPath });
+  const triggers = Array.isArray(inferred) ? inferred : [inferred];
 
   return {
-    operation: trigger,
+    operation: triggers[0],
+    extraTriggers: triggers.slice(1),
     projectPath,
     changedFiles,
     hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),

@@ -19,7 +19,7 @@
 | context/ | 渐进式上下文加载、token 预算管理 |
 | architecture/ | 架构约束、跨项目检查 |
 | spec/ | Spec 注解验证 |
-| cli/commands/ | 17 个 CLI 子命令 |
+| cli/commands/ | 24 个 CLI 子命令 |
 | tools/ | 工具定义 |
 | safety/ | 沙箱、护栏 |
 
@@ -30,5 +30,5 @@
 
 ## 注意事项
 - 公共包，禁止硬编码业务路径
-- 约束定义在 `core/constraints/definitions.ts`，不应在运行时代码中定义
+- 约束定义在 `core/constraints/definitions/{iron-laws,guidelines,prompts}.ts`，不应在运行时代码中定义
 - `bin/` 只有 CLI 入口发布到 npm

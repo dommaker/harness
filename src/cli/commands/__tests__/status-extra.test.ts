@@ -75,7 +75,7 @@ describe('status command - 补充覆盖', () => {
           threshold: 0.5,
         },
         {
-          constraintId: 'no_self_approval',
+          constraintId: 'no_completion_without_verification',
           type: 'frequent_bypass',
           current: 0.3,
           threshold: 0.1,
@@ -116,13 +116,13 @@ describe('status command - 补充覆盖', () => {
     it('应该显示 Iron Laws 统计', async () => {
       const mockTraces = [
         { constraintId: 'no_bypass_checkpoint', level: 'iron_law', result: 'pass' },
-        { constraintId: 'no_self_approval', level: 'iron_law', result: 'pass' },
+        { constraintId: 'no_completion_without_verification', level: 'iron_law', result: 'pass' },
       ];
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
         { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, totalChecks: 10, bypassRate: 0 },
-        { constraintId: 'no_self_approval', level: 'iron_law', passRate: 0.8, totalChecks: 5, bypassRate: 0 },
+        { constraintId: 'no_completion_without_verification', level: 'iron_law', passRate: 0.8, totalChecks: 5, bypassRate: 0 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),
@@ -138,12 +138,12 @@ describe('status command - 补充覆盖', () => {
 
     it('应该显示 Guidelines 统计', async () => {
       const mockTraces = [
-        { constraintId: 'no_any_type', level: 'guideline', result: 'pass' },
+        { constraintId: 'capability_sync', level: 'guideline', result: 'pass' },
       ];
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
-        { constraintId: 'no_any_type', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
+        { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),
@@ -158,12 +158,12 @@ describe('status command - 补充覆盖', () => {
 
     it('应该显示 Tips 统计', async () => {
       const mockTraces = [
-        { constraintId: 'readme_required', level: 'tip', result: 'pass' },
+        { constraintId: 'context_doc_sync', level: 'tip', result: 'pass' },
       ];
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
-        { constraintId: 'readme_required', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
+        { constraintId: 'context_doc_sync', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),
@@ -181,15 +181,15 @@ describe('status command - 补充覆盖', () => {
     it('详细模式应该显示所有级别详情', async () => {
       const mockTraces = [
         { constraintId: 'no_bypass_checkpoint', level: 'iron_law', result: 'pass' },
-        { constraintId: 'no_any_type', level: 'guideline', result: 'pass' },
-        { constraintId: 'readme_required', level: 'tip', result: 'pass' },
+        { constraintId: 'capability_sync', level: 'guideline', result: 'pass' },
+        { constraintId: 'context_doc_sync', level: 'tip', result: 'pass' },
       ];
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
         { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, totalChecks: 10, bypassRate: 0 },
-        { constraintId: 'no_any_type', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
-        { constraintId: 'readme_required', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
+        { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
+        { constraintId: 'context_doc_sync', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),

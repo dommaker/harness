@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.17.1] - 2026-08-09
+
+### Changes
+- fix(constraints): 自定义约束 promptInjection 未透传，收编约束进不了注入段
+
 ## [0.17.0] - 2026-08-08
 
 约束体系重构（ADR-0001）：删除自动进化子系统，确立 check/prompt 二元模型。决策依据见 `docs/adr/0001-constraint-system-rearchitecture.md`。

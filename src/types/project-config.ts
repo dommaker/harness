@@ -34,6 +34,15 @@ export interface CustomConstraintDefinition {
   /** 描述（可选） */
   description?: string;
 
+  /**
+   * Prompt 注入文本（可选）
+   *
+   * 自定义约束统一 kind='prompt'（无 checker），该字段是进入 CLAUDE.md
+   * 注入段（renderConstraintsSection）的唯一通道——缺省不出现在注入段，
+   * 与内置无 promptInjection 的 check 条目行为一致。
+   */
+  promptInjection?: string;
+
   /** 是否启用（可选，默认 true） */
   enabled?: boolean;
 }

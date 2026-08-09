@@ -300,6 +300,7 @@ export class ProjectConfigLoader {
       trigger: (def.trigger || 'manual') as ConstraintTrigger | ConstraintTrigger[],
       exceptions: def.exceptions,
       description: def.description,
+      promptInjection: def.promptInjection,
       enabled: def.enabled !== false,
       enforcement: 'custom',
     };

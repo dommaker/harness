@@ -106,6 +106,43 @@ custom_constraints:
     });
   });
 
+  describe('自定义约束 promptInjection', () => {
+    it('应该透传 promptInjection 并进入注入段渲染', async () => {
+      fs.writeFileSync(
+        path.join(harnessDir, 'config.yml'),
+        `
+custom_constraints:
+  my_prompt_rule:
+    rule: MY PROMPT RULE
+    message: Prompt rule message
+    level: guideline
+    trigger: commit
+    promptInjection: 我的自定义注入文本
+  my_silent_rule:
+    rule: MY SILENT RULE
+    message: No injection text
+    level: guideline
+    trigger: commit
+`
+      );
+
+      const loader = new ProjectConfigLoader(tempDir);
+      loader.load();
+      const merged = loader.mergeConstraints();
+
+      // 字段透传
+      expect(merged.guidelines['my_prompt_rule']?.promptInjection).toBe('我的自定义注入文本');
+      // 未定义 promptInjection 的自定义约束保持不注入（与内置无注入文本条目一致）
+      expect(merged.guidelines['my_silent_rule']?.promptInjection).toBeUndefined();
+
+      // 端到端：进入 CLAUDE.md 注入段渲染
+      const { renderConstraintsSection } = await import('../core/constraints/injection-renderer');
+      const section = renderConstraintsSection(Object.values(merged.guidelines), '0.0.0-test');
+      expect(section).toContain('- **my_prompt_rule**: 我的自定义注入文本');
+      expect(section).not.toContain('my_silent_rule');
+    });
+  });
+
   describe('约束扩展', () => {
     it('应该扩展例外列表', () => {
       fs.writeFileSync(

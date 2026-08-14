@@ -85,6 +85,27 @@ constraints:
       expect(constraints.length).toBe(BUILTIN_TOTAL - SCENE_PROMPTS.length - 2);
     });
 
+    it('config.yml 禁用：custom 约束同样从生效集移除（retire 落 config.yml 的退役路径）', () => {
+      const dir = setupProject(
+        `
+constraints:
+  my_project_rule:
+    enabled: false
+`,
+        `
+custom_constraints:
+  my_project_rule:
+    level: iron_law
+    rule: MY RULE
+    message: 项目自定义
+`
+      );
+      const constraints = getEffectiveConstraints(dir);
+      const ids = constraints.map(c => c.id);
+
+      expect(ids).not.toContain('my_project_rule');
+    });
+
     it('preset: relaxed 裁剪生效集', () => {
       const dir = setupProject(`preset: relaxed\n`);
       const constraints = getEffectiveConstraints(dir);

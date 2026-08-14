@@ -156,7 +156,8 @@ export class ProjectConfigLoader {
    * 合并内置约束和自定义约束（ADR-0001 生效集完整链路）
    *
    * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
-   * 删除 → custom-constraints 追加/extend_exceptions → scenes 过滤
+   * 删除（对内置与 custom 同效）→ custom-constraints 追加/extend_exceptions
+   * （被禁用的 custom 不追加）→ scenes 过滤
    * （带 appliesTo 的 prompt 仅当 scenes 交集非空时保留）。
    *
    * config.yml 中未知约束 id（如已移除约束的禁用残留）静默忽略，
@@ -201,8 +202,12 @@ export class ProjectConfigLoader {
       }
     }
 
-    // 2. 添加自定义约束
+    // 2. 添加自定义约束（config.yml 禁用的 id 不追加：step 1 已将其
+    // 收集进 disabled，custom 在 step 1 时尚未入桶，须在此兜底跳过）
     for (const [id, customDef] of Object.entries(this.customConstraints)) {
+      if (result.disabled.includes(id)) {
+        continue;
+      }
       const extendExceptions = customDef.extend_exceptions;
       const isExtendOnly =
         !!extendExceptions && extendExceptions.length > 0 &&

@@ -15,7 +15,8 @@ import { ProjectConfigLoader } from './project-config-loader';
  * 获取项目当前生效的约束集（check + prompt，带 kind）
  *
  * 内部完成完整合并：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
- * 删除 → custom-constraints 追加/extend_exceptions → scenes 过滤
+ * 删除（内置与 custom 同效）→ custom-constraints 追加/extend_exceptions
+ * （被禁用的 custom 不追加）→ scenes 过滤
  * （带 appliesTo 的 prompt 仅当 config.yml `scenes` 与其交集非空时保留，
  * 缺省 scenes=[] 即场景专属 prompt 默认不进入生效集）。
  *

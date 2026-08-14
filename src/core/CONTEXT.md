@@ -5,7 +5,7 @@
 
 ## 核心导出
 - `constraints/` — 约束定义(IRON_LAWS/GUIDELINES/PROMPTS；TIPS 已退役为空表) + 检查引擎(ConstraintChecker) + 拦截器(ConstraintInterceptor) + 缓存(CheckCache) + 注入渲染(injection-renderer)/漂移校验(injection-drift)/使用统计(usage-report)
-- `effective-constraints.ts` — `getEffectiveConstraints(projectRoot)`：全仓唯一生效集来源（内置 → preset → config.yml 禁用（内置与 custom 同效）→ custom 追加（禁用的不追加）→ scenes 过滤）；`lintEffectiveConfig` 配置诊断
+- `effective-constraints.ts` — `getEffectiveConstraints(projectRoot)`：全仓唯一生效集来源（内置 → preset → config.yml 禁用（内置与 custom 同效）→ custom 追加（禁用/已退役的不追加）→ scenes 过滤）；`lintEffectiveConfig` 配置诊断
 - `validators/` — checkpoints、passes-gate、CSO 验证器
 - `session/` — 会话管理
 - `spec/validator` — SpecValidator

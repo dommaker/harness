@@ -22,8 +22,8 @@ export const IRON_LAWS: Record<string, Constraint> = {
     level: 'iron_law',
     trigger: 'code_implementation',
     enforcement: 'verify-completion',
-    description: '在声明任何任务完成之前，必须运行新鲜的、完整的验证命令。验证命令包括：npm test、npm run build、CI 流程。',
-    promptInjection: '在声明任务完成前，必须重新运行完整的验证命令（npm test、npm run build、type check），使用新鲜的输出作为完成证据，不得复用旧结果。',
+    description: '在声明任何任务完成之前，必须运行新鲜的验证命令（项目声明的测试 + type check），以新鲜输出作为完成证据。验证命令集由项目自行声明，全量验证留给 CI 流程。',
+    promptInjection: '在声明任务完成前，必须重新运行新鲜的验证命令（项目声明的测试 + type check），使用新鲜的输出作为完成证据，不得复用旧结果，不得凭记忆声称完成。',
   },
 
   /**

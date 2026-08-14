@@ -58,6 +58,8 @@ export interface SourceRef {
   step?: string;
   commit?: string;
   timestamp: string;
+  /** ID of the source material entry this knowledge was distilled/evolved from (entry-level back-reference) */
+  entryId?: string;
 }
 
 export interface ExecutionResult {

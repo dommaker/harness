@@ -478,8 +478,13 @@ program
   .alias('uum')
   .option('--json', 'JSON 格式输出', false)
   .option('--dry-run', '只显示变化，不更新状态', false)
+  .option('--days <n>', '只处理最近 N 天的会话（自然日，含今天）')
   .action(async (options) => {
-    await cmd('updateUserModel')({ json: options.json, dryRun: options.dryRun });
+    await cmd('updateUserModel')({
+      days: options.days !== undefined ? parseInt(options.days, 10) : undefined,
+      json: options.json,
+      dryRun: options.dryRun,
+    });
   });
 
 // ========================================

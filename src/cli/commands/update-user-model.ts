@@ -28,6 +28,7 @@ import {
 } from '../session-mining';
 
 export interface UpdateUserModelOptions {
+  days?: number;    // 只处理最近 N 天（自然日，含今天）的会话；缺省不过滤（向后兼容）
   json?: boolean;
   dryRun?: boolean;  // don't update state, just show what would change
 }
@@ -58,7 +59,7 @@ export async function updateUserModel(options: UpdateUserModelOptions): Promise<
   const state = loadState();
 
   // 2. Scan new data
-  const newSessions = findNewSessions(transcriptDir, state.sessionsProcessed);
+  const newSessions = findNewSessions(transcriptDir, state.sessionsProcessed, options.days);
   if (newSessions.length === 0) {
     console.log(chalk.gray('No new sessions to process'));
     return;
@@ -137,10 +138,19 @@ interface SimpleSession {
   toolCalls: string[];     // tool names used
 }
 
-function findNewSessions(dir: string, processed: string[]): SimpleSession[] {
-  const sessions = readTranscriptSessions(dir)
-    .filter(s => !processed.includes(s.id))
-    .sort((a, b) => a.date.localeCompare(b.date));
+function findNewSessions(dir: string, processed: string[], days?: number): SimpleSession[] {
+  let sessions = readTranscriptSessions(dir)
+    .filter(s => !processed.includes(s.id));
+
+  // 「最近 N 天」：自然日窗口（含今天）。days<=0 视为不过滤，与缺省一致。
+  if (days !== undefined && days > 0) {
+    const cutoff = new Date(Date.now() - (days - 1) * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    sessions = sessions.filter(s => s.date >= cutoff);
+  }
+
+  sessions.sort((a, b) => a.date.localeCompare(b.date));
 
   return sessions.map(s => ({
     id: s.id,

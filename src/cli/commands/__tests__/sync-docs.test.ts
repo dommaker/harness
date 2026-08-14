@@ -406,6 +406,96 @@ describe('sync-docs command', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
+    it('.tsx 登记行指向真实文件时不得误判为已删除（#33），--check 收敛', async () => {
+      const testDir = path.join(tempDir, 'tsx-row');
+      const srcDir = path.join(testDir, 'src', 'components');
+      fs.mkdirSync(srcDir, { recursive: true });
+      // 复刻 studio 场景：同目录混合 .ts 与 .tsx
+      fs.writeFileSync(path.join(srcDir, 'statusClasses.ts'), 'export const statuses = {};');
+      fs.writeFileSync(
+        path.join(srcDir, 'DistillProposalCard.tsx'),
+        'export const DistillProposalCard = () => null;'
+      );
+
+      // 手工登记一行 .tsx 模块（表格格式承诺支持 ts|tsx|js|jsx）
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        [
+          '# CAPABILITIES.md', '',
+          '> 最后更新: 2026-01-01', '',
+          '| 模块 | 文件 | 说明 |', '|------|------|------|',
+          '| statusClasses | src/components/statusClasses.ts | 状态类 |',
+          '| DistillProposalCard | src/components/DistillProposalCard.tsx | 人审卡 |',
+          '',
+        ].join('\n')
+      );
+
+      await syncDocs({ projectPath: testDir });
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('DistillProposalCard.tsx');
+
+      // 修复前：--check 每跑必报「包含已删除的模块」不收敛
+      consoleSpy.mockClear();
+      const check = await syncDocs({ projectPath: testDir, check: true });
+      expect(check).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('未登记的 .tsx 源文件应进入 added，写入模式生成表格行', async () => {
+      const testDir = path.join(tempDir, 'tsx-added');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, 'util.ts'), 'export const util = 1;');
+      fs.writeFileSync(path.join(srcDir, 'Card.tsx'), 'export const Card = () => null;');
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| util | src/util.ts | util |'
+      );
+
+      const check = await syncDocs({ projectPath: testDir, check: true });
+      expect(check).toBe(false);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Card.tsx'));
+
+      await syncDocs({ projectPath: testDir });
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('Card.tsx');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('真实存在的非扫描扩展名登记行（.js/.jsx）也不得误删（存在性过滤兜底）', async () => {
+      const testDir = path.join(tempDir, 'js-row');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, 'helper.js'), 'module.exports = {};');
+      fs.writeFileSync(path.join(srcDir, 'Helper.jsx'), 'export default () => null;');
+
+      fs.writeFileSync(
+        path.join(testDir, 'CAPABILITIES.md'),
+        [
+          '# CAPABILITIES.md', '',
+          '> 最后更新: 2026-01-01', '',
+          '| 模块 | 文件 | 说明 |', '|------|------|------|',
+          '| helper | src/helper.js | 手工登记 |',
+          '| Helper | src/Helper.jsx | 手工登记 |',
+          '',
+        ].join('\n')
+      );
+
+      await syncDocs({ projectPath: testDir });
+      const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
+      expect(content).toContain('src/helper.js');
+      expect(content).toContain('src/Helper.jsx');
+
+      consoleSpy.mockClear();
+      const check = await syncDocs({ projectPath: testDir, check: true });
+      expect(check).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
     it('basename 碰撞的幽灵条目（文件已删但同名文件存在）也应被移除', async () => {
       const testDir = path.join(tempDir, 'ghost-basename-collision');
       const srcA = path.join(testDir, 'src', 'a');

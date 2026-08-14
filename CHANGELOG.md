@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changes
+- fix(sync-docs): CAPABILITIES.md 中真实存在的 .tsx 模块行不再被误判为「已删除」并误删（#33）——源码扫描扩入 .tsx（findTsSourceFiles 新增 includeTsx 选项，sync-docs 链路开启，scanSourceModules 顶层分支同步），removed 判定前对含路径登记条目做全路径存在性过滤，兜住 .js/.jsx 等其它扫描盲区
 - fix(constraints): 内置 `no_completion_without_verification` 文案弱化（#25）——去掉「完整」字样与写死的命令示例（npm test/npm run build），验证口径改为项目声明的测试 + type check，全量验证归 CI；强制力保留在「新鲜输出为证、禁止凭记忆声称完成」。大仓项目需自定义口径时仍可用 custom-constraints.yml shadow override
 - fix(constraints): `retire <id>` 直达路径补人确认闸门（#24）——无 `--yes` 报错 + 非零退出码且不落盘，提示改用 `--yes` 或交互模式；`--yes` 直达保留原行为，iron 仍打印警示。ADR-0001 决策 2「执行层保留一次人确认」对所有入口成立。
 

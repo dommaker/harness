@@ -225,7 +225,7 @@ describe('KnowledgeStore', () => {
 
     it('should create directory if it does not exist', () => {
       const newDir = path.join(process.cwd(), 'temp-test-knowledge-nested', 'sub', 'deep');
-      const s = new KnowledgeStore({ baseDir: newDir });
+      new KnowledgeStore({ baseDir: newDir });
       expect(fs.existsSync(newDir)).toBe(true);
       fs.rmSync(path.join(process.cwd(), 'temp-test-knowledge-nested'), { recursive: true, force: true });
     });

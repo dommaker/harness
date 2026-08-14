@@ -99,7 +99,7 @@ export function stripCodeBlocks(text: string): string {
 
 /** 是否纯标点/空白 */
 export function isPunctuation(str: string): boolean {
-  return /^[，。！？、；：""''（）\[\]【】「」『』《》〈〉\s]+$/.test(str);
+  return /^[，。！？、；：""''（）[\]【】「」『』《》〈〉\s]+$/.test(str);
 }
 
 /** 是否含语义内容（汉字，或 ≥7 字符的合法英文标识词） */

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { PassesGate, createPassesGate } from '../core/validators/passes-gate';
-import { mkdirSync, rmSync, writeFileSync, existsSync, mkdir } from 'fs';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 describe('PassesGate - 补充覆盖', () => {

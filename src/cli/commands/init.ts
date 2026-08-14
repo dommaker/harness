@@ -273,7 +273,7 @@ fi
 # Plan coverage check (via PostEval)
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 if command -v npx > /dev/null 2>&1; then
-  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\.md$|\.plan\.md$' || true)
+  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
   if [ -n "$PLAN_FILES" ]; then
     echo "📋 Checking plan coverage..."
     for plan in $PLAN_FILES; do

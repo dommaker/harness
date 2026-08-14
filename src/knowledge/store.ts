@@ -68,7 +68,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
   list(filter?: QueryFilter): KnowledgeEntry[] {
     const index = this.readIndex();
     const effectiveFilter: QueryFilter = { excludeArchived: true, ...filter };
-    let entries = index.filter(e => this.matchesFilter(e, effectiveFilter));
+    const entries = index.filter(e => this.matchesFilter(e, effectiveFilter));
 
     return entries.map(idx => {
       const full = this.get(idx.id);

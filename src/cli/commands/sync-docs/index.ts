@@ -93,7 +93,7 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
 
   // 1. 扫描源码模块（从 governance config 读取目录列表，默认 src/）
   const srcDirs = await getSourceDirs(projectPath);
-  let currentModules: ModuleInfo[] = [];
+  const currentModules: ModuleInfo[] = [];
   for (const srcDir of srcDirs) {
     try {
       const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);

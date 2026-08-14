@@ -417,7 +417,7 @@ describe('CheckpointValidator', () => {
   describe('custom', () => {
     it('自定义检查处理器应该被调用', async () => {
       const customHandlers = new Map();
-      customHandlers.set('myValidator', async (config: any) => ({
+      customHandlers.set('myValidator', async (_config: any) => ({
         checkId: 'c-26',
         passed: true,
         message: '自定义检查通过',
@@ -436,7 +436,7 @@ describe('CheckpointValidator', () => {
 
     it('自定义检查可以返回失败', async () => {
       const customHandlers = new Map();
-      customHandlers.set('failValidator', async (config: any) => ({
+      customHandlers.set('failValidator', async (_config: any) => ({
         checkId: 'c-26b',
         passed: false,
         message: '自定义检查失败',

@@ -47,7 +47,6 @@ import {
   readProjectTraces,
   type RetireCandidate,
 } from '../../core/constraints/usage-report';
-import { getConstraintsMeta } from './constraints';
 
 export interface RetireExecuteOptions {
   /** 退役原因（可空） */
@@ -364,7 +363,7 @@ export function printRetireResult(result: RetireResult): void {
     case 'already_retired':
       console.log(chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 中 enabled: false），跳过`));
       return;
-    case 'retired':
+    case 'retired': {
       console.log(chalk.green(`✅ ${result.id}: 已退役`));
       console.log(`   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
       console.log(`   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
@@ -376,6 +375,8 @@ export function printRetireResult(result: RetireResult): void {
           ? `删除 custom-constraints.yml 中 custom_constraints.${result.id}.retired 段`
           : `删除 config.yml 中 constraints.${result.id} 段`;
       console.log(chalk.gray(`   retire 不是删除——恢复方法：${recovery}`));
+      break;
+    }
   }
 }
 

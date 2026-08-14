@@ -3,7 +3,7 @@
  */
 
 import { VerificationLoop } from '../loop';
-import type { VerificationLoopConfig, GatherState, VerificationResult } from '../types';
+import type { VerificationLoopConfig, GatherState } from '../types';
 
 describe('VerificationLoop', () => {
   const baseConfig: VerificationLoopConfig = {

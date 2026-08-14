@@ -2,7 +2,7 @@
  * CommandGate 测试
  */
 
-import { CommandGate, createCommandGate, isCommandAllowed, getCommandRiskLevel, DEFAULT_COMMAND_BLACKLIST } from '../command';
+import { CommandGate, isCommandAllowed, getCommandRiskLevel, DEFAULT_COMMAND_BLACKLIST } from '../command';
 
 describe('CommandGate', () => {
   describe('check', () => {

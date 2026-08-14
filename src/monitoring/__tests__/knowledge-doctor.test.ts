@@ -226,7 +226,6 @@ describe('KnowledgeDoctor', () => {
 
     it('critical 严重度扣 10 分', () => {
       const doctor = new KnowledgeDoctor();
-      const issue: LintIssue = { type: 'contradiction', severity: 'high', entryId: 'e1', description: 'critical issue', suggestion: 'fix' };
       // 直接构造 critical 诊断来测试 calculateHealthScore 的 critical 分支
       // LintIssue severity 只有 low/medium/high，所以通过 checkDecay 的 high 来测试
       const entry = makeEntry({ maturity: 'proven', lastReferenced: '2020-01-01T00:00:00Z' });

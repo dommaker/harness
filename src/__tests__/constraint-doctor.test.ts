@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 import { ConstraintDoctor } from '../monitoring/constraint-doctor';
 import type { TraceAnomaly } from '../types/trace';
-import type { LLMAdapter, Message, LLMOptions, SummarizeConfig } from '../llm/types';
+import type { LLMAdapter, Message, LLMOptions } from '../llm/types';
 import * as fs from 'fs';
 import * as path from 'path';
 

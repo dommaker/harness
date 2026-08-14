@@ -37,12 +37,6 @@ describe('migrateKnowledgeEntries', () => {
     fs.writeFileSync(path.join(tempDir, filename), raw, 'utf-8');
   }
 
-  function readMeta(filename: string): Record<string, unknown> {
-    const raw = fs.readFileSync(path.join(tempDir, filename), 'utf-8');
-    const match = raw.match(/^---\n([\s\S]*?)\n---/)!;
-    return JSON.parse(JSON.stringify(eval(`(${match[1].replace(/(\w+):/g, '"$1":').replace(/'/g, '"')})`)));
-  }
-
   it('should add consumptionMode and origin to entries missing them', () => {
     writeEntry('DEC-001.md', {
       id: 'DEC-001', type: 'decision', title: 'Test', maturity: 'draft',

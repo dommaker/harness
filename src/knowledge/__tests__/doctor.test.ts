@@ -5,10 +5,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { FileKnowledgeStore as KnowledgeStore } from '../store';
-import { KnowledgeLinter, type LintReport } from '../lint';
+import { KnowledgeLinter } from '../lint';
 import { ReferenceTracker } from '../reference-tracker';
 import { KnowledgeHealthScorer } from '../doctor';
-import type { KnowledgeEntry, IndexEntry } from '../types';
+import type { KnowledgeEntry } from '../types';
 
 describe('KnowledgeHealthScorer', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-knowledge-doctor');

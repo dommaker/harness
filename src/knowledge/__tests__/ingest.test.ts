@@ -245,7 +245,7 @@ describe('KnowledgeIngest', () => {
       });
 
       // After stripping [prefix], normalizing: "api超时导致请求失败" contains "api超时导致"
-      const merged = ingest.ingestEntry(
+      ingest.ingestEntry(
         { title: '[Triage Fix] API 超时导致', content: 'different content but same issue', type: 'pitfall' },
         { source: 'test', layer: 'system' },
       );
@@ -287,7 +287,7 @@ describe('KnowledgeIngest', () => {
 
       // Keywords: prisma, 连接, 超时, 导致, api, 请求, 失败
       // Incoming: prisma, 超时, 请求, 失败 → 4/7 overlap
-      const merged = ingest.ingestEntry(
+      ingest.ingestEntry(
         { title: 'Prisma 超时导致请求失败', content: 'totally different content', type: 'pitfall' },
         { source: 'test', layer: 'system' },
       );

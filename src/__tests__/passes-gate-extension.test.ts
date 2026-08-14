@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { PassesGate, createPassesGate } from '../core/validators/passes-gate';
-import type { PassesGateExtension, TaskTestResult } from '../types/passes-gate';
+import type { PassesGateExtension } from '../types/passes-gate';
 
 describe('PassesGate Extension', () => {
   let passesGate: PassesGate;
@@ -100,7 +100,7 @@ describe('PassesGate Extension', () => {
       const extension: PassesGateExtension = {
         name: 'puppeteer',
         description: 'Puppeteer E2E tests',
-        run: async (workDir) => ({
+        run: async (_workDir) => ({
           passed: true,
           command: 'puppeteer',
           output: 'E2E passed',
@@ -116,7 +116,7 @@ describe('PassesGate Extension', () => {
     it('扩展 run 方法应返回 TaskTestResult', async () => {
       const extension: PassesGateExtension = {
         name: 'mock',
-        run: async (workDir, task) => {
+        run: async (_workDir, _task) => {
           // 模拟测试运行
           return {
             passed: true,

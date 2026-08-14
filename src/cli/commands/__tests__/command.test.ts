@@ -3,7 +3,7 @@
  */
 
 import { executeCommand } from '../command';
-import { createCommandGate, getCommandRiskLevel, DEFAULT_COMMAND_BLACKLIST } from '../../../gates';
+import { createCommandGate, getCommandRiskLevel } from '../../../gates';
 
 jest.mock('../../../gates', () => ({
   createCommandGate: jest.fn(),

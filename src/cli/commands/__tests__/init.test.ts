@@ -111,6 +111,8 @@ describe('init command', () => {
     it('应该输出代码片段模式', async () => {
       await init({ preset: 'standard', printSnippets: true });
       expect(consoleSpy).toHaveBeenCalled();
+      // 打印版与落盘版 plan 匹配模式须一致（#35：模板字面量 \. 运行期退化为 .，防两副本 drift）
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("grep -E 'plans/.*\\.md$|\\.plan\\.md$'"));
     });
   });
 
@@ -159,6 +161,8 @@ describe('init command', () => {
       expect(hookCall![1]).toContain('npx @dommaker/harness check --staged');
       expect(hookCall![1]).toContain('npx @dommaker/harness posteval-plan');
       expect(hookCall![1]).not.toMatch(/npx harness /);
+      // plan 匹配模式须为转义点（#35：模板字面量 \. 运行期退化为 .，与打印版防 drift）
+      expect(hookCall![1]).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
     });
   });
 

@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.18.0] - 2026-08-15
+
+### Changes
+- test: init 片段/落盘钩子 plan 匹配模式一致性断言，防模板字面量转义 drift（#35）
+- fix: npm run lint 恒失败——补 ESLint flat config 并清零存量违规，CI 接 lint 防再退化（#35）
+- fix: 模板/提示裸名 npx harness 全改 scoped @dommaker/harness，自身钩子/CI 改 dogfood node bin/harness.js（#36）
+- fix: sync-docs 不再误删 CAPABILITIES.md 中真实存在的 .tsx 模块行（#33）
+- feat: SourceRef 增加 entryId 条目级回指字段（#23）
+- fix: 内置 no_completion_without_verification 验证命令口径弱化（#25）
+- fix: constraints retire 直达路径补 --yes 人确认闸门（#24）
+- feat: custom 约束退役落点迁至 custom-constraints.yml（#82 D6 一处真相）
+- fix: mergeConstraints 生效 config.yml 对 custom 约束的禁用
+
 ## [Unreleased]
 
 ### Changes

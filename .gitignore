@@ -27,10 +27,8 @@ coverage/
 .env.local
 
 # Internal agent docs
-AGENTS.md
 CLAUDE.md
 specs/
-docs/
 
 # Runtime state
 .harness/

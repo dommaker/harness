@@ -79,10 +79,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/kww/harness.git"
+    "url": "https://github.com/dommaker/harness.git"
   },
   "bugs": {
-    "url": "https://github.com/kww/harness/issues"
+    "url": "https://github.com/dommaker/harness/issues"
   },
-  "homepage": "https://github.com/kww/harness#readme"
+  "homepage": "https://github.com/dommaker/harness#readme"
 }

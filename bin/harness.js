@@ -543,13 +543,15 @@ constraintsCmd
 
 constraintsCmd
   .command('retire [id]')
-  .description('退役约束：无 id 进入交互式候选选择；带 id 直接退役（写 config.yml + KnowledgeStore + 同步 CLAUDE.md 注入段）')
+  .description('退役约束：无 id 进入交互式候选选择（人确认）；带 id 直达退役需显式 --yes（写 config.yml + KnowledgeStore + 同步 CLAUDE.md 注入段）')
   .option('-p, --project-path <path>', '项目路径')
   .option('--reason <text>', '退役原因')
+  .option('-y, --yes', '显式确认直达退役（人确认闸门；无此 flag 直达报错并提示改走交互模式）', false)
   .action(async (id, options) => {
     await cmd('constraintsRetire')(id, {
       projectPath: options.projectPath,
       reason: options.reason,
+      yes: options.yes,
     });
   });
 

@@ -165,15 +165,15 @@ export async function createExampleCheckpoint(projectPath: string): Promise<void
 const DEFAULT_RESOLUTIONS = {
   no_fuzzy_completion_claim: {
     title: 'commit message 缺少验证证据',
-    fix: '在 commit message body 中附上验证输出:\n`npx harness check --staged` | `npx harness validate` | `npm test -- --coverage`\n确认全部通过后重新 commit。',
+    fix: '在 commit message body 中附上验证输出:\n`npx @dommaker/harness check --staged` | `npx @dommaker/harness validate` | `npm test -- --coverage`\n确认全部通过后重新 commit。',
   },
   capability_sync: {
     title: '缺少 CAPABILITIES.md',
-    fix: '在项目根目录创建 CAPABILITIES.md，列出所有模块能力清单。运行 `npx harness sync-docs` 可自动生成模板。',
+    fix: '在项目根目录创建 CAPABILITIES.md，列出所有模块能力清单。运行 `npx @dommaker/harness sync-docs` 可自动生成模板。',
   },
   context_doc_sync: {
     title: '关键目录缺少 CONTEXT.md',
-    fix: '在 required_dirs 目录下创建 CONTEXT.md。运行 `npx harness sync-docs` 可自动生成模板。',
+    fix: '在 required_dirs 目录下创建 CONTEXT.md。运行 `npx @dommaker/harness sync-docs` 可自动生成模板。',
   },
 };
 

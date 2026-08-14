@@ -4,7 +4,7 @@
  * 目标：覆盖 autoCommit、detectBugs 完整流程、异常分支
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { CleanStateManager } from '../core/session/clean-state';
 import * as fs from 'fs';
 import * as path from 'path';

@@ -118,9 +118,9 @@ export function renderExportMarkdown(
 export function renderInjectionDriftLines(drift: InjectionDrift): string[] {
   const lines: string[] = [];
   if (drift.notInjected) {
-    lines.push('  CLAUDE.md 无约束注入标记段（未注入，不算漂移）；可运行 npx harness init 注入');
+    lines.push('  CLAUDE.md 无约束注入标记段（未注入，不算漂移）；可运行 npx @dommaker/harness init 注入');
     if (drift.duplicateHeading) {
-      lines.push('  另检测到多个 "## Governance Rules" 标题（历史遗留重复章节），建议手工清理后重跑 npx harness init');
+      lines.push('  另检测到多个 "## Governance Rules" 标题（历史遗留重复章节），建议手工清理后重跑 npx @dommaker/harness init');
     }
     return lines;
   }

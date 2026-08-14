@@ -323,8 +323,8 @@ function isBreakingChange(change: ApiChange): boolean {
 
 function getDependents(project: string, config: CrossProjectConfig): string[] {
   return Object.entries(config.dependencies)
-    .filter(([_, deps]) => deps.includes(project))
-    .map(([name, _]) => name);
+    .filter(([, deps]) => deps.includes(project))
+    .map(([name]) => name);
 }
 
 interface ApiChange {

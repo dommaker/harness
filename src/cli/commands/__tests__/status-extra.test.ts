@@ -4,7 +4,6 @@
 
 import { status } from '../status';
 import * as fs from 'fs';
-import { TraceCollector } from '../../../monitoring/traces';
 import { TraceAnalyzer } from '../../../monitoring/trace-analyzer';
 
 // Mock fs
@@ -41,7 +40,6 @@ jest.mock('chalk', () => ({
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
-const MockTraceCollector = TraceCollector as jest.MockedClass<typeof TraceCollector>;
 const MockTraceAnalyzer = TraceAnalyzer as jest.MockedClass<typeof TraceAnalyzer>;
 
 describe('status command - 补充覆盖', () => {

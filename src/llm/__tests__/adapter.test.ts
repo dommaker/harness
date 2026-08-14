@@ -53,7 +53,7 @@ describe('LLM Adapter', () => {
       it('应该抛出未实现错误', async () => {
         const gen = adapter.streamChat([{ role: 'user', content: 'test' }]);
         await expect(async () => {
-          for await (const _ of gen) { /* noop */ }
+          for await (const _ of gen) { void _; }
         }).rejects.toThrow('LLM streamChat 未实现');
       });
     });

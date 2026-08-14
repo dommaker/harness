@@ -78,3 +78,21 @@ jobs:
         with:
           name: coverage-report
           path: coverage/
+
+  # lint 曾长期无 CI 覆盖（issue #35）：仓库自初始提交起无 ESLint 配置，命令恒失败却从未被 CI 暴露。
+  # 本 job 保证 npm run lint 持续全绿，防再退化。
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint

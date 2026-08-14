@@ -358,7 +358,7 @@ export async function docFreshnessCheck(
   const content = fs.readFileSync(resolvedPath, 'utf-8');
 
   // 提取声明
-  let claims = extractClaims(content, resolvedPath);
+  const claims = extractClaims(content, resolvedPath);
 
   // 如果指定了变更文件，只验证与变更文件相关的声明
   if (options.changedFiles) {

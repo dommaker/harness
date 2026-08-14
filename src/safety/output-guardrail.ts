@@ -11,7 +11,7 @@ import type { OutputSafetyCheckResult, OutputViolation, OutputGuardrailConfig } 
 
 const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
   // API keys
-  /(?:api[_-]?key|apikey)\s*[:=]\s*['"]?([a-zA-Z0-9_\-]{20,})['"]?/gi,
+  /(?:api[_-]?key|apikey)\s*[:=]\s*['"]?([a-zA-Z0-9_-]{20,})['"]?/gi,
   // AWS
   /(?:AKIA|ASIA)[A-Z0-9]{16}/g,
   // Generic secrets
@@ -21,7 +21,7 @@ const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
   // GitHub tokens
   /gh[ps]_[A-Za-z0-9_]{36,}/g,
   // Bearer tokens
-  /Bearer\s+[A-Za-z0-9_\-\.]{20,}/g,
+  /Bearer\s+[A-Za-z0-9_\-.]{20,}/g,
   // Connection strings
   /(?:mongodb|postgres|mysql|redis):\/\/[^\s'"]+/gi,
 ];

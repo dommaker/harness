@@ -5,25 +5,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { TraceCollector } from '../monitoring/traces';
-import { TraceAnalyzer } from '../monitoring/trace-analyzer';
 import { ConstraintDoctor, createDoctor } from '../monitoring/constraint-doctor';
 import type { ExecutionTrace, TraceAnomaly } from '../types/trace';
 
 describe('ConstraintDoctor', () => {
   let tempDir: string;
-  let collector: TraceCollector;
-  let analyzer: TraceAnalyzer;
   let doctor: ConstraintDoctor;
 
   beforeEach(() => {
     tempDir = path.join(os.tmpdir(), `harness-traces-${Date.now()}`);
     fs.mkdirSync(tempDir, { recursive: true });
-    collector = new TraceCollector({
-      traceFile: path.join(tempDir, 'execution.log'),
-      enabled: true,
-    });
-    analyzer = new TraceAnalyzer(collector);
     doctor = createDoctor();
   });
 

@@ -13,7 +13,6 @@ jest.mock('../../../failure/recorder');
 
 describe('failure CLI commands', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-failure-cli');
-  const logFilePath = path.join(tempDir, '.harness', 'failures', 'failures.log');
   let consoleSpy: jest.SpyInstance;
   let consoleErrorSpy: jest.SpyInstance;
   let mockRecorderInstance: {

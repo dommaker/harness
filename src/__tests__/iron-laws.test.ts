@@ -82,6 +82,17 @@ describe('Constraint System', () => {
       expect(PROMPTS['no_skill_without_test'].appliesTo).toEqual(['agent-skill']);
       expect(PROMPTS['no_model_for_deterministic'].appliesTo).toEqual(['llm-app']);
     });
+
+    it('no_completion_without_verification 不硬编码具体命令示例（#25：口径由项目声明）', () => {
+      const law = IRON_LAWS['no_completion_without_verification'];
+      expect(law.promptInjection).not.toMatch(/npm test|npm run build/);
+      expect(law.description).not.toMatch(/npm test|npm run build/);
+      expect(law.promptInjection).not.toContain('完整');
+      expect(law.description).not.toContain('完整');
+      expect(law.promptInjection).toContain('项目声明的测试');
+      expect(law.description).toContain('项目声明的测试');
+      expect(law.promptInjection).toContain('不得凭记忆声称完成');
+    });
   });
 
   describe('注册表闭环', () => {

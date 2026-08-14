@@ -256,7 +256,7 @@ function printSnippets(): void {
   console.log();
   console.log(chalk.cyan(GITHUB_ACTIONS_SNIPPET));
   
-  console.log(chalk.blue('💡 提示: 运行 harness init 自动创建配置文件'));
+  console.log(chalk.blue('💡 提示: 运行 npx @dommaker/harness init 自动创建配置文件'));
 }
 
 /**
@@ -264,7 +264,7 @@ function printSnippets(): void {
  */
 const PRE_COMMIT_SNIPPET = `
 # Harness 约束检查
-npx harness check --staged
+npx @dommaker/harness check --staged
 if [ $? -ne 0 ]; then
   echo "❌ Iron law check failed"
   exit 1
@@ -273,11 +273,11 @@ fi
 # Plan coverage check (via PostEval)
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 if command -v npx > /dev/null 2>&1; then
-  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\.md$|\.plan\.md$' || true)
+  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
   if [ -n "$PLAN_FILES" ]; then
     echo "📋 Checking plan coverage..."
     for plan in $PLAN_FILES; do
-      npx harness posteval-plan "$plan" || {
+      npx @dommaker/harness posteval-plan "$plan" || {
         echo "🛑 Plan coverage incomplete. See above for missed items."
         exit 1
       }
@@ -298,7 +298,7 @@ const GITHUB_ACTIONS_SNIPPET = `
         with:
           node-version: '20'
       - run: npm ci
-      - run: npx harness check
+      - run: npx @dommaker/harness check
 `;
 
 /**
@@ -313,7 +313,7 @@ async function setupGitHooks(projectPath: string): Promise<void> {
     await fs.access(gitDir);
   } catch {
     console.log(chalk.yellow('⚠️  未检测到 Git 仓库，跳过 Git hooks'));
-    console.log(chalk.gray('💡 初始化 Git 后可运行 harness init --print-snippets 查看配置'));
+    console.log(chalk.gray('💡 初始化 Git 后可运行 npx @dommaker/harness init --print-snippets 查看配置'));
     return;
   }
 
@@ -337,7 +337,7 @@ echo "🔍 Running harness checks..."
 STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 
 # 铁律检查
-npx harness check --staged
+npx @dommaker/harness check --staged
 if [ $? -ne 0 ]; then
   echo "❌ Iron law check failed"
   exit 1
@@ -349,7 +349,7 @@ if command -v npx > /dev/null 2>&1; then
   if [ -n "$PLAN_FILES" ]; then
     echo "📋 Checking plan coverage..."
     for plan in $PLAN_FILES; do
-      npx harness posteval-plan "$plan" || {
+      npx @dommaker/harness posteval-plan "$plan" || {
         echo "🛑 Plan coverage incomplete. See above for missed items."
         exit 1
       }
@@ -413,13 +413,13 @@ jobs:
         run: npm ci
 
       - name: Run harness check
-        run: npx harness check
+        run: npx @dommaker/harness check
 
       - name: Run harness validate
-        run: npx harness validate
+        run: npx @dommaker/harness validate
 
       - name: Run harness passes-gate
-        run: npx harness passes-gate
+        run: npx @dommaker/harness passes-gate
 `;
 
   await fs.writeFile(workflowPath, workflowContent, 'utf-8');
@@ -820,7 +820,7 @@ async function setupGovernanceWorkflow(projectPath: string, level: string): Prom
   const docsCheckStep = level !== 'minimal'
     ? `
       - name: Check docs freshness
-        run: npx harness sync-docs --check
+        run: npx @dommaker/harness sync-docs --check
         continue-on-error: true`
     : '';
 
@@ -848,10 +848,10 @@ jobs:
         run: npm ci
 
       - name: Constraint check
-        run: npx harness check
+        run: npx @dommaker/harness check
 
       - name: Quality gate
-        run: npx harness passes-gate
+        run: npx @dommaker/harness passes-gate
 ${docsCheckStep}
 `;
 

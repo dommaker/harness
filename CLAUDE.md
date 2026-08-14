@@ -14,6 +14,7 @@ npm run dev            # Watch mode compilation
 npm test               # Run Jest tests
 npm test -- path/to/test.test.ts  # Run a single test file
 npm run lint           # ESLint on src/
+npm run hooks:install  # Install this repo's own pre-commit hook (dogfoods current HEAD via node bin/harness.js)
 ```
 
 ## Architecture
@@ -57,7 +58,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/llm/` | LLM adapter layer: unified interface for multi-model switching |
 | `src/tools/` | Tool registry, core tools, loader, path management |
 | `src/verification/` | Rules-based verification engine + loop verification |
-| `src/cli/commands/` | 24 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
+| `src/cli/commands/` | 24 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
 
 ### Entry Points
 

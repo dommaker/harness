@@ -4,7 +4,6 @@
 
 import { checkFile, checkDirectory, generateReport } from '../annotation-checker';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock fs
 jest.mock('fs', () => ({

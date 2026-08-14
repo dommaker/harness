@@ -82,7 +82,7 @@ describe('check 命令注入漂移警告', () => {
     expect(output).toContain('⚠️⚠️');
     expect(output).toContain('agent 上下文中的规则与已安装 harness 版本不一致');
     expect(output).toContain('0.0.1-old');
-    expect(output).toContain('npx harness init');
+    expect(output).toContain('npx @dommaker/harness init');
     // 不阻断：检查仍通过、未调用 process.exit
     expect(output).toContain('约束检查通过');
     expect(exitSpy).not.toHaveBeenCalled();

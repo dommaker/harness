@@ -40,6 +40,24 @@ function readConfig(root: string): any {
   return yaml.load(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8'));
 }
 
+const CUSTOM_YML = `
+custom_constraints:
+  my_custom_rule:
+    level: iron_law
+    rule: 禁止引入 X
+    message: X 已由平台能力替代
+    promptInjection: 禁止引入 X
+`;
+
+function writeCustom(root: string, yml: string): void {
+  fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.harness', 'custom-constraints.yml'), yml, 'utf-8');
+}
+
+function readCustom(root: string): any {
+  return yaml.load(fs.readFileSync(path.join(root, '.harness', 'custom-constraints.yml'), 'utf-8'));
+}
+
 let logSpy: jest.SpyInstance;
 
 beforeEach(() => {
@@ -184,12 +202,121 @@ describe('retireConstraint 执行逻辑', () => {
     retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(getEffectiveConstraints(root).some(c => c.id === 'capability_sync')).toBe(false);
   });
+
+  it('custom 约束退役：落 custom-constraints.yml retired 段（不写 config.yml），生效集与注入段移除', () => {
+    const root = makeTmpProject();
+    writeCustom(root, CUSTOM_YML);
+    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
+    expect(before).toContain('**my_custom_rule**');
+    fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}\n其他内容\n`, 'utf-8');
+
+    const result = retireConstraint(root, 'my_custom_rule', { reason: '作用对象已从代码库消失', now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    expect(result.landing).toBe('custom-constraints.yml');
+    expect(result.claudeMdSynced).toBe(true);
+    // config.yml 不产生该 id 段
+    expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
+    // yml 保留规则原文 + retired 元数据
+    const custom = readCustom(root).custom_constraints.my_custom_rule;
+    expect(custom.rule).toBe('禁止引入 X');
+    expect(custom.promptInjection).toBe('禁止引入 X');
+    expect(custom.retired.at).toBe(FIXED_NOW.toISOString());
+    expect(custom.retired.reason).toBe('作用对象已从代码库消失');
+    // 生效集移除
+    expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(false);
+    // 注入段同步移除
+    const after = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8');
+    expect(after).not.toContain('**my_custom_rule**');
+    expect(after).toContain('其他内容');
+    // 打印的恢复提示指向 yml
+    printRetireResult(result);
+    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(output).toContain('custom_constraints.my_custom_rule.retired');
+  });
+
+  it('custom 重复退役：yml 已带 retired → already_retired，不覆盖原元数据', () => {
+    const root = makeTmpProject();
+    writeCustom(root, CUSTOM_YML);
+    const first = retireConstraint(root, 'my_custom_rule', { reason: '第一次', now: FIXED_NOW });
+    expect(first.status).toBe('retired');
+
+    const later = new Date('2026-08-09T00:00:00.000Z');
+    const second = retireConstraint(root, 'my_custom_rule', { reason: '第二次', now: later });
+    expect(second.status).toBe('already_retired');
+
+    const custom = readCustom(root).custom_constraints.my_custom_rule;
+    expect(custom.retired.at).toBe(FIXED_NOW.toISOString());
+    expect(custom.retired.reason).toBe('第一次');
+  });
+
+  it('custom 历史落点（config.yml enabled:false）仍判定 already_retired', () => {
+    const root = makeTmpProject();
+    writeCustom(root, CUSTOM_YML);
+    fs.writeFileSync(path.join(root, '.harness', 'config.yml'), 'constraints:\n  my_custom_rule:\n    enabled: false\n', 'utf-8');
+    const result = retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
+    expect(result.status).toBe('already_retired');
+  });
+
+  it('custom 退役 KnowledgeStore 记录包含 promptInjection（规则原文完整）', () => {
+    const root = makeTmpProject();
+    writeCustom(root, CUSTOM_YML);
+    const result = retireConstraint(root, 'my_custom_rule', { reason: '由新机制覆盖', now: FIXED_NOW });
+    expect(result.status).toBe('retired');
+
+    const store = new FileKnowledgeStore({ baseDir: path.join(root, '.harness', 'knowledge') });
+    const entry = store.get('constraint-retired-my_custom_rule');
+    expect(entry).toBeDefined();
+    expect(entry!.content).toContain('禁止引入 X');
+    expect(entry!.content).toContain('promptInjection: 禁止引入 X');
+  });
+
+  it('custom 恢复：删除 yml retired 段后回到生效集', () => {
+    const root = makeTmpProject();
+    writeCustom(root, CUSTOM_YML);
+    retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
+    expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(false);
+
+    const custom = readCustom(root);
+    delete custom.custom_constraints.my_custom_rule.retired;
+    fs.writeFileSync(path.join(root, '.harness', 'custom-constraints.yml'), yaml.dump(custom), 'utf-8');
+
+    expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(true);
+  });
 });
 
 describe('constraintsRetire 非交互直达', () => {
-  it('iron 直达退役时打印额外警示', async () => {
+  let originalExitCode: typeof process.exitCode;
+
+  beforeEach(() => {
+    originalExitCode = process.exitCode;
+    process.exitCode = 0;
+  });
+
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+  });
+
+  it('无 --yes 直达：报错 + 非零退出码 + 不落盘任何文件（#24 人确认闸门）', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' });
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' });
+
+      const output = errSpy.mock.calls.map(c => String(c[0])).join('\n');
+      expect(output).toContain('--yes');
+      expect(output).toContain('交互');
+      expect(process.exitCode).toBe(1);
+      // 无副作用：任何文件都不落盘
+      expect(fs.existsSync(path.join(root, '.harness'))).toBe(false);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('--yes 直达 iron 退役：打印额外警示并落盘', async () => {
+    const root = makeTmpProject();
+    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true });
 
     const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
     expect(output).toContain('Iron Law');
@@ -199,9 +326,21 @@ describe('constraintsRetire 非交互直达', () => {
     expect(config.constraints.docs_freshness.enabled).toBe(false);
   });
 
-  it('未知 id 直达：明确提示', async () => {
+  it('--yes 直达非 iron（guideline）退役：不打印 iron 警示并落盘', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('ghost', { projectPath: root });
+    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true });
+
+    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(output).not.toContain('Iron Law');
+    expect(output).toContain('已退役');
+
+    const config = readConfig(root);
+    expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
+  });
+
+  it('--yes 直达未知 id：明确提示', async () => {
+    const root = makeTmpProject();
+    await constraintsRetire('ghost', { projectPath: root, yes: true });
     const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
     expect(output).toContain('约束不存在');
   });
@@ -262,6 +401,28 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     const config = readConfig(root);
     expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
     expect(config.constraints.no_hardcoded_credentials.retired.reason).toBe('误报太多');
+  });
+
+  it('无候选 → 手动输入 custom id → 确认执行 → 落 custom-constraints.yml', async () => {
+    const root = makeTmpProject();
+    writeCustom(root, CUSTOM_YML);
+    // 所有 check 约束给少量健康数据（低于一切候选阈值）
+    const healthy = getEffectiveConstraints(root)
+      .filter(c => c.kind === 'check')
+      .flatMap(c => [
+        { constraintId: c.id, result: 'pass' as const },
+        { constraintId: c.id, result: 'pass' as const, timestamp: 1700000001000 },
+        { constraintId: c.id, result: 'fail' as const, timestamp: 1700000002000 },
+      ]);
+    writeTraces(root, healthy);
+
+    const io = makeIo(['my_custom_rule', '作用对象消失', 'y']);
+    await runRetireInteractive(root, io);
+    io.done();
+
+    const custom = readCustom(root).custom_constraints.my_custom_rule;
+    expect(custom.retired.reason).toBe('作用对象消失');
+    expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
   });
 
   it('无候选 → 手动输入未知 id → 提示不存在并取消', async () => {

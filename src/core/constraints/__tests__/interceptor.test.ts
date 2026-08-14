@@ -2,10 +2,10 @@
  * ConstraintInterceptor 测试
  */
 
-import { ConstraintInterceptor, constraintInterceptor } from '../interceptor';
+import { ConstraintInterceptor } from '../interceptor';
 import { constraintChecker } from '../checker';
-import type { Constraint, ConstraintContext, ConstraintTrigger } from '../../../types/constraint';
-import type { EnforcementExecutor, EnforcementResult } from '../../../types/enforcement';
+import type { ConstraintContext } from '../../../types/constraint';
+import type { EnforcementExecutor } from '../../../types/enforcement';
 
 // Mock constraintChecker
 jest.mock('../checker', () => ({

@@ -42,7 +42,7 @@ export interface InjectionDrift {
 }
 
 /** 修复指引（重跑 init 幂等同步注入段） */
-export const INJECTION_DRIFT_FIX_HINT = '重跑 `npx harness init` 同步注入段（漂移仅警告，不阻断）';
+export const INJECTION_DRIFT_FIX_HINT = '重跑 `npx @dommaker/harness init` 同步注入段（漂移仅警告，不阻断）';
 
 const VERSION_LINE_RE = /<!-- version: ([^ ]+) -->/;
 const ENTRY_LINE_RE = /^- \*\*.+?\*\*: .+$/;

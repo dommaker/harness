@@ -290,7 +290,7 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
     expect(output).toContain('0.0.1-old');
     expect(output).toContain(`缺失: ${originalLine}`);
     expect(output).toContain(`多余: ${editedLine}`);
-    expect(output).toContain('npx harness init');
+    expect(output).toContain('npx @dommaker/harness init');
   });
 
   it('重复章节：输出重复章节提示', async () => {

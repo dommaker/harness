@@ -7,7 +7,6 @@ import * as path from 'path';
 import * as os from 'os';
 import { TraceCollector } from '../monitoring/traces';
 import { TraceAnalyzer } from '../monitoring/trace-analyzer';
-import type { ExecutionTrace } from '../types/trace';
 
 describe('TraceCollector', () => {
   let tempDir: string;
@@ -175,7 +174,7 @@ describe('TraceCollector', () => {
   });
 
   test('should return 0 when backup dir does not exist', () => {
-    const result = collector.cleanupOldFiles(30);
+    collector.cleanupOldFiles(30);
     // Dir exists (created by constructor), so this won't hit line 259.
     // Create a collector with a path in non-existent dir to test that branch.
     const tmpRoot = path.join(os.tmpdir(), `harness-traces-nonexistent-${Date.now()}`);

@@ -70,7 +70,7 @@ export async function bootstrapHarness(
   const resolvedPath = projectPath || process.cwd();
 
   // 1. 异步加载配置（S9 fix）
-  const { config: _config, mergedConstraints } = await loadConfigAsync(resolvedPath);
+  const { mergedConstraints } = await loadConfigAsync(resolvedPath);
 
   // 2. 初始化核心组件
   const checker = ConstraintChecker.getInstance();

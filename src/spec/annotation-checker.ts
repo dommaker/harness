@@ -152,7 +152,7 @@ function parseJSDoc(lines: string[], startLine: number): SpecAnnotation | null {
   }
 
   // @dependencies
-  const depsMatch = content.match(/@dependencies\s+([\w\-_,\s\/]+)/);
+  const depsMatch = content.match(/@dependencies\s+([\w\-_,\s/]+)/);
   if (depsMatch) {
     annotation.dependencies = depsMatch[1]
       .split(/[,\s]+/)

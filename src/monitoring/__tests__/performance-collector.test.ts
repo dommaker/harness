@@ -2,10 +2,9 @@
  * PerformanceCollector 测试
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import { PerformanceCollector } from '../performance-collector';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock fs
 jest.mock('fs', () => ({

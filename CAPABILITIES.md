@@ -3,7 +3,7 @@
 ## CLI Commands (26)
 check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, posteval-plan, update-user-model, release, analyze-sessions, constraints, doc-freshness-check, spec-baseline-check
 
-约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役，写 config.yml retired 元数据 + KnowledgeStore 沉淀 + CLAUDE.md 注入段同步，可回滚）。
+约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置写 config.yml retired 元数据，custom 写 custom-constraints.yml 条目 retired 段（#82 D6 一处真相）+ KnowledgeStore 沉淀 + CLAUDE.md 注入段同步，可回滚）。
 
 ## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
@@ -15,7 +15,7 @@ AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, Security
 - TIPS 已退役（@deprecated 空表，仅为在途消费者编译兼容保留，后续删除）。
 
 ## Effective Constraints
-getEffectiveConstraints(projectRoot)：全仓唯一生效集来源——内置 → preset 裁剪 → config.yml 禁用 → custom 追加 → scenes 过滤。init 注入、check、外部消费者全部消费它。lintEffectiveConfig 提供 unknownIds/scenes 诊断。
+getEffectiveConstraints(projectRoot)：全仓唯一生效集来源——内置 → preset 裁剪 → config.yml 禁用（内置与 custom 同效）→ custom 追加（禁用/已退役的不追加）→ scenes 过滤。init 注入、check、外部消费者全部消费它。lintEffectiveConfig 提供 unknownIds/scenes 诊断。
 
 ## Injection
 renderConstraintsSection（标记区间 HARNESS_CONSTRAINTS_START/END，Output Style 段 HARNESS_OUTPUT_STYLE_START/END，init 幂等修复）；detectInjectionDrift（版本漂移/内容漂移条目级 diff/重复章节；check 警告不阻断，详细 diff 进 report）。

@@ -4,7 +4,6 @@
 
 import { SpecAcceptanceGate, createSpecAcceptanceGate } from '../acceptance';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import { exec } from 'child_process';
 
 // Mock dependencies

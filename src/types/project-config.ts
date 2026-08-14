@@ -45,6 +45,18 @@ export interface CustomConstraintDefinition {
 
   /** 是否启用（可选，默认 true） */
   enabled?: boolean;
+
+  /**
+   * 退役元数据（#82 D6 统一落点）
+   *
+   * 存在即视为已退役：不进生效集、不注入 CLAUDE.md。恢复 = 删除该段。
+   * 落点在 custom-constraints.yml 条目内（一处真相，不拆 config.yml 第二处）。
+   */
+  retired?: {
+    at?: string;
+    reason?: string;
+    stats?: { total: number; fail: number; failRate: number };
+  };
 }
 
 /**

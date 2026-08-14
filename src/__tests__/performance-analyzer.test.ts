@@ -6,7 +6,6 @@ import { PerformanceAnalyzer, createPerformanceAnalyzer } from '../monitoring/pe
 import { PerformanceCollector } from '../monitoring/performance-collector';
 import type { PerformanceTrace, PerformanceSummary } from '../types/performance';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock fs
 jest.mock('fs', () => ({
@@ -25,7 +24,6 @@ jest.mock('../monitoring/performance-collector', () => ({
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
-const MockPerformanceCollector = PerformanceCollector as jest.MockedClass<typeof PerformanceCollector>;
 
 describe('PerformanceAnalyzer', () => {
   let analyzer: PerformanceAnalyzer;

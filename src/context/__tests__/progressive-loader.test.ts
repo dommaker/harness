@@ -18,7 +18,7 @@ describe('ProgressiveLoader', () => {
 
       await loader.loadInChunks(items, {
         chunkSize: 20,
-        onChunk: (chunk, index) => { chunks.push(chunk); },
+        onChunk: (chunk) => { chunks.push(chunk); },
       });
 
       expect(chunks.length).toBe(5);
@@ -45,7 +45,7 @@ describe('ProgressiveLoader', () => {
       await loader.loadInChunks(items, {
         chunkSize: 5,
         parallel: true,
-        onChunk: (chunk, index) => { chunks.push(chunk); },
+        onChunk: (chunk) => { chunks.push(chunk); },
       });
 
       expect(chunks.length).toBe(4);
@@ -78,7 +78,7 @@ describe('ProgressiveLoader', () => {
 
       await loader.loadInChunks(items, {
         chunkSize: 10,
-        onChunk: (chunk, index) => { chunks.push(chunk); },
+        onChunk: (chunk) => { chunks.push(chunk); },
       });
 
       expect(chunks.length).toBe(3);
@@ -171,7 +171,7 @@ describe('ProgressiveLoader', () => {
     it('should handle empty items', async () => {
       const result = await loader.loadWithBudget([], {
         budget: 100,
-        estimator: (item) => 0,
+        estimator: () => 0,
       });
 
       expect(result.items.length).toBe(0);
@@ -241,7 +241,7 @@ describe('ProgressiveLoader', () => {
         return n * 2;
       };
 
-      const results = await loader.processBatch(items, processor, 1);
+      await loader.processBatch(items, processor, 1);
 
       // Check that all items were processed
       expect(processed.sort()).toEqual([1, 2, 3]);
@@ -256,7 +256,7 @@ describe('progressiveLoader (default instance)', () => {
 
     await progressiveLoader.loadInChunks(items, {
       chunkSize: 1,
-      onChunk: (chunk, index) => { chunks.push(chunk); return undefined; },
+      onChunk: (chunk) => { chunks.push(chunk); return undefined; },
     });
 
     expect(chunks.length).toBe(3);

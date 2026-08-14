@@ -206,7 +206,7 @@ describe('HookPipeline', () => {
     registry.register(makeHook('enabled'));
     registry.register(makeHook('disabled', { enabled: false }));
 
-    const result = await pipeline.run('before', ctx);
+    await pipeline.run('before', ctx);
 
     expect(ctx.calls).toEqual(['enabled']);
     expect(ctx.calls).not.toContain('disabled');

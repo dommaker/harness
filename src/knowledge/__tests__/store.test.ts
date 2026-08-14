@@ -184,6 +184,19 @@ describe('KnowledgeStore', () => {
   });
 
   describe('edge cases', () => {
+    it('should round-trip sourceReferences with entryId through save/load', () => {
+      const sourceRefs = [
+        { workflow: 'test-flow', step: 'distill', commit: 'abc1234', timestamp: '2026-05-01', entryId: 'SRC-001' },
+        { workflow: 'test-flow', timestamp: '2026-05-02' },
+      ];
+      store.save(makeEntry({ id: 'DEC-001', sourceReferences: sourceRefs }));
+      const loaded = store.get('DEC-001');
+      expect(loaded?.sourceReferences).toStrictEqual(sourceRefs);
+      // 缺省 entryId 的 ref 不落 undefined 键：原始 frontmatter 中 entryId 只出现一次
+      const raw = fs.readFileSync(path.join(tempDir, 'decision-DEC-001.md'), 'utf-8');
+      expect(raw.match(/entryId/g)).toHaveLength(1);
+    });
+
     it('should round-trip consumptionMode and origin through save/load', () => {
       store.save(makeEntry({
         id: 'DEC-001',
@@ -212,7 +225,7 @@ describe('KnowledgeStore', () => {
 
     it('should create directory if it does not exist', () => {
       const newDir = path.join(process.cwd(), 'temp-test-knowledge-nested', 'sub', 'deep');
-      const s = new KnowledgeStore({ baseDir: newDir });
+      new KnowledgeStore({ baseDir: newDir });
       expect(fs.existsSync(newDir)).toBe(true);
       fs.rmSync(path.join(process.cwd(), 'temp-test-knowledge-nested'), { recursive: true, force: true });
     });

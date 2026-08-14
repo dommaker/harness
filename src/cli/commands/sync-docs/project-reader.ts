@@ -7,7 +7,7 @@ import { existsSync } from 'fs';
 import * as path from 'path';
 import { loadRawProjectConfig } from '../../../core/project-config-loader';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
-import { findTsSourceFiles } from '../../../utils/file-walk';
+import { findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';
 
 export interface ModuleInfo {
   name: string;
@@ -115,18 +115,20 @@ export async function scanSourceModules(srcDir: string, projectPath: string): Pr
     const stat = await fs.stat(entryPath);
 
     if (stat.isDirectory()) {
-      // 子目录：递归扫描 .ts 文件（不报告目录条目本身）
-      const subFiles = findTsSourceFiles(entryPath, { skipIndex: true });
+      // 子目录：递归扫描 .ts/.tsx 文件（不报告目录条目本身）
+      // includeTsx 开启后，历史项目未登记过的 .tsx 会首次批量进入 added（#33 已知连带，
+      // 与 .ts 同口径属预期，一次性补登记即可）
+      const subFiles = findTsSourceFiles(entryPath, { skipIndex: true, includeTsx: true });
       for (const f of subFiles) {
         modules.push({
-          name: path.basename(f, '.ts'),
+          name: path.basename(f, path.extname(f)),
           file: path.relative(projectPath, f),
           description: await extractFileDescription(f),
         });
       }
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts') && entry !== 'index.ts') {
+    } else if (isTsSourceFile(entry, { skipIndex: true, includeTsx: true })) {
       modules.push({
-        name: path.basename(entry, '.ts'),
+        name: path.basename(entry, path.extname(entry)),
         file: path.relative(projectPath, entryPath),
         description: await extractFileDescription(entryPath),
       });
@@ -142,9 +144,9 @@ export async function scanSourceModules(srcDir: string, projectPath: string): Pr
 async function extractFileDescription(filePath: string): Promise<string> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return extractFirstComment(content) || path.basename(filePath, '.ts');
+    return extractFirstComment(content) || path.basename(filePath, path.extname(filePath));
   } catch {
-    return path.basename(filePath, '.ts');
+    return path.basename(filePath, path.extname(filePath));
   }
 }
 

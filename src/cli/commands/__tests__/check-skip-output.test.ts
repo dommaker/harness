@@ -5,9 +5,7 @@
  */
 
 import { check } from '../check';
-import * as fs from 'fs';
 import { constraintChecker } from '../../../core/constraints/checker';
-import { ProjectConfigLoader } from '../../../core/project-config-loader';
 
 // Mock fs
 jest.mock('fs', () => ({

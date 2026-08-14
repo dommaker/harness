@@ -45,7 +45,7 @@ describe('detectInjectionDrift', () => {
     expect(drift.versionDrift).toBeUndefined();
     expect(drift.contentDrift).toBeUndefined();
     expect(drift.duplicateHeading).toBe(false);
-    expect(drift.fixHint).toContain('npx harness init');
+    expect(drift.fixHint).toContain('npx @dommaker/harness init');
     expect(drift.fixHint).toBe(INJECTION_DRIFT_FIX_HINT);
   });
 

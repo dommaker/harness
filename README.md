@@ -22,8 +22,8 @@ Harness 提供两层核心价值：
 
 ```bash
 npm install @dommaker/harness
-npx harness init --preset standard
-npx harness check
+npx @dommaker/harness init --preset standard
+npx @dommaker/harness check
 ```
 
 **作为库使用**：
@@ -41,7 +41,7 @@ await checkBeforeExecution({
 
 // 获取约束元数据
 const meta = await import('child_process').then(cp =>
-  JSON.parse(cp.execSync('npx harness constraints --json', { encoding: 'utf-8' }))
+  JSON.parse(cp.execSync('npx @dommaker/harness constraints --json', { encoding: 'utf-8' }))
 );
 // { version, hash, counts: { ironLaws, guidelines, prompts }, textSize }
 ```

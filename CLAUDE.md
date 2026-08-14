@@ -14,6 +14,7 @@ npm run dev            # Watch mode compilation
 npm test               # Run Jest tests
 npm test -- path/to/test.test.ts  # Run a single test file
 npm run lint           # ESLint on src/
+npm run hooks:install  # Install this repo's own pre-commit hook (dogfoods current HEAD via node bin/harness.js)
 ```
 
 ## Architecture

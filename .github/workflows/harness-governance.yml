@@ -25,11 +25,11 @@ jobs:
         run: npm run build
 
       - name: Constraint check
-        run: npx harness check
+        run: node bin/harness.js check
 
       - name: Quality gate
-        run: npx harness passes-gate
+        run: node bin/harness.js passes-gate
 
       - name: Check docs freshness
-        run: npx harness sync-docs --check
+        run: node bin/harness.js sync-docs --check
         continue-on-error: true

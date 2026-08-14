@@ -132,6 +132,8 @@ describe('init command', () => {
 
       await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pre-commit 已存在'));
+      // 手动添加提示的片段同样 scoped 化（#36）
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('npx @dommaker/harness check --staged'));
     });
 
     it('应该创建 pre-commit hook', async () => {
@@ -142,6 +144,21 @@ describe('init command', () => {
 
       await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已创建 .git/hooks/pre-commit'));
+    });
+
+    it('落盘 pre-commit 使用 scoped 包名（#36）', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+
+      await init({ preset: 'standard', projectPath: PROJECT });
+      const writeCalls = mockFs.writeFile.mock.calls;
+      const hookCall = writeCalls.find((c: any[]) => String(c[0]).includes('pre-commit'));
+      expect(hookCall).toBeDefined();
+      expect(hookCall![1]).toContain('npx @dommaker/harness check --staged');
+      expect(hookCall![1]).toContain('npx @dommaker/harness posteval-plan');
+      expect(hookCall![1]).not.toMatch(/npx harness /);
     });
   });
 
@@ -154,6 +171,20 @@ describe('init command', () => {
 
       await init({ preset: 'standard', projectPath: PROJECT });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已存在的 CI 配置'));
+    });
+
+    it('落盘 harness-check.yml 使用 scoped 包名（#36）', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      await init({ preset: 'standard', projectPath: PROJECT });
+      const writeCalls = mockFs.writeFile.mock.calls;
+      const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-check.yml'));
+      expect(workflowCall).toBeDefined();
+      expect(workflowCall![1]).toContain('npx @dommaker/harness check');
+      expect(workflowCall![1]).toContain('npx @dommaker/harness validate');
+      expect(workflowCall![1]).toContain('npx @dommaker/harness passes-gate');
+      expect(workflowCall![1]).not.toMatch(/npx harness /);
     });
   });
 
@@ -258,6 +289,10 @@ describe('init command', () => {
       expect(workflowCall).toBeDefined();
       expect(workflowCall![1]).toContain('Harness Governance');
       expect(workflowCall![1]).toContain('harness check');
+      // scoped 包名（#36）
+      expect(workflowCall![1]).toContain('npx @dommaker/harness check');
+      expect(workflowCall![1]).toContain('npx @dommaker/harness passes-gate');
+      expect(workflowCall![1]).not.toMatch(/npx harness /);
     });
 
     it('应该跳过治理 CI workflow 当已存在', async () => {
@@ -277,6 +312,7 @@ describe('init command', () => {
       const writeCalls = mockFs.writeFile.mock.calls;
       const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-governance.yml'));
       expect(workflowCall![1]).toContain('sync-docs');
+      expect(workflowCall![1]).toContain('npx @dommaker/harness sync-docs --check');
     });
 
     it('minimal 治理不应在 CI 中包含 docs check', async () => {

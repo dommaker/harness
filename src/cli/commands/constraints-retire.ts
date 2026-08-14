@@ -75,6 +75,8 @@ export interface RetireResult {
 export interface ConstraintsRetireOptions {
   projectPath?: string;
   reason?: string;
+  /** 直达模式显式确认（--yes）：ADR-0001 决策 2 人确认闸门，无此 flag 直达拒绝执行 */
+  yes?: boolean;
 }
 
 interface RetireTargetInfo {
@@ -501,15 +503,29 @@ export async function runRetireInteractive(
 
 /**
  * CLI handler: harness constraints retire [id]
+ *
+ * 人确认闸门（#24，ADR-0001 决策 2）：带 id 的直达路径必须显式 `--yes`，
+ * 无 `--yes` 报错 + 非零退出码，提示改用 `--yes` 或交互模式；不落盘任何文件。
  */
 export async function constraintsRetire(id?: string, options: ConstraintsRetireOptions = {}): Promise<void> {
   const projectRoot = options.projectPath || process.cwd();
 
   if (id) {
-    // 非交互直达
+    // 非交互直达：执行层人确认对所有入口成立（含程序化调用方）
+    if (!options.yes) {
+      console.error(
+        chalk.red(`❌ 直达退役需要显式人确认（ADR-0001 决策 2：执行层保留一次人确认），未做任何变更\n`) +
+          `   带 --yes 显式确认直达：harness constraints retire ${id} --yes` +
+          `${options.reason ? ` --reason "${options.reason}"` : ''}\n` +
+          `   或去掉 id 走交互确认：harness constraints retire`
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     const result = retireConstraint(projectRoot, id, { reason: options.reason });
     if (result.status === 'retired' && result.isIronLaw) {
-      console.log(chalk.yellow(`⚠️  ${id} 是一条 Iron Law，已通过命令行直接退役（交互模式会要求二次确认）`));
+      console.log(chalk.yellow(`⚠️  ${id} 是一条 Iron Law，已通过 --yes 直达退役（交互模式会要求二次确认）`));
     }
     printRetireResult(result);
     return;

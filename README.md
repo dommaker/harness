@@ -75,7 +75,7 @@ report 观测 → retire（人确认）→ 知识沉淀 → --export 回传 → 
 ```
 
 - `harness constraints report` — 只读观测：check 层统计、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、配置健康、注入漂移；`--export` 输出脱敏 markdown 摘要，供使用方回传给维护者。
-- `harness constraints retire` — 交互选择退役候选，**执行前保留一次人确认**。落盘为 config.yml `enabled: false` + `retired` 元数据，同时写入 **KnowledgeStore**（规则原文 + 退役原因 + 历史统计），并自动同步 CLAUDE.md 注入段。退役不是删除——删除 config.yml 中对应段即可回滚。
+- `harness constraints retire` — 交互选择退役候选，**执行前保留一次人确认**。带 id 直达（`harness constraints retire <id> --yes`）也须显式 `--yes` 确认，无 `--yes` 报错不执行。落盘为 config.yml `enabled: false` + `retired` 元数据，同时写入 **KnowledgeStore**（规则原文 + 退役原因 + 历史统计），并自动同步 CLAUDE.md 注入段。退役不是删除——删除 config.yml 中对应段即可回滚。
 - 维护者收到回传摘要后编辑内置 definitions 并发版，内置集由此演进。不使用遥测，不做自动降级。
 
 ---
@@ -91,6 +91,7 @@ harness status         # 项目健康状态、统计、异常检测
 harness constraints    # 约束元数据（版本/hash/计数/文本大小）
 harness constraints report   # 约束使用报告：统计 + 退役候选诊断 + 配置健康 + 注入漂移（--export 脱敏）
 harness constraints retire   # 约束退役：交互选择 + 人确认 → config.yml + KnowledgeStore + 注入段同步
+harness constraints retire <id> --yes   # 直达退役：显式 --yes 人确认（无 --yes 拒绝执行）
 harness report         # 生成检查报告
 
 # 门禁

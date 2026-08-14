@@ -286,9 +286,37 @@ describe('retireConstraint 执行逻辑', () => {
 });
 
 describe('constraintsRetire 非交互直达', () => {
-  it('iron 直达退役时打印额外警示', async () => {
+  let originalExitCode: typeof process.exitCode;
+
+  beforeEach(() => {
+    originalExitCode = process.exitCode;
+    process.exitCode = 0;
+  });
+
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+  });
+
+  it('无 --yes 直达：报错 + 非零退出码 + 不落盘任何文件（#24 人确认闸门）', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' });
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' });
+
+      const output = errSpy.mock.calls.map(c => String(c[0])).join('\n');
+      expect(output).toContain('--yes');
+      expect(output).toContain('交互');
+      expect(process.exitCode).toBe(1);
+      // 无副作用：任何文件都不落盘
+      expect(fs.existsSync(path.join(root, '.harness'))).toBe(false);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('--yes 直达 iron 退役：打印额外警示并落盘', async () => {
+    const root = makeTmpProject();
+    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true });
 
     const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
     expect(output).toContain('Iron Law');
@@ -298,9 +326,21 @@ describe('constraintsRetire 非交互直达', () => {
     expect(config.constraints.docs_freshness.enabled).toBe(false);
   });
 
-  it('未知 id 直达：明确提示', async () => {
+  it('--yes 直达非 iron（guideline）退役：不打印 iron 警示并落盘', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('ghost', { projectPath: root });
+    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true });
+
+    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(output).not.toContain('Iron Law');
+    expect(output).toContain('已退役');
+
+    const config = readConfig(root);
+    expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
+  });
+
+  it('--yes 直达未知 id：明确提示', async () => {
+    const root = makeTmpProject();
+    await constraintsRetire('ghost', { projectPath: root, yes: true });
     const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
     expect(output).toContain('约束不存在');
   });

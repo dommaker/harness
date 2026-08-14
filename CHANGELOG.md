@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Changes
+- fix(constraints): `retire <id>` 直达路径补人确认闸门（#24）——无 `--yes` 报错 + 非零退出码且不落盘，提示改用 `--yes` 或交互模式；`--yes` 直达保留原行为，iron 仍打印警示。ADR-0001 决策 2「执行层保留一次人确认」对所有入口成立。
+
 ## [0.17.1] - 2026-08-09
 
 ### Changes

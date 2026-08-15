@@ -5,7 +5,8 @@
  * 检查命令是否安全，防止执行危险操作
  */
 
-import type { GateResult, CommandGateConfig, CommandBlacklistRule } from './types';
+import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, GateContext, GateDecision } from './types';
+import { decisionFromResult } from './decision';
 
 /**
  * 黑名单级别
@@ -195,7 +196,9 @@ export const DEFAULT_COMMAND_BLACKLIST: CommandBlacklistRule[] = [
 /**
  * 命令门禁
  */
-export class CommandGate {
+export class CommandGate implements Gate {
+  readonly id = 'command';
+  order = 0;
   private config: Required<CommandGateConfig>;
   private blacklist: CommandBlacklistRule[];
 
@@ -212,6 +215,14 @@ export class CommandGate {
       ...DEFAULT_COMMAND_BLACKLIST,
       ...this.config.customBlacklist,
     ];
+  }
+
+  /**
+   * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导。
+   * 待检命令经 GateContext.command 传入。
+   */
+  async evaluate(context: GateContext): Promise<GateDecision> {
+    return decisionFromResult(await this.check(context.command ?? ''));
   }
 
   /**

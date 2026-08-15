@@ -90,12 +90,13 @@ When making changes to this codebase, follow these rules:
 ### Process
 
 - Every new gate MUST have a corresponding CLI command in `src/cli/commands/` and a test file in `__tests__/`
+- New gates must implement the unified `Gate` interface from `src/gates/types.ts` (id/order/evaluate → 三态 `GateDecision`)，报告结构走 `GateResult`；同时必须在 `src/gates/definitions.ts` 补 GateDefinition（含 CLI 元数据）并在 `src/gates/registry.ts` 注册实现——注册表双向闭环，缺一构建期抛错；门禁 CLI 命令由定义表驱动生成（`bin/harness.js`），不再手写命令块
+- deny 单调是接口契约：`runGates` 中 deny 不可被下游改回 allow，决策浅冻结；ask 枚举预留、无实现 fail-closed = deny
 - Constraint definitions in `src/core/constraints/definitions/` must include `trigger`, `enforcement`, and `description` fields
 - Coverage must not decrease — run `npm test -- --coverage` before committing
 - Each `src/` subdirectory's entry point is its `CONTEXT.md` (not README). CONTEXT.md documents responsibilities, exports, dependencies, and conventions.
 - `CAPABILITIES.md` must be updated when adding or modifying gates or constraints
 - All public API exports in `src/index.ts` must have JSDoc comments
-- New gates must implement the `GateResult` interface from `src/gates/types.ts`
 - Iron Law violations MUST throw `ConstraintViolationError`, never silently pass
 - Trace records must use the `ExecutionTrace` type from `src/types/trace.ts`
 - CLI commands must be registered in `src/cli/commands/index.ts` and added to `bin/harness.js`

@@ -5,8 +5,10 @@ check, validate, passes-gate, init, report, status, spec, acceptance, performanc
 
 约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置写 config.yml retired 元数据，custom 写 custom-constraints.yml 条目 retired 段（#82 D6 一处真相）+ KnowledgeStore 沉淀 + CLAUDE.md 注入段同步，可回滚）。
 
-## Quality Gates (6)
+## Quality Gates (12)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
+
+统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。`getEffectiveGates(projectRoot)` 声明式裁剪（对齐 getEffectiveConstraints：config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除，引用未注册 id 抛错）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny。checker-as-guard 接线点 `createCheckerGate(check)`（studio #129 随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
 
 ## Constraint Model (kind 二元, ADR-0001)
 - check (9)：必须带真实 checker，注册表闭环。Iron Laws (5) 违规阻断；Guidelines (4) 违规告警。

@@ -6,8 +6,9 @@
  */
 
 export * from './types';
-export { HookRegistry } from './registry';
+export { HookRegistry, assertHookRegistryClosed } from './registry';
 export { HookPipeline } from './pipeline';
+export { toErrorStrategy } from './config';
 export {
   bootstrapHarness,
   bootstrapHarnessSync,

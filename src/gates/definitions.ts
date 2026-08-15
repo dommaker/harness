@@ -4,10 +4,14 @@
  * - 每个门禁在此声明 id / description / 默认 order / CLI 元数据；
  *   registry.ts 按此表做「定义↔实现」双向闭环校验（复制 checker 闭环模式）。
  * - CLI 元数据被 bin/harness.js 消费，注册表驱动生成 6 个门禁命令：
- *   命令名/别名/选项/子命令路由与历史手工块完全兼容。
- * - 本模块禁止 import 任何门禁实现——bin 启动期只加载本纯数据模块
- *   （保持 --help/--version 懒加载，闭环校验在 registry 加载期执行）。
+ *   命令名/别名/选项/子命令路由与历史手工块完全兼容；实现引用为
+ *   module+export（CommandImplRef），bin 按需 per-command 懒加载（H5/O2）。
+ * - 本模块禁止 import 任何门禁/命令实现（仅 type import，运行时零依赖）——
+ *   bin 启动期只加载本纯数据模块（保持 --help/--version 懒加载，
+ *   闭环校验在 registry 加载期执行）。
  */
+
+import type { CommandImplRef } from '../cli/commands/definitions';
 
 /**
  * 门禁 CLI 选项元数据（直接映射 commander `.option()`）
@@ -35,10 +39,10 @@ export interface GateCliDefinition {
   description: string;
   /** 命令选项 */
   options: GateCliOption[];
-  /** 子命令名 → src/cli/commands 桶导出函数名；命中后按 [options] 透传 */
-  subcommands?: Record<string, string>;
-  /** 默认 action（src/cli/commands 桶导出函数名） */
-  action: string;
+  /** 子命令名 → 命令实现引用（module+export）；命中后按 [options] 透传 */
+  subcommands?: Record<string, CommandImplRef>;
+  /** 默认 action 命令实现引用（module+export） */
+  action: CommandImplRef;
   /** 默认 action 实参构造：arg = 位置参数（无位置参数时为 undefined），options = commander 选项对象 */
   mapActionArgs: (arg: string | undefined, options: Record<string, unknown>) => unknown[];
 }
@@ -77,8 +81,8 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--check-all', description: '检查所有任务', defaultValue: false },
         { flags: '--run-e2e', description: '运行 E2E 测试', defaultValue: false },
       ],
-      subcommands: { list: 'listAcceptanceCriteria' },
-      action: 'acceptance',
+      subcommands: { list: { module: 'acceptance', export: 'listAcceptanceCriteria' } },
+      action: { module: 'acceptance', export: 'acceptance' },
       mapActionArgs: (_arg, options) => [options],
     },
   },
@@ -97,7 +101,7 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--json', description: 'JSON 格式输出' },
         { flags: '--strict', description: '严格模式（warn 也阻止）' },
       ],
-      action: 'executeCommand',
+      action: { module: 'command', export: 'executeCommand' },
       mapActionArgs: (arg, options) => [arg, options],
     },
   },
@@ -115,8 +119,8 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--no-strict', description: '关闭严格模式' },
         { flags: '--allow-breaking', description: '允许破坏性变更', defaultValue: false },
       ],
-      subcommands: { validate: 'validateSchema' },
-      action: 'contract',
+      subcommands: { validate: { module: 'contract', export: 'validateSchema' } },
+      action: { module: 'contract', export: 'contract' },
       mapActionArgs: (_arg, options) => [options],
     },
   },
@@ -137,7 +141,7 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--benchmark', description: '运行基准测试', defaultValue: false },
         { flags: '--benchmark-timeout <n>', description: '基准测试超时（秒）', defaultValue: '60' },
       ],
-      action: 'performance',
+      action: { module: 'performance', export: 'performance' },
       mapActionArgs: (_arg, options) => [
         {
           projectPath: options.projectPath,
@@ -166,8 +170,8 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--no-block-on-changes', description: '不阻止变更请求' },
         { flags: '--allowed-reviewers <list>', description: '允许的审查者（逗号分隔）' },
       ],
-      subcommands: { status: 'reviewStatus' },
-      action: 'review',
+      subcommands: { status: { module: 'review', export: 'reviewStatus' } },
+      action: { module: 'review', export: 'review' },
       mapActionArgs: (_arg, options) => [
         {
           projectPath: options.projectPath,
@@ -195,8 +199,8 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--ignore-dev-deps', description: '忽略开发依赖', defaultValue: false },
         { flags: '--scan-command <cmd>', description: '自定义扫描命令' },
       ],
-      subcommands: { audit: 'auditDetails' },
-      action: 'security',
+      subcommands: { audit: { module: 'security', export: 'auditDetails' } },
+      action: { module: 'security', export: 'security' },
       mapActionArgs: (_arg, options) => [options],
     },
   },

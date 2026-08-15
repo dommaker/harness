@@ -63,7 +63,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 ### Entry Points
 
 - **Library**: `src/index.ts` — exports all types, modules, and convenience functions (`checkConstraints()`, `checkBeforeExecution()`, `interceptOperation()`)
-- **CLI**: `bin/harness.js` — commander-based, imports from `dist/cli/commands/`
+- **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
 - **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management)
 
 ### Design Principles
@@ -99,7 +99,8 @@ When making changes to this codebase, follow these rules:
 - All public API exports in `src/index.ts` must have JSDoc comments
 - Iron Law violations MUST throw `ConstraintViolationError`, never silently pass
 - Trace records must use the `ExecutionTrace` type from `src/types/trace.ts`
-- CLI commands must be registered in `src/cli/commands/index.ts` and added to `bin/harness.js`
+- CLI 命令注册的单一来源是 `src/cli/commands/definitions.ts`（COMMAND_DEFINITIONS，含 CLI 元数据与 module+export 实现引用）；bin/harness.js 由定义表驱动生成，禁止手写命令块；definitions 是纯数据模块，禁止 import 任何命令实现/运行时依赖（per-command 懒加载，O2）；新增命令 = 命令实现文件 + 定义表一条 + 测试，实现引用可解析性由 `src/cli/commands/__tests__/registry.test.ts` 断言
+- Hook 声明与实现必须注册表闭环：`HookConfig` 声明 ↔ `HookDefinition` 注册一一对应，`assertHookRegistryClosed` 双向校验（引用未注册/注册无定义/重复 → 抛错，断言限构建/测试期）；per-hook 配置归一走 `errorStrategy`（`blocking` → block/warn 无损映射见 `toErrorStrategy`），不再维护平行 blocking 语义
 
 ### Behavioral Guidelines
 

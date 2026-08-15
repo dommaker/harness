@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.19.0] - 2026-08-15
+
+### Changes
+- feat: H6 后半——CheckCache 计数采样 + trigger 参数化分组渲染 API（G5/G6，#45）
+- test: 补 analyze-sessions / release 命令测试（O6）
+- feat: update-user-model 增加 --days flag（O1）
+- chore: package.json 元数据 kww→dommaker（O7）
+- docs: 纳入 docs/ 与 AGENTS.md 版本控制（O11）
+
 ## [0.18.0] - 2026-08-15
 
 ### Changes

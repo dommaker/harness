@@ -48,7 +48,6 @@ describe('applyPreset with string preset names', () => {
     const config = applyPreset('relaxed');
     expect(config.ironLaws).toBeDefined();
     expect(config.ironLaws.no_completion_without_verification).toBeDefined();
-    expect(Object.keys(config.tips).length).toBe(0);
     expect(Object.keys(config.prompts ?? {}).length).toBe(0);
     expect(config.disabled.length).toBeGreaterThan(0);
   });
@@ -75,7 +74,6 @@ describe('applyPreset with PresetConfig object', () => {
       prompts: [],
     });
     expect(Object.keys(config.guidelines).length).toBeGreaterThan(0);
-    expect(Object.keys(config.tips).length).toBe(0);
     expect(Object.keys(config.prompts ?? {}).length).toBe(0);
   });
 

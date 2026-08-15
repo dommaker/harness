@@ -64,7 +64,6 @@ describe('ConstraintInterceptor', () => {
     mockChecker.getConstraints.mockReturnValue({
       ironLaws: { test_iron_law: mockIronLaw },
       guidelines: { test_guideline: mockGuideline },
-      tips: {},
       prompts: {},
     });
   });
@@ -202,7 +201,6 @@ describe('ConstraintInterceptor', () => {
       mockChecker.getConstraints.mockReturnValue({
         ironLaws: {},
         guidelines: {},
-        tips: {},
         prompts: {},
       });
 

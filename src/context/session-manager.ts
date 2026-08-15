@@ -8,26 +8,20 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { TokenPipeline } from './token-pipeline';
 import { ContextTracker } from '../monitoring/context-tracker';
 import type {
   SessionEvent,
   SessionHandle,
   SessionCheckpoint,
-  TokenBudgetAllocation,
-  PipelineOutput,
-  ContextSource,
 } from './types';
 
 export class SessionManager {
   private basePath: string;
   private sessions: Map<string, SessionHandle> = new Map();
-  private pipeline: TokenPipeline;
   private tracker: ContextTracker;
 
   constructor(basePath?: string) {
     this.basePath = basePath || process.cwd();
-    this.pipeline = new TokenPipeline();
     this.tracker = new ContextTracker(this.basePath);
   }
 
@@ -140,29 +134,6 @@ export class SessionManager {
   }
 
   /**
-   * 获取当前轮窗口视图（自动从磁盘加载，S2）
-   *
-   * 将 session 事件转换为 ContextSource，通过 TokenPipeline 生成 prompt
-   */
-  getWindowView(id: string, budget: TokenBudgetAllocation): PipelineOutput {
-    const handle = this.getSession(id);
-    if (!handle) {
-      throw new Error(`会话 ${id} 不存在`);
-    }
-
-    // 将事件转换为 ContextSource
-    const sources = this.eventsToSources(handle.events);
-
-    // 通过 pipeline 生成窗口视图
-    const output = this.pipeline.run({ sources, budget });
-
-    // 记录快照
-    this.tracker.record(output.snapshot);
-
-    return output;
-  }
-
-  /**
    * 生成 checkpoint（自动从磁盘加载，S2）
    */
   checkpointSession(id: string): SessionCheckpoint {
@@ -240,51 +211,6 @@ export class SessionManager {
    */
   getTracker(): ContextTracker {
     return this.tracker;
-  }
-
-  /**
-   * 将事件转换为 ContextSource
-   */
-  private eventsToSources(events: SessionEvent[]): ContextSource[] {
-    return events.map(event => {
-      let priority: number;
-      let type: ContextSource['type'];
-
-      switch (event.type) {
-        case 'system':
-          priority = 1;
-          type = 'system_prompt';
-          break;
-        case 'user_message':
-          priority = 6;
-          type = 'user_message';
-          break;
-        case 'assistant_message':
-          priority = 5;
-          type = 'session_event';
-          break;
-        case 'tool_call':
-        case 'tool_result':
-          priority = 5;
-          type = 'tool_output';
-          break;
-        case 'checkpoint':
-          priority = 4;
-          type = 'session_event';
-          break;
-        default:
-          priority = 5;
-          type = 'session_event';
-      }
-
-      return {
-        type,
-        id: event.id,
-        content: event.content,
-        priority,
-        metadata: event.metadata,
-      };
-    });
   }
 
   /**

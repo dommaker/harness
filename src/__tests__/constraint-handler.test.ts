@@ -15,10 +15,8 @@ function makePassingResult(): ConstraintCheckResult {
   return {
     ironLaws: [{ id: 'test_law', level: 'iron_law', satisfied: true, checkedAt: new Date() }],
     guidelines: [],
-    tips: [],
     passed: true,
     warningCount: 0,
-    tipCount: 0,
   };
 }
 
@@ -26,10 +24,8 @@ function makeFailingResult(): ConstraintCheckResult {
   return {
     ironLaws: [{ id: 'test_law', level: 'iron_law', satisfied: false, message: '违规', checkedAt: new Date() }],
     guidelines: [{ id: 'guide', level: 'guideline', satisfied: false, checkedAt: new Date() }],
-    tips: [],
     passed: false,
     warningCount: 1,
-    tipCount: 0,
   };
 }
 

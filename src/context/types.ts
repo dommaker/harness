@@ -1,48 +1,8 @@
 /**
  * 上下文管理类型定义
  *
- * Phase 2: Token 流水线 + 预算 + 压缩
+ * Token 预算 + 会话压缩 + 会话管理 + 知识注入
  */
-
-import type { QueryResult } from '../knowledge/types';
-
-// ========================================
-// 文件读取预算
-// ========================================
-
-export interface FileBudgetConfig {
-  maxLines: number;           // 默认 2000
-  maxBytes: number;           // 默认 50KB (51200)
-  maxTokenEstimate: number;   // 默认 8000
-  continuationHint: boolean;  // 默认 true
-}
-
-export const DEFAULT_FILE_BUDGET: FileBudgetConfig = {
-  maxLines: 2000,
-  maxBytes: 51200,
-  maxTokenEstimate: 8000,
-  continuationHint: true,
-};
-
-// ========================================
-// 工具输出预算
-// ========================================
-
-export interface ToolOutputBudgetConfig {
-  maxChars: number;           // 默认 16000
-  maxTokenRatio: number;      // 默认 0.3 (占总预算 30%)
-  previewLines: number;       // 默认 50
-  overflowToDisk: boolean;    // 默认 false
-  dedup: boolean;             // 默认 true
-}
-
-export const DEFAULT_TOOL_OUTPUT_BUDGET: ToolOutputBudgetConfig = {
-  maxChars: 16000,
-  maxTokenRatio: 0.3,
-  previewLines: 50,
-  overflowToDisk: false,
-  dedup: true,
-};
 
 // ========================================
 // 会话压缩
@@ -76,7 +36,7 @@ export interface SessionMessage {
 }
 
 // ========================================
-// Token Pipeline
+// 上下文来源
 // ========================================
 
 export type ContextSourceType = 'session_event' | 'tool_output' | 'knowledge' | 'user_message' | 'system_prompt' | 'tool_definition';
@@ -87,27 +47,6 @@ export interface ContextSource {
   content: string;
   priority: number;  // P1-P6
   metadata?: Record<string, any>;
-}
-
-export interface TokenBudgetAllocation {
-  total: number;
-  systemPrompt: number;    // 固定，不压缩
-  toolDefinitions: number; // 按需懒加载
-  knowledge: number;       // 500-800
-  notes: number;           // 200-500
-  history: number;         // 剩余预算
-}
-
-export interface PipelineInput {
-  sources: ContextSource[];
-  budget: TokenBudgetAllocation;
-  knowledge?: QueryResult;
-}
-
-export interface PipelineOutput {
-  prompt: string;
-  snapshot: ContextUsageSnapshot;
-  dropped: Array<{ type: string; id: string; reason: string }>;
 }
 
 // ========================================

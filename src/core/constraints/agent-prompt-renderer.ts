@@ -8,7 +8,7 @@
  * custom 追加 → scenes 过滤），与 init 注入、harness check 同一来源。
  *
  * 输出按层级分组：铁律 → 指导原则 → 行为提示；无 promptInjection 的约束
- * （如 docs_freshness）不渲染。tip 层级已随 TIPS 退役，不参与分组。
+ * （如 docs_freshness）不渲染。
  */
 
 import type { Constraint, ConstraintLevel, ConstraintTrigger } from '../../types/constraint';

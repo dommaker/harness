@@ -17,7 +17,7 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { IRON_LAWS, GUIDELINES, TIPS, PROMPTS } from './definitions';
+import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
 import { runCommand } from '../../utils/exec';
@@ -157,13 +157,12 @@ export class ConstraintChecker {
   getConstraints(customConfig?: MergedConstraintsConfig | null): {
     ironLaws: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     guidelines: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    tips: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     prompts: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
   } {
     const config = customConfig ?? this.customConfig;
     const source = config
-      ? { ironLaws: config.ironLaws, guidelines: config.guidelines, tips: config.tips, prompts: config.prompts ?? PROMPTS }
-      : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, tips: TIPS, prompts: PROMPTS };
+      ? { ironLaws: config.ironLaws, guidelines: config.guidelines, prompts: config.prompts ?? PROMPTS }
+      : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, prompts: PROMPTS };
 
     // Wire unified check() method on every constraint
     const wire = (constraints: Record<string, Constraint>) => {
@@ -175,7 +174,6 @@ export class ConstraintChecker {
     return {
       ironLaws: wire(source.ironLaws),
       guidelines: wire(source.guidelines),
-      tips: wire(source.tips),
       prompts: wire(source.prompts),
     };
   }
@@ -260,7 +258,6 @@ export class ConstraintChecker {
       case 'guideline':
         return 'warning';
       case 'prompt':
-      case 'tip':
         return 'info';
       default:
         return 'warning';
@@ -350,7 +347,6 @@ export class ConstraintChecker {
   ): {
     ironLaws: Constraint[];
     guidelines: Constraint[];
-    tips: Constraint[];
     prompts: Constraint[];
   } {
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
@@ -368,17 +364,15 @@ export class ConstraintChecker {
     return {
       ironLaws: filterByTrigger(constraints.ironLaws),
       guidelines: filterByTrigger(constraints.guidelines),
-      tips: filterByTrigger(constraints.tips),
       prompts: filterByTrigger(constraints.prompts),
     };
   }
 
   /**
-   * 执行三层约束检查
+   * 执行约束检查
    *
    * - Iron Laws：检查失败立即抛出异常
    * - Guidelines：检查失败记录警告
-   * - Tips：检查失败记录提示
    *
    * @param context 约束上下文
    * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
@@ -395,10 +389,8 @@ export class ConstraintChecker {
       const result: ConstraintCheckResult = {
         ironLaws: [],
         guidelines: [],
-        tips: [],
         passed: true,
         warningCount: 0,
-        tipCount: 0,
       };
 
       const traceCollector = this.traceRecorder;
@@ -431,19 +423,6 @@ export class ConstraintChecker {
         }
       }
 
-      // 3. Tips: 仅记录
-      for (const constraint of Object.values(constraints.tips)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-
-        const checkResult = await this.check(constraint, context);
-        result.tips.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-
-        if (!checkResult.satisfied) {
-          result.tipCount++;
-        }
-      }
-
       return result;
     } finally {
       this.runCache = null;
@@ -451,7 +430,7 @@ export class ConstraintChecker {
   }
 
   /**
-   * S11: 安全全量检查 — 全部三层约束检查，不抛异常
+   * S11: 安全全量检查 — 全部约束检查，不抛异常
    *
    * 区别 checkConstraints(): Iron Law 违规收集在结果中而不是抛异常。
    * 调用方通过 result.passed + result.warningCount 判断状态。
@@ -468,10 +447,8 @@ export class ConstraintChecker {
       const result: ConstraintCheckResult = {
         ironLaws: [],
         guidelines: [],
-        tips: [],
         passed: true,
         warningCount: 0,
-        tipCount: 0,
       };
 
       const traceCollector = this.traceRecorder;
@@ -491,14 +468,6 @@ export class ConstraintChecker {
         result.guidelines.push(checkResult);
         this.recordTrace(traceCollector, constraint, checkResult, context);
         if (!checkResult.satisfied) result.warningCount++;
-      }
-
-      for (const constraint of Object.values(constraints.tips)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-        const checkResult = await this.check(constraint, context);
-        result.tips.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-        if (!checkResult.satisfied) result.tipCount++;
       }
 
       return result;
@@ -549,13 +518,12 @@ export async function checkConstraint(
   const constraint =
     constraints.ironLaws[constraintId] ||
     constraints.guidelines[constraintId] ||
-    constraints.tips[constraintId] ||
     constraints.prompts[constraintId];
 
   if (!constraint) {
     return {
       id: constraintId,
-      level: 'tip',
+      level: 'guideline',
       satisfied: false,
       message: `未知的约束: ${constraintId}`,
       checkedAt: new Date(),

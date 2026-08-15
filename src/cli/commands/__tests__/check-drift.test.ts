@@ -58,9 +58,7 @@ describe('check 命令注入漂移警告', () => {
       passed: true,
       ironLaws: [],
       guidelines: [],
-      tips: [],
       warningCount: 0,
-      tipCount: 0,
     });
   });
 

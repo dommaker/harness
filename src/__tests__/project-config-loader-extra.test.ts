@@ -66,26 +66,6 @@ custom_constraints:
       expect(merged.ironLaws['my_iron_law']).toBeDefined();
     });
 
-    it('应该正确分类 tip 级别约束', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'config.yml'),
-        `
-custom_constraints:
-  my_tip:
-    rule: MY TIP
-    message: Tip message
-    level: tip
-    trigger: commit
-`
-      );
-
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-      const merged = loader.mergeConstraints();
-
-      expect(merged.tips['my_tip']).toBeDefined();
-    });
-
     it('默认应该分类为 guideline', () => {
       fs.writeFileSync(
         path.join(harnessDir, 'config.yml'),

@@ -124,7 +124,6 @@ describe('bootstrapHarnessSync', () => {
     // Check that mergedConstraints has the expected structure
     expect(result.mergedConstraints).toHaveProperty('ironLaws');
     expect(result.mergedConstraints).toHaveProperty('guidelines');
-    expect(result.mergedConstraints).toHaveProperty('tips');
   });
 
   it('registers hook definitions when provided', () => {

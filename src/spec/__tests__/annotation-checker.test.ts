@@ -163,12 +163,18 @@ export function noSpecFunc() {}
     });
 
     it('应该跳过 node_modules 和 dist', () => {
-      mockFs.readdirSync.mockReturnValue(['src'] as any);
+      mockFs.readFileSync.mockReturnValue('');
+      mockFs.readdirSync.mockReturnValue([
+        { name: 'node_modules', isDirectory: () => true, isFile: () => false },
+        { name: 'dist', isDirectory: () => true, isFile: () => false },
+        { name: 'file.ts', isDirectory: () => false, isFile: () => true },
+      ] as any);
 
       const results = checkDirectory(tempDir);
 
-      // 应该跳过 node_modules 和 dist
-      expect(Array.isArray(results)).toBe(true);
+      // 只收集 file.ts，跳过 node_modules 与 dist 目录
+      expect(results).toHaveLength(1);
+      expect(results[0].file).toBe('/test/project/file.ts');
     });
 
     it('应该处理空目录', () => {

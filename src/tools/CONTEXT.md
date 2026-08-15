@@ -1,25 +1,18 @@
 # tools/
 
 ## 职责
-工具管理：工具类型定义、注册表、核心工具实现、加载器、路径管理。
+工具定义目录与路径管理：bundled 工具定义目录（`definitions/`，113 个 yml 能力目录）与路径解析。
 
 ## 核心导出
-- `types.ts` — 工具类型定义
-- `registry.ts` — 工具注册表
-- `core.ts` — 核心工具实现
-- `loader.ts` — 工具加载器
-- `paths.ts` — 工具路径管理
+- `paths.ts` — 工具路径管理（`getToolsDir` / `getRegistryPath`）
 
 ## 依赖关系
-- 依赖 `src/types/` 公共类型
-- 被 `src/safety/tool-guardrail.ts` 消费
-- 被 Agent 工具调用管线消费
+- 仅依赖 Node 内置 `path`
+- 被 studio 消费（`getRegistryPath` / `getToolsDir`，`capabilities/routes.ts`、`capability.service.ts`）
 
 ## 约定
-- 工具通过注册表统一管理
-- 工具路径由 paths 模块解析
-- loader 支持动态加载外部工具
+- 工具定义目录路径由 paths 模块解析
+- `definitions/` 为静态能力目录，构建时复制到 dist
 
 ## 注意事项
-- 工具注册表与 ToolGuardrail 配合使用
-- 路径管理支持多项目工具目录
+- 旧工具注册表/核心工具/加载器/类型定义已随 H1（#40）删除，仅保留路径管理与能力目录

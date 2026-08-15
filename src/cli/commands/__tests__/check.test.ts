@@ -89,9 +89,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [{ id: 'test', level: 'iron_law', satisfied: true, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
@@ -103,9 +101,7 @@ describe('check command', () => {
         passed: false,
         ironLaws: [{ id: 'no_bypass_checkpoint', level: 'iron_law', satisfied: false, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'no_bypass_checkpoint', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' } }],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
@@ -120,9 +116,7 @@ describe('check command', () => {
         passed: false,
         ironLaws: [],
         guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: false, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
-        tips: [],
         warningCount: 1,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
@@ -141,9 +135,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false, projectPath: '/project' });
@@ -151,28 +143,12 @@ describe('check command', () => {
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已禁用约束'));
     });
 
-    it('应该显示提示信息', async () => {
-      mockChecker.checkConstraints.mockResolvedValue({
-        passed: true,
-        ironLaws: [],
-        guidelines: [],
-        tips: [{ id: 'test_tip', level: 'tip', satisfied: false, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test_tip', rule: 'test', message: 'test tip', level: 'tip', trigger: 'code_implementation', enforcement: 'info' } }],
-        warningCount: 0,
-        tipCount: 1,
-      });
-
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('提示'));
-    });
-
     it('应该显示通过的指导原则', async () => {
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,
         ironLaws: [],
         guidelines: [{ id: 'test_guideline', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: { kind: 'check' as const, id: 'test_guideline', rule: 'test', message: 'test', level: 'guideline', trigger: 'code_implementation', enforcement: 'warning' } }],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
@@ -186,9 +162,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: true });
@@ -201,9 +175,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
@@ -216,9 +188,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: true });
@@ -231,9 +201,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
@@ -244,7 +212,7 @@ describe('check command', () => {
     it('应该检测 module_modification 触发条件（.ts 文件）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: 'src/foo.ts\nsrc/bar.tsx\n', stderr: '' });
       mockChecker.checkConstraints.mockResolvedValue({
-        passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
+        passed: true, ironLaws: [], guidelines: [], warningCount: 0,
       });
 
       // Mock filesystem so detectSourceRoots finds src/ as a source root
@@ -267,7 +235,7 @@ describe('check command', () => {
     it('应该检测 module_modification 触发条件（.js 文件）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: 'src/foo.js\nsrc/bar.jsx\n', stderr: '' });
       mockChecker.checkConstraints.mockResolvedValue({
-        passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
+        passed: true, ironLaws: [], guidelines: [], warningCount: 0,
       });
 
       // Mock filesystem so detectSourceRoots finds src/ as a source root
@@ -290,7 +258,7 @@ describe('check command', () => {
     it('应该检测 file_modification 触发条件（非 src/ 目录）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: 'docs/bar.md\n', stderr: '' });
       mockChecker.checkConstraints.mockResolvedValue({
-        passed: true, ironLaws: [], guidelines: [], tips: [], warningCount: 0, tipCount: 0,
+        passed: true, ironLaws: [], guidelines: [], warningCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
@@ -304,9 +272,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       // Mock filesystem so detectSourceRoots finds src/ as a source root
@@ -332,9 +298,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false, trigger: 'code_implementation' });
@@ -361,9 +325,7 @@ describe('check command', () => {
           },
         }],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
@@ -393,43 +355,13 @@ describe('check command', () => {
             enforcement: 'warning',
           },
         }],
-        tips: [],
         warningCount: 1,
-        tipCount: 0,
       });
 
       await check({ preset: 'default', staged: false });
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('prefer_composition'));
     });
 
-    it('应该显示提示的约束详情', async () => {
-      mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
-      mockChecker.checkConstraints.mockResolvedValue({
-        passed: true,
-        ironLaws: [],
-        guidelines: [],
-        tips: [{
-          id: 'consider_reuse',
-          level: 'tip',
-          satisfied: false,
-          checkedAt: new Date(),
-          constraint: {
-            kind: 'check' as const,
-            id: 'consider_reuse',
-            rule: 'CONSIDER REUSE',
-            message: '考虑复用',
-            level: 'tip',
-            trigger: 'code_implementation',
-            enforcement: 'info',
-          },
-        }],
-        warningCount: 0,
-        tipCount: 1,
-      });
-
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('consider_reuse'));
-    });
   });
 
   describe('getSmartHint (通过 check 间接测试)', () => {
@@ -439,9 +371,7 @@ describe('check command', () => {
         passed: true,
         ironLaws: [],
         guidelines: [],
-        tips: [],
         warningCount: 0,
-        tipCount: 0,
       });
     });
 

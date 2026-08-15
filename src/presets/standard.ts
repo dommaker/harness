@@ -3,7 +3,7 @@
  *
  * 预设定义哪些约束被启用
  *
- * ADR-0001：tips 维度退役，替换为 prompts（纯注入层）。
+ * ADR-0001：kind 二元（check + prompt 纯注入层）。
  */
 
 import type { Constraint } from '../types/constraint';
@@ -79,7 +79,6 @@ export function applyPreset(
   return {
     ironLaws: filterByIds(IRON_LAWS, cfg.ironLaws),
     guidelines: filterByIds(GUIDELINES, cfg.guidelines),
-    tips: {},
     prompts: filterByIds(PROMPTS, cfg.prompts),
     disabled,
     custom: [],

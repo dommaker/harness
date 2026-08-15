@@ -115,14 +115,13 @@ export class ConstraintInterceptor {
     const allConstraints = [
       ...Object.values(constraints.ironLaws),
       ...Object.values(constraints.guidelines),
-      ...Object.values(constraints.tips),
     ].filter(c => c.kind !== 'prompt');
 
     const applicableConstraints = allConstraints.filter(
       (c) => normalizeTriggers<ConstraintTrigger>(c.trigger).includes(trigger)
     );
 
-    const order: Record<ConstraintLevel, number> = { iron_law: 0, guideline: 1, prompt: 2, tip: 3 };
+    const order: Record<ConstraintLevel, number> = { iron_law: 0, guideline: 1, prompt: 2 };
     const ordered = applicableConstraints.sort((a, b) => order[a.level] - order[b.level]);
 
     for (const constraint of ordered) {
@@ -199,10 +198,6 @@ export class ConstraintInterceptor {
 }
 
 export const constraintInterceptor = ConstraintInterceptor.getInstance();
-
-// 注册内置 executors
-import { registerDefaultExecutors } from './default-executors';
-registerDefaultExecutors();
 
 export async function interceptOperation(
   trigger: ConstraintTrigger,

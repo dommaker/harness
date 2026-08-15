@@ -494,7 +494,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       // 这个测试的目的是验证 filterByTrigger 逻辑
       expect(Array.isArray(result.ironLaws)).toBe(true);
       expect(Array.isArray(result.guidelines)).toBe(true);
-      expect(Array.isArray(result.tips)).toBe(true);
     });
   });
 
@@ -541,10 +540,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       expect(result.ironLaws).toBeDefined();
       expect(result.guidelines).toBeDefined();
-      expect(result.tips).toBeDefined();
       expect(typeof result.passed).toBe('boolean');
       expect(typeof result.warningCount).toBe('number');
-      expect(typeof result.tipCount).toBe('number');
     });
   });
 
@@ -553,7 +550,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       checker.setCustomConfig({
         ironLaws: {},
         guidelines: {},
-        tips: {},
         disabled: [],
         custom: [],
       });
@@ -562,7 +558,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       expect(constraints.ironLaws).toEqual({});
       expect(constraints.guidelines).toEqual({});
-      expect(constraints.tips).toEqual({});
 
       // 重置为默认
       (checker as any).customConfig = null;
@@ -613,26 +608,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       expect(result).toBeDefined();
     });
 
-    it('tip 应该返回 info', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_severity_tip',
-          kind: 'prompt',
-          level: 'tip',
-          rule: 'TEST',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result).toBeDefined();
-    });
   });
 
   describe('checkException 例外豁免', () => {
@@ -1448,7 +1423,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
           },
         },
         guidelines: {},
-        tips: {},
         disabled: [] as string[],
         custom: [] as string[],
       };
@@ -1482,7 +1456,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
           },
         },
         guidelines: {},
-        tips: {},
         disabled: [] as string[],
         custom: [] as string[],
       };
@@ -1500,7 +1473,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
           },
         },
         guidelines: {},
-        tips: {},
         disabled: [] as string[],
         custom: [] as string[],
       };
@@ -1543,7 +1515,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const customConfig = {
         ironLaws: { compat_test: { id: 'compat_test', kind: 'prompt' as const, level: 'iron_law' as const, rule: 'C', message: 'compat', trigger: 'file_modification', enforcement: 'test' } },
         guidelines: {},
-        tips: {},
         disabled: [] as string[],
         custom: [] as string[],
       };
@@ -1574,7 +1545,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
           },
         },
         guidelines: {},
-        tips: {},
         disabled: [] as string[],
         custom: [] as string[],
       };

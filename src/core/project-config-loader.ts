@@ -172,7 +172,6 @@ export class ProjectConfigLoader {
     const result: MergedConstraintsConfig = {
       ironLaws: presetMerged.ironLaws,
       guidelines: presetMerged.guidelines,
-      tips: {},
       prompts: presetMerged.prompts ?? {},
       disabled: [...presetMerged.disabled],
       custom: [],
@@ -196,7 +195,6 @@ export class ProjectConfigLoader {
           // 从对应层级中移除
           delete result.ironLaws[constraintId];
           delete result.guidelines[constraintId];
-          delete result.tips[constraintId];
           delete result.prompts![constraintId];
         }
       }
@@ -225,7 +223,6 @@ export class ProjectConfigLoader {
           ];
           if (result.ironLaws[id]) result.ironLaws[id] = constraint;
           if (result.guidelines[id]) result.guidelines[id] = constraint;
-          if (result.tips[id]) result.tips[id] = constraint;
           if (result.prompts![id]) result.prompts![id] = constraint;
           continue;
         }
@@ -255,9 +252,6 @@ export class ProjectConfigLoader {
         case 'prompt':
           result.prompts![id] = constraint;
           break;
-        case 'tip':
-          result.tips[id] = constraint;
-          break;
       }
     }
 
@@ -285,7 +279,7 @@ export class ProjectConfigLoader {
     id: string,
     merged: MergedConstraintsConfig
   ): Constraint | undefined {
-    return merged.ironLaws[id] || merged.guidelines[id] || merged.tips[id] || merged.prompts?.[id];
+    return merged.ironLaws[id] || merged.guidelines[id] || merged.prompts?.[id];
   }
 
   /**

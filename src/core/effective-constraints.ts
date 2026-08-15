@@ -29,7 +29,6 @@ export function getEffectiveConstraints(projectRoot: string = process.cwd()): Co
   return [
     ...Object.values(merged.ironLaws),
     ...Object.values(merged.guidelines),
-    ...Object.values(merged.tips),
     ...Object.values(merged.prompts ?? {}),
   ];
 }

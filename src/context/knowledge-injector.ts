@@ -1,7 +1,7 @@
 /**
  * 知识注入器
  *
- * 将知识条目转换为 ContextSource，注入到 TokenPipeline 的 P3 位置
+ * 将知识条目转换为 ContextSource，供上层上下文组装消费
  * 支持按阶段预算、类型过滤、去重
  */
 

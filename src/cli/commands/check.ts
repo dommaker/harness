@@ -73,7 +73,7 @@ export async function check(options: CheckOptions): Promise<void> {
     }
     console.log(chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
-    // 执行三层检查
+    // 执行检查
     const result = await constraintChecker.checkConstraints(context);
 
     // 输出结果
@@ -83,7 +83,6 @@ export async function check(options: CheckOptions): Promise<void> {
     const skippedResults = [
       ...result.ironLaws,
       ...result.guidelines,
-      ...result.tips,
     ].filter(r => r.skipped);
 
     // Iron Laws
@@ -116,16 +115,6 @@ export async function check(options: CheckOptions): Promise<void> {
       const evaluatedGuidelines = result.guidelines.filter(r => !r.skipped);
       const passedGuidelines = evaluatedGuidelines.filter(r => r.satisfied).length;
       console.log(chalk.green(`✅ 指导原则: ${passedGuidelines}/${evaluatedGuidelines.length} 通过`));
-    }
-
-    // Tips
-    if (result.tipCount > 0) {
-      console.log(chalk.blue(`💡 提示: ${result.tipCount} 条`));
-      result.tips.filter(r => !r.satisfied).forEach(r => {
-        if (r.constraint) {
-          console.log(chalk.blue(`   - ${r.constraint.id}: ${r.constraint.message}`));
-        }
-      });
     }
 
     // Skipped：约定未采用 / 证据未接线，未评估（不计通过/失败）

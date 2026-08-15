@@ -2,12 +2,11 @@
  * 约束模块入口
  */
 
-// 约束定义（kind 二元：check 层 + prompt 层；TIPS 已退役，空表仅为在途兼容保留）
+// 约束定义（kind 二元：check 层 + prompt 层）
 export {
   IRON_LAWS,
   GUIDELINES,
   PROMPTS,
-  TIPS,
   getAllConstraints,
   findConstraintsByTrigger,
   getConstraint,

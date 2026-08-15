@@ -6,9 +6,6 @@
  *   - iron_law：绝对禁止，无例外，违背即阻止执行
  *   - guideline：优先建议，有例外，违背发警告但不阻止
  * - prompt：纯文本提示，仅参与 prompt 注入，不占检查位、不产生 trace
- *
- * 'tip' 层级已随 TIPS 退役（ADR-0001），仅保留在类型上以兼容
- * ConstraintCheckResult.tips 等历史结果形态，不再有新定义使用。
  */
 
 /**
@@ -25,9 +22,8 @@ export type ConstraintKind = 'check' | 'prompt';
  * 约束层级
  *
  * check 层只使用 'iron_law' | 'guideline'；prompt 类统一为 'prompt'。
- * 'tip' 已退役，仅为历史结果结构兼容保留。
  */
-export type ConstraintLevel = 'iron_law' | 'guideline' | 'prompt' | 'tip';
+export type ConstraintLevel = 'iron_law' | 'guideline' | 'prompt';
 
 /**
  * 约束触发条件（开放扩展）
@@ -281,9 +277,6 @@ export class ConstraintViolationError extends Error {
 
 /**
  * 约束检查结果（check 层）
- *
- * tips/tipCount 已随 TIPS 退役（ADR-0001），保留字段以兼容历史调用方，
- * 内置约束下恒为空数组 / 0。
  */
 export interface ConstraintCheckResult {
   /** 铁律检查结果（必须全部通过） */
@@ -292,17 +285,11 @@ export interface ConstraintCheckResult {
   /** 指导原则检查结果（警告，不阻止） */
   guidelines: ConstraintResult[];
   
-  /** 提示检查结果（仅提示） */
-  tips: ConstraintResult[];
-  
   /** 是否通过（铁律全部通过） */
   passed: boolean;
   
   /** 警告数量 */
   warningCount: number;
-  
-  /** 提示数量 */
-  tipCount: number;
 }
 
 /**

@@ -89,9 +89,7 @@ describe('check 命令 skip 输出', () => {
         { id: 'law_skip', level: 'iron_law', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('law_skip', 'iron_law') },
       ],
       guidelines: [],
-      tips: [],
       warningCount: 0,
-      tipCount: 0,
     });
 
     await check({ preset: 'default', staged: false });
@@ -113,9 +111,7 @@ describe('check 命令 skip 输出', () => {
         { id: 'g_pass', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: fakeConstraint('g_pass', 'guideline') },
         { id: 'g_skip', level: 'guideline', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('g_skip', 'guideline') },
       ],
-      tips: [],
       warningCount: 0,
-      tipCount: 0,
     });
 
     await check({ preset: 'default', staged: false });

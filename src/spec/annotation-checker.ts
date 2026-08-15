@@ -4,8 +4,9 @@
  * 检查代码中的 @spec 注释是否规范
  */
 
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import * as path from 'path';
+import { walkFiles } from '../utils/file-walk';
 
 export interface AnnotationCheckResult {
   valid: boolean;
@@ -248,36 +249,13 @@ function checkPublicExports(content: string, result: AnnotationCheckResult): voi
 }
 
 /**
- * 递归获取目录下所有文件
+ * 递归获取目录下所有文件（收敛到 utils/file-walk 的 walkFiles，工单 O3）
  */
 function getFilesRecursively(dir: string, extensions: string[]): string[] {
-  const files: string[] = [];
-  
-  try {
-    const items = readdirSync(dir);
-    
-    for (const item of items) {
-      const fullPath = path.join(dir, item);
-      const stat = statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        // 跳过 node_modules 和 dist
-        if (item === 'node_modules' || item === 'dist') {
-          continue;
-        }
-        files.push(...getFilesRecursively(fullPath, extensions));
-      } else if (stat.isFile()) {
-        const ext = path.extname(item);
-        if (extensions.includes(ext) && !item.endsWith('.d.ts')) {
-          files.push(fullPath);
-        }
-      }
-    }
-  } catch {
-    // 目录不存在或无法访问
-  }
-  
-  return files;
+  return walkFiles(dir, {
+    skipDirs: ['node_modules', 'dist'],
+    filter: (name) => extensions.includes(path.extname(name)) && !name.endsWith('.d.ts'),
+  });
 }
 
 /**

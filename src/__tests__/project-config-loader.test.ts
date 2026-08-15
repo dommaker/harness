@@ -58,7 +58,6 @@ custom_constraints_file: my-constraints.yml
 
       expect(merged.ironLaws).toBeDefined();
       expect(merged.guidelines).toBeDefined();
-      expect(merged.tips).toBeDefined();
       expect(Object.keys(merged.ironLaws).length).toBeGreaterThan(0);
     });
 

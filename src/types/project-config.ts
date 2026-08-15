@@ -285,9 +285,6 @@ export interface MergedConstraintsConfig {
   /** Guidelines（合并后） */
   guidelines: Record<string, Constraint>;
 
-  /** Tips（合并后）—— 已退役（ADR-0001），内置侧恒为空表，仅兼容历史调用方 */
-  tips: Record<string, Constraint>;
-
   /** Prompts（合并后，ADR-0001 新增；可选以兼容旧调用方，缺省回落内置 PROMPTS） */
   prompts?: Record<string, Constraint>;
 

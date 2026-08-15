@@ -108,10 +108,8 @@ export class ConstraintViolationHandler {
       const empty: ConstraintCheckResult = {
         ironLaws: [],
         guidelines: [],
-        tips: [],
         passed: false,
         warningCount: 0,
-        tipCount: 0,
       };
       return {
         strategy: 'COLLECT',

@@ -1,8 +1,8 @@
 /**
  * 文件遍历工具（工单 19）
  *
- * 收敛此前散落在 sync-docs / cross-project-checker / checker /
- * spec-baseline-check / doc-freshness-check 中的 5 处递归遍历实现。
+ * 收敛此前散落在 sync-docs / checker / spec-baseline-check /
+ * doc-freshness-check / spec/annotation-checker 中的递归遍历实现。
  */
 
 import * as fs from 'fs';

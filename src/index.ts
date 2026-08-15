@@ -3,10 +3,9 @@
  * 
  * 通用工程约束框架
  * 
- * 三层约束体系：
- * - Iron Laws：绝对禁止，无例外
- * - Guidelines：优先建议，有例外
- * - Tips：信息性提示，可忽略
+ * 约束体系（ADR-0001 kind 二元）：
+ * - check：可执行检查（Iron Laws 阻断 / Guidelines 告警）
+ * - prompt：纯文本注入，不参与检查
  * 
  * 门禁系统：
  * - PassesGate：测试门控
@@ -43,12 +42,6 @@ export * from './monitoring';
 export * from './failure';
 
 // ========================================
-// 架构约束导出
-// ========================================
-export * from './architecture/constraint-engine';
-export * from './architecture/cross-project-checker';
-
-// ========================================
 // Spec 检查导出
 // ========================================
 export * from './spec/annotation-checker';
@@ -79,16 +72,7 @@ export * from './verification';
 export * from './dashboard';
 
 // ========================================
-// LLM 适配器导出
-// ========================================
-export * from './llm';
-
-// ========================================
-// 治理模块导出
-// ========================================
-
-// ========================================
-// 工具注册表导出
+// 工具路径导出
 // ========================================
 export * from './tools';
 
@@ -171,7 +155,7 @@ export function registerExecutor(
 }
 
 /**
- * 检查约束（三层）
+ * 检查约束（check 层）
  *
  * @param context - 约束上下文
  * @param options.onTrace - 每条约束检查后的回调（用于记录 trace 到外部存储）
@@ -184,7 +168,6 @@ export async function checkConstraints(
   if (options?.onTrace) {
     for (const r of result.ironLaws) options.onTrace(r);
     for (const r of result.guidelines) options.onTrace(r);
-    for (const r of result.tips) options.onTrace(r);
   }
   return result;
 }

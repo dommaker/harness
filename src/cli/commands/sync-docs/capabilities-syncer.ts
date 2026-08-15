@@ -8,7 +8,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { IRON_LAWS, GUIDELINES, TIPS } from '../../../core/constraints/definitions';
+import { IRON_LAWS, GUIDELINES } from '../../../core/constraints/definitions';
 import { isCapabilityListingFormat, readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import { FreshnessRunner } from '../../../core/constraints/doc-freshness/runner';
 import type { CapabilitiesMode } from '../../../core/project-config-loader';
@@ -75,13 +75,6 @@ function buildCapabilityChecks(): DocFreshnessCheck[] {
       pattern: 'Guidelines?\\s*\\((\\d+)\\)',
       actual: { kind: 'const_count', value: Object.keys(GUIDELINES).length },
     },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Tips',
-      pattern: 'Tips?\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: Object.keys(TIPS).length },
-    },
   ];
 }
 
@@ -117,14 +110,12 @@ export function updateCapabilityCounts(content: string, projectPath: string): st
   const gateCount = runner.countFromDir('src/gates', '.ts', ['index.ts', 'types.ts'], projectPath);
   const ironCount = Object.keys(IRON_LAWS).length;
   const guideCount = Object.keys(GUIDELINES).length;
-  const tipsCount = Object.keys(TIPS).length;
 
   const replacements: [RegExp, string][] = [
     [/CLI Commands\s*\(\d+\)/, `CLI Commands (${cliCount})`],
     [/Quality Gates?\s*\(\d+\)/, `Quality Gates (${gateCount})`],
     [/Iron Laws?\s*\(\d+\)/, `Iron Laws (${ironCount})`],
     [/Guidelines?\s*\(\d+\)/, `Guidelines (${guideCount})`],
-    [/Tips?\s*\(\d+\)/, `Tips (${tipsCount})`],
   ];
 
   for (const [regex, replacement] of replacements) {

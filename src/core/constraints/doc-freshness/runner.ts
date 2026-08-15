@@ -44,7 +44,6 @@ interface RunContext {
   constraintCounts?: {
     ironLaws?: number;
     guidelines?: number;
-    tips?: number;
   };
 }
 
@@ -58,7 +57,7 @@ export class FreshnessRunner {
   runAll(
     config: DocFreshnessConfig,
     projectPath: string,
-    ctx?: { requiredDirs?: string[]; constraintCounts?: { ironLaws?: number; guidelines?: number; tips?: number } }
+    ctx?: { requiredDirs?: string[]; constraintCounts?: { ironLaws?: number; guidelines?: number } }
   ): FreshnessCheckResult[] {
     if (config.enabled === false) return [];
     if (!config.checks || config.checks.length === 0) return [];

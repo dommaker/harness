@@ -7,14 +7,14 @@
 
 import { KnowledgeQuery } from '../knowledge/query';
 import { TokenEstimator } from './token-budget';
-import type { KnowledgeEntry, KnowledgeType } from '../knowledge/types';
+import type { KnowledgeEntry, KnowledgeSubsystem } from '../knowledge/types';
 import type { ContextSource } from './types';
 
 export interface InjectionConfig {
   /** Token 预算（默认 800） */
   budget: number;
   /** 关注的知识类型 */
-  focusTypes?: KnowledgeType[];
+  focusTypes?: KnowledgeSubsystem[];
   /** 当前阶段 */
   phase?: string;
   /** 已注入的条目 ID（去重） */

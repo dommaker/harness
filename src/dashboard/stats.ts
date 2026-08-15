@@ -4,7 +4,7 @@
  * 纯函数，从原始数据计算统计指标
  */
 
-import type { KnowledgeEntry, KnowledgeType } from '../knowledge/types';
+import type { KnowledgeEntry, KnowledgeSubsystem } from '../knowledge/types';
 import type { KnowledgeOverview, KnowledgeFlow } from './types';
 
 /**
@@ -36,7 +36,7 @@ export function computeKnowledgeOverview(entries: KnowledgeEntry[]): KnowledgeOv
  * 按类型分组统计
  */
 function computeByType(entries: KnowledgeEntry[]): KnowledgeOverview['byType'] {
-  const typeMap = new Map<KnowledgeType, { total: number; proven: number; verified: number; draft: number }>();
+  const typeMap = new Map<KnowledgeSubsystem, { total: number; proven: number; verified: number; draft: number }>();
 
   for (const entry of entries) {
     const existing = typeMap.get(entry.type) || { total: 0, proven: 0, verified: 0, draft: 0 };

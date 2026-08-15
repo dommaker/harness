@@ -16,7 +16,6 @@ import { getEffectiveConstraints } from '../../../core/effective-constraints';
 
 jest.mock('../../../core/constraints/checker', () => ({
   constraintChecker: {
-    setCustomConfig: jest.fn(),
     setTraceRecorder: jest.fn(),
     checkConstraints: jest.fn(),
   },

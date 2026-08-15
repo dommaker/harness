@@ -7,7 +7,7 @@
 
 import type {
   KnowledgeEntry,
-  KnowledgeType,
+  KnowledgeSubsystem,
   IngestOptions,
   SourceRef,
 } from './types';
@@ -176,19 +176,19 @@ export class KnowledgeIngest {
     };
   }
 
-  private generateId(type: KnowledgeType): string {
+  private generateId(type: KnowledgeSubsystem): string {
     const prefix = type.toUpperCase().slice(0, 3);
     const existing = this.store.list({ types: [type] });
     const seq = String(existing.length + 1).padStart(3, '0');
     return `${prefix}-${seq}`;
   }
 
-  private inferType(_options: IngestOptions): KnowledgeType {
+  private inferType(_options: IngestOptions): KnowledgeSubsystem {
     // Default to 'guideline' if type can't be inferred
     return 'guideline';
   }
 
-  private findDuplicate(title: string, content: string, type: KnowledgeType): KnowledgeEntry | undefined {
+  private findDuplicate(title: string, content: string, type: KnowledgeSubsystem): KnowledgeEntry | undefined {
     // A1: Read from disk directly to avoid stale index causing dedup failure
     const all = this.store.readEntriesFromDisk().filter(e => e.type === type);
 

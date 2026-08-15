@@ -49,7 +49,6 @@ export async function check(options: CheckOptions): Promise<void> {
     const merged = configLoader.hasCustomConfig()
       ? configLoader.mergeConstraints()
       : configLoader.mergeConstraints({ preset: options.preset || 'standard' });
-    constraintChecker.setCustomConfig(merged);
     if (merged.custom.length > 0) {
       console.log(chalk.gray(`自定义约束: ${merged.custom.length} 条`));
     }
@@ -73,8 +72,8 @@ export async function check(options: CheckOptions): Promise<void> {
     }
     console.log(chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
-    // 执行检查
-    const result = await constraintChecker.checkConstraints(context);
+    // 执行三层检查（per-request 传 customConfig，避免单例状态污染）
+    const result = await constraintChecker.checkConstraints(context, merged);
 
     // 输出结果
     console.log();

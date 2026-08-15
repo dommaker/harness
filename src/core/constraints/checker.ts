@@ -74,9 +74,6 @@ const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
 export class ConstraintChecker {
   private static instance: ConstraintChecker;
 
-  /** 自定义约束配置（项目级） */
-  private customConfig: MergedConstraintsConfig | null = null;
-
   /** 检查结果缓存（S7：src 扫描等重复 I/O，TTL=1s 防跨测试污染） */
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
@@ -140,26 +137,16 @@ export class ConstraintChecker {
   }
 
   /**
-   * 设置项目级约束配置
-   *
-   * @deprecated 修改单例状态，多项目并发时存在污染风险。
-   * 请改用 checkConstraints() / beforeExecution() 的 customConfig 参数实现 per-request 隔离。
-   */
-  setCustomConfig(config: MergedConstraintsConfig): void {
-    this.customConfig = config;
-  }
-
-  /**
    * 获取当前的约束集合（内置 + 自定义）
    *
-   * @param customConfig 可选，per-request 自定义配置（优先级高于 setCustomConfig 的单例状态）
+   * @param customConfig 可选，per-request 自定义配置；不传则返回内置约束集
    */
   getConstraints(customConfig?: MergedConstraintsConfig | null): {
     ironLaws: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     guidelines: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
     prompts: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
   } {
-    const config = customConfig ?? this.customConfig;
+    const config = customConfig;
     const source = config
       ? { ironLaws: config.ironLaws, guidelines: config.guidelines, prompts: config.prompts ?? PROMPTS }
       : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, prompts: PROMPTS };

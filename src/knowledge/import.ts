@@ -13,7 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { KnowledgeEntry, KnowledgeType, StorageLayer } from './types';
+import type { KnowledgeEntry, KnowledgeSubsystem, StorageLayer } from './types';
 import type { KnowledgeStore } from './store';
 
 // ── 导入源 ───────────────────────────────────────────────
@@ -62,7 +62,7 @@ export interface ImportConfig {
   manualEntries?: Array<{
     title: string;
     content: string;
-    type: KnowledgeType;
+    type: KnowledgeSubsystem;
     tags?: string[];
   }>;
   /** 是否跳过已导入的 */
@@ -366,7 +366,7 @@ export class ColdStartImporter {
   private createEntry(params: {
     title: string;
     content: string;
-    type: KnowledgeType;
+    type: KnowledgeSubsystem;
     tags: string[];
     layer: StorageLayer;
   }): KnowledgeEntry {

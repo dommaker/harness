@@ -67,6 +67,13 @@ export * from './safety';
 export * from './verification';
 
 // ========================================
+// Completion Checkers 导出（T7-E1，studio#160）
+// WU 收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
+// 纯函数直接 export，不进 ConstraintCheck 闭环注册表。
+// ========================================
+export * from './completion-checkers';
+
+// ========================================
 // Dashboard 数据导出
 // ========================================
 export * from './dashboard';

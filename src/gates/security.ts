@@ -8,12 +8,15 @@
  */
 
 import { execAsync } from '../utils/exec';
-import type { GateResult, GateContext, SecurityGateConfig } from './types';
+import type { GateResult, GateContext, SecurityGateConfig, Gate, GateDecision } from './types';
+import { decisionFromResult } from './decision';
 
 /**
  * 安全门禁
  */
-export class SecurityGate {
+export class SecurityGate implements Gate {
+  readonly id = 'security';
+  order = 0;
   private config: Required<SecurityGateConfig>;
 
   constructor(config: Partial<SecurityGateConfig> = {}) {
@@ -24,6 +27,13 @@ export class SecurityGate {
       ignoreDevDependencies: config.ignoreDevDependencies ?? false,
       severityThreshold: config.severityThreshold ?? 'high',
     };
+  }
+
+  /**
+   * 统一门禁接口（G1）：执行细节私有，决策三态由 scan() 报告推导
+   */
+  async evaluate(context: GateContext): Promise<GateDecision> {
+    return decisionFromResult(await this.scan(context));
   }
 
   /**

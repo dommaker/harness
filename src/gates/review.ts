@@ -8,12 +8,15 @@
  */
 
 import { execAsync } from '../utils/exec';
-import type { GateResult, GateContext, ReviewGateConfig } from './types';
+import type { GateResult, GateContext, ReviewGateConfig, Gate, GateDecision } from './types';
+import { decisionFromResult } from './decision';
 
 /**
  * 审查门禁
  */
-export class ReviewGate {
+export class ReviewGate implements Gate {
+  readonly id = 'review';
+  order = 0;
   private config: Required<ReviewGateConfig>;
 
   constructor(config: Partial<ReviewGateConfig> = {}) {
@@ -23,6 +26,13 @@ export class ReviewGate {
       blockOnChangesRequested: config.blockOnChangesRequested ?? true,
       allowedReviewers: config.allowedReviewers ?? [],
     };
+  }
+
+  /**
+   * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导
+   */
+  async evaluate(context: GateContext): Promise<GateDecision> {
+    return decisionFromResult(await this.check(context));
   }
 
   /**

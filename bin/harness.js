@@ -10,6 +10,13 @@ const { Command } = require('commander');
 const { version } = require('../package.json');
 
 /**
+ * 门禁命令定义表（G1 注册表驱动生成）。
+ * 纯数据模块（无门禁实现 import），--help/--version 懒加载不受影响；
+ * 注册表双向闭环校验在实现加载期执行，不在此处。
+ */
+const { GATE_DEFINITIONS } = require('../dist/gates/definitions');
+
+/**
  * 懒加载命令实现（工单 17）：只在 .action 执行时 require 命令桶，
  * --version/--help 等不触发命令体的调用不再加载全部实现。
  */
@@ -156,128 +163,36 @@ program
   });
 
 // ========================================
-// harness acceptance
+// 门禁命令（6 个，注册表驱动生成，G1）
+// 命令名/别名/选项/子命令路由由 GATE_DEFINITIONS 的 cli 元数据生成，
+// 与历史手工块完全兼容；新增门禁只需补定义 + 注册实现，不再手写本段。
 // ========================================
-program
-  .command('acceptance [subcommand]')
-  .description('验收标准门控，检查任务是否满足验收标准')
-  .alias('acc')
-  .option('-t, --task-id <id>', '任务 ID')
-  .option('--tasks-path <path>', 'tasks.yml 路径')
-  .option('-p, --project-path <path>', '项目路径')
-  .option('--check-all', '检查所有任务', false)
-  .option('--run-e2e', '运行 E2E 测试', false)
-  .action(async (subcommand, options, command) => {
-    if (subcommand === 'list') {
-      await cmd('listAcceptanceCriteria')(options);
+for (const def of GATE_DEFINITIONS) {
+  const cli = def.cli;
+  const command = program.command(cli.command + (cli.argument ? ' ' + cli.argument : ''));
+  command.description(cli.description);
+  if (cli.alias) {
+    command.alias(cli.alias);
+  }
+  for (const opt of cli.options) {
+    if (opt.defaultValue !== undefined) {
+      command.option(opt.flags, opt.description, opt.defaultValue);
     } else {
-      await cmd('acceptance')(options);
+      command.option(opt.flags, opt.description);
+    }
+  }
+  command.action(async (arg, options) => {
+    // commander：无位置参数的命令把 options 传入第一个形参
+    const realArg = cli.argument ? arg : undefined;
+    const realOptions = cli.argument ? options : arg;
+    const sub = cli.subcommands && realArg != null ? cli.subcommands[realArg] : undefined;
+    if (sub) {
+      await cmd(sub)(realOptions);
+    } else {
+      await cmd(cli.action)(...cli.mapActionArgs(realArg, realOptions));
     }
   });
-
-// ========================================
-// harness performance
-// ========================================
-program
-  .command('performance')
-  .description('性能门控，检查性能指标')
-  .alias('perf')
-  .option('-p, --project-path <path>', '项目路径')
-  .option('--coverage', '检查测试覆盖率', false)
-  .option('--coverage-threshold <n>', '覆盖率阈值', '80')
-  .option('--bundle', '检查打包大小', false)
-  .option('--bundle-threshold <n>', '打包大小阈值 (KB)', '500')
-  .option('--benchmark', '运行基准测试', false)
-  .option('--benchmark-timeout <n>', '基准测试超时（秒）', '60')
-  .action(async (options) => {
-    await cmd('performance')({
-      projectPath: options.projectPath,
-      coverage: options.coverage,
-      coverageThreshold: parseInt(options.coverageThreshold, 10),
-      bundle: options.bundle,
-      bundleThreshold: parseInt(options.bundleThreshold, 10),
-      benchmark: options.benchmark,
-      benchmarkTimeout: parseInt(options.benchmarkTimeout, 10),
-    });
-  });
-
-// ========================================
-// harness security
-// ========================================
-program
-  .command('security [subcommand]')
-  .description('安全门控，检查安全漏洞')
-  .alias('sec')
-  .option('-p, --project-path <path>', '项目路径')
-  .option('--severity <level>', '严重性阈值 (low/moderate/high/critical)', 'high')
-  .option('--ignore-warnings', '忽略警告', false)
-  .option('--ignore-dev-deps', '忽略开发依赖', false)
-  .option('--scan-command <cmd>', '自定义扫描命令')
-  .action(async (subcommand, options, command) => {
-    if (subcommand === 'audit') {
-      await cmd('auditDetails')(options);
-    } else {
-      await cmd('security')(options);
-    }
-  });
-
-// ========================================
-// harness contract
-// ========================================
-program
-  .command('contract [subcommand]')
-  .description('API 契约门控，检查 OpenAPI Schema')
-  .option('-p, --project-path <path>', '项目路径')
-  .option('--contract-path <path>', '契约文件路径', 'openapi.yaml')
-  .option('--no-strict', '关闭严格模式')
-  .option('--allow-breaking', '允许破坏性变更', false)
-  .action(async (subcommand, options, command) => {
-    if (subcommand === 'validate') {
-      await cmd('validateSchema')(options);
-    } else {
-      await cmd('contract')(options);
-    }
-  });
-
-// ========================================
-// harness review
-// ========================================
-program
-  .command('review [subcommand]')
-  .description('代码审查门控，检查审查状态')
-  .option('-p, --project-path <path>', '项目路径')
-  .option('--min-reviewers <n>', '最少审查人数', '1')
-  .option('--no-require-approval', '不要求审批')
-  .option('--no-block-on-changes', '不阻止变更请求')
-  .option('--allowed-reviewers <list>', '允许的审查者（逗号分隔）')
-  .action(async (subcommand, options, command) => {
-    if (subcommand === 'status') {
-      await cmd('reviewStatus')(options);
-    } else {
-      await cmd('review')({
-        projectPath: options.projectPath,
-        minReviewers: parseInt(options.minReviewers, 10),
-        requireApproval: options.requireApproval,
-        blockOnChangesRequested: options.blockOnChanges,
-        allowedReviewers: options.allowedReviewers,
-      });
-    }
-  });
-
-// ========================================
-// harness command
-// ========================================
-program
-  .command('command [cmd]')
-  .description('检查命令是否在黑名单中')
-  .alias('cmd')
-  .option('-l, --level', '显示风险等级')
-  .option('--list', '列出所有黑名单规则')
-  .option('--json', 'JSON 格式输出')
-  .option('--strict', '严格模式（warn 也阻止）')
-  .action(async (cmdArg, options) => {
-    await cmd('executeCommand')(cmdArg, options);
-  });
+}
 
 // ========================================
 // harness sync-docs

@@ -21,6 +21,8 @@ import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import type { Gate, GateContext, GateDecision } from './types';
+import { decisionFromResult } from './decision';
 
 
 // ==================== 类型定义 ====================
@@ -135,7 +137,9 @@ export interface E2ETestResult {
 /**
  * 验收标准门禁
  */
-export class SpecAcceptanceGate {
+export class SpecAcceptanceGate implements Gate {
+  readonly id = 'acceptance';
+  order = 0;
   private config: SpecAcceptanceGateConfig;
 
   constructor(config?: Partial<SpecAcceptanceGateConfig>) {
@@ -146,6 +150,25 @@ export class SpecAcceptanceGate {
       e2eTestTimeout: 120000,
       ...config,
     };
+  }
+
+  /**
+   * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导。
+   * AcceptanceGateResult 无 gate 字段，此处归一化为 GateResult 报告结构。
+   */
+  async evaluate(context: GateContext): Promise<GateDecision> {
+    const result = await this.check({
+      projectPath: context.projectPath,
+      taskId: context.taskId,
+      tasksPath: context.tasksPath,
+    });
+    return decisionFromResult({
+      gate: 'acceptance',
+      passed: result.passed,
+      message: result.message,
+      timestamp: result.timestamp,
+      details: result.details as Record<string, any>,
+    });
   }
 
   /**

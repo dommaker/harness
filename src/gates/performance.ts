@@ -16,7 +16,8 @@
 import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { GateResult, GateContext, PerformanceGateConfig, PerformanceThresholds } from './types';
+import type { GateResult, GateContext, PerformanceGateConfig, PerformanceThresholds, Gate, GateDecision } from './types';
+import { decisionFromResult } from './decision';
 
 // 默认超时时间（毫秒）
 const DEFAULT_TIMEOUTS = {
@@ -38,7 +39,9 @@ export interface ExtendedPerformanceGateConfig extends PerformanceGateConfig {
 /**
  * 性能门禁
  */
-export class PerformanceGate {
+export class PerformanceGate implements Gate {
+  readonly id = 'performance';
+  order = 0;
   private config: Required<ExtendedPerformanceGateConfig>;
 
   constructor(config: Partial<ExtendedPerformanceGateConfig> = {}) {
@@ -51,6 +54,13 @@ export class PerformanceGate {
       coverageTimeout: config.coverageTimeout ?? DEFAULT_TIMEOUTS.coverage,
       benchmarkTimeout: config.benchmarkTimeout ?? DEFAULT_TIMEOUTS.benchmark,
     };
+  }
+
+  /**
+   * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导
+   */
+  async evaluate(context: GateContext): Promise<GateDecision> {
+    return decisionFromResult(await this.check(context));
   }
 
   /**

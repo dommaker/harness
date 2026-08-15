@@ -9,12 +9,15 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { GateResult, GateContext, ContractGateConfig } from './types';
+import type { GateResult, GateContext, ContractGateConfig, Gate, GateDecision } from './types';
+import { decisionFromResult } from './decision';
 
 /**
  * 契约门禁
  */
-export class ContractGate {
+export class ContractGate implements Gate {
+  readonly id = 'contract';
+  order = 0;
   private config: Required<ContractGateConfig>;
 
   constructor(config: Partial<ContractGateConfig> = {}) {
@@ -24,6 +27,13 @@ export class ContractGate {
       allowBreakingChanges: config.allowBreakingChanges ?? false,
       contractPath: config.contractPath ?? 'openapi.yaml',
     };
+  }
+
+  /**
+   * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导
+   */
+  async evaluate(context: GateContext): Promise<GateDecision> {
+    return decisionFromResult(await this.check(context));
   }
 
   /**

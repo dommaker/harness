@@ -36,6 +36,11 @@
       "types": "./dist/context/index.d.ts",
       "require": "./dist/context/index.js",
       "import": "./dist/context/index.js"
+    },
+    "./gates": {
+      "types": "./dist/gates/index.d.ts",
+      "require": "./dist/gates/index.js",
+      "import": "./dist/gates/index.js"
     }
   },
   "files": [

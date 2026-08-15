@@ -29,6 +29,16 @@ export {
   renderConstraintsSection,
 } from './injection-renderer';
 
+// 约束检查缓存（H6/G5：TTL 缓存 + 计数采样，公开导出）
+export { CheckCache } from './check-cache';
+export type { CheckCacheConfig, CheckSamplingConfig } from './check-cache';
+
+// Agent prompt 约束段渲染（H6/G6：trigger 参数化分组渲染，role 路由留 studio）
+export {
+  renderConstraintsByTrigger,
+} from './agent-prompt-renderer';
+export type { RenderConstraintsByTriggerOptions } from './agent-prompt-renderer';
+
 // 类型导出
 export type {
   ConstraintId,

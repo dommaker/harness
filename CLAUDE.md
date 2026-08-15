@@ -46,8 +46,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/gates/` | Quality gates: acceptance, command blacklist, contract (OpenAPI), performance, review, security |
 | `src/monitoring/` | Trace collection/analysis, performance monitoring, constraint diagnostics |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
-| `src/context/` | Progressive context loading with worker pool, token budget management |
-| `src/architecture/` | Architecture-level constraint checking, cross-project interface contract checking (API sync, type consistency, breaking changes, doc-code consistency) |
+| `src/context/` | Session management, token budget, compaction, knowledge injection |
 | `src/spec/` | Spec annotation validation in code |
 | `src/safety/` | Security guardrails: Input/Output/Tool Guardrail + Sandbox (L1-L4) |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
@@ -55,8 +54,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
 | `src/dashboard/` | Dashboard stats aggregation and data source management |
-| `src/llm/` | LLM adapter layer: unified interface for multi-model switching |
-| `src/tools/` | Tool registry, core tools, loader, path management |
+| `src/tools/` | Tool path management (paths.ts) + 113 yml capability definitions |
 | `src/verification/` | Rules-based verification engine + loop verification |
 | `src/cli/commands/` | 24 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
 

@@ -1,11 +1,16 @@
 /**
- * CAPABILITIES.md 表格解析（工单 19-B）
+ * CAPABILITIES.md 解析与能力清单计数（工单 19-B / H2 O10-R3）
  *
  * 此前 checker.parseCapabilitiesFiles 与 sync-docs.parseCapabilitiesFiles
- * 各持一份正则，收敛到此处。
+ * 各持一份正则，收敛到此处。H2 起能力清单计数（checkCapabilityCounts /
+ * updateCapabilityCounts）也从 sync-docs/capabilities-syncer 收敛到此，
+ * 使本模块成为 CAPABILITIES.md 解析 + 计数唯一入口。
  */
 
 import * as fs from 'fs';
+import { IRON_LAWS, GUIDELINES } from './definitions';
+import { FreshnessRunner } from './doc-freshness/runner';
+import type { DocFreshnessCheck } from '../../types/project-config';
 
 /** 匹配表格单元格中的源码文件条目（如 `src/foo.ts`、`foo.tsx`） */
 const FILE_CELL_REGEX = /\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/g;
@@ -95,4 +100,92 @@ export function aggregateToSourceSubdir(root: string, file: string): string {
   const idx = rest.indexOf('/');
   if (idx === -1) return prefix;
   return prefix + rest.slice(0, idx) + '/';
+}
+
+// ── 能力清单计数 ────────────────────────────────────────────
+
+/**
+ * 构建 CAPABILITIES.md 能力清单格式的检查配置
+ */
+function buildCapabilityChecks(): DocFreshnessCheck[] {
+  return [
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'CLI Commands',
+      pattern: 'CLI Commands\\s*\\((\\d+)\\)',
+      // index.ts（已删 barrel）与 definitions.ts（命令注册表纯数据）不是命令实现，不计入
+      actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts', 'definitions.ts'] },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Quality Gates',
+      pattern: 'Quality Gates?\\s*\\((\\d+)\\)',
+      actual: { kind: 'dir_count', path: 'src/gates', extension: '.ts', exclude: ['index.ts', 'types.ts'] },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Iron Laws',
+      pattern: 'Iron Laws?\\s*\\((\\d+)\\)',
+      actual: { kind: 'const_count', value: Object.keys(IRON_LAWS).length },
+    },
+    {
+      type: 'doc_regex_count',
+      doc: 'CAPABILITIES.md',
+      label: 'Guidelines',
+      pattern: 'Guidelines?\\s*\\((\\d+)\\)',
+      actual: { kind: 'const_count', value: Object.keys(GUIDELINES).length },
+    },
+  ];
+}
+
+/**
+ * 使用 FreshnessRunner 检查能力清单计数是否与代码一致（--check 模式）
+ */
+export function checkCapabilityCounts(
+  projectPath: string
+): { match: boolean; mismatches: string[] } {
+  const runner = new FreshnessRunner();
+  const checks = buildCapabilityChecks();
+  const results = runner.runAll({ checks }, projectPath);
+
+  const mismatches: string[] = [];
+  for (const r of results) {
+    if (!r.pass && r.message) {
+      mismatches.push(r.message);
+    }
+  }
+
+  return { match: mismatches.length === 0, mismatches };
+}
+
+/**
+ * 更新 CAPABILITIES.md 中的能力清单计数（write 模式）
+ *
+ * 使用 FreshnessRunner 获取实际计数，然后 regex 替换文档计数行。
+ */
+export function updateCapabilityCounts(content: string, projectPath: string): string {
+  const runner = new FreshnessRunner();
+
+  const cliCount = runner.countFromDir('src/cli/commands', '.ts', ['index.ts', 'definitions.ts'], projectPath);
+  const gateCount = runner.countFromDir('src/gates', '.ts', ['index.ts', 'types.ts'], projectPath);
+  const ironCount = Object.keys(IRON_LAWS).length;
+  const guideCount = Object.keys(GUIDELINES).length;
+
+  const replacements: [RegExp, string][] = [
+    [/CLI Commands\s*\(\d+\)/, `CLI Commands (${cliCount})`],
+    [/Quality Gates?\s*\(\d+\)/, `Quality Gates (${gateCount})`],
+    [/Iron Laws?\s*\(\d+\)/, `Iron Laws (${ironCount})`],
+    [/Guidelines?\s*\(\d+\)/, `Guidelines (${guideCount})`],
+  ];
+
+  for (const [regex, replacement] of replacements) {
+    if (regex.test(content)) {
+      content = content.replace(regex, replacement);
+    }
+  }
+
+  return content;
 }

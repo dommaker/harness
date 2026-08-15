@@ -3,16 +3,13 @@
  *
  * Three orthogonal dimensions:
  * - StorageLayer: where knowledge lives (shared boundary)
- * - KnowledgeType: what knowledge describes (MECE)
+ * - KnowledgeSubsystem: what knowledge describes (MECE)
  * - MaturityLevel: how trusted (lifecycle)
  */
 
 // ── Dimensions ──────────────────────────────────────────────
 
 export type KnowledgeSubsystem = 'model' | 'decision' | 'guideline' | 'pitfall' | 'process' | 'architecture';
-
-/** @deprecated Use KnowledgeSubsystem */
-export type KnowledgeType = KnowledgeSubsystem;
 
 export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived' | 'active' | 'deprecated';
 
@@ -28,7 +25,7 @@ export type KnowledgeOrigin = 'human' | 'agent' | 'external' | 'system';
 
 export interface KnowledgeEntry {
   id: string;
-  type: KnowledgeType;
+  type: KnowledgeSubsystem;
   title: string;
   content: string;
   maturity: MaturityLevel;
@@ -81,7 +78,7 @@ export interface QueryBudget {
   phase: string;
   maxTokens: number;
   maxEntries: number;
-  focusTypes: KnowledgeType[];
+  focusTypes: KnowledgeSubsystem[];
 }
 
 export interface QueryResult {
@@ -92,7 +89,7 @@ export interface QueryResult {
 }
 
 export interface QueryFilter {
-  types?: KnowledgeType[];
+  types?: KnowledgeSubsystem[];
   maturity?: MaturityLevel[];
   layers?: StorageLayer[];
   tags?: string[];
@@ -180,7 +177,7 @@ export interface ReferenceRecord {
 
 export interface IndexEntry {
   id: string;
-  type: KnowledgeType;
+  type: KnowledgeSubsystem;
   title: string;
   maturity: MaturityLevel;
   layer: StorageLayer;

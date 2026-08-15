@@ -1,18 +1,14 @@
 /**
- * CAPABILITIES.md 同步器（工单 22）
+ * CAPABILITIES.md 文件表格同步器（工单 22）
  *
- * 支持两种格式：
- * - 文件表格格式：模块/文件/说明三列表格，增删行维护
- * - 能力清单格式：计数行（CLI Commands (N) 等），FreshnessRunner 校验与刷新
+ * 只负责文件表格格式：模块/文件/说明三列表格，增删行维护。
+ * 能力清单格式（计数行）的解析与计数已收敛到 core/constraints/capabilities-parser（H2 O10-R3）。
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { IRON_LAWS, GUIDELINES } from '../../../core/constraints/definitions';
-import { isCapabilityListingFormat, readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
-import { FreshnessRunner } from '../../../core/constraints/doc-freshness/runner';
+import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import type { CapabilitiesMode } from '../../../core/project-config-loader';
-import type { DocFreshnessCheck } from '../../../types/project-config';
 import type { ModuleInfo, SyncResult } from './project-reader';
 
 /**
@@ -31,100 +27,6 @@ export async function parseCapabilitiesFiles(capabilitiesPath: string): Promise<
     if (!files.includes(value)) files.push(value);
   }
   return files;
-}
-
-/**
- * 检测 CAPABILITIES.md 是否使用能力清单格式（计数行），而非文件表格格式
- *
- * @deprecated 实现已收敛到 core/constraints/capabilities-parser（与工单 19-B 同方向），
- * 此处保留 re-export 兼容现有调用方
- */
-export { isCapabilityListingFormat };
-
-/**
- * 构建 CAPABILITIES.md 能力清单格式的检查配置
- */
-function buildCapabilityChecks(): DocFreshnessCheck[] {
-  return [
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'CLI Commands',
-      pattern: 'CLI Commands\\s*\\((\\d+)\\)',
-      // index.ts（已删 barrel）与 definitions.ts（命令注册表纯数据）不是命令实现，不计入
-      actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts', 'definitions.ts'] },
-    },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Quality Gates',
-      pattern: 'Quality Gates?\\s*\\((\\d+)\\)',
-      actual: { kind: 'dir_count', path: 'src/gates', extension: '.ts', exclude: ['index.ts', 'types.ts'] },
-    },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Iron Laws',
-      pattern: 'Iron Laws?\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: Object.keys(IRON_LAWS).length },
-    },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Guidelines',
-      pattern: 'Guidelines?\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: Object.keys(GUIDELINES).length },
-    },
-  ];
-}
-
-/**
- * 使用 FreshnessRunner 检查能力清单计数是否与代码一致（--check 模式）
- */
-export function checkCapabilityCounts(
-  projectPath: string
-): { match: boolean; mismatches: string[] } {
-  const runner = new FreshnessRunner();
-  const checks = buildCapabilityChecks();
-  const results = runner.runAll({ checks }, projectPath);
-
-  const mismatches: string[] = [];
-  for (const r of results) {
-    if (!r.pass && r.message) {
-      mismatches.push(r.message);
-    }
-  }
-
-  return { match: mismatches.length === 0, mismatches };
-}
-
-/**
- * 更新 CAPABILITIES.md 中的能力清单计数（write 模式）
- *
- * 使用 FreshnessRunner 获取实际计数，然后 regex 替换文档计数行。
- */
-export function updateCapabilityCounts(content: string, projectPath: string): string {
-  const runner = new FreshnessRunner();
-
-  const cliCount = runner.countFromDir('src/cli/commands', '.ts', ['index.ts', 'definitions.ts'], projectPath);
-  const gateCount = runner.countFromDir('src/gates', '.ts', ['index.ts', 'types.ts'], projectPath);
-  const ironCount = Object.keys(IRON_LAWS).length;
-  const guideCount = Object.keys(GUIDELINES).length;
-
-  const replacements: [RegExp, string][] = [
-    [/CLI Commands\s*\(\d+\)/, `CLI Commands (${cliCount})`],
-    [/Quality Gates?\s*\(\d+\)/, `Quality Gates (${gateCount})`],
-    [/Iron Laws?\s*\(\d+\)/, `Iron Laws (${ironCount})`],
-    [/Guidelines?\s*\(\d+\)/, `Guidelines (${guideCount})`],
-  ];
-
-  for (const [regex, replacement] of replacements) {
-    if (regex.test(content)) {
-      content = content.replace(regex, replacement);
-    }
-  }
-
-  return content;
 }
 
 /**

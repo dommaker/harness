@@ -546,21 +546,16 @@ describe('ConstraintChecker - 补充覆盖', () => {
   });
 
   describe('自定义约束配置', () => {
-    it('setCustomConfig 应该生效', () => {
-      checker.setCustomConfig({
+    it('per-request customConfig 应该生效', () => {
+      const constraints = checker.getConstraints({
         ironLaws: {},
         guidelines: {},
         disabled: [],
         custom: [],
       });
 
-      const constraints = checker.getConstraints();
-
       expect(constraints.ironLaws).toEqual({});
       expect(constraints.guidelines).toEqual({});
-
-      // 重置为默认
-      (checker as any).customConfig = null;
     });
   });
 
@@ -1505,28 +1500,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const ironLawIdsB = resultB.ironLaws.map(r => r.id);
       expect(ironLawIdsB).toContain('rule_b');
       expect(ironLawIdsB).not.toContain('rule_a');
-    });
-
-    it('setCustomConfig 仍可用于兼容（但应标记 deprecated）', () => {
-      const checker = ConstraintChecker.getInstance();
-      const defaultConstraints = checker.getConstraints();
-      const defaultKeys = Object.keys(defaultConstraints.ironLaws);
-
-      const customConfig = {
-        ironLaws: { compat_test: { id: 'compat_test', kind: 'prompt' as const, level: 'iron_law' as const, rule: 'C', message: 'compat', trigger: 'file_modification', enforcement: 'test' } },
-        guidelines: {},
-        disabled: [] as string[],
-        custom: [] as string[],
-      };
-
-      checker.setCustomConfig(customConfig);
-      const modified = checker.getConstraints();
-      expect(Object.keys(modified.ironLaws)).toEqual(['compat_test']);
-
-      // 恢复默认
-      checker.setCustomConfig(null as any);
-      const restored = checker.getConstraints();
-      expect(Object.keys(restored.ironLaws)).toEqual(defaultKeys);
     });
 
     it('findApplicableConstraints 应接受 per-request config', () => {

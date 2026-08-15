@@ -6,7 +6,7 @@
  *
  * 实现拆分：
  * - project-reader.ts       项目信息读取（package.json/config.yml/源码扫描）
- * - capabilities-syncer.ts  CAPABILITIES.md 两种格式的对比与维护
+ * - capabilities-syncer.ts  CAPABILITIES.md 文件表格格式的对比与维护（能力清单格式解析/计数走 core/constraints/capabilities-parser）
  * - context-syncer.ts       CONTEXT.md 模板生成/发现/过时判定
  * - agents-syncer.ts        AGENTS.md 生成
  * - preserve-block.ts       PRESERVE 标记块提取与组合
@@ -16,16 +16,19 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { aggregateToSourceSubdir, readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
+import {
+  aggregateToSourceSubdir,
+  readCapabilitiesEntries,
+  isCapabilityListingFormat,
+  checkCapabilityCounts,
+  updateCapabilityCounts,
+} from '../../../core/constraints/capabilities-parser';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getCapabilitiesMode } from '../../../core/project-config-loader';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
 import type { ModuleInfo, SyncResult } from './project-reader';
 import {
   parseCapabilitiesFiles,
-  isCapabilityListingFormat,
-  checkCapabilityCounts,
-  updateCapabilityCounts,
   updateCapabilitiesFile,
   compactCapabilitiesContent,
 } from './capabilities-syncer';

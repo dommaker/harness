@@ -40,7 +40,6 @@ jest.mock('child_process', () => ({
 // Mock constraintChecker
 jest.mock('../../../core/constraints/checker', () => ({
   constraintChecker: {
-    setCustomConfig: jest.fn(),
     setTraceRecorder: jest.fn(),
     checkConstraints: jest.fn(),
   },
@@ -139,7 +138,10 @@ describe('check command', () => {
       });
 
       await check({ preset: 'default', staged: false, projectPath: '/project' });
-      expect(mockChecker.setCustomConfig).toHaveBeenCalled();
+      expect(mockChecker.checkConstraints).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ disabled: ['disabled_constraint'] })
+      );
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已禁用约束'));
     });
 

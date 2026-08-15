@@ -4,7 +4,7 @@
  * harness 提供数据，studio 负责渲染
  */
 
-import type { KnowledgeType } from '../knowledge/types';
+import type { KnowledgeSubsystem } from '../knowledge/types';
 
 // ── 约束分层（原 src/constraints/types，约束分层子系统删除后归位 dashboard）──
 
@@ -28,7 +28,7 @@ export interface ConstraintStats {
 
 export interface KnowledgeOverview {
   byType: Array<{
-    type: KnowledgeType;
+    type: KnowledgeSubsystem;
     total: number;
     proven: number;
     verified: number;

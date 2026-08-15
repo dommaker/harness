@@ -6,7 +6,7 @@
  * - 完成时提取新知识
  */
 
-import type { KnowledgeEntry, KnowledgeType } from './types';
+import type { KnowledgeEntry, KnowledgeSubsystem } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeQuery } from './query';
 import type { ContextSource } from '../context/types';
@@ -48,7 +48,7 @@ export class KnowledgeLifecycleHooks {
   onSessionStart(options?: {
     phase?: string;
     budget?: number;
-    focusTypes?: KnowledgeType[];
+    focusTypes?: KnowledgeSubsystem[];
     exclude?: string[];
   }): ContextSource[] {
     const budget = options?.budget ?? this.config.injectionBudget ?? 800;
@@ -173,7 +173,7 @@ export class KnowledgeLifecycleHooks {
   private createExtractionEntry(params: {
     title: string;
     content: string;
-    type: KnowledgeType;
+    type: KnowledgeSubsystem;
     tags: string[];
   }): KnowledgeEntry {
     return {

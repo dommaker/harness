@@ -74,7 +74,6 @@ export async function bootstrapHarness(
 
   // 2. 初始化核心组件
   const checker = ConstraintChecker.getInstance();
-  checker.setCustomConfig(mergedConstraints);
   checker.setTraceRecorder(getTraceCollector());
 
   const sessions = new SessionManager(resolvedPath);
@@ -112,7 +111,6 @@ export function bootstrapHarnessSync(
   const mergedConstraints = loader.mergeConstraints();
 
   const checker = ConstraintChecker.getInstance();
-  checker.setCustomConfig(mergedConstraints);
   checker.setTraceRecorder(getTraceCollector());
 
   const sessions = new SessionManager(resolvedPath);

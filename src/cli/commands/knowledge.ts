@@ -15,7 +15,7 @@ import { ColdStartImporter } from '../../knowledge/import';
 import { KnowledgeAudit } from '../../knowledge/audit';
 import { migrateKnowledgeEntries } from '../../knowledge/migration';
 import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
-import type { KnowledgeType, MaturityLevel, QueryFilter } from '../../knowledge/types';
+import type { KnowledgeSubsystem, MaturityLevel, QueryFilter } from '../../knowledge/types';
 
 export interface KnowledgeOptions {
   /** 项目路径 */
@@ -36,7 +36,7 @@ export async function knowledgeList(options: KnowledgeOptions & {
 
   const filter: QueryFilter = { excludeArchived: false };
   if (options.type) {
-    filter.types = options.type.split(',') as KnowledgeType[];
+    filter.types = options.type.split(',') as KnowledgeSubsystem[];
   }
   if (options.maturity) {
     filter.maturity = options.maturity.split(',') as MaturityLevel[];
@@ -85,7 +85,7 @@ export async function knowledgeSearch(
     phase: 'cli',
     maxTokens: 10000,
     maxEntries: options.limit || 20,
-    focusTypes: [] as KnowledgeType[],
+    focusTypes: [] as KnowledgeSubsystem[],
   };
 
   const result = queryEngine.query(budget);

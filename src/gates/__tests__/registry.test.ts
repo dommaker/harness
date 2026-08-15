@@ -53,7 +53,7 @@ describe('gateRegistry', () => {
 
   it('定义无实现 → 抛错（闭环失败方向 1）', () => {
     const definitions: GateDefinition[] = [
-      { id: 'orphan-def', description: 'x', order: 0, cli: { command: 'x', description: 'x', options: [], action: 'x', mapActionArgs: () => [] } },
+      { id: 'orphan-def', description: 'x', order: 0, cli: { command: 'x', description: 'x', options: [], action: { module: 'x', export: 'x' }, mapActionArgs: () => [] } },
     ];
     const implementations = [fakeGate('other')];
     expect(() => assertGateRegistryClosed(definitions, implementations)).toThrow(
@@ -63,7 +63,7 @@ describe('gateRegistry', () => {
 
   it('实现无定义 → 抛错（闭环失败方向 2）', () => {
     const definitions: GateDefinition[] = [
-      { id: 'defined', description: 'x', order: 0, cli: { command: 'x', description: 'x', options: [], action: 'x', mapActionArgs: () => [] } },
+      { id: 'defined', description: 'x', order: 0, cli: { command: 'x', description: 'x', options: [], action: { module: 'x', export: 'x' }, mapActionArgs: () => [] } },
     ];
     const implementations = [fakeGate('defined'), fakeGate('undocumented-impl')];
     expect(() => assertGateRegistryClosed(definitions, implementations)).toThrow(
@@ -73,7 +73,7 @@ describe('gateRegistry', () => {
 
   it('重复 id → 抛错', () => {
     const definitions: GateDefinition[] = [
-      { id: 'dup', description: 'x', order: 0, cli: { command: 'x', description: 'x', options: [], action: 'x', mapActionArgs: () => [] } },
+      { id: 'dup', description: 'x', order: 0, cli: { command: 'x', description: 'x', options: [], action: { module: 'x', export: 'x' }, mapActionArgs: () => [] } },
     ];
     const implementations = [fakeGate('dup'), fakeGate('dup')];
     expect(() => assertGateRegistryClosed(definitions, implementations)).toThrow(

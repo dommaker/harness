@@ -51,7 +51,8 @@ function buildCapabilityChecks(): DocFreshnessCheck[] {
       doc: 'CAPABILITIES.md',
       label: 'CLI Commands',
       pattern: 'CLI Commands\\s*\\((\\d+)\\)',
-      actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts'] },
+      // index.ts（已删 barrel）与 definitions.ts（命令注册表纯数据）不是命令实现，不计入
+      actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts', 'definitions.ts'] },
     },
     {
       type: 'doc_regex_count',
@@ -112,7 +113,7 @@ export function checkCapabilityCounts(
 export function updateCapabilityCounts(content: string, projectPath: string): string {
   const runner = new FreshnessRunner();
 
-  const cliCount = runner.countFromDir('src/cli/commands', '.ts', ['index.ts'], projectPath);
+  const cliCount = runner.countFromDir('src/cli/commands', '.ts', ['index.ts', 'definitions.ts'], projectPath);
   const gateCount = runner.countFromDir('src/gates', '.ts', ['index.ts', 'types.ts'], projectPath);
   const ironCount = Object.keys(IRON_LAWS).length;
   const guideCount = Object.keys(GUIDELINES).length;

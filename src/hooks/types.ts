@@ -16,6 +16,27 @@ export type HookPhase = 'before' | 'after' | 'around';
 export type HookErrorStrategy = 'block' | 'warn' | 'ignore';
 
 /**
+ * Hook 配置（G7 归一后形状：consumer 侧的 per-hook 声明表）
+ *
+ * 声明与实现构成注册表闭环（assertHookRegistryClosed 双向校验）：
+ * - 声明（HookConfig）是「定义」侧：引用未注册实现 → 抛错
+ * - 注册（HookDefinition）是「实现」侧：注册无对应声明 → 抛错
+ *
+ * 对应 studio 侧 per-hook 运行时配置（hooks/config.ts 的 DEFAULTS）语义：
+ * blocking:true ↔ errorStrategy 'block'（失败阻断管线），
+ * blocking:false ↔ errorStrategy 'warn'（记录警告继续）——无损映射见
+ * config.ts 的 toErrorStrategy。
+ */
+export interface HookConfig {
+  /** Hook 唯一名称（须与注册的 HookDefinition.name 一致） */
+  name: string;
+  /** 是否启用（false 时不进入管线） */
+  enabled: boolean;
+  /** 错误策略：block=失败阻断管线，warn=记录警告继续 */
+  errorStrategy: 'block' | 'warn';
+}
+
+/**
  * Hook 定义
  *
  * Consumer 自行选择 name（如 'beforeAgentExecute'），harness 只提供管线。

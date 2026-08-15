@@ -28,6 +28,20 @@
 - `src/gates/` 依赖 `src/core/` 类型
 - `src/cli/` 依赖所有模块
 
+## 术语
+
+词典（#30 术语裁决；详见 `docs/adr/0002-registry-closed-loop.md`）：
+
+| 术语 | 定义 |
+|------|------|
+| 插件 | harness 扩展点统称 = hook / checker / 门禁(Gate) / 命令(CLI)；非运行时插件容器——harness 是文件驱动 CLI、无常驻进程 |
+| Gate（门禁） | 统一守卫接口 `Gate{id, order, evaluate(ctx)}` → `GateDecision`；统一的是决策协议（id/order/三态），执行细节私有 |
+| GateDecision | 三态决策 `deny \| abstain \| ask`；deny 单调（下游不可改回 allow）、ask 枚举预留 fail-closed = deny |
+| GateResult | 报告结构（gate/passed/message/details/timestamp/duration），保留为报告层，不作决策 |
+| 守卫 guard | 仅 dsh 借鉴语境（工具管线单调守卫），不进入 harness 命名 |
+| 回滚 | 分工：版本化回退（单段——yml 数据文件 git 版本化，删段恢复）+ 提案回滚（多段 inverse，挂 #82 D6） |
+| 文件驱动 CLI | yml 状态真值 + 一次性进程、无常驻生命周期；故不引 dispose 链（止步档 1） |
+
 ## 注意事项
 - 公共包，禁止硬编码业务路径
 - 约束定义在 `core/constraints/definitions/{iron-laws,guidelines,prompts}.ts`，不应在运行时代码中定义

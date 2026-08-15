@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.0.0] - 2026-08-16
+
+### Changes
+- feat(pkg): H3 exports 治理——./gates 子路径公开 CommandGate（#42）
+- feat(core,cli,knowledge): H2 命名与收敛——setCustomConfig 迁移 per-request + KnowledgeType→KnowledgeSubsystem + capabilities 双轨收敛（O4/O5/O10-R3，#41）
+- feat!(cleanup): 删除孤儿子系统并收窄 API 面（1.0.0，#40）
+- docs(adr,context): ADR-0002 注册型能力「定义即注册+构建期闭环」+ CONTEXT.md 术语落地（#46）
+- feat(hooks,cli): H5 hook/命令注册表闭环 + per-command 懒加载（G2/G7/O2/R6，#44）
+- feat(gates): H4 门禁统一——Gate 三态 + gateRegistry 构建期闭环 + 声明式 order/enabled + runGates 单调语义 + bin 注册表驱动生成（#43）
+
 ## [0.19.0] - 2026-08-15
 
 ### Changes

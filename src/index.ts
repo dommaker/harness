@@ -108,6 +108,14 @@ export * from './agents';
 export * from './presets';
 
 // ========================================
+// 约束缓存与渲染导出（H6/G5-G6，#31 收编）
+// ========================================
+export { CheckCache } from './core/constraints/check-cache';
+export type { CheckCacheConfig, CheckSamplingConfig } from './core/constraints/check-cache';
+export { renderConstraintsByTrigger } from './core/constraints/agent-prompt-renderer';
+export type { RenderConstraintsByTriggerOptions } from './core/constraints/agent-prompt-renderer';
+
+// ========================================
 // 便捷 API
 // ========================================
 

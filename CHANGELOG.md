@@ -4,12 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [1.1.0] - 2026-08-16
 
 ### Changes
-- feat(sync-docs): AGENTS.md 知识入口行识别 .studio/CONTEXT.md 正本模型——存在时生成「模块上下文正本：.studio/CONTEXT.md（模块锚点组织）」行整行替代散置 CONTEXT.md 指引，不存在时保持现状逻辑（studio #188）
-- feat(gates): command-gate PreToolUse hook 固化进包——新增 `src/pretool-use-hook.ts`（stdin PreToolUse JSON → CommandGate.isAllowed block 级 exit 2，fail-open），编译产物 `dist/pretool-use-hook.js` 随包出厂，provider hook 配置直接指向 require.resolve 包内路径，取代 studio-agent 按 worktree 生成的胶水脚本（studio #153）
-- feat(completion-checkers): 三纯判定函数 verifyTddChain / verifyPhaseFormat / verifyContractPresence + CompletionCheckersConfig——WU 收尾软观测判定，不进 checker 闭环注册表，纯函数不碰 FS/git（studio #160）
+- docs(changelog): 清空 [Unreleased] 条目段，待 release 脚本生成 [1.1.0]（避免自动生成后残留重复条目）
+- feat(sync-docs): AGENTS.md 知识入口行识别 .studio/CONTEXT.md 正本模型 (studio #188)
+- docs(research): 恢复 wayfinder #27/#28 研究正本——harness 现状盘点 + studio→harness 边界盘点（原仅存于游离提交 e3ab6ac/d2874fc，未随 O11 纳入版本控制）
+- feat(gates): command-gate PreToolUse hook 固化进包（studio #153）
+- feat(completion-checkers): T7-E1 三纯判定函数 tdd-chain/phase-format/contract-presence + CompletionCheckersConfig（#160）
+- docs: CLAUDE.md Key Subsystems 清除已删子系统行 + 修正 context/tools 描述（#40 收尾）
+
+## [Unreleased]
 
 ## [1.0.0] - 2026-08-16
 

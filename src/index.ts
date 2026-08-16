@@ -113,6 +113,7 @@ export type { RenderConstraintsByTriggerOptions } from './core/constraints/agent
 import { constraintChecker } from './core/constraints/checker';
 import { getTraceCollector } from './monitoring/traces';
 import type { ConstraintContext, ConstraintCheckResult, ConstraintTrigger } from './types/constraint';
+import type { MergedConstraintsConfig } from './types/project-config';
 import { constraintInterceptor } from './core/constraints/interceptor';
 import type { EnforcementExecutor, EnforcementId, InterceptionResult } from './types/enforcement';
 
@@ -126,13 +127,15 @@ export const interceptor = constraintInterceptor;
  * 拦截操作 — 在操作执行前检查约束
  * @param trigger - 触发条件
  * @param context - 约束上下文
+ * @param customConfig - 可选，per-request 自定义约束配置；不传则用内置约束集
  * @returns 拦截结果（是否通过、违规列表）
  */
 export async function interceptOperation(
   trigger: ConstraintTrigger,
-  context: ConstraintContext
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
 ): Promise<InterceptionResult> {
-  return constraintInterceptor.intercept(trigger, context);
+  return constraintInterceptor.intercept(trigger, context, customConfig);
 }
 
 /**
@@ -166,12 +169,16 @@ export function registerExecutor(
  *
  * @param context - 约束上下文
  * @param options.onTrace - 每条约束检查后的回调（用于记录 trace 到外部存储）
+ * @param options.customConfig - 可选，per-request 自定义约束配置；不传则用内置约束集
  */
 export async function checkConstraints(
   context: ConstraintContext,
-  options?: { onTrace?: (result: import('./types/constraint').ConstraintResult) => void }
+  options?: {
+    onTrace?: (result: import('./types/constraint').ConstraintResult) => void;
+    customConfig?: MergedConstraintsConfig | null;
+  }
 ): Promise<ConstraintCheckResult> {
-  const result = await constraintChecker.checkConstraints(context);
+  const result = await constraintChecker.checkConstraints(context, options?.customConfig ?? null);
   if (options?.onTrace) {
     for (const r of result.ironLaws) options.onTrace(r);
     for (const r of result.guidelines) options.onTrace(r);
@@ -181,9 +188,13 @@ export async function checkConstraints(
 
 /**
  * 执行前检查（仅 Iron Laws）
+ *
+ * @param context - 约束上下文
+ * @param customConfig - 可选，per-request 自定义约束配置；不传则用内置约束集
  */
 export async function checkBeforeExecution(
-  context: ConstraintContext
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
 ): Promise<void> {
-  return constraintChecker.beforeExecution(context);
+  return constraintChecker.beforeExecution(context, customConfig);
 }

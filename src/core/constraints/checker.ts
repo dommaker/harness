@@ -494,13 +494,16 @@ export class ConstraintChecker {
 
 /**
  * 快捷函数：检查约束
+ *
+ * @param customConfig 可选，per-request 自定义配置；不传则返回内置约束集
  */
 export async function checkConstraint(
   constraintId: string,
-  context: ConstraintContext
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
 ): Promise<ConstraintResult> {
   const checker = ConstraintChecker.getInstance();
-  const constraints = checker.getConstraints();
+  const constraints = checker.getConstraints(customConfig);
 
   const constraint =
     constraints.ironLaws[constraintId] ||

@@ -16,6 +16,7 @@ import type {
   EnforcementContext,
   InterceptionResult,
 } from '../../types/enforcement';
+import type { MergedConstraintsConfig } from '../../types/project-config';
 import { constraintChecker } from './checker';
 
 export class ConstraintInterceptor {
@@ -91,7 +92,8 @@ export class ConstraintInterceptor {
 
   async intercept(
     trigger: ConstraintTrigger,
-    context: ConstraintContext
+    context: ConstraintContext,
+    customConfig?: MergedConstraintsConfig | null
   ): Promise<InterceptionResult> {
     if (!this.enabled) {
       return {
@@ -110,7 +112,7 @@ export class ConstraintInterceptor {
       interceptedAt: new Date(),
     };
 
-    const constraints = constraintChecker.getConstraints();
+    const constraints = constraintChecker.getConstraints(customConfig);
     // prompt 类约束不参与拦截执行（ADR-0001：仅参与注入）
     const allConstraints = [
       ...Object.values(constraints.ironLaws),
@@ -201,9 +203,10 @@ export const constraintInterceptor = ConstraintInterceptor.getInstance();
 
 export async function interceptOperation(
   trigger: ConstraintTrigger,
-  context: ConstraintContext
+  context: ConstraintContext,
+  customConfig?: MergedConstraintsConfig | null
 ): Promise<InterceptionResult> {
-  return constraintInterceptor.intercept(trigger, context);
+  return constraintInterceptor.intercept(trigger, context, customConfig);
 }
 
 export async function claimOperation(

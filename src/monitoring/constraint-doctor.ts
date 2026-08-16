@@ -19,17 +19,8 @@ export type { Diagnosis };
  * 诊断配置
  */
 export interface ConstraintDoctorConfig {
-  /** 是否启用 Agent 诊断（默认 false，需要显式启用） */
-  enabled?: boolean;
-
-  /** Agent 类型（预留，后续对接） */
-  agentType?: 'claude-code' | 'codex' | 'openai';
-
-  /** 最大 traces 数量（用于构造 prompt） */
-  maxTracesInPrompt?: number;
-
-  /** 是否自动生成提案 */
-  autoGenerateProposal?: boolean;
+  /** 最大 traces 数量（用于构造诊断证据） */
+  maxTraces?: number;
 }
 
 /**
@@ -51,9 +42,7 @@ export class ConstraintDoctor {
 
   constructor(config?: ConstraintDoctorConfig) {
     this.config = {
-      enabled: false,
-      maxTracesInPrompt: 20,
-      autoGenerateProposal: false,
+      maxTraces: 20,
       ...config,
     };
     this.traces = [];
@@ -95,7 +84,7 @@ export class ConstraintDoctor {
       rootCause: {
         primary: '',
         secondary: [],
-        evidence: traces.slice(0, this.config.maxTracesInPrompt!),
+        evidence: traces.slice(0, this.config.maxTraces!),
       },
       impact: {
         severity: 'medium',

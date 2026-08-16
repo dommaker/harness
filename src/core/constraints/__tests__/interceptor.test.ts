@@ -215,6 +215,20 @@ describe('ConstraintInterceptor', () => {
 
       await expect(interceptor.intercept('code_implementation', mockContext)).rejects.toThrow();
     });
+
+    it('should forward customConfig to checker.getConstraints', async () => {
+      interceptor.register('test-enforcement', mockExecutor);
+      (mockExecutor.execute as jest.Mock).mockResolvedValue({ passed: true });
+
+      const customConfig = {
+        ironLaws: { test_iron_law: mockIronLaw },
+        guidelines: {},
+        prompts: {},
+      } as any;
+
+      await interceptor.intercept('code_implementation', mockContext, customConfig);
+      expect(mockChecker.getConstraints).toHaveBeenCalledWith(customConfig);
+    });
   });
 
   describe('claim', () => {

@@ -29,7 +29,7 @@ export interface ExecutionTrace {
   constraintId: string;
 
   /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'prompt' | 'tip';
+  level: 'iron_law' | 'guideline' | 'prompt';
 
   /** 检查时间（Unix timestamp） */
   timestamp: number;
@@ -77,7 +77,7 @@ export interface TraceSummary {
   constraintId: string;
 
   /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'prompt' | 'tip';
+  level: 'iron_law' | 'guideline' | 'prompt';
 
   /** 统计时间范围 */
   timeRange: {
@@ -161,7 +161,7 @@ export interface TraceAnomaly {
   constraintId: string;
 
   /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'prompt' | 'tip';
+  level: 'iron_law' | 'guideline' | 'prompt';
 
   /** 异常描述 */
   message: string;
@@ -188,7 +188,7 @@ export interface TraceFilter {
   constraintId?: string;
 
   /** 约束层级（可选） */
-  level?: 'iron_law' | 'guideline' | 'prompt' | 'tip';
+  level?: 'iron_law' | 'guideline' | 'prompt';
 
   /** 结果类型（可选） */
   result?: 'pass' | 'fail' | 'bypassed' | 'skip';

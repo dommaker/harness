@@ -88,7 +88,7 @@ export class TraceCollector {
    */
   recordPass(
     constraintId: string,
-    level: 'iron_law' | 'guideline' | 'tip',
+    level: 'iron_law' | 'guideline',
     options?: Partial<ExecutionTrace>
   ): void {
     this.record({
@@ -105,7 +105,7 @@ export class TraceCollector {
    */
   recordFail(
     constraintId: string,
-    level: 'iron_law' | 'guideline' | 'tip',
+    level: 'iron_law' | 'guideline',
     options?: Partial<ExecutionTrace>
   ): void {
     this.record({
@@ -122,7 +122,7 @@ export class TraceCollector {
    */
   recordBypass(
     constraintId: string,
-    level: 'iron_law' | 'guideline' | 'tip',
+    level: 'iron_law' | 'guideline',
     bypassReason?: string,
     options?: Partial<ExecutionTrace>
   ): void {

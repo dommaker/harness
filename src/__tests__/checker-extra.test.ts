@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 import {
   ConstraintChecker,
+  checkConstraint,
   checkConstraints,
   checkBeforeExecution,
 } from '../core/constraints/checker';
@@ -525,6 +526,22 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       await expect(checkBeforeExecution(context)).rejects.toThrow();
     });
+
+    it('customConfig 应替换内置集（空配置不检查内置铁律）', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        hasTest: false,
+        hasVerificationEvidence: false,
+      };
+
+      // 内置铁律下违规抛错
+      await expect(checkBeforeExecution(context)).rejects.toThrow();
+
+      // 空 customConfig 替换内置集 → 不抛
+      await expect(
+        checkBeforeExecution(context, { ironLaws: {}, guidelines: {}, disabled: [], custom: [] })
+      ).resolves.not.toThrow();
+    });
   });
 
   describe('checkConstraints 完整流程', () => {
@@ -556,6 +573,36 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       expect(constraints.ironLaws).toEqual({});
       expect(constraints.guidelines).toEqual({});
+    });
+
+    it('checkConstraint 带 customConfig 应命中自定义约束', async () => {
+      const context: ConstraintContext = { operation: 'file_modification' };
+      const customConfig = {
+        ironLaws: {
+          test_only: {
+            id: 'test_only',
+            kind: 'prompt' as const,
+            level: 'iron_law' as const,
+            rule: 'TEST',
+            message: 'test',
+            trigger: 'file_modification',
+            enforcement: 'test',
+          },
+        },
+        guidelines: {},
+        disabled: [] as string[],
+        custom: [] as string[],
+      };
+
+      // 不带 customConfig：自定义约束不可见
+      const missing = await checkConstraint('test_only', context);
+      expect(missing.satisfied).toBe(false);
+      expect(missing.message).toContain('未知的约束');
+
+      // 带 customConfig：命中（prompt kind 直接 pass）
+      const hit = await checkConstraint('test_only', context, customConfig);
+      expect(hit.id).toBe('test_only');
+      expect(hit.satisfied).toBe(true);
     });
   });
 

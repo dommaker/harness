@@ -26,7 +26,7 @@ Constraints are defined in `src/core/constraints/definitions/{iron-laws,guidelin
 - **check · Guidelines** (4) — severity: warning. Real checkers; records warning, allows continuation.
 - **prompt** (16) — pure text injections with role routing and applicability tags; no check slot, no trace stats.
 
-`TIPS` is retired (`@deprecated` empty export kept only for in-flight consumer compile compatibility). Every check-layer constraint must reference a registered checker (registry closed loop — build fails otherwise). Convention-probing checks (`capability_sync`/`docs_freshness`/`context_doc_sync`) report `skip` when the project hasn't adopted the convention — no blocking, not counted in pass rate.
+Every check-layer constraint must reference a registered checker (registry closed loop — build fails otherwise). Convention-probing checks (`capability_sync`/`docs_freshness`/`context_doc_sync`) report `skip` when the project hasn't adopted the convention — no blocking, not counted in pass rate.
 
 `getEffectiveConstraints(projectRoot)` (`src/core/effective-constraints.ts`) is the single source of the effective set: built-ins → preset → config.yml disables → custom additions → scenes filtering. init injection, `check`, and external consumers all go through it.
 
@@ -62,7 +62,7 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 
 - **Library**: `src/index.ts` — exports all types, modules, and convenience functions (`checkConstraints()`, `checkBeforeExecution()`, `interceptOperation()`)
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
-- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management)
+- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management), `./gates` (gates only)
 
 ### Design Principles
 

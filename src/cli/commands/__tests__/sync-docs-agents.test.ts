@@ -242,6 +242,61 @@ describe('sync-docs --agents', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
+  describe('知识入口行：.studio/CONTEXT.md 正本模型（studio #188）', () => {
+    it('.studio/CONTEXT.md 存在时生成正本行，替代散置指引（散置文件同时在场也一样），--check 无漂移', async () => {
+      const testDir = path.join(tempDir, 'studio-context-model');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+      // 夹具已带散置 src/CONTEXT.md：正本在场时整行替代，与是否残留散置文件无关
+      fs.mkdirSync(path.join(testDir, '.studio'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, '.studio', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
+
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain('模块上下文正本：`.studio/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
+      expect(content).not.toContain('各源码目录的 `CONTEXT.md`');
+      expect(content).not.toContain('缺失目录可由 `harness sync-docs` 生成模板');
+      // 知识库行不受影响
+      expect(content).toContain('项目知识库，用 `harness knowledge` 查询');
+
+      // 幂等 + --check 通过（正本模型下无漂移）
+      const second = await syncDocs({ projectPath: testDir, agents: true });
+      expect(second).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('.studio/CONTEXT.md 不存在时保持散置模型行，--check 无漂移', async () => {
+      const testDir = path.join(tempDir, 'scattered-context-model');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain('各源码目录的 `CONTEXT.md` 是权威模块文档（现有 1 个），改动代码时同步更新');
+      expect(content).not.toContain('模块上下文正本');
+
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
+    it('.studio/CONTEXT.md 是目录而非文件时不视为正本', async () => {
+      const testDir = path.join(tempDir, 'studio-context-dir');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+      fs.mkdirSync(path.join(testDir, '.studio', 'CONTEXT.md'), { recursive: true });
+
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain('各源码目录的 `CONTEXT.md` 是权威模块文档');
+      expect(content).not.toContain('模块上下文正本');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+  });
+
   it('空项目应该生成兜底内容（无 package.json、无治理配置、无知识库）', async () => {
     const testDir = path.join(tempDir, 'empty-project');
     // 只放应被跳过的目录：依赖/构建产物/隐藏目录

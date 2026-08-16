@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Changes
+- feat(sync-docs): AGENTS.md 知识入口行识别 .studio/CONTEXT.md 正本模型——存在时生成「模块上下文正本：.studio/CONTEXT.md（模块锚点组织）」行整行替代散置 CONTEXT.md 指引，不存在时保持现状逻辑（studio #188）
+- feat(gates): command-gate PreToolUse hook 固化进包——新增 `src/pretool-use-hook.ts`（stdin PreToolUse JSON → CommandGate.isAllowed block 级 exit 2，fail-open），编译产物 `dist/pretool-use-hook.js` 随包出厂，provider hook 配置直接指向 require.resolve 包内路径，取代 studio-agent 按 worktree 生成的胶水脚本（studio #153）
+- feat(completion-checkers): 三纯判定函数 verifyTddChain / verifyPhaseFormat / verifyContractPresence + CompletionCheckersConfig——WU 收尾软观测判定，不进 checker 闭环注册表，纯函数不碰 FS/git（studio #160）
+
 ## [1.0.0] - 2026-08-16
 
 ### Changes
@@ -35,19 +42,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: constraints retire 直达路径补 --yes 人确认闸门（#24）
 - feat: custom 约束退役落点迁至 custom-constraints.yml（#82 D6 一处真相）
 - fix: mergeConstraints 生效 config.yml 对 custom 约束的禁用
-
-## [Unreleased]
-
-### Changes
-- feat(pkg): exports 增加 `./gates` 子路径公开 CommandGate 等门禁导出（H3，#42）——studio `provider-hooks.ts` 可改正规 import `@dommaker/harness/gates` 而非 require.resolve dist 深路径（studio 侧随动 #150 B3）；O7 files 去 src 因 studio `rule-scanner.ts:223` 仍硬编码 `@dommaker/harness/src/` 源路径而保留（待 studio #150 B2 先行）
-- feat(hooks): hook 注册表闭环 + 配置归一（G2/G7，#44）——`assertHookRegistryClosed` 声明（HookConfig）↔ 实现（HookDefinition）双向校验（引用未注册/注册无定义/重复 → 抛错，复制 checker 闭环模式，断言限构建/测试期）；`HookConfig{name,enabled,errorStrategy}` 为 per-hook 配置唯一真相，`toErrorStrategy` 承载 studio `blocking`→errorStrategy(block/warn) 无损映射（studio #150 A4 随动）；pipeline block/warn 语义补测试固化
-- feat(cli): 命令注册表驱动 + per-command 懒加载（O2/R6，#44）——`COMMAND_DEFINITIONS`（definitions.ts，纯数据模块）为命令形状单一来源，bin/harness.js 由注册表遍历生成、不再手写 commander 命令块，删 commands/index.ts barrel（消灭两处手工同步）；实现引用 module+export，action 执行时才 require 对应命令模块，任一命令执行不再加载全部命令实现；门禁 CLI 元数据 action/subcommands 同步改为实现引用；`--help`/`--version` 零命令实现加载（模块数 10→11，仅多一个纯数据模块），单命令只加载自身模块（registry.test.ts 端到端断言）
-- feat(gates): H4 门禁统一——Gate 三态（deny | abstain | ask）+ gateRegistry 构建期闭环 + 声明式 order/enabled + runGates 单调语义 + bin 注册表驱动生成（#43）。统一 `Gate{id, order, evaluate(ctx)}` → `GateDecision`（GateResult 保留为报告结构）；注册表「定义即注册 + 双向闭环」复制 checker 模式（定义无实现/实现无定义/重复 id → 加载期抛错，getGate 引用未注册抛错）；`getEffectiveGates` 对齐 getEffectiveConstraints 裁剪（config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除，引用未注册抛错）；`runGates` deny 单调（下游不得改回 allow，决策浅冻结）+ ask 枚举预留 fail-closed = deny；6 门禁 CLI 命令由 `GATE_DEFINITIONS` 元数据驱动生成（命令名/别名/选项兼容，bin 不再手写 6 块）；checker-as-guard 接线点 `createCheckerGate`（studio #129 随动）
-- fix(lint): `npm run lint` 恒失败——仓库自初始提交起无任何 ESLint 配置，命令不可用却一直挂在文档里（#35）。新增 `eslint.config.mjs` flat config（eslint 8.57 自动识别，无需升级/环境变量）：eslint:recommended + @typescript-eslint/recommended 收敛版；`no-explicit-any`/`no-non-null-assertion`/`no-var-requires`/`require-yield` 显式关闭（存量 335/252/39/1 处，any/non-null 属风格化改型、var-requires 为刻意 CJS 懒加载、require-yield 为故意抛错 stub，专项治理另开票），`no-empty` 保留 `catch {}` 吞异常既有约定（allowEmptyCatch），unused-vars 支持 `_` 前缀参数约定；一次性清理 74 处机械违规（unused-vars/prefer-const/useless-escape/case-declarations，均不改运行时行为；唯一例外 init.ts：模板字面量 `\.` 运行期退化，生成 `grep -E 'plans/.*.md$'` 点通配，与同文件落盘版 preCommitContent 副本 drift，改 `\\.` 使两副本一致）。lint script 去掉 `--ext .ts`（flat config 按文件模式选型）。coverage-gate.yml 新增 lint job——CI 从未跑 lint 正是问题长期未暴露的根因，从此防再退化
-- fix(cli): 模板/提示裸名 `npx harness` 全部改为 `npx @dommaker/harness`（#36）——裸名经 npx 必然走 npm 注册表，命中同名陌生包（rsdoiel/harness@0.0.6，2013 年与本项目无关）；init 三段模板（pre-commit/harness-check.yml/harness-governance.yml）、validate resolutions、constraints-report、injection-drift 修复提示、README 示例全部 scoped 化。harness 仓自身 dogfood 改用 `node bin/harness.js`（`.github/workflows/harness-governance.yml` 直改；pre-commit 钩子生成源落盘为 `bin/install-precommit-hook.sh`，`npm run hooks:install` 一条命令装回，本地确定、离线可用、dogfood 当前 HEAD）。消费项目已有落盘钩子需重跑 `npx @dommaker/harness init` 刷新
-- fix(sync-docs): CAPABILITIES.md 中真实存在的 .tsx 模块行不再被误判为「已删除」并误删（#33）——源码扫描扩入 .tsx（findTsSourceFiles 新增 includeTsx 选项，sync-docs 链路开启，scanSourceModules 顶层分支同步），removed 判定前对含路径登记条目做全路径存在性过滤，兜住 .js/.jsx 等其它扫描盲区
-- fix(constraints): 内置 `no_completion_without_verification` 文案弱化（#25）——去掉「完整」字样与写死的命令示例（npm test/npm run build），验证口径改为项目声明的测试 + type check，全量验证归 CI；强制力保留在「新鲜输出为证、禁止凭记忆声称完成」。大仓项目需自定义口径时仍可用 custom-constraints.yml shadow override
-- fix(constraints): `retire <id>` 直达路径补人确认闸门（#24）——无 `--yes` 报错 + 非零退出码且不落盘，提示改用 `--yes` 或交互模式；`--yes` 直达保留原行为，iron 仍打印警示。ADR-0001 决策 2「执行层保留一次人确认」对所有入口成立。
 
 ## [0.17.1] - 2026-08-09
 

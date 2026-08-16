@@ -8,6 +8,7 @@
 - `core/index.ts`: 核心约束引擎
 - `presets/index.ts`: 预设配置
 - `context/index.ts`: 上下文管理
+- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径（studio#153）
 
 ## 目录
 | 目录 | 职责 |

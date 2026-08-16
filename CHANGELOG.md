@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+## [1.1.1] - 2026-08-17
+
+### Changes
+- docs: 评审收尾——ADR-0002 版本线 1.0.0 + 文档漂移对齐
+- fix(core,cli,monitoring,types): D5/D8 收尾——tip 层级整链摘除 + constraint-doctor 死配置清理
+- fix(core): O4 收尾——便捷 API 补 per-request customConfig（checkConstraint/checkBeforeExecution/checkConstraints/interceptOperation）
+
 ## [1.1.0] - 2026-08-16
 
 ### Changes
@@ -13,8 +22,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat(gates): command-gate PreToolUse hook 固化进包（studio #153）
 - feat(completion-checkers): T7-E1 三纯判定函数 tdd-chain/phase-format/contract-presence + CompletionCheckersConfig（#160）
 - docs: CLAUDE.md Key Subsystems 清除已删子系统行 + 修正 context/tools 描述（#40 收尾）
-
-## [Unreleased]
 
 ## [1.0.0] - 2026-08-16
 

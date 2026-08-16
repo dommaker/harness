@@ -17,8 +17,7 @@
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
 | monitoring/ | 追踪收集/分析、性能、诊断 |
 | failure/ | 错误分类、失败记录 |
-| context/ | 渐进式上下文加载、token 预算管理 |
-| architecture/ | 架构约束、跨项目检查 |
+| context/ | 会话管理、token 预算、压缩、知识注入 |
 | spec/ | Spec 注解验证 |
 | cli/commands/ | 24 个 CLI 子命令 |
 | tools/ | 工具定义 |

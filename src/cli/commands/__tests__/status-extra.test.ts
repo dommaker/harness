@@ -153,26 +153,6 @@ describe('status command - 补充覆盖', () => {
       
       expect(consoleSpy).toHaveBeenCalled();
     });
-
-    it('应该显示 Tips 统计', async () => {
-      const mockTraces = [
-        { constraintId: 'context_doc_sync', level: 'tip', result: 'pass' },
-      ];
-      mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
-
-      const mockSummaries = [
-        { constraintId: 'context_doc_sync', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
-      ];
-      const mockAnalyze = {
-        summarize: jest.fn().mockReturnValue(mockSummaries),
-        detectAnomalies: jest.fn().mockReturnValue([]),
-      };
-      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
-
-      await status({});
-      
-      expect(consoleSpy).toHaveBeenCalled();
-    });
   });
 
   describe('详细模式扩展', () => {
@@ -180,14 +160,12 @@ describe('status command - 补充覆盖', () => {
       const mockTraces = [
         { constraintId: 'no_bypass_checkpoint', level: 'iron_law', result: 'pass' },
         { constraintId: 'capability_sync', level: 'guideline', result: 'pass' },
-        { constraintId: 'context_doc_sync', level: 'tip', result: 'pass' },
       ];
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
         { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, totalChecks: 10, bypassRate: 0 },
         { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
-        { constraintId: 'context_doc_sync', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),

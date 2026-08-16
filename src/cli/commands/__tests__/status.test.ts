@@ -193,21 +193,6 @@ describe('status command', () => {
       await status({});
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Guidelines'));
     });
-
-    it('应该显示 Tips 统计', async () => {
-      mockFs.readFileSync.mockReturnValue('{"constraintId":"test"}');
-
-      const mockAnalyze = {
-        summarize: jest.fn().mockReturnValue([
-          { constraintId: 'test_tip', level: 'tip', passRate: 1, totalChecks: 5, bypassRate: 0 },
-        ]),
-        detectAnomalies: jest.fn().mockReturnValue([]),
-      };
-      (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
-
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Tips'));
-    });
   });
 
   describe('异常模式', () => {

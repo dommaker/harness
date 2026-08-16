@@ -129,16 +129,6 @@ export async function status(options: StatusOptions): Promise<void> {
     console.log();
   }
 
-  // Tips
-  const tipSummaries = summaries.filter((s: TraceSummary) => s.level === 'tip');
-  if (tipSummaries.length > 0) {
-    console.log(chalk.blue('🔵 Tips:'));
-    tipSummaries.forEach((s: TraceSummary) => {
-      console.log(`  💡 ${s.constraintId}`);
-    });
-    console.log();
-  }
-
   // 异常检测
   if (anomalies.length > 0) {
     console.log(chalk.yellow(`⚠️  发现 ${anomalies.length} 个异常`));

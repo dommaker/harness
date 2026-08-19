@@ -2,7 +2,7 @@
  * ConstraintViolationHandler — 约束违规统一处理（S4）
  *
  * 问题：ConstraintViolationError 在 4 个调用点有 4 种行为：
- *   1. 抛异常阻断（checker.ts / interceptor.ts）
+ *   1. 抛异常阻断（checker.ts）
  *   2. 返回 null（report.ts catch 后返回空数据）
  *   3. 返回 403 HTTP 状态
  *   4. console.warn 静默吞掉

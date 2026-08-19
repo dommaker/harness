@@ -12,7 +12,7 @@
 ## 依赖关系
 - 依赖 `src/types/constraint` ConstraintViolationError
 - 依赖 `src/core/constraints/` 约束检查结果
-- 被 `src/core/constraints/interceptor.ts` 消费
+- 被 `src/cli/commands/report.ts` 消费（executeWithCollect），并经包根导出
 
 ## 约定
 - 分类规则可扩展(自定义 ErrorClassifierConfig)

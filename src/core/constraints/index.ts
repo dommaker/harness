@@ -53,19 +53,3 @@ export type {
 } from '../../types/constraint';
 
 export { ConstraintViolationError } from '../../types/constraint';
-
-// 约束拦截器
-export {
-  ConstraintInterceptor,
-  constraintInterceptor,
-  interceptOperation,
-  claimOperation,
-} from './interceptor';
-
-export type {
-  EnforcementId,
-  EnforcementExecutor,
-  EnforcementContext,
-  EnforcementResult,
-  InterceptionResult,
-} from '../../types/enforcement';

@@ -90,7 +90,7 @@
 ### monitoring 已删文件（17）— 断链诊断/性能/知识医生链路：ConstraintDoctor 依赖已删 diagnosis-rules；Performance 链路无消费者；KnowledgeDoctor/KnowledgeEvolver 与 knowledge/doctor.ts 的 KnowledgeHealthScorer 重复。符号来源含 `types/performance.ts`（Performance*/TokenUsage* 8 个）与 `types/monitoring-types.ts`（Diagnosis）——两文件仅服务已删链路，整文件删除、删前核验零引用
 `ConstraintDoctor` `ConstraintDoctorConfig` `createDoctor` `Diagnosis` `KnowledgeDoctor` `KnowledgeEvolver` `PerformanceAnalyzer` `PerformanceAnalyzerConfig` `PerformanceAnomaly` `PerformanceCollector` `PerformanceCollectorConfig` `PerformanceSummary` `PerformanceTrace` `PerformanceTraceFilter` `createPerformanceAnalyzer` `TokenUsageRecord` `TokenUsageSummary`
 
-### interceptor（12）— 不删除但摘出公共面：拟退役的第二执行引擎（退役单独立项），不进公共清单；enforcement 类型仅服务于 interceptor API，一并摘出
+### interceptor（12）— 已由 ADR-0004 整体删除：第二执行引擎零生产调用方，拦截统一由 checkBeforeExecution 承担；enforcement 类型仅服务该 API，随文件 `types/enforcement.ts` 一并删除
 `ConstraintInterceptor` `constraintInterceptor` `interceptOperation` `claimOperation` `interceptor` `registerExecutor` `EnforcementId` `EnforcementExecutor` `EnforcementContext` `EnforcementResult` `EnforcementRegistration` `InterceptionResult`
 
 ### 内部 seam（6）— 不公开：单例/加载器属内部接线点，studio 清单无消费；`./core` 子路径仍可达

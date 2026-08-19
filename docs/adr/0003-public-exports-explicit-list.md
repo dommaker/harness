@@ -58,5 +58,5 @@ studio 实际消费的 58 个符号全数收录；逐符号判定见 `docs/publi
 
 ## 明确不做
 
-- **interceptor 本次不删**：`ConstraintInterceptor`/`interceptOperation`/`claimOperation`/`registerExecutor` 及 enforcement 类型仅从包根公共面摘出，实现保留（`./core` 可达）；退役单独立项。
+- **interceptor 本次不删**：`ConstraintInterceptor`/`interceptOperation`/`claimOperation`/`registerExecutor` 及 enforcement 类型仅从包根公共面摘出，实现保留（`./core` 可达）；退役单独立项。→ 已由 ADR-0004 兑现：整体物理删除，见 `docs/adr/0004-retire-constraint-interceptor.md`。
 - package.json 版本号与 CHANGELOG 不动（发布走 harness-ship）。

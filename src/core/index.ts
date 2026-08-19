@@ -24,10 +24,6 @@ export {
   CheckCache,
   renderConstraintsByTrigger,
   ConstraintViolationError,
-  ConstraintInterceptor,
-  constraintInterceptor,
-  interceptOperation,
-  claimOperation,
 } from './constraints';
 export type {
   CheckConstraintsOptions,
@@ -43,11 +39,6 @@ export type {
   ConstraintContext,
   ConstraintCheckResult,
   IronLawContext,
-  EnforcementId,
-  EnforcementExecutor,
-  EnforcementContext,
-  EnforcementResult,
-  InterceptionResult,
 } from './constraints';
 
 // 验证器（检查点 / PassesGate / CSO）

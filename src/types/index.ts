@@ -31,9 +31,6 @@ export { DynamicTask as ExtendedDynamicTask, TaskTestResult as ExtendedTaskTestR
 // 项目配置类型
 export * from './project-config';
 
-// Enforcement 类型
-export * from './enforcement';
-
 // Spec 验证类型
 export * from './spec';
 

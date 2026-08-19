@@ -8,8 +8,9 @@
  * H5（#44）：命令注册表驱动生成（R6 消灭手工 commander 块 + commands/index.ts
  * 两处同步）+ per-command 懒加载（O2，拆单一 commands barrel）。
  * 本文件是纯通用引擎：命令形状（名称/别名/选项/子命令/实现引用）全部来自
- * COMMAND_DEFINITIONS（非门禁命令）与 GATE_DEFINITIONS.cli（6 门禁命令），
- * 不含任何单命令知识；新增命令 = 命令文件 + 定义表一条 + 测试，不再改本文件。
+ * COMMAND_DEFINITIONS（非门禁命令）与 GATE_DEFINITIONS.cli（6 门禁命令，
+ * 形状同为 CommandDefinition，ADR-0007），不含任何单命令知识；
+ * 新增命令 = 命令文件 + 定义表一条 + 测试，不再改本文件。
  */
 
 const { Command } = require('commander');
@@ -111,9 +112,9 @@ async function runDefinition(command, def, positionals, options) {
         console.error(`未知子命令: ${sub}`);
         process.exit(1);
       }
-      // 非 strict（如 spec）：未知位置参数落回默认 action
-    } else {
-      // 无子命令时显示帮助
+      // 非 strict（如 spec / 门禁命令）：未知位置参数落回默认 action
+    } else if (!def.bareRunsAction) {
+      // 无子命令时显示帮助（bareRunsAction 的门禁命令则落回默认 action）
       command.help();
       return;
     }
@@ -135,40 +136,14 @@ program
   .version(version);
 
 // ========================================
-// 非门禁命令：COMMAND_DEFINITIONS 注册表驱动生成
+// 全部命令：注册表驱动生成（非门禁 COMMAND_DEFINITIONS + 门禁 GATE_DEFINITIONS.cli，
+// 形状同为 CommandDefinition，ADR-0007）
 // ========================================
-for (const def of COMMAND_DEFINITIONS) {
+for (const def of [
+  ...COMMAND_DEFINITIONS,
+  ...GATE_DEFINITIONS.filter(g => g.cli).map(g => g.cli),
+]) {
   buildCommand(program, def);
-}
-
-// ========================================
-// 门禁命令（6 个）：GATE_DEFINITIONS.cli 注册表驱动生成（G1）
-// ========================================
-for (const def of GATE_DEFINITIONS) {
-  const cli = def.cli;
-  const command = program.command(cli.command + (cli.argument ? ' ' + cli.argument : ''));
-  command.description(cli.description);
-  if (cli.alias) {
-    command.alias(cli.alias);
-  }
-  for (const opt of cli.options) {
-    if (opt.defaultValue !== undefined) {
-      command.option(opt.flags, opt.description, opt.defaultValue);
-    } else {
-      command.option(opt.flags, opt.description);
-    }
-  }
-  command.action(async (arg, options) => {
-    // commander：无位置参数的命令把 options 传入第一个形参
-    const realArg = cli.argument ? arg : undefined;
-    const realOptions = cli.argument ? options : arg;
-    const sub = cli.subcommands && realArg != null ? cli.subcommands[realArg] : undefined;
-    if (sub) {
-      await callImpl(sub, [realOptions]);
-    } else {
-      await callImpl(cli.action, cli.mapActionArgs(realArg, realOptions));
-    }
-  });
 }
 
 // 解析命令行参数

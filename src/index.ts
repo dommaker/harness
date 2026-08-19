@@ -191,8 +191,6 @@ export type {
   GateDecision,
   GateDecisionStatus,
   GateDefinition,
-  GateCliDefinition,
-  GateCliOption,
   GateRunResult,
   GatesConfig,
   PerformanceThresholds,

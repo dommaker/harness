@@ -6,7 +6,7 @@
 ## 核心导出
 - 统一协议：`Gate{id, order, evaluate(ctx)}` → `GateDecision{status: deny|abstain|ask, result: GateResult}`（`types.ts`；`decisionFromResult` 报告→决策映射，浅冻结）
 - 注册表：`gateRegistry`（`registry.ts`）——定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错）；`getGate`（未注册抛错）/`listRegisteredGates`/`registeredGateCount`
-- 定义表：`GATE_DEFINITIONS`（`definitions.ts`）——id/description/默认 order/CLI 元数据；bin/harness.js 注册表驱动生成 6 门禁命令（纯数据模块，禁 import 实现，保 --help 懒加载；CLI 实现引用为 module+export，per-command 懒加载，H5）
+- 定义表：`GATE_DEFINITIONS`（`definitions.ts`）——id/description/默认 order/CLI 元数据；CLI 元数据形状即 `CommandDefinition`（ADR-0007：门禁与非门禁共用同一命令定义形状，bin 单引擎单循环；门禁特有语义 = `subcommandStrict:false` 未知子命令落回默认 action + `bareRunsAction:true` 裸跑执行 action）；bin/harness.js 注册表驱动生成 6 门禁命令（纯数据模块，禁 import 实现，保 --help 懒加载；CLI 实现引用为 module+export，per-command 懒加载，H5）
 - 执行器：`runGates`（`runner.ts`）——按 order 升序；deny 单调（下游 abstain 不得改回 allow）+ ask 枚举预留 fail-closed = deny；决策浅冻结
 - 生效集：`getEffectiveGates(projectRoot)`（`effective-gates.ts`）——对齐 getEffectiveConstraints 裁剪模式：config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除；enabled 段未注册校验与裁剪走 core/effective-set 共享筛选器（throw 模式），order 重排与重复 id 检测留本侧
 - checker-as-guard 接线点：`createCheckerGate(check)`（`checker-gate.ts`）——ConstraintCheck → Gate（studio #129 随动）；false→deny，true/'skip'→abstain；env 经 `buildCheckEnv(..., 'none')` 构造（显式不接证据，语义见 core/constraints/checkers/types.ts 工厂 doc）

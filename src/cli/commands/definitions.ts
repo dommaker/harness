@@ -81,6 +81,8 @@ export interface CommandDefinition {
   subcommands?: Record<string, CommandSubcommand>;
   /** false = 未知位置参数不报错、落回默认 action（spec 的文件参数用法） */
   subcommandStrict?: boolean;
+  /** true = 有 subcommands 但无位置参数时运行默认 action 而非显示帮助（门禁命令语义） */
+  bareRunsAction?: boolean;
   /** 选项条件路由（匹配时替代默认 action 执行） */
   optionRoutes?: CommandOptionRoute[];
   /** 默认 action 实参构造（缺省为 [options]） */

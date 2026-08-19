@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changes
+- refactor(cli,gates)!: 门禁命令定义形状对齐 CommandDefinition，bin/harness.js 单引擎单循环（ADR-0007，架构评审候选8）——删除 `GateCliDefinition`/`GateCliOption` 公开类型，`GateDefinition.cli` 直接为 `CommandDefinition`；`CommandDefinition` 新增 `bareRunsAction` 字段表达门禁裸跑语义。CLI 行为（命令名/别名/选项/子命令/help 输出）逐字不变
 - refactor(core)!: 删除 checkConstraintsSafe + getConstraints() 的 .check 装配副作用（ADR-0006，架构评审候选6）——Safe 与 checkConstraints 逐行重复且生产零调用方；getConstraints 变为纯查询，返回类型收窄为 Constraint。`checkConstraints(ctx)` 签名与返回结构（P0 契约）不动
 - refactor(core,types,monitoring,cli)!: 删除 guideline 例外机制（ADR-0005，架构评审确认）——`Constraint.exceptions`、config `exceptions`/`extend_exceptions` 键、`ConstraintContext` 24 个例外证据字段 + `exceptionReason`、checker 例外分支、trace `exceptionApplied`/`exceptionCount`/`mostCommonException`/`exception_overuse`/`add_exception` 滥用检测链全链路移除。生产行为无变化（机制从未触发，`checkException` 恒 false）；存量配置中的这两个键静默忽略，不报错不警告
 - refactor(core)!: 删除 ConstraintInterceptor 第二执行引擎及 enforcement 类型——生产零调用方，拦截统一由 checkBeforeExecution 承担（ADR-0004，架构评审候选2）

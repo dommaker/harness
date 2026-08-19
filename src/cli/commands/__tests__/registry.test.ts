@@ -51,11 +51,10 @@ describe('命令注册表闭环', () => {
   });
 
   it('全部实现引用可解析（module 存在且 export 是函数）', () => {
-    const refs = collectRefs(COMMAND_DEFINITIONS);
-    for (const def of GATE_DEFINITIONS) {
-      refs.push(def.cli.action);
-      for (const entry of Object.values(def.cli.subcommands || {})) refs.push(entry);
-    }
+    const refs = collectRefs([
+      ...COMMAND_DEFINITIONS,
+      ...GATE_DEFINITIONS.map(d => d.cli),
+    ]);
     expect(refs.length).toBeGreaterThan(0);
 
     for (const ref of refs) {
@@ -107,7 +106,10 @@ describe('命令注册表闭环', () => {
         }
         for (const child of def.children || []) walk(child);
       };
-      for (const def of COMMAND_DEFINITIONS) walk(def);
+      for (const def of [
+        ...COMMAND_DEFINITIONS,
+        ...GATE_DEFINITIONS.map(d => d.cli),
+      ]) walk(def);
       // sync-docs --check 失败路径确实会请求退出
       expect(exitSpy).toHaveBeenCalled();
     } finally {

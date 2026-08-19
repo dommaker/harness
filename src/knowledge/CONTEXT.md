@@ -32,7 +32,7 @@
 
 ## 依赖关系
 - 依赖 `src/types/` 知识相关类型
-- 依赖 `src/monitoring/` KnowledgeDoctor / KnowledgeEvolver
+- 依赖 `src/context/types`（ContextUsageSnapshot 等类型；不依赖 monitoring——知识健康评分由本目录 doctor.ts 的 KnowledgeHealthScorer 承载）
 - 被 `src/cli/commands/knowledge.ts` CLI 消费（含 `migrate` 子命令）
 
 ## 约定

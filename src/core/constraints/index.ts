@@ -20,6 +20,7 @@ export {
   checkBeforeExecution,
   constraintChecker,
 } from './checker';
+export type { CheckConstraintsOptions, TraceRecorder } from './checker';
 
 // CLAUDE.md 约束注入段渲染（纯函数，init 注入与漂移校验共用）
 export {

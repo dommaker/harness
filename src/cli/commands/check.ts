@@ -10,7 +10,6 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import { constraintChecker } from '../../core/constraints/checker';
-import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
@@ -41,7 +40,6 @@ export async function check(options: CheckOptions): Promise<void> {
     const projectPath = options.projectPath || process.cwd();
     const configLoader = new ProjectConfigLoader(projectPath);
     configLoader.load();
-    constraintChecker.setTraceRecorder(getTraceCollector());
 
     // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
     // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（保持工单 23 语义：
@@ -199,23 +197,7 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
     hints.push('📊 记录已足够，运行 harness status 查看统计');
     state.shownHints.push('trace_50');
   }
-  
-  // 条件 2: 检查异常趋势（简单检查绕过率）
-  const bypassCount = lines.filter(line => {
-    try {
-      const trace = JSON.parse(line);
-      return trace.result === 'bypassed';
-    } catch {
-      return false;
-    }
-  }).length;
-  
-  const bypassRate = traceCount > 10 ? bypassCount / traceCount : 0;
-  if (bypassRate > 0.3 && !state.shownHints.includes('high_bypass')) {
-    hints.push('⚠️ 发现异常趋势，建议运行 harness status 查看详情');
-    state.shownHints.push('high_bypass');
-  }
-  
+
   // 保存状态
   if (hints.length > 0) {
     fs.mkdirSync(path.dirname(statePath), { recursive: true });

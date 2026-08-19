@@ -87,7 +87,7 @@ describe('status command', () => {
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummarize = jest.fn().mockReturnValue([
-        { constraintId: 'test1', level: 'iron_law', passRate: 1, totalChecks: 1, bypassRate: 0 },
+        { constraintId: 'test1', level: 'iron_law', passRate: 1, failRate: 0, totalChecks: 1 },
       ]);
       const mockAnalyze = {
         summarize: mockSummarize,
@@ -106,7 +106,7 @@ describe('status command', () => {
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummarize = jest.fn().mockReturnValue([
-        { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, totalChecks: 5, bypassRate: 0 },
+        { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, failRate: 0, totalChecks: 5 },
       ]);
       const mockAnalyze = {
         summarize: mockSummarize,
@@ -131,7 +131,7 @@ describe('status command', () => {
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue([
-          { constraintId: 'test1', level: 'iron_law', passRate: 0.2, totalChecks: 5, bypassRate: 0 },
+          { constraintId: 'test1', level: 'iron_law', passRate: 0.2, failRate: 0.8, totalChecks: 5 },
         ]),
         detectAnomalies: jest.fn().mockReturnValue(mockAnomalies),
       };
@@ -150,7 +150,7 @@ describe('status command', () => {
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummarize = jest.fn().mockReturnValue([
-        { constraintId: 'test1', level: 'iron_law', passRate: 0.8, totalChecks: 10, bypassRate: 0.1 },
+        { constraintId: 'test1', level: 'iron_law', passRate: 0.8, failRate: 0.2, totalChecks: 10 },
       ]);
       const mockAnalyze = {
         summarize: mockSummarize,
@@ -184,7 +184,7 @@ describe('status command', () => {
 
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue([
-          { constraintId: 'test_guide', level: 'guideline', passRate: 0.9, totalChecks: 10, bypassRate: 0 },
+          { constraintId: 'test_guide', level: 'guideline', passRate: 0.9, failRate: 0.1, totalChecks: 10 },
         ]),
         detectAnomalies: jest.fn().mockReturnValue([]),
       };
@@ -276,7 +276,7 @@ describe('status command', () => {
 
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue([
-          { constraintId: 'test_guide', level: 'guideline', passRate: 0.6, totalChecks: 10, bypassRate: 0.1 },
+          { constraintId: 'test_guide', level: 'guideline', passRate: 0.6, failRate: 0.4, totalChecks: 10 },
         ]),
         detectAnomalies: jest.fn().mockReturnValue([]),
       };

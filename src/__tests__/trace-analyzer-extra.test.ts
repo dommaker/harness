@@ -65,22 +65,21 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('compareWithPrevious', () => {
     it('应该计算环比变化', () => {
       const current: any[] = [
-        { constraintId: 'test', passRate: 0.8, failRate: 0.2, bypassRate: 0.1, level: 'iron_law' },
+        { constraintId: 'test', passRate: 0.8, failRate: 0.2, level: 'iron_law' },
       ];
       const previous: any[] = [
-        { constraintId: 'test', passRate: 0.6, failRate: 0.4, bypassRate: 0.2, level: 'iron_law' },
+        { constraintId: 'test', passRate: 0.6, failRate: 0.4, level: 'iron_law' },
       ];
 
       const result = analyzer.compareWithPrevious(current, previous);
-      
+
       expect(result[0]?.changeFromLastPeriod?.passRateDelta).toBeCloseTo(0.2);
       expect(result[0]?.changeFromLastPeriod?.failRateDelta).toBeCloseTo(-0.2);
-      expect(result[0]?.changeFromLastPeriod?.bypassRateDelta).toBeCloseTo(-0.1);
     });
 
     it('无历史数据应该不设置变化', () => {
       const current: any[] = [
-        { constraintId: 'new_test', passRate: 0.8, failRate: 0.2, bypassRate: 0.1, level: 'iron_law' },
+        { constraintId: 'new_test', passRate: 0.8, failRate: 0.2, level: 'iron_law' },
       ];
       const previous: any[] = [];
 
@@ -93,7 +92,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('saveSummary/loadSummary', () => {
     it('应该保存和加载汇总', () => {
       const summaries: any[] = [
-        { constraintId: 'test', passRate: 0.8, failRate: 0.2, bypassRate: 0.1, level: 'iron_law', totalChecks: 10 },
+        { constraintId: 'test', passRate: 0.8, failRate: 0.2, level: 'iron_law', totalChecks: 10 },
       ];
 
       analyzer.saveSummary(summaries);
@@ -157,7 +156,6 @@ describe('TraceAnalyzer - 补充覆盖', () => {
           level: 'iron_law',
           passRate: 0.8,
           failRate: 0.2,
-          bypassRate: 0.1,
           totalChecks: 100,
           recentTrend: 'stable',
         },
@@ -254,25 +252,6 @@ describe('TraceAnalyzer - 补充覆盖', () => {
       expect(risingFail).toBeDefined();
     });
 
-    it('应该检测 rising_bypass_rate', () => {
-      // 前半段全 fail，后半段混合 pass+bypass → rising 趋势
-      // bypassRate 需要 > 0.1，且 trend === 'rising'
-      const traces: ExecutionTrace[] = [];
-      for (let i = 0; i < 6; i++) {
-        traces.push({ constraintId: 'rising_bypass', level: 'guideline', timestamp: 1000 + i * 100, result: 'fail' });
-      }
-      for (let i = 6; i < 14; i++) {
-        // 后半段有 pass 也有 bypass，使 passRate 上升（rising），同时 bypassRate > 0.1
-        traces.push({ constraintId: 'rising_bypass', level: 'guideline', timestamp: 1000 + i * 100, result: i % 2 === 0 ? 'pass' : 'bypassed' });
-      }
-
-      const summaries = analyzer.summarize(traces);
-      const anomalies = analyzer.detectAnomalies(summaries);
-
-      const risingBypass = anomalies.find(a => a.type === 'rising_bypass_rate');
-      expect(risingBypass).toBeDefined();
-    });
-
     it('应该检测 exception_overuse', () => {
       const traces: ExecutionTrace[] = [];
       for (let i = 0; i < 10; i++) {
@@ -300,7 +279,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
     });
 
     it('应该支持自定义配置', () => {
-      const a = createAnalyzer({ thresholds: { bypassRate: 0.05 } });
+      const a = createAnalyzer({ thresholds: { failRate: 0.05 } });
       expect(a).toBeDefined();
     });
   });

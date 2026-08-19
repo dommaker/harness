@@ -17,6 +17,7 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
+import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
@@ -57,16 +58,15 @@ const EXCEPTION_FIELD_MAP: Record<string, keyof ConstraintContext> = {
 };
 
 /**
- * trace 记录器最小接口（工单 15：core→monitoring 循环消除）
+ * trace 记录器最小接口（原工单 15 为消除 core→monitoring 循环；现 monitoring
+ * 不反向依赖 core，方向单向、无环，checker 可直接值引用 getTraceCollector）
  *
- * checker 不再值导入 monitoring/traces 的单例；生产调用方经
- * setTraceRecorder 注入真实收集器，默认 no-op。
+ * checker 不构造收集器；生产路径首次记录时惰性接线 getTraceCollector()
+ * （幂等单点，ADR-0003），测试可经 setTraceRecorder 注入替身。
  */
 export interface TraceRecorder {
   record(trace: ExecutionTrace): void;
 }
-
-const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
 
 /**
  * 约束检查器
@@ -83,10 +83,20 @@ export class ConstraintChecker {
    */
   private runCache: Map<string, Promise<string>> | null = null;
 
-  /** trace 记录器（注入式，默认 no-op；生产入口经 setTraceRecorder 接入真实收集器） */
-  private traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER;
+  /** trace 记录器（注入式；null = 未显式注入，首次记录时惰性接线全局收集器） */
+  private traceRecorder: TraceRecorder | null = null;
 
   private constructor() {}
+
+  /**
+   * 取 trace 记录器：未显式注入时惰性接线全局收集器（幂等，ADR-0003 副作用收敛）
+   */
+  private getRecorder(): TraceRecorder {
+    if (!this.traceRecorder) {
+      this.traceRecorder = getTraceCollector();
+    }
+    return this.traceRecorder;
+  }
 
   /**
    * run 内 memoize；无活动 run 时直接执行（工单 18）
@@ -130,7 +140,7 @@ export class ConstraintChecker {
   }
 
   /**
-   * 注入 trace 记录器（工单 15：解耦 core 对 monitoring 的值依赖）
+   * 注入 trace 记录器（测试/定制场景；不调用则首次记录时惰性接线全局收集器）
    */
   setTraceRecorder(recorder: TraceRecorder): void {
     this.traceRecorder = recorder;
@@ -380,7 +390,7 @@ export class ConstraintChecker {
         warningCount: 0,
       };
 
-      const traceCollector = this.traceRecorder;
+      const traceCollector = this.getRecorder();
       const constraints = this.getConstraints(customConfig);
 
       // 1. Iron Laws: 必须全部通过
@@ -438,7 +448,7 @@ export class ConstraintChecker {
         warningCount: 0,
       };
 
-      const traceCollector = this.traceRecorder;
+      const traceCollector = this.getRecorder();
       const constraints = this.getConstraints(customConfig);
 
       for (const constraint of Object.values(constraints.ironLaws)) {
@@ -524,16 +534,32 @@ export async function checkConstraint(
 }
 
 /**
+ * checkConstraints 选项（ADR-0003：包根/子路径统一 options 对象签名）
+ */
+export interface CheckConstraintsOptions {
+  /** 每条约束检查后的回调（用于记录 trace 到外部存储） */
+  onTrace?: (result: ConstraintResult) => void;
+  /** 可选，per-request 自定义约束配置；不传则用内置约束集 */
+  customConfig?: MergedConstraintsConfig | null;
+}
+
+/**
  * 快捷函数：执行三层检查
  *
  * @param context 约束上下文
- * @param customConfig 可选，per-request 自定义配置
+ * @param options.onTrace 每条约束检查后的回调（用于记录 trace 到外部存储）
+ * @param options.customConfig 可选，per-request 自定义约束配置；不传则用内置约束集
  */
 export async function checkConstraints(
   context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
+  options?: CheckConstraintsOptions
 ): Promise<ConstraintCheckResult> {
-  return ConstraintChecker.getInstance().checkConstraints(context, customConfig);
+  const result = await ConstraintChecker.getInstance().checkConstraints(context, options?.customConfig ?? null);
+  if (options?.onTrace) {
+    for (const r of result.ironLaws) options.onTrace(r);
+    for (const r of result.guidelines) options.onTrace(r);
+  }
+  return result;
 }
 
 /**

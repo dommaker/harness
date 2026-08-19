@@ -7,7 +7,7 @@ check, validate, passes-gate, init, report, status, spec, acceptance, performanc
 
 命令注册表（H5）：`COMMAND_DEFINITIONS`（非门禁命令）+ `GATE_DEFINITIONS.cli`（6 门禁命令）是命令形状单一来源，bin/harness.js 注册表驱动生成（无手写命令块，R6）；实现引用 module+export per-command 懒加载（O2，任一命令执行只加载该命令模块，--help/--version 零命令实现加载）。
 
-## Quality Gates (12)
+## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
 
 统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。`getEffectiveGates(projectRoot)` 声明式裁剪（对齐 getEffectiveConstraints：config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除，引用未注册 id 抛错）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny。checker-as-guard 接线点 `createCheckerGate(check)`（studio #129 随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
@@ -27,16 +27,13 @@ renderConstraintsSection（标记区间 HARNESS_CONSTRAINTS_START/END，Output S
 buildConstraintsUsageReport：check 层统计表（total/pass/fail/skip、fail 率、首末触发）、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、prompt 注入清单、配置健康；report 与 retire 共用此数据层，只读。
 
 ## Monitoring
-TraceCollector, TraceAnalyzer, PerformanceMonitor, ConstraintDiagnostics
+TraceCollector, TraceAnalyzer, ContextTracker
 
 ## Knowledge Infrastructure
 KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), SDDIndexGenerator (scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md), migrateKnowledgeEntries (AS-021 migration), extractCodeStructure (TS Compiler API code analysis)
 
 ## Hook Scripts (bin/)
 harness-knowledge-track.sh, harness-sensitive-check.sh
-
-## Safety
-Sandbox, ToolGuardrail, OutputGuardrail
 
 ## Agent Infrastructure
 AgentLifecycle (init→running→paused→completed→failed)
@@ -47,14 +44,8 @@ GovernanceExecutor (doc-code-config drift detection, detect-only)
 ## Doc Freshness
 FreshnessRunner (config-driven doc freshness checking: changelog_version, context_docs, doc_dir_check, doc_regex_count), FreshnessAutoFix (regex count auto-fix)
 
-## Dashboard
-Stats aggregation, data source management
-
 ## Hooks
 HookRegistry, HookPipeline (register → sort → error-isolate → sampled execution)；`assertHookRegistryClosed` 声明（HookConfig）↔ 实现双向闭环（引用未注册/注册无定义/重复 → 抛错，复制 checker 闭环模式，H5）；`toErrorStrategy` blocking→errorStrategy(block/warn) 无损映射（配置归一，G7）
-
-## Verification
-Rules-based verification, loop verification
 
 ## Templates
 node-api, python-api, nextjs-app

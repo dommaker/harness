@@ -33,12 +33,11 @@ export interface ConstraintUsageStats {
   id: string;
   level: Constraint['level'];
 
-  /** trace 总行数（含 skip/bypassed） */
+  /** trace 总行数（含 skip） */
   total: number;
   pass: number;
   fail: number;
   skip: number;
-  bypassed: number;
 
   /** 实际评估次数（total - skip；skip 未评估不计入，与 TraceAnalyzer 一致） */
   evaluated: number;
@@ -129,26 +128,25 @@ export function readProjectTraces(projectRoot: string): ExecutionTrace[] {
 export function collectUsageByConstraint(
   traces: ExecutionTrace[]
 ): Map<string, Omit<ConstraintUsageStats, 'id' | 'level' | 'evaluated' | 'failRate'>> {
-  const map = new Map<string, { total: number; pass: number; fail: number; skip: number; bypassed: number; firstAt?: number; lastAt?: number }>();
+  const map = new Map<string, { total: number; pass: number; fail: number; skip: number; firstAt?: number; lastAt?: number }>();
   for (const t of traces) {
     let agg = map.get(t.constraintId);
     if (!agg) {
-      agg = { total: 0, pass: 0, fail: 0, skip: 0, bypassed: 0 };
+      agg = { total: 0, pass: 0, fail: 0, skip: 0 };
       map.set(t.constraintId, agg);
     }
     agg.total++;
     if (t.result === 'pass') agg.pass++;
     else if (t.result === 'fail') agg.fail++;
     else if (t.result === 'skip') agg.skip++;
-    else if (t.result === 'bypassed') agg.bypassed++;
     if (agg.firstAt === undefined || t.timestamp < agg.firstAt) agg.firstAt = t.timestamp;
     if (agg.lastAt === undefined || t.timestamp > agg.lastAt) agg.lastAt = t.timestamp;
   }
   return map;
 }
 
-function toStats(id: string, level: Constraint['level'], agg: { total: number; pass: number; fail: number; skip: number; bypassed: number; firstAt?: number; lastAt?: number } | undefined): ConstraintUsageStats {
-  const a = agg ?? { total: 0, pass: 0, fail: 0, skip: 0, bypassed: 0 };
+function toStats(id: string, level: Constraint['level'], agg: { total: number; pass: number; fail: number; skip: number; firstAt?: number; lastAt?: number } | undefined): ConstraintUsageStats {
+  const a = agg ?? { total: 0, pass: 0, fail: 0, skip: 0 };
   const evaluated = a.total - a.skip;
   return {
     id,
@@ -157,7 +155,6 @@ function toStats(id: string, level: Constraint['level'], agg: { total: number; p
     pass: a.pass,
     fail: a.fail,
     skip: a.skip,
-    bypassed: a.bypassed,
     evaluated,
     failRate: evaluated > 0 ? a.fail / evaluated : 0,
     firstAt: a.firstAt,

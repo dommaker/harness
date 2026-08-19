@@ -33,7 +33,6 @@ const DEFAULT_CONFIG: TraceAnalyzerConfig = {
   summaryFile: '.harness/logs/traces-summary.json',
   periodMs: 3600 * 1000, // 1 小时
   thresholds: {
-    bypassRate: 0.3,      // 绕过率 > 30% 视为异常
     failRate: 0.5,        // 失败率 > 50% 视为异常
     exceptionRate: 0.4,   // 例外率 > 40% 视为滥用
   },
@@ -76,13 +75,12 @@ export class TraceAnalyzer {
       // 计算时间范围
       const timeRange = timeRangeOf(group.map(t => t.timestamp));
 
-      // 单次遍历计算核心统计（skip 单独计数，不计入 pass/fail/bypass 率分母，ADR-0001）
+      // 单次遍历计算核心统计（skip 单独计数，不计入 pass/fail 率分母，ADR-0001）
       const totalChecks = group.length;
-      let passCount = 0, failCount = 0, bypassCount = 0, ignoreCount = 0, skipCount = 0;
+      let passCount = 0, failCount = 0, ignoreCount = 0, skipCount = 0;
       for (const t of group) {
         if (t.result === 'pass') passCount++;
         else if (t.result === 'fail') failCount++;
-        else if (t.result === 'bypassed') bypassCount++;
         else if (t.result === 'skip') skipCount++;
         if (t.userAction === 'ignore') ignoreCount++;
       }
@@ -91,7 +89,6 @@ export class TraceAnalyzer {
       const evaluatedChecks = totalChecks - skipCount;
       const passRate = evaluatedChecks > 0 ? passCount / evaluatedChecks : 0;
       const failRate = evaluatedChecks > 0 ? failCount / evaluatedChecks : 0;
-      const bypassRate = evaluatedChecks > 0 ? bypassCount / evaluatedChecks : 0;
 
       // 计算例外统计
       const exceptionTraces = group.filter(t => t.exceptionApplied);
@@ -109,12 +106,10 @@ export class TraceAnalyzer {
         totalChecks,
         passCount,
         failCount,
-        bypassCount,
         skipCount,
         ignoreCount,
         passRate,
         failRate,
-        bypassRate,
         recentTrend,
         exceptionCount,
         mostCommonException,
@@ -150,23 +145,6 @@ export class TraceAnalyzer {
     const thresholds = this.config.thresholds!;
 
     for (const summary of summaries) {
-      // 检测高绕过率
-      if (summary.bypassRate > thresholds.bypassRate!) {
-        anomalies.push({
-          type: 'high_bypass_rate',
-          constraintId: summary.constraintId,
-          level: summary.level,
-          message: `约束 ${summary.constraintId} 绕过率 ${Math.round(summary.bypassRate * 100)}%，超过阈值 ${thresholds.bypassRate! * 100}%`,
-          data: {
-            currentRate: summary.bypassRate,
-            threshold: thresholds.bypassRate!,
-            trend: summary.recentTrend,
-          },
-          detectedAt: Date.now(),
-          suggestedAction: 'diagnose',
-        });
-      }
-
       // 检测失败率上升
       if (summary.failRate > thresholds.failRate! && summary.recentTrend === 'rising') {
         anomalies.push({
@@ -177,23 +155,6 @@ export class TraceAnalyzer {
           data: {
             currentRate: summary.failRate,
             threshold: thresholds.failRate!,
-            trend: 'rising',
-          },
-          detectedAt: Date.now(),
-          suggestedAction: 'diagnose',
-        });
-      }
-
-      // 检测绕过率上升
-      if (summary.bypassRate > 0.1 && summary.recentTrend === 'rising') {
-        anomalies.push({
-          type: 'rising_bypass_rate',
-          constraintId: summary.constraintId,
-          level: summary.level,
-          message: `约束 ${summary.constraintId} 绕过率 ${Math.round(summary.bypassRate * 100)}% 且趋势上升`,
-          data: {
-            currentRate: summary.bypassRate,
-            threshold: 0.1,
             trend: 'rising',
           },
           detectedAt: Date.now(),
@@ -262,7 +223,6 @@ export class TraceAnalyzer {
         summary.changeFromLastPeriod = {
           passRateDelta: summary.passRate - prev.passRate,
           failRateDelta: summary.failRate - prev.failRate,
-          bypassRateDelta: summary.bypassRate - prev.bypassRate,
         };
       }
 
@@ -386,7 +346,6 @@ export class TraceAnalyzer {
       lines.push(`  - Checks: ${summary.totalChecks}`);
       lines.push(`  - Pass: ${Math.round(summary.passRate * 100)}%`);
       lines.push(`  - Fail: ${Math.round(summary.failRate * 100)}%`);
-      lines.push(`  - Bypass: ${Math.round(summary.bypassRate * 100)}%`);
       lines.push(`  - Trend: ${summary.recentTrend}`);
       lines.push('');
     }

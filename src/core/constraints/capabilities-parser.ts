@@ -9,8 +9,15 @@
 
 import * as fs from 'fs';
 import { IRON_LAWS, GUIDELINES } from './definitions';
+import { COMMAND_DEFINITIONS } from '../../cli/commands/definitions';
+import { GATE_DEFINITIONS } from '../../gates/definitions';
 import { FreshnessRunner } from './doc-freshness/runner';
 import type { DocFreshnessCheck } from '../../types/project-config';
+
+/** CLI 命令数 = 非门禁命令定义 + 门禁命令定义（ADR-0002：定义表是命令形状单一来源） */
+function cliCommandCount(): number {
+  return COMMAND_DEFINITIONS.length + GATE_DEFINITIONS.filter(g => g.cli).length;
+}
 
 /** 匹配表格单元格中的源码文件条目（如 `src/foo.ts`、`foo.tsx`） */
 const FILE_CELL_REGEX = /\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/g;
@@ -114,15 +121,14 @@ function buildCapabilityChecks(): DocFreshnessCheck[] {
       doc: 'CAPABILITIES.md',
       label: 'CLI Commands',
       pattern: 'CLI Commands\\s*\\((\\d+)\\)',
-      // index.ts（已删 barrel）与 definitions.ts（命令注册表纯数据）不是命令实现，不计入
-      actual: { kind: 'dir_count', path: 'src/cli/commands', extension: '.ts', exclude: ['index.ts', 'definitions.ts'] },
+      actual: { kind: 'const_count', value: cliCommandCount() },
     },
     {
       type: 'doc_regex_count',
       doc: 'CAPABILITIES.md',
       label: 'Quality Gates',
       pattern: 'Quality Gates?\\s*\\((\\d+)\\)',
-      actual: { kind: 'dir_count', path: 'src/gates', extension: '.ts', exclude: ['index.ts', 'types.ts'] },
+      actual: { kind: 'const_count', value: GATE_DEFINITIONS.length },
     },
     {
       type: 'doc_regex_count',
@@ -164,13 +170,11 @@ export function checkCapabilityCounts(
 /**
  * 更新 CAPABILITIES.md 中的能力清单计数（write 模式）
  *
- * 使用 FreshnessRunner 获取实际计数，然后 regex 替换文档计数行。
+ * 命令/门禁计数取自定义表（ADR-0002 单一来源），regex 替换文档计数行。
  */
-export function updateCapabilityCounts(content: string, projectPath: string): string {
-  const runner = new FreshnessRunner();
-
-  const cliCount = runner.countFromDir('src/cli/commands', '.ts', ['index.ts', 'definitions.ts'], projectPath);
-  const gateCount = runner.countFromDir('src/gates', '.ts', ['index.ts', 'types.ts'], projectPath);
+export function updateCapabilityCounts(content: string, _projectPath: string): string {
+  const cliCount = cliCommandCount();
+  const gateCount = GATE_DEFINITIONS.length;
   const ironCount = Object.keys(IRON_LAWS).length;
   const guideCount = Object.keys(GUIDELINES).length;
 

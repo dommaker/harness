@@ -79,16 +79,6 @@ describe('TraceCollector', () => {
     });
   });
 
-  describe('recordBypass()', () => {
-    it('should record bypass trace', () => {
-      collector.recordBypass('test', 'guideline', 'Emergency');
-      const call = mockFs.appendFileSync.mock.calls[0];
-      const content = JSON.parse(call[1] as string);
-      expect(content.result).toBe('bypassed');
-      expect(content.bypassReason).toBe('Emergency');
-    });
-  });
-
   describe('read()', () => {
     it('should return empty array if file not exists', () => {
       mockFs.existsSync.mockReturnValueOnce(true);

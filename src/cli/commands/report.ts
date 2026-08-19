@@ -7,7 +7,6 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
-import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { executeWithCollect } from '../../failure/constraint-handler';
 import type { ConstraintContext } from '../../types/constraint';
@@ -48,7 +47,6 @@ export async function report(options: ReportOptions): Promise<void> {
 
   const projectPath = options.projectPath || process.cwd();
   const checker = ConstraintChecker.getInstance();
-  checker.setTraceRecorder(getTraceCollector());
 
   const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...PROMPTS };
   const totalConstraints = Object.keys(allConstraints).length;

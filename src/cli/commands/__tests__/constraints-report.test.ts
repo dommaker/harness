@@ -170,7 +170,7 @@ describe('buildConstraintsUsageReport', () => {
     const candidates = diagnoseRetireCandidates([
       {
         id: 'x', level: 'guideline',
-        total: 60, pass: 0, fail: 0, skip: 60, bypassed: 0,
+        total: 60, pass: 0, fail: 0, skip: 60,
         evaluated: 0, failRate: 0,
       },
     ]);

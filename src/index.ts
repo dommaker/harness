@@ -1,12 +1,12 @@
 /**
  * @dommaker/harness - 主入口
- * 
+ *
  * 通用工程约束框架
- * 
+ *
  * 约束体系（ADR-0001 kind 二元）：
  * - check：可执行检查（Iron Laws 阻断 / Guidelines 告警）
  * - prompt：纯文本注入，不参与检查
- * 
+ *
  * 门禁系统：
  * - PassesGate：测试门控
  * - ReviewGate：审查门禁
@@ -14,187 +14,437 @@
  * - PerformanceGate：性能门禁
  * - ContractGate：契约门禁
  * - CheckpointValidator：检查点验证
+ *
+ * 公共导出（ADR-0003）：显式清单，禁 export *。
+ * 收录标准：属 harness 定位（约束数据 / 执行引擎 / 注入工具 / 知识基建）、
+ * 实现真实可用、无同名冲突。interceptor（拟退役第二执行引擎）与内部 seam
+ * （ConstraintChecker / constraintChecker / ProjectConfigLoader）不进公共清单。
  */
 
 // ========================================
-// 类型导出
+// 约束类型（三层体系 + kind 二元）
 // ========================================
-export * from './types';
+export {
+  ConstraintViolationError,
+} from './types/constraint';
+export type {
+  Constraint,
+  ConstraintId,
+  ConstraintKind,
+  ConstraintLevel,
+  ConstraintTrigger,
+  ConstraintContext,
+  ConstraintResult,
+  ConstraintCheckResult,
+  IronLawContext,
+} from './types/constraint';
 
 // ========================================
-// 核心功能导出
+// 约束数据（内置定义 + 生效集）
 // ========================================
-export * from './core';
+export {
+  IRON_LAWS,
+  GUIDELINES,
+  PROMPTS,
+  getAllConstraints,
+  getConstraint,
+  findConstraintsByTrigger,
+} from './core/constraints/definitions';
+export {
+  getEffectiveConstraints,
+  lintEffectiveConfig,
+} from './core/effective-constraints';
+export type { EffectiveConfigLint } from './core/effective-constraints';
 
 // ========================================
-// 门禁系统导出
+// 约束检查引擎（便捷 API；options 统一签名，ADR-0003）
 // ========================================
-export * from './gates';
+export {
+  checkConstraint,
+  checkConstraints,
+  checkBeforeExecution,
+} from './core/constraints/checker';
+export type { CheckConstraintsOptions } from './core/constraints/checker';
 
 // ========================================
-// 监控导出
-// ========================================
-export * from './monitoring';
-
-// ========================================
-// 失败处理导出
-// ========================================
-export * from './failure';
-
-// ========================================
-// Spec 检查导出
-// ========================================
-export * from './spec/annotation-checker';
-
-// ========================================
-// 上下文管理导出
-// ========================================
-export * from './context';
-
-// ========================================
-// 知识引擎导出
-// ========================================
-export * from './knowledge';
-
-// ========================================
-// 安全护栏导出
-// ========================================
-export * from './safety';
-
-// ========================================
-// 验证循环导出
-// ========================================
-export * from './verification';
-
-// ========================================
-// Completion Checkers 导出（T7-E1，studio#160）
-// WU 收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
-// 纯函数直接 export，不进 ConstraintCheck 闭环注册表。
-// ========================================
-export * from './completion-checkers';
-
-// ========================================
-// Dashboard 数据导出
-// ========================================
-export * from './dashboard';
-
-// ========================================
-// 工具路径导出
-// ========================================
-export * from './tools';
-
-// ========================================
-// Hooks 管线导出（Phase 1）
-// ========================================
-export * from './hooks';
-
-// ========================================
-// Agent 生命周期导出
-// ========================================
-export * from './agents';
-
-// ========================================
-// 预设导出
-// ========================================
-export * from './presets';
-
-// ========================================
-// 约束缓存与渲染导出（H6/G5-G6，#31 收编）
+// 约束缓存与注入渲染
 // ========================================
 export { CheckCache } from './core/constraints/check-cache';
 export type { CheckCacheConfig, CheckSamplingConfig } from './core/constraints/check-cache';
 export { renderConstraintsByTrigger } from './core/constraints/agent-prompt-renderer';
 export type { RenderConstraintsByTriggerOptions } from './core/constraints/agent-prompt-renderer';
+export {
+  CONSTRAINTS_START_MARKER,
+  CONSTRAINTS_END_MARKER,
+  renderConstraintsSection,
+} from './core/constraints/injection-renderer';
 
 // ========================================
-// 便捷 API
+// 检查点与验证器
 // ========================================
+export type {
+  Checkpoint,
+  CheckpointCheck,
+  CheckpointContext,
+  CheckpointResult,
+  CheckConfig,
+  CheckResult,
+  CheckType,
+} from './types/checkpoint';
+export {
+  CheckpointValidator,
+  PassesGate,
+  createPassesGate,
+  CSOValidator,
+} from './core/validators';
+export type { CSOIssue, CSOValidationResult } from './core/validators';
+export type {
+  PassesGateConfig,
+  PassesGateResult,
+  PassesGateCheckResult,
+  PassesGateViolation,
+  PassesGateExtension,
+  TestResult,
+  DynamicTask,
+  TaskTestResult,
+  ExtensionTestResult,
+} from './types/passes-gate';
+export type {
+  StepMeta,
+  ToolMeta,
+  WorkflowMeta,
+} from './types/cso';
 
-import { constraintChecker } from './core/constraints/checker';
-import { getTraceCollector } from './monitoring/traces';
-import type { ConstraintContext, ConstraintCheckResult, ConstraintTrigger } from './types/constraint';
-import type { MergedConstraintsConfig } from './types/project-config';
-import { constraintInterceptor } from './core/constraints/interceptor';
-import type { EnforcementExecutor, EnforcementId, InterceptionResult } from './types/enforcement';
+// ========================================
+// 会话启动 / 净室状态
+// ========================================
+export {
+  SessionStartup,
+  createSessionStartup,
+  DEFAULT_CODE_CHECKPOINTS,
+  MINIMAL_CHECKPOINTS,
+  CleanStateManager,
+  createCleanStateManager,
+} from './core/session';
+export type {
+  StartupCheckpoints,
+  StartupCheckpointType,
+  StartupCheckpointResult,
+  CleanStateConfig,
+  CleanStateResult,
+  DetectedBug,
+  TaskListJson,
+  TaskStepStatus,
+  SessionInfo,
+} from './types/session';
+// 与 passes-gate 同名类型的 session 版（沿用既有别名）
+export { DynamicTask as ExtendedDynamicTask, TaskTestResult as ExtendedTaskTestResult } from './types/session';
 
-// 工单 15：checker 的 trace 记录改为注入式，根入口在此接入真实收集器（保持既有行为）
-constraintChecker.setTraceRecorder(getTraceCollector());
+// ========================================
+// Spec 验证（已接线的 spec 故事：validator + SpecAcceptanceGate）
+// ========================================
+export { SpecValidator, validateSpec, validateAllSpecs } from './core/spec/validator';
+export type {
+  SpecValidatorConfig,
+  SpecValidationResult,
+  BatchSpecValidationResult,
+  SpecSchemaDefinition,
+  SpecType,
+  SpecValidationError,
+  SchemaLoader,
+} from './types/spec';
 
-/** 约束拦截器单例，用于注册 enforcement executor 和拦截操作 */
-export const interceptor = constraintInterceptor;
+// ========================================
+// 门禁系统（公共面 = ./gates 子路径出口）
+// ========================================
+export {
+  ReviewGate,
+  SecurityGate,
+  PerformanceGate,
+  ContractGate,
+  SpecAcceptanceGate,
+  CommandGate,
+  createCommandGate,
+  getCommandGate,
+  isCommandAllowed,
+  getCommandRiskLevel,
+  DEFAULT_COMMAND_BLACKLIST,
+  createReviewGate,
+  createSecurityGate,
+  createPerformanceGate,
+  createContractGate,
+  createSpecAcceptanceGate,
+  decisionFromResult,
+  GATE_DEFINITIONS,
+  getGate,
+  listRegisteredGates,
+  registeredGateCount,
+  assertGateRegistryClosed,
+  runGates,
+  getEffectiveGates,
+  createCheckerGate,
+} from './gates';
+export type {
+  GateResult,
+  GateContext,
+  Gate,
+  GateDecision,
+  GateDecisionStatus,
+  GateDefinition,
+  GateCliDefinition,
+  GateCliOption,
+  GateRunResult,
+  GatesConfig,
+  PerformanceThresholds,
+  ReviewGateConfig,
+  SecurityGateConfig,
+  PerformanceGateConfig,
+  ContractGateConfig,
+  SpecAcceptanceGateConfig,
+  AcceptanceGateContext,
+  AcceptanceCriteria,
+  CommandBlacklistRule,
+  CommandGateConfig,
+} from './gates';
 
-/**
- * 拦截操作 — 在操作执行前检查约束
- * @param trigger - 触发条件
- * @param context - 约束上下文
- * @param customConfig - 可选，per-request 自定义约束配置；不传则用内置约束集
- * @returns 拦截结果（是否通过、违规列表）
- */
-export async function interceptOperation(
-  trigger: ConstraintTrigger,
-  context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
-): Promise<InterceptionResult> {
-  return constraintInterceptor.intercept(trigger, context, customConfig);
-}
+// ========================================
+// 监控（Execution Trace 收集/分析 + 上下文追踪）
+// ========================================
+export {
+  DEFAULT_TRACE_FILE,
+} from './types/trace';
+export type {
+  ExecutionTrace,
+  TraceFilter,
+  TraceSummary,
+  TraceAnomaly,
+  TraceCollectorConfig,
+  TraceAnalyzerConfig,
+} from './types/trace';
+export {
+  TraceCollector,
+  getTraceCollector,
+  configureTraceCollector,
+  TraceAnalyzer,
+  createAnalyzer,
+  ContextTracker,
+} from './monitoring';
+export type { ContextAverages } from './monitoring';
 
-/**
- * 声明操作意图 — 声明即将执行的操作，但不执行检查
- * @param trigger - 触发条件
- * @param context - 约束上下文
- */
-export async function claimOperation(
-  trigger: ConstraintTrigger,
-  context: ConstraintContext
-): Promise<void> {
-  return constraintInterceptor.claim(trigger, context);
-}
+// ========================================
+// 失败处理（错误分类 + 记录 + 违规处理策略）
+// ========================================
+export {
+  ErrorType,
+  FailureLevel,
+  DEFAULT_CLASSIFICATION_RULES,
+  DEFAULT_LEVEL_MAPPING,
+  ErrorClassifier,
+  createErrorClassifier,
+  classifyError,
+  getFailureLevel,
+  FailureRecorder,
+  createFailureRecorder,
+  ConstraintViolationHandler,
+  executeWithBlock,
+  executeWithCollect,
+  executeWithSafeBoolean,
+} from './failure';
+export type {
+  FailureRecord,
+  ErrorClassificationRule,
+  ClassificationResult,
+  ErrorClassifierConfig,
+  FailureRecorderConfig,
+  ViolationStrategy,
+  ViolationHandlingResult,
+} from './failure';
 
-/**
- * 注册 enforcement executor — 将 enforcement ID 连接到实际检查逻辑
- * @param enforcementId - enforcement ID（对应约束定义中的 enforcement 字段）
- * @param executor - 执行器实现
- * @param source - 注册来源（如 'builtin', 'plugin'）
- */
-export function registerExecutor(
-  enforcementId: EnforcementId,
-  executor: EnforcementExecutor,
-  source?: string
-): void {
-  constraintInterceptor.register(enforcementId, executor, source);
-}
+// ========================================
+// 上下文管理（Token 预算 + 会话压缩 + 知识注入）
+// ========================================
+export {
+  AdaptiveTokenBudget,
+  TokenBudget,
+  TokenEstimator,
+  DEFAULT_COMPACTION_CONFIG,
+  SessionCompaction,
+  SessionManager,
+  KnowledgeInjector,
+} from './context';
+export type {
+  CompactionConfig,
+  CompactionLevel,
+  CompactionResult,
+  ContextSource,
+  ContextSourceType,
+  ContextUsageSnapshot,
+  InjectionConfig,
+  InjectionResult,
+  SessionCheckpoint,
+  SessionEvent,
+  SessionEventType,
+  SessionHandle,
+  SessionMessage,
+} from './context';
 
-/**
- * 检查约束（check 层）
- *
- * @param context - 约束上下文
- * @param options.onTrace - 每条约束检查后的回调（用于记录 trace 到外部存储）
- * @param options.customConfig - 可选，per-request 自定义约束配置；不传则用内置约束集
- */
-export async function checkConstraints(
-  context: ConstraintContext,
-  options?: {
-    onTrace?: (result: import('./types/constraint').ConstraintResult) => void;
-    customConfig?: MergedConstraintsConfig | null;
-  }
-): Promise<ConstraintCheckResult> {
-  const result = await constraintChecker.checkConstraints(context, options?.customConfig ?? null);
-  if (options?.onTrace) {
-    for (const r of result.ironLaws) options.onTrace(r);
-    for (const r of result.guidelines) options.onTrace(r);
-  }
-  return result;
-}
+// ========================================
+// 知识引擎（Knowledge 基建）
+// ========================================
+export {
+  FileKnowledgeStore,
+  KnowledgeQuery,
+  KnowledgeLifecycle,
+  KnowledgeIngest,
+  sanitizeExternalContent,
+  ReferenceTracker,
+  KnowledgeLinter,
+  ColdStartImporter,
+  KnowledgeHealthScorer,
+  KnowledgeLifecycleHooks,
+  KnowledgeAudit,
+  migrateKnowledgeEntries,
+  extractCodeStructure,
+  DEFAULT_DECAY_CONFIG,
+} from './knowledge';
+export type {
+  KnowledgeEntry,
+  KnowledgeStore,
+  KnowledgeSubsystem,
+  KnowledgeOrigin,
+  KnowledgeReference,
+  MaturityLevel,
+  MaturityChange,
+  DecayConfig,
+  SourceRef,
+  DecisionRecord,
+  QueryFilter,
+  QueryBudget,
+  QueryResult,
+  ExecutionResult,
+  IndexEntry,
+  StorageLayer,
+  ConsumptionEvent,
+  ConsumptionMode,
+  IngestOptions,
+  ReferenceRecord,
+  LintIssue,
+  LintIssueType,
+  AuditRuleName,
+  AuditAction,
+  AuditIssue,
+  AuditReport,
+  AuditOptions,
+  CodeStructure,
+  DeclarationInfo,
+  ImportInfo,
+} from './knowledge';
 
-/**
- * 执行前检查（仅 Iron Laws）
- *
- * @param context - 约束上下文
- * @param customConfig - 可选，per-request 自定义约束配置；不传则用内置约束集
- */
-export async function checkBeforeExecution(
-  context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
-): Promise<void> {
-  return constraintChecker.beforeExecution(context, customConfig);
-}
+// ========================================
+// Completion Checkers（T7-E1，studio#160）
+// WU 收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
+// 纯函数直接 export，不进 ConstraintCheck 闭环注册表。
+// ========================================
+export {
+  DEFAULT_TEST_GLOBS,
+  DEFAULT_NONCODE_GLOBS,
+  matchGlob,
+  matchAnyGlob,
+  classifyCommitFiles,
+  resolveGlobs,
+  verifyTddChain,
+  TESTED_BY_RE,
+  TESTS_NONE_RE,
+  verifyPhaseFormat,
+  PHASE_SUBJECT_RE,
+  verifyContractPresence,
+} from './completion-checkers';
+export type {
+  CheckerVerdict,
+  CommitVerdict,
+  CommitInput,
+  CommitFileClassification,
+  CompletionCheckersConfig,
+  ContractPresenceContext,
+  ContractPresenceResult,
+  PhaseFormatResult,
+  TddChainResult,
+} from './completion-checkers';
+
+// ========================================
+// 工具路径
+// ========================================
+export { getRegistryPath, getToolsDir } from './tools';
+
+// ========================================
+// Hooks 管线
+// ========================================
+export {
+  HookRegistry,
+  assertHookRegistryClosed,
+  HookPipeline,
+  toErrorStrategy,
+  bootstrapHarness,
+  bootstrapHarnessSync,
+} from './hooks';
+export type {
+  HookDefinition,
+  HookConfig,
+  HookErrorStrategy,
+  HookExecutionRecord,
+  HookPhase,
+  HookResult,
+  PipelineResult,
+  HarnessBootstrap,
+} from './hooks';
+
+// ========================================
+// Agent 生命周期
+// ========================================
+export {
+  AgentLifecycle,
+} from './agents';
+export type {
+  AgentConfig,
+  AgentEvent,
+  AgentState,
+  AgentStatus,
+  EventHandler,
+  FallbackStrategy,
+} from './agents';
+
+// ========================================
+// 预设
+// ========================================
+export {
+  STRICT_PRESET,
+  STANDARD_PRESET,
+  RELAXED_PRESET,
+  getPreset,
+  applyPreset,
+} from './presets';
+export type { PresetConfig } from './presets';
+
+// ========================================
+// 项目配置类型（config.yml 形状；Loader 属内部 seam 不公开）
+// ========================================
+export type {
+  ProjectConfig,
+  MergedConstraintsConfig,
+  CustomConstraintDefinition,
+  GovernanceConfig,
+  CapabilitiesConfig,
+  ChangelogConfig,
+  ChangelogVersionCheck,
+  TestingGovernanceConfig,
+  ContextFilesConfig,
+  ContextDocsCheck,
+  DocsSyncConfig,
+  DocFreshnessConfig,
+  DocFreshnessCheck,
+  DocDirCheck,
+  DocRegexCountCheck,
+  ConstCountActual,
+  DirCountActual,
+  GrepCountActual,
+} from './types/project-config';

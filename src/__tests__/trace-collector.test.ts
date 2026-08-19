@@ -104,17 +104,6 @@ describe('TraceCollector', () => {
     });
   });
 
-  describe('recordBypass', () => {
-    it('应该记录绕过 trace', () => {
-      collector.recordBypass('no_bypass_checkpoint', 'iron_law', 'Emergency fix');
-
-      const traces = collector.read();
-      expect(traces.length).toBe(1);
-      expect(traces[0].result).toBe('bypassed');
-      expect(traces[0].bypassReason).toBe('Emergency fix');
-    });
-  });
-
   describe('read', () => {
     it('应该返回所有 traces', () => {
       collector.record({

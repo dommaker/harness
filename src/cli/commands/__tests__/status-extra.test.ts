@@ -81,7 +81,7 @@ describe('status command - 补充覆盖', () => {
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue([
-          { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 0.2, totalChecks: 10, bypassRate: 0.1 },
+          { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 0.2, failRate: 0.8, totalChecks: 10 },
         ]),
         detectAnomalies: jest.fn().mockReturnValue(mockAnomalies),
       };
@@ -119,8 +119,8 @@ describe('status command - 补充覆盖', () => {
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
-        { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, totalChecks: 10, bypassRate: 0 },
-        { constraintId: 'no_completion_without_verification', level: 'iron_law', passRate: 0.8, totalChecks: 5, bypassRate: 0 },
+        { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, failRate: 0, totalChecks: 10 },
+        { constraintId: 'no_completion_without_verification', level: 'iron_law', passRate: 0.8, failRate: 0.2, totalChecks: 5 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),
@@ -141,7 +141,7 @@ describe('status command - 补充覆盖', () => {
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
-        { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
+        { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, failRate: 0.1, totalChecks: 20 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),
@@ -164,8 +164,8 @@ describe('status command - 补充覆盖', () => {
       mockFs.readFileSync.mockReturnValue(mockTraces.map(t => JSON.stringify(t)).join('\n'));
 
       const mockSummaries = [
-        { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, totalChecks: 10, bypassRate: 0 },
-        { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, totalChecks: 20, bypassRate: 0.1 },
+        { constraintId: 'no_bypass_checkpoint', level: 'iron_law', passRate: 1, failRate: 0, totalChecks: 10 },
+        { constraintId: 'capability_sync', level: 'guideline', passRate: 0.9, failRate: 0.1, totalChecks: 20 },
       ];
       const mockAnalyze = {
         summarize: jest.fn().mockReturnValue(mockSummaries),

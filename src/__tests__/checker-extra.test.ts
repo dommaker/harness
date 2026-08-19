@@ -1304,45 +1304,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
 
 
-  describe('checkConstraintsSafe', () => {
-    it('should not throw even with iron law violations', async () => {
-      const { checkConstraintsSafe } = await import('../core/constraints/checker');
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        hasTest: false,
-        hasVerificationEvidence: false,
-      };
-
-      const result = await checkConstraintsSafe(context);
-      expect(result.passed).toBe(false);
-      // Should have at least one iron law violation even though it didn't throw
-      expect(result.ironLaws.length).toBeGreaterThan(0);
-    });
-
-    it('should return passed=true when all constraints satisfied', async () => {
-      const { checkConstraintsSafe } = await import('../core/constraints/checker');
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        hasTest: true,
-        hasVerificationEvidence: true,
-        hasSingleTask: true,
-        hasRequirementReview: true,
-        hasRequirement: true,
-        hasWorktree: true,
-        hasTwoStageReview: true,
-        hasRootCauseInvestigation: true,
-        hasFailingTest: true,
-        hasReuseCheck: true,
-        completionClaimText: 'All 142 tests passed, coverage 85.2%',
-        taskDescription: 'Implement the new feature with proper testing',
-      };
-
-      const result = await checkConstraintsSafe(context);
-      expect(result.passed).toBe(true);
-      expect(result.warningCount).toBe(0);
-    });
-  });
-
   // S1: per-request customConfig 隔离
   describe('S1: per-request customConfig isolation', () => {
     it('使用 per-request customConfig 不应污染单例状态', () => {

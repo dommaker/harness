@@ -48,7 +48,7 @@ export class ConstraintChecker {
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
   /**
-   * run 级 memo（工单 18）：一次 checkConstraints/checkConstraintsSafe 内
+   * run 级 memo（工单 18）：一次 checkConstraints 内
    * git diff 等命令只执行一次；run 外直接调用私有检查方法时不 memo（恒新鲜）。
    */
   private runCache: Map<string, Promise<string>> | null = null;
@@ -119,29 +119,25 @@ export class ConstraintChecker {
   /**
    * 获取当前的约束集合（内置 + 自定义）
    *
+   * 纯查询，无副作用（ADR-0006：原 `.check` 装配已随唯一消费者
+   * interceptor 的删除一并移除，ADR-0004）。
+   *
    * @param customConfig 可选，per-request 自定义配置；不传则返回内置约束集
    */
   getConstraints(customConfig?: MergedConstraintsConfig | null): {
-    ironLaws: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    guidelines: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    prompts: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
+    ironLaws: Record<string, Constraint>;
+    guidelines: Record<string, Constraint>;
+    prompts: Record<string, Constraint>;
   } {
     const config = customConfig;
     const source = config
       ? { ironLaws: config.ironLaws, guidelines: config.guidelines, prompts: config.prompts ?? PROMPTS }
       : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, prompts: PROMPTS };
 
-    // Wire unified check() method on every constraint
-    const wire = (constraints: Record<string, Constraint>) => {
-      for (const c of Object.values(constraints)) {
-        (c as any).check = (ctx: ConstraintContext) => this.check(c, ctx);
-      }
-      return constraints as Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    };
     return {
-      ironLaws: wire(source.ironLaws),
-      guidelines: wire(source.guidelines),
-      prompts: wire(source.prompts),
+      ironLaws: source.ironLaws,
+      guidelines: source.guidelines,
+      prompts: source.prompts,
     };
   }
 
@@ -370,53 +366,6 @@ export class ConstraintChecker {
   }
 
   /**
-   * S11: 安全全量检查 — 全部约束检查，不抛异常
-   *
-   * 区别 checkConstraints(): Iron Law 违规收集在结果中而不是抛异常。
-   * 调用方通过 result.passed + result.warningCount 判断状态。
-   */
-  async checkConstraintsSafe(
-    context: ConstraintContext,
-    customConfig?: MergedConstraintsConfig | null
-  ): Promise<ConstraintCheckResult> {
-    // run 起始：重置 run 级缓存（工单 18）
-    this.cache.invalidate();
-    this.runCache = new Map();
-
-    try {
-      const result: ConstraintCheckResult = {
-        ironLaws: [],
-        guidelines: [],
-        passed: true,
-        warningCount: 0,
-      };
-
-      const traceCollector = this.getRecorder();
-      const constraints = this.getConstraints(customConfig);
-
-      for (const constraint of Object.values(constraints.ironLaws)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-        const checkResult = await this.check(constraint, context);
-        result.ironLaws.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-        if (!checkResult.satisfied) result.passed = false;
-      }
-
-      for (const constraint of Object.values(constraints.guidelines)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-        const checkResult = await this.check(constraint, context);
-        result.guidelines.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-        if (!checkResult.satisfied) result.warningCount++;
-      }
-
-      return result;
-    } finally {
-      this.runCache = null;
-    }
-  }
-
-  /**
    * 执行前检查（仅检查 Iron Laws）
    *
    * @param context 约束上下文
@@ -503,16 +452,6 @@ export async function checkConstraints(
     for (const r of result.guidelines) options.onTrace(r);
   }
   return result;
-}
-
-/**
- * S11: 快捷函数 — 安全全量检查（不抛异常）
- */
-export async function checkConstraintsSafe(
-  context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
-): Promise<ConstraintCheckResult> {
-  return ConstraintChecker.getInstance().checkConstraintsSafe(context, customConfig);
 }
 
 /**

@@ -6,7 +6,7 @@
 ## 核心导出 (dist/)
 - `index.ts`: 显式公共导出清单（ADR-0003，禁 export *）
 - `core/index.ts`: 核心约束引擎
-- `presets/index.ts`: 预设配置
+- `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理
 - `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径（studio#153）
 

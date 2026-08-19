@@ -37,19 +37,15 @@ export interface InitOptions {
 
 /**
  * 默认配置
+ *
+ * 只写有运行时消费者的字段：preset（ADR-0001 生效集链路由 mergeConstraints 消费）。
+ * 历史模板里的 enabled / ironLaws.enforceErrors / ironLaws.warnWarnings /
+ * validators.{checkpoint,passesGate,cso} 均为零消费者的死字段，不再写入；
+ * strict/standard/relaxed 三档差异曾只存在于这些死字段上（实为两档），
+ * 现在三档差异完全由 preset 键经生效集链路体现。
  */
 const DEFAULT_CONFIG = {
   preset: 'standard',
-  enabled: true,
-  ironLaws: {
-    enforceErrors: true,
-    warnWarnings: true,
-  },
-  validators: {
-    checkpoint: true,
-    passesGate: true,
-    cso: false,
-  },
 };
 
 /**
@@ -59,15 +55,6 @@ const PRESETS = {
   strict: {
     ...DEFAULT_CONFIG,
     preset: 'strict',
-    ironLaws: {
-      enforceErrors: true,
-      warnWarnings: true,
-    },
-    validators: {
-      checkpoint: true,
-      passesGate: true,
-      cso: true,
-    },
   },
   standard: {
     ...DEFAULT_CONFIG,
@@ -76,10 +63,6 @@ const PRESETS = {
   relaxed: {
     ...DEFAULT_CONFIG,
     preset: 'relaxed',
-    ironLaws: {
-      enforceErrors: true,
-      warnWarnings: false,
-    },
   },
 };
 

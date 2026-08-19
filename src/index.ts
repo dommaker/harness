@@ -414,18 +414,6 @@ export type {
 } from './agents';
 
 // ========================================
-// 预设
-// ========================================
-export {
-  STRICT_PRESET,
-  STANDARD_PRESET,
-  RELAXED_PRESET,
-  getPreset,
-  applyPreset,
-} from './presets';
-export type { PresetConfig } from './presets';
-
-// ========================================
 // 项目配置类型（config.yml 形状；Loader 属内部 seam 不公开）
 // ========================================
 export type {

@@ -1,14 +1,12 @@
 /**
- * 约束预设
+ * 约束预设（纯数据）
  *
- * 预设定义哪些约束被启用
+ * 预设定义哪些内置约束被启用。筛选与合并逻辑统一在
+ * core/project-config-loader.ts 的 mergeConstraints（ADR-0001 生效集链路），
+ * 本文件只保留预设数据，不再含函数。
  *
  * ADR-0001：kind 二元（check + prompt 纯注入层）。
  */
-
-import type { Constraint } from '../types/constraint';
-import type { MergedConstraintsConfig } from '../types/project-config';
-import { IRON_LAWS, GUIDELINES, PROMPTS } from '../core/constraints/definitions';
 
 /**
  * 预设配置
@@ -28,68 +26,9 @@ export interface PresetConfig {
 }
 
 /**
- * 应用预设，生成 MergedConstraintsConfig（S12）
- *
- * 将 PresetConfig 转换为 ConstraintChecker.checkConstraints() 所需的 customConfig。
- * 支持 per-request 预设切换，不再局限于 CLI。
- *
- * @param preset 预设名称（'strict' | 'standard' | 'relaxed'）或 PresetConfig 对象
- * @returns 可直接传入 checkConstraints() 的 merged config
- *
- * 用法：
- * ```typescript
- * const config = applyPreset('relaxed');
- * await checker.checkConstraints(ctx, config);
- * ```
- */
-export function applyPreset(
-  preset: string | PresetConfig
-): MergedConstraintsConfig {
-  const cfg = typeof preset === 'string' ? getPreset(preset) : preset;
-
-  const filterByIds = (
-    source: Record<string, Constraint>,
-    ids: string[] | null,
-  ): Record<string, Constraint> => {
-    if (ids === null) return { ...source };
-    const filtered: Record<string, Constraint> = {};
-    for (const id of ids) {
-      if (source[id]) filtered[id] = source[id];
-    }
-    return filtered;
-  };
-
-  const disabled: string[] = [];
-  if (cfg.ironLaws !== null) {
-    for (const id of Object.keys(IRON_LAWS)) {
-      if (!cfg.ironLaws.includes(id)) disabled.push(id);
-    }
-  }
-  if (cfg.guidelines !== null) {
-    for (const id of Object.keys(GUIDELINES)) {
-      if (!cfg.guidelines.includes(id)) disabled.push(id);
-    }
-  }
-  if (cfg.prompts !== null) {
-    for (const id of Object.keys(PROMPTS)) {
-      if (!cfg.prompts.includes(id)) disabled.push(id);
-    }
-  }
-
-  return {
-    ironLaws: filterByIds(IRON_LAWS, cfg.ironLaws),
-    guidelines: filterByIds(GUIDELINES, cfg.guidelines),
-    prompts: filterByIds(PROMPTS, cfg.prompts),
-    disabled,
-    custom: [],
-    unknownIds: [],
-  };
-}
-
-/**
  * 严格预设
  *
- * 所有约束全部启用
+ * 所有约束全部启用（与 standard 同集，保留别名兼容历史配置）
  */
 export const STRICT_PRESET: PresetConfig = {
   name: 'strict',
@@ -130,17 +69,13 @@ export const RELAXED_PRESET: PresetConfig = {
 };
 
 /**
- * 获取预设
+ * 预设名 → 预设数据
+ *
+ * strict 是 standard 的别名（两者同为全部启用）。未知名不在此表，
+ * 由 mergeConstraints 回落 standard + stderr 警告。
  */
-export function getPreset(name: string): PresetConfig {
-  switch (name) {
-    case 'strict':
-      return STRICT_PRESET;
-    case 'standard':
-      return STANDARD_PRESET;
-    case 'relaxed':
-      return RELAXED_PRESET;
-    default:
-      return STANDARD_PRESET;
-  }
-}
+export const PRESETS_BY_NAME: Record<string, PresetConfig> = {
+  strict: STRICT_PRESET,
+  standard: STANDARD_PRESET,
+  relaxed: RELAXED_PRESET,
+};

@@ -34,13 +34,16 @@ jest.mock('../../../core/constraints/checker', () => ({
   },
 }));
 
-// Mock ProjectConfigLoader
-jest.mock('../../../core/project-config-loader', () => ({
-  ProjectConfigLoader: jest.fn().mockImplementation(() => ({
-    load: jest.fn(),
-    hasCustomConfig: jest.fn().mockReturnValue(false),
-    mergeConstraints: jest.fn().mockReturnValue({ custom: [], disabled: [] }),
-  })),
+// Mock effective-constraints（ADR-0001：check 经 getMergedConstraintsConfig 走生效集链路）
+jest.mock('../../../core/effective-constraints', () => ({
+  getMergedConstraintsConfig: jest.fn().mockReturnValue({
+    ironLaws: {},
+    guidelines: {},
+    prompts: {},
+    custom: [],
+    disabled: [],
+    unknownIds: [],
+  }),
 }));
 
 // Mock chalk

@@ -30,7 +30,7 @@ Every check-layer constraint must reference a registered checker (registry close
 
 `getEffectiveConstraints(projectRoot)` (`src/core/effective-constraints.ts`) is the single source of the effective set: built-ins → preset → config.yml disables → custom additions → scenes filtering. init injection, `check`, and external consumers all go through it.
 
-Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints.
+Presets (`src/presets/`) are pure data: `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints. Filtering lives in `mergeConstraints`; unknown preset names fall back to `standard` with a stderr warning.
 
 ### Core Singletons
 

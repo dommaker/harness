@@ -8,29 +8,57 @@
  */
 
 import type { Constraint } from '../types/constraint';
+import type { MergedConstraintsConfig } from '../types/project-config';
 import { PROMPTS } from './constraints/definitions';
 import { ProjectConfigLoader } from './project-config-loader';
 
 /**
  * 获取项目当前生效的约束集（check + prompt，带 kind）
  *
- * 内部完成完整合并：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
- * 删除（内置与 custom 同效）→ custom-constraints 追加/extend_exceptions
- * （禁用/已退役的 custom 不追加）→ scenes 过滤
+ * 生效集链路同 getMergedConstraintsConfig：内置 → preset 裁剪 → config.yml
+ * `constraints.<id>.enabled:false` 删除（内置与 custom 同效）→ custom-constraints
+ * 追加/extend_exceptions（禁用/已退役的 custom 不追加）→ scenes 过滤
  * （带 appliesTo 的 prompt 仅当 config.yml `scenes` 与其交集非空时保留，
  * 缺省 scenes=[] 即场景专属 prompt 默认不进入生效集）。
  *
  * @param projectRoot 项目根路径（缺省 process.cwd()）
+ * @param options.preset 覆盖 config.yml 的 preset；仅在项目无自定义配置时生效
+ *   （与 getMergedConstraintsConfig 同一优先级规则），不传则尊重 config.yml
  */
-export function getEffectiveConstraints(projectRoot: string = process.cwd()): Constraint[] {
-  const loader = new ProjectConfigLoader(projectRoot);
-  loader.load();
-  const merged = loader.mergeConstraints();
+export function getEffectiveConstraints(
+  projectRoot: string = process.cwd(),
+  options?: { preset?: string }
+): Constraint[] {
+  const merged = getMergedConstraintsConfig(projectRoot, options);
   return [
     ...Object.values(merged.ironLaws),
     ...Object.values(merged.guidelines),
     ...Object.values(merged.prompts ?? {}),
   ];
+}
+
+/**
+ * 获取项目当前生效的合并约束配置（ADR-0001 唯一来源的完整形状）
+ *
+ * 与 getEffectiveConstraints 同一生效集链路，返回完整 MergedConstraintsConfig
+ * （含 disabled/custom/unknownIds），供 check 等需要诊断信息的消费方使用。
+ *
+ * options.preset（CLI --preset）仅在项目无自定义配置时覆盖 config.yml 的
+ * preset（工单 23 语义：项目自定义配置优先于 CLI 预设）；不传 preset 时
+ * 完全尊重 config.yml 的 preset 键。
+ *
+ * @param projectRoot 项目根路径（缺省 process.cwd()）
+ */
+export function getMergedConstraintsConfig(
+  projectRoot: string = process.cwd(),
+  options?: { preset?: string }
+): MergedConstraintsConfig {
+  const loader = new ProjectConfigLoader(projectRoot);
+  loader.load();
+  if (loader.hasCustomConfig() || !options?.preset) {
+    return loader.mergeConstraints();
+  }
+  return loader.mergeConstraints({ preset: options.preset });
 }
 
 /**

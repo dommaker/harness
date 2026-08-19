@@ -5,7 +5,7 @@
 import { check, listLaws } from '../check';
 import * as fs from 'fs';
 import { constraintChecker } from '../../../core/constraints/checker';
-import { ProjectConfigLoader } from '../../../core/project-config-loader';
+import { getMergedConstraintsConfig } from '../../../core/effective-constraints';
 import { execAsync } from '../../../utils/exec';
 
 // Mock fs
@@ -45,13 +45,16 @@ jest.mock('../../../core/constraints/checker', () => ({
   },
 }));
 
-// Mock ProjectConfigLoader
-jest.mock('../../../core/project-config-loader', () => ({
-  ProjectConfigLoader: jest.fn().mockImplementation(() => ({
-    load: jest.fn(),
-    hasCustomConfig: jest.fn().mockReturnValue(false),
-    mergeConstraints: jest.fn().mockReturnValue({ custom: [], disabled: [] }),
-  })),
+// Mock effective-constraints（ADR-0001：check 经 getMergedConstraintsConfig 走生效集链路）
+jest.mock('../../../core/effective-constraints', () => ({
+  getMergedConstraintsConfig: jest.fn().mockReturnValue({
+    ironLaws: {},
+    guidelines: {},
+    prompts: {},
+    custom: [],
+    disabled: [],
+    unknownIds: [],
+  }),
 }));
 
 // Mock chalk
@@ -65,7 +68,7 @@ jest.mock('chalk', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs> & { readdirSync: jest.Mock };
 const mockChecker = constraintChecker as jest.Mocked<typeof constraintChecker>;
-const MockProjectConfigLoader = ProjectConfigLoader as jest.MockedClass<typeof ProjectConfigLoader>;
+const mockGetMergedConfig = getMergedConstraintsConfig as jest.MockedFunction<typeof getMergedConstraintsConfig>;
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
 describe('check command', () => {
@@ -73,6 +76,15 @@ describe('check command', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks 不清实现，显式恢复默认 merged config，避免用例间泄漏
+    mockGetMergedConfig.mockReturnValue({
+      ironLaws: {},
+      guidelines: {},
+      prompts: {},
+      custom: [],
+      disabled: [],
+      unknownIds: [],
+    });
     consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     process.exitCode = 0;
   });
@@ -123,12 +135,14 @@ describe('check command', () => {
     });
 
     it('应该加载自定义约束', async () => {
-      const mockLoader = {
-        load: jest.fn(),
-        hasCustomConfig: jest.fn().mockReturnValue(true),
-        mergeConstraints: jest.fn().mockReturnValue({ custom: [{ id: 'custom', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' }], disabled: ['disabled_constraint'] }),
-      };
-      (MockProjectConfigLoader as any).mockImplementation(() => mockLoader);
+      mockGetMergedConfig.mockReturnValue({
+        ironLaws: {},
+        guidelines: {},
+        prompts: {},
+        custom: ['custom'],
+        disabled: ['disabled_constraint'],
+        unknownIds: [],
+      });
 
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,

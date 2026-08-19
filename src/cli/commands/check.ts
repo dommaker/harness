@@ -219,14 +219,11 @@ export function listLaws(): void {
   });
 
   // Guidelines
-  console.log(chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，有例外:\n'));
+  console.log(chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，违背发警告但不阻止:\n'));
   Object.values(GUIDELINES).forEach(constraint => {
     console.log(chalk.yellow(`  ${constraint.id}`));
     console.log(chalk.gray(`    ${constraint.rule}`));
     console.log(chalk.gray(`    ${constraint.message}`));
-    if (constraint.exceptions && constraint.exceptions.length > 0) {
-      console.log(chalk.gray(`    例外: ${constraint.exceptions.join(', ')}`));
-    }
     console.log();
   });
 

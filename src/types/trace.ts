@@ -47,9 +47,6 @@ export interface ExecutionTrace {
   /** 严重性（从约束定义继承） */
   severity?: 'error' | 'warning' | 'info';
 
-  /** 例外类型（如果适用了例外） */
-  exceptionApplied?: string;
-
   /** 项目路径（用于区分多项目） */
   projectPath?: string;
 
@@ -126,16 +123,6 @@ export interface TraceSummary {
     passRateDelta: number;
     failRateDelta: number;
   };
-
-  // ========================================
-  // 例外统计
-  // ========================================
-
-  /** 例外应用次数 */
-  exceptionCount: number;
-
-  /** 最常见例外 */
-  mostCommonException?: string;
 }
 
 /**
@@ -145,8 +132,7 @@ export interface TraceAnomaly {
   /** 异常类型 */
   type:
     | 'rising_fail_rate'      // 失败率上升
-    | 'low_pass_rate'         // 通过率过低
-    | 'exception_overuse';    // 例外滥用
+    | 'low_pass_rate';        // 通过率过低
 
   /** 约束 ID */
   constraintId: string;
@@ -168,7 +154,7 @@ export interface TraceAnomaly {
   detectedAt: number;
 
   /** 建议的下一步 */
-  suggestedAction?: 'diagnose' | 'adjust_threshold' | 'add_exception' | 'notify_user';
+  suggestedAction?: 'diagnose' | 'adjust_threshold' | 'notify_user';
 }
 
 /**
@@ -224,6 +210,5 @@ export interface TraceAnalyzerConfig {
   /** 异常阈值 */
   thresholds?: {
     failRate?: number;       // 失败率阈值，默认 0.5
-    exceptionRate?: number;  // 例外率阈值，默认 0.4
   };
 }

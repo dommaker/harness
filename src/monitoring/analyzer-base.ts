@@ -36,28 +36,6 @@ export function timeRangeOf(timestamps: number[]): { start: number; end: number 
 }
 
 /**
- * 找出出现次数最多的元素
- */
-export function findMostCommon(items: string[]): string | undefined {
-  if (items.length === 0) return undefined;
-
-  const counts = new Map<string, number>();
-  for (const item of items) {
-    counts.set(item, (counts.get(item) || 0) + 1);
-  }
-
-  let maxCount = 0;
-  let mostCommon: string | undefined;
-  for (const [item, count] of counts) {
-    if (count > maxCount) {
-      maxCount = count;
-      mostCommon = item;
-    }
-  }
-  return mostCommon;
-}
-
-/**
  * 平均值
  */
 export function calcAverage(values: number[]): number {

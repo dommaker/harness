@@ -68,7 +68,6 @@ export const GUIDELINES: Record<string, Constraint> = {
 - 性能优化不改变接口
 
 支持模块级目录条目登记：governance.capabilities.mode=module 时按目录覆盖判定（如 src/core/ 一条目录条目覆盖该目录下所有源文件）。`,
-    exceptions: ['internal_refactor', 'bug_fix_only', 'performance_optimization'],
   },
 
   /**
@@ -97,6 +96,5 @@ export const GUIDELINES: Record<string, Constraint> = {
 - 临时目录（tmp、temp）
 - 测试目录（__tests__、test）
 - 生成代码目录（dist、build、generated）`,
-    exceptions: ['temp_dir', 'test_dir', 'generated_code'],
   },
 };

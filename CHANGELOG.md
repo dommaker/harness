@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changes
+- refactor(core,types,monitoring,cli)!: 删除 guideline 例外机制（ADR-0005，架构评审确认）——`Constraint.exceptions`、config `exceptions`/`extend_exceptions` 键、`ConstraintContext` 24 个例外证据字段 + `exceptionReason`、checker 例外分支、trace `exceptionApplied`/`exceptionCount`/`mostCommonException`/`exception_overuse`/`add_exception` 滥用检测链全链路移除。生产行为无变化（机制从未触发，`checkException` 恒 false）；存量配置中的这两个键静默忽略，不报错不警告
 - refactor(core)!: 删除 ConstraintInterceptor 第二执行引擎及 enforcement 类型——生产零调用方，拦截统一由 checkBeforeExecution 承担（ADR-0004，架构评审候选2）
 - refactor(core): 生效集筛选逻辑收口一处（架构评审候选3，ADR-0001 闭环）
 

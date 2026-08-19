@@ -28,36 +28,6 @@ import { findTsSourceFiles } from '../../utils/file-walk';
 import { getConstraintCheck, type CheckEnv, type CheckOutcome } from './checkers';
 
 /**
- * 例外名称 → ConstraintContext 中布尔字段的映射
- */
-const EXCEPTION_FIELD_MAP: Record<string, keyof ConstraintContext> = {
-  scalability_required: 'scalabilityRequired',
-  security_required: 'securityRequired',
-  performance_required: 'performanceRequired',
-  reliability_required: 'reliabilityRequired',
-  simple_typo: 'isSimpleTypo',
-  config_value_error: 'isConfigValueError',
-  missing_config: 'isMissingConfig',
-  config_file: 'isConfigFile',
-  type_definition: 'isTypeDefinition',
-  simple_accessor: 'isSimpleAccessor',
-  pure_display_component: 'isPureDisplayComponent',
-  json_parse_result: 'isJsonParseResult',
-  third_party_no_types: 'isThirdPartyNoTypes',
-  legacy_migration: 'isLegacyMigration',
-  internal_refactor: 'isInternalRefactor',
-  bug_fix_only: 'isBugFixOnly',
-  performance_optimization: 'isPerformanceOptimization',
-  redundant_code_cleanup: 'isRedundantCodeCleanup',
-  same_effect_refactor: 'isSameEffectRefactor',
-  unused_code_removal: 'isUnusedCodeRemoval',
-  external_dependency: 'isExternalDependency',
-  explicit_instruction: 'isExplicitInstruction',
-  emergency_fix: 'isEmergencyFix',
-  existing_design: 'isExistingDesign',
-};
-
-/**
  * trace 记录器最小接口（原工单 15 为消除 core→monitoring 循环；现 monitoring
  * 不反向依赖 core，方向单向、无环，checker 可直接值引用 getTraceCollector）
  *
@@ -193,20 +163,6 @@ export class ConstraintChecker {
       };
     }
 
-    // 检查例外条件（仅 Guidelines 有效）
-    if (constraint.level === 'guideline' && constraint.exceptions) {
-      if (this.checkException(constraint, context)) {
-        return {
-          id: constraint.id,
-          level: constraint.level,
-          satisfied: true,
-          constraint,
-          message: `指导原则 ${constraint.id} 因例外条件被豁免`,
-          checkedAt: new Date(),
-        };
-      }
-    }
-
     // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
     const outcome = await this.checkPrecondition(constraint, context);
 
@@ -233,16 +189,6 @@ export class ConstraintChecker {
       requiredAction: satisfied ? undefined : constraint.enforcement,
       checkedAt: new Date(),
     };
-  }
-
-  /**
-   * 检查例外条件
-   */
-  private checkException(constraint: Constraint, context: ConstraintContext): boolean {
-    if (!constraint.exceptions) return false;
-    return constraint.exceptions.some(
-      (ex) => context[EXCEPTION_FIELD_MAP[ex]] === true
-    );
   }
 
   /**
@@ -289,9 +235,6 @@ export class ConstraintChecker {
       result: checkResult.skipped ? 'skip' : checkResult.satisfied ? 'pass' : 'fail',
       operation: context.operation,
       severity: this.getSeverity(constraint.level),
-      exceptionApplied: checkResult.message?.includes('豁免')
-        ? constraint.exceptions?.[0]
-        : undefined,
       projectPath: context.projectPath,
       sessionId: context.sessionId,
     });

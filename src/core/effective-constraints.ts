@@ -17,7 +17,7 @@ import { ProjectConfigLoader } from './project-config-loader';
  *
  * 生效集链路同 getMergedConstraintsConfig：内置 → preset 裁剪 → config.yml
  * `constraints.<id>.enabled:false` 删除（内置与 custom 同效）→ custom-constraints
- * 追加/extend_exceptions（禁用/已退役的 custom 不追加）→ scenes 过滤
+ * 追加（禁用/已退役的 custom 不追加）→ scenes 过滤
  * （带 appliesTo 的 prompt 仅当 config.yml `scenes` 与其交集非空时保留，
  * 缺省 scenes=[] 即场景专属 prompt 默认不进入生效集）。
  *

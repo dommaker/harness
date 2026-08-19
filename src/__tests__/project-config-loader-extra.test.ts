@@ -123,34 +123,6 @@ custom_constraints:
     });
   });
 
-  describe('约束扩展', () => {
-    it('应该扩展例外列表', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'config.yml'),
-        `
-custom_constraints:
-  extended_rule:
-    rule: EXTENDED RULE
-    message: Extended
-    level: guideline
-    trigger: commit
-    exceptions:
-      - simple_typo
-    extend_exceptions:
-      - config_change
-`
-      );
-
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-      const merged = loader.mergeConstraints();
-
-      expect(merged.guidelines['extended_rule']?.exceptions).toBeDefined();
-      expect(merged.guidelines['extended_rule']?.exceptions).toContain('simple_typo');
-      expect(merged.guidelines['extended_rule']?.exceptions).toContain('config_change');
-    });
-  });
-
   describe('isConstraintEnabled', () => {
     it('启用的约束应该返回 true', () => {
       const loader = new ProjectConfigLoader(tempDir);

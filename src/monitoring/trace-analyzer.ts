@@ -19,7 +19,6 @@ import { TraceCollector } from './traces';
 import {
   groupByKey,
   timeRangeOf,
-  findMostCommon,
   splitByTime,
   writeSummaryJson,
   readSummaryJson,
@@ -34,7 +33,6 @@ const DEFAULT_CONFIG: TraceAnalyzerConfig = {
   periodMs: 3600 * 1000, // 1 小时
   thresholds: {
     failRate: 0.5,        // 失败率 > 50% 视为异常
-    exceptionRate: 0.4,   // 例外率 > 40% 视为滥用
   },
 };
 
@@ -90,12 +88,6 @@ export class TraceAnalyzer {
       const passRate = evaluatedChecks > 0 ? passCount / evaluatedChecks : 0;
       const failRate = evaluatedChecks > 0 ? failCount / evaluatedChecks : 0;
 
-      // 计算例外统计
-      const exceptionTraces = group.filter(t => t.exceptionApplied);
-      const exceptionCount = exceptionTraces.length;
-      const exceptionTypes = exceptionTraces.map(t => t.exceptionApplied!);
-      const mostCommonException = findMostCommon(exceptionTypes);
-
       // 计算趋势
       const recentTrend = this.calculateTrend(group);
 
@@ -111,8 +103,6 @@ export class TraceAnalyzer {
         passRate,
         failRate,
         recentTrend,
-        exceptionCount,
-        mostCommonException,
       });
     }
 
@@ -176,26 +166,6 @@ export class TraceAnalyzer {
           },
           detectedAt: Date.now(),
           suggestedAction: 'adjust_threshold',
-        });
-      }
-
-      // 检测例外滥用
-      const exceptionRate = summary.totalChecks > 0
-        ? summary.exceptionCount / summary.totalChecks
-        : 0;
-
-      if (exceptionRate > thresholds.exceptionRate!) {
-        anomalies.push({
-          type: 'exception_overuse',
-          constraintId: summary.constraintId,
-          level: summary.level,
-          message: `约束 ${summary.constraintId} 例外使用率 ${Math.round(exceptionRate * 100)}%，可能过度依赖例外`,
-          data: {
-            currentRate: exceptionRate,
-            threshold: thresholds.exceptionRate!,
-          },
-          detectedAt: Date.now(),
-          suggestedAction: 'add_exception',
         });
       }
     }

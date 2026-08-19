@@ -157,7 +157,7 @@ export class ProjectConfigLoader {
    * 合并内置约束和自定义约束（ADR-0001 生效集完整链路）
    *
    * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
-   * 删除（对内置与 custom 同效）→ custom-constraints 追加/extend_exceptions
+   * 删除（对内置与 custom 同效）→ custom-constraints 追加
    * （禁用/已退役的 custom 不追加）→ scenes 过滤
    * （带 appliesTo 的 prompt 仅当 scenes 交集非空时保留）。
    *
@@ -233,37 +233,7 @@ export class ProjectConfigLoader {
       if (result.disabled.includes(id) || customDef.retired) {
         continue;
       }
-      const extendExceptions = customDef.extend_exceptions;
-      const isExtendOnly =
-        !!extendExceptions && extendExceptions.length > 0 &&
-        !customDef.rule &&
-        !customDef.exceptions;
-
-      if (isExtendOnly) {
-        const builtIn = this.findBuiltInConstraint(id, result);
-        if (builtIn) {
-          const constraint = { ...builtIn };
-          constraint.exceptions = [
-            ...(builtIn.exceptions || []),
-            ...extendExceptions!,
-          ];
-          if (result.ironLaws[id]) result.ironLaws[id] = constraint;
-          if (result.guidelines[id]) result.guidelines[id] = constraint;
-          if (result.prompts![id]) result.prompts![id] = constraint;
-          continue;
-        }
-      }
-
       const constraint = this.toConstraint(customDef, id);
-
-      if (extendExceptions && extendExceptions.length > 0) {
-        const builtIn = this.findBuiltInConstraint(id, result);
-        constraint.exceptions = [
-          ...(builtIn?.exceptions || []),
-          ...(customDef.exceptions || []),
-          ...extendExceptions,
-        ];
-      }
 
       result.custom.push(id);
 
@@ -299,16 +269,6 @@ export class ProjectConfigLoader {
   }
 
   /**
-   * 在合并结果中查找内置约束
-   */
-  private findBuiltInConstraint(
-    id: string,
-    merged: MergedConstraintsConfig
-  ): Constraint | undefined {
-    return merged.ironLaws[id] || merged.guidelines[id] || merged.prompts?.[id];
-  }
-
-  /**
    * 将自定义约束定义转换为 Constraint
    *
    * kind 推导（ADR-0001）：自定义约束没有注册表中的 checker，统一归为
@@ -324,7 +284,6 @@ export class ProjectConfigLoader {
       rule: def.rule || '',
       message: def.message || '',
       trigger: (def.trigger || 'manual') as ConstraintTrigger | ConstraintTrigger[],
-      exceptions: def.exceptions,
       description: def.description,
       promptInjection: def.promptInjection,
       enabled: def.enabled !== false,

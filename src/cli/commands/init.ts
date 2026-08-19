@@ -466,7 +466,6 @@ custom_constraints:
   #   rule: "NO MOMENT.JS IMPORTS"
   #   message: "禁止使用 moment.js，请使用 date-fns 或 dayjs"
   #   trigger: ["code_implementation"]
-  #   exceptions: ["legacy_migration"]
 
   # 示例 3：要求特定的文件命名
   # my_project_component_naming:
@@ -475,19 +474,6 @@ custom_constraints:
   #   rule: "REACT COMPONENTS SHOULD BE PASCAL CASE"
   #   message: "React 组件文件名应使用 PascalCase"
   #   trigger: ["file_creation"]
-
-# ========================================
-# 扩展内置约束的例外
-# ========================================
-
-# 如果需要为内置约束添加项目特定的例外，
-# 可以在 .harness/config.yml 中配置：
-
-# constraints:
-#   no_fix_without_root_cause:
-#     # 添加项目特定的例外
-#     exceptions:
-#       - my_custom_exception
 `;
 
   await fs.writeFile(customConstraintsPath, content, 'utf-8');

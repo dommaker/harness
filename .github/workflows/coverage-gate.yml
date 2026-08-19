@@ -47,10 +47,20 @@ jobs:
       - name: Check coverage not decreased (PR only)
         if: github.event_name == 'pull_request'
         run: |
+          # 纯删除误伤豁免：删掉高覆盖死代码会同减分子分母、拉低总覆盖率
+          #（2026-08-19 PR #64 删 ConstraintInterceptor 实发：88.9%→87.5%）。
+          # 统计时排除本 PR 删除的文件，只比较两边都存在的文件；
+          # 新增文件仍计入 PR 侧（新代码必须带测试，不受豁免）。
+          export DELETED_FILES=$(git diff --name-only --diff-filter=D ${{ github.base_ref }}...HEAD)
           cov() { node -e "
-            const data = require('./coverage/coverage-final.json');
+            const path=require('path');
+            const del=(process.env.DELETED_FILES||'').split('\n').filter(Boolean);
+            const data=require('./coverage/coverage-final.json');
             let t=0,c=0;
-            for(const i of Object.values(data)){const s=i.s||{};const h=Object.values(s);t+=h.length;c+=h.filter(v=>v>0).length;}
+            for(const [f,i] of Object.entries(data)){
+              if(del.includes(path.relative(process.cwd(),f)))continue;
+              const s=i.s||{};const h=Object.values(s);t+=h.length;c+=h.filter(v=>v>0).length;
+            }
             console.log((c/t*100).toFixed(1));
           "; }
           git checkout ${{ github.base_ref }}
@@ -63,7 +73,7 @@ jobs:
           git checkout -
           npm ci && npm test -- --coverage
           PR_COVERAGE=$(cov)
-          echo "Base coverage: $BASE_COVERAGE%"
+          echo "Base coverage: $BASE_COVERAGE% (excludes PR-deleted files)"
           echo "PR coverage: $PR_COVERAGE%"
           DECREASE=$(echo "$BASE_COVERAGE - $PR_COVERAGE" | bc)
           if (( $(echo "$DECREASE > 1" | bc -l) )); then

@@ -3,49 +3,18 @@
  *
  * - 每个门禁在此声明 id / description / 默认 order / CLI 元数据；
  *   registry.ts 按此表做「定义↔实现」双向闭环校验（复制 checker 闭环模式）。
- * - CLI 元数据被 bin/harness.js 消费，注册表驱动生成 6 个门禁命令：
- *   命令名/别名/选项/子命令路由与历史手工块完全兼容；实现引用为
- *   module+export（CommandImplRef），bin 按需 per-command 懒加载（H5/O2）。
+ * - CLI 元数据即 CommandDefinition（架构评审候选8，ADR-0007：形状对齐通用
+ *   命令定义，bin/harness.js 单引擎单循环生成全部命令）：命令名/别名/选项/
+ *   子命令路由与历史手工块完全兼容；实现引用为 module+export（CommandImplRef），
+ *   bin 按需 per-command 懒加载（H5/O2）。门禁特有语义由两个标志表达：
+ *   subcommandStrict:false（未知位置参数落回默认 action）+
+ *   bareRunsAction:true（无位置参数时跑默认 action 而非显示帮助）。
  * - 本模块禁止 import 任何门禁/命令实现（仅 type import，运行时零依赖）——
  *   bin 启动期只加载本纯数据模块（保持 --help/--version 懒加载，
  *   闭环校验在 registry 加载期执行）。
  */
 
-import type { CommandImplRef } from '../cli/commands/definitions';
-
-/**
- * 门禁 CLI 选项元数据（直接映射 commander `.option()`）
- */
-export interface GateCliOption {
-  /** commander option flags，如 '-p, --project-path <path>' */
-  flags: string;
-  /** 选项描述 */
-  description: string;
-  /** commander 缺省值；negated option（如 --no-strict）不设，由 commander 默认 true */
-  defaultValue?: string | boolean;
-}
-
-/**
- * 门禁 CLI 命令元数据（bin/harness.js 注册表驱动生成）
- */
-export interface GateCliDefinition {
-  /** 命令名（历史命令名兼容保留） */
-  command: string;
-  /** 命令别名 */
-  alias?: string;
-  /** 位置参数声明，如 '[subcommand]' / '[cmd]' */
-  argument?: string;
-  /** 命令描述 */
-  description: string;
-  /** 命令选项 */
-  options: GateCliOption[];
-  /** 子命令名 → 命令实现引用（module+export）；命中后按 [options] 透传 */
-  subcommands?: Record<string, CommandImplRef>;
-  /** 默认 action 命令实现引用（module+export） */
-  action: CommandImplRef;
-  /** 默认 action 实参构造：arg = 位置参数（无位置参数时为 undefined），options = commander 选项对象 */
-  mapActionArgs: (arg: string | undefined, options: Record<string, unknown>) => unknown[];
-}
+import type { CommandDefinition } from '../cli/commands/definitions';
 
 /**
  * 门禁定义
@@ -57,8 +26,8 @@ export interface GateDefinition {
   description: string;
   /** 默认顺序（config.yml `gates.order` 可覆盖），小者先执行 */
   order: number;
-  /** CLI 元数据（bin/harness.js 注册表驱动生成） */
-  cli: GateCliDefinition;
+  /** CLI 元数据（形状 = CommandDefinition，bin/harness.js 通用引擎驱动生成） */
+  cli: CommandDefinition;
 }
 
 /**
@@ -81,9 +50,11 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--check-all', description: '检查所有任务', defaultValue: false },
         { flags: '--run-e2e', description: '运行 E2E 测试', defaultValue: false },
       ],
-      subcommands: { list: { module: 'acceptance', export: 'listAcceptanceCriteria' } },
+      subcommands: { list: { impl: { module: 'acceptance', export: 'listAcceptanceCriteria' } } },
+      subcommandStrict: false,
+      bareRunsAction: true,
       action: { module: 'acceptance', export: 'acceptance' },
-      mapActionArgs: (_arg, options) => [options],
+      mapActionArgs: (_positionals, options) => [options],
     },
   },
   {
@@ -102,7 +73,7 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--strict', description: '严格模式（warn 也阻止）' },
       ],
       action: { module: 'command', export: 'executeCommand' },
-      mapActionArgs: (arg, options) => [arg, options],
+      mapActionArgs: (positionals, options) => [positionals[0], options],
     },
   },
   {
@@ -119,9 +90,11 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--no-strict', description: '关闭严格模式' },
         { flags: '--allow-breaking', description: '允许破坏性变更', defaultValue: false },
       ],
-      subcommands: { validate: { module: 'contract', export: 'validateSchema' } },
+      subcommands: { validate: { impl: { module: 'contract', export: 'validateSchema' } } },
+      subcommandStrict: false,
+      bareRunsAction: true,
       action: { module: 'contract', export: 'contract' },
-      mapActionArgs: (_arg, options) => [options],
+      mapActionArgs: (_positionals, options) => [options],
     },
   },
   {
@@ -142,7 +115,7 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--benchmark-timeout <n>', description: '基准测试超时（秒）', defaultValue: '60' },
       ],
       action: { module: 'performance', export: 'performance' },
-      mapActionArgs: (_arg, options) => [
+      mapActionArgs: (_positionals, options) => [
         {
           projectPath: options.projectPath,
           coverage: options.coverage,
@@ -170,9 +143,11 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--no-block-on-changes', description: '不阻止变更请求' },
         { flags: '--allowed-reviewers <list>', description: '允许的审查者（逗号分隔）' },
       ],
-      subcommands: { status: { module: 'review', export: 'reviewStatus' } },
+      subcommands: { status: { impl: { module: 'review', export: 'reviewStatus' } } },
+      subcommandStrict: false,
+      bareRunsAction: true,
       action: { module: 'review', export: 'review' },
-      mapActionArgs: (_arg, options) => [
+      mapActionArgs: (_positionals, options) => [
         {
           projectPath: options.projectPath,
           minReviewers: parseInt(String(options.minReviewers), 10),
@@ -199,9 +174,11 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--ignore-dev-deps', description: '忽略开发依赖', defaultValue: false },
         { flags: '--scan-command <cmd>', description: '自定义扫描命令' },
       ],
-      subcommands: { audit: { module: 'security', export: 'auditDetails' } },
+      subcommands: { audit: { impl: { module: 'security', export: 'auditDetails' } } },
+      subcommandStrict: false,
+      bareRunsAction: true,
       action: { module: 'security', export: 'security' },
-      mapActionArgs: (_arg, options) => [options],
+      mapActionArgs: (_positionals, options) => [options],
     },
   },
 ];

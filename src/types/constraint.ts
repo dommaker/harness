@@ -4,7 +4,7 @@
  * kind 二元模型（ADR-0001）：
  * - check：必须带真实 checker，参与运行时检查与 trace 统计
  *   - iron_law：绝对禁止，无例外，违背即阻止执行
- *   - guideline：优先建议，有例外，违背发警告但不阻止
+ *   - guideline：优先建议，违背发警告但不阻止
  * - prompt：纯文本提示，仅参与 prompt 注入，不占检查位、不产生 trace
  */
 
@@ -73,9 +73,6 @@ export interface Constraint {
 
   /** 是否启用 */
   enabled?: boolean;
-
-  /** 例外条件（仅 Guidelines 有效） */
-  exceptions?: string[];
 
   /**
    * 适用场景标签（prompt 类专用，如 'agent-skill'、'llm-app'）。
@@ -210,54 +207,7 @@ export interface ConstraintContext {
 
   /** 是否完成两阶段审查（对应约束已移出内置，字段保留兼容） */
   hasTwoStageReview?: boolean;
-  
-  // ========================================
-  // 例外条件（用于 Guidelines）
-  // ========================================
-  
-  // simplest_solution_first 例外
-  scalabilityRequired?: boolean;
-  securityRequired?: boolean;
-  performanceRequired?: boolean;
-  reliabilityRequired?: boolean;
-  
-  // no_fix_without_root_cause 例外
-  isSimpleTypo?: boolean;
-  isConfigValueError?: boolean;
-  isMissingConfig?: boolean;
-  
-  // no_code_without_test 例外
-  isConfigFile?: boolean;
-  isTypeDefinition?: boolean;
-  isSimpleAccessor?: boolean;
-  isPureDisplayComponent?: boolean;
-  
-  // any 类型相关例外（对应约束已退役，字段保留兼容）
-  isJsonParseResult?: boolean;
-  isThirdPartyNoTypes?: boolean;
-  isLegacyMigration?: boolean;
-  
-  // capability_sync 例外
-  isInternalRefactor?: boolean;
-  isBugFixOnly?: boolean;
-  isPerformanceOptimization?: boolean;
-  
-  // no_simplification_without_approval 例外
-  isRedundantCodeCleanup?: boolean;
-  isSameEffectRefactor?: boolean;
-  isUnusedCodeRemoval?: boolean;
 
-  // 设计决策例外
-  isExplicitInstruction?: boolean;
-  isEmergencyFix?: boolean;
-  isExistingDesign?: boolean;
-
-  // 外部依赖相关
-  isExternalDependency?: boolean;
-  
-  /** 例外理由说明 */
-  exceptionReason?: string;
-  
   /** 执行上下文 */
   executionContext?: any;
 }

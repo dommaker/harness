@@ -57,7 +57,7 @@ describe('TraceCollector', () => {
   test('should filter traces by constraint ID', () => {
     collector.recordPass('constraint_a', 'iron_law');
     collector.recordFail('constraint_b', 'guideline');
-    collector.recordBypass('constraint_a', 'iron_law', 'user reason');
+    collector.recordFail('constraint_a', 'iron_law');
 
     const traces = collector.read({ constraintId: 'constraint_a' });
     expect(traces.length).toBe(2);
@@ -226,7 +226,7 @@ describe('TraceAnalyzer', () => {
         constraintId: 'constraint_b',
         level: 'iron_law',
         timestamp: Date.now() - i * 60 * 1000,
-        result: i < 3 ? 'pass' : 'bypassed',
+        result: i < 3 ? 'pass' : 'fail',
       });
     }
 
@@ -243,26 +243,7 @@ describe('TraceAnalyzer', () => {
 
     const summaryB = summaries.find(s => s.constraintId === 'constraint_b');
     expect(summaryB).toBeDefined();
-    expect(summaryB!.bypassRate).toBeCloseTo(0.4, 1);
-  });
-
-  test('should detect high bypass rate anomaly', () => {
-    // 记录高绕过率的 traces
-    for (let i = 0; i < 10; i++) {
-      collector.record({
-        constraintId: 'problematic_constraint',
-        level: 'guideline',
-        timestamp: Date.now(),
-        result: i < 3 ? 'pass' : 'bypassed', // 70% 绕过率
-      });
-    }
-
-    const traces = collector.read();
-    const summaries = analyzer.summarize(traces);
-    const anomalies = analyzer.detectAnomalies(summaries);
-
-    expect(anomalies.length).toBeGreaterThan(0);
-    expect(anomalies.some(a => a.type === 'high_bypass_rate')).toBe(true);
+    expect(summaryB!.failRate).toBeCloseTo(0.4, 1);
   });
 
   test('should detect rising fail rate anomaly', () => {

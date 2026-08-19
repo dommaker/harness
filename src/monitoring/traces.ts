@@ -118,26 +118,6 @@ export class TraceCollector {
   }
 
   /**
-   * 快捷方法：记录绕过
-   */
-  recordBypass(
-    constraintId: string,
-    level: 'iron_law' | 'guideline',
-    bypassReason?: string,
-    options?: Partial<ExecutionTrace>
-  ): void {
-    this.record({
-      constraintId,
-      level,
-      timestamp: Date.now(),
-      result: 'bypassed',
-      userAction: 'bypass',
-      bypassReason,
-      ...options,
-    });
-  }
-
-  /**
    * 批量读取 traces
    *
    * 支持过滤条件：

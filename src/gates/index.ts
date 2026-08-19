@@ -35,7 +35,7 @@ export { decisionFromResult } from './decision';
 /**
  * 门禁定义表（定义即注册的单一定义源；bin/harness.js 注册表驱动生成 CLI）
  */
-export { GATE_DEFINITIONS, type GateDefinition, type GateCliDefinition, type GateCliOption } from './definitions';
+export { GATE_DEFINITIONS, type GateDefinition } from './definitions';
 
 /**
  * 门禁注册表（定义↔实现双向闭环，加载期抛错）+ getGate 引用闭环

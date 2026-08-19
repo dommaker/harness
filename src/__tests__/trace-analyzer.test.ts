@@ -75,11 +75,11 @@ describe('TraceAnalyzer', () => {
   });
 
   describe('detectAnomalies', () => {
-    it('应该检测高绕过率异常', () => {
+    it('应该检测失败率异常', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test', level: 'guideline', timestamp: 1000, result: 'bypassed' },
-        { constraintId: 'test', level: 'guideline', timestamp: 2000, result: 'bypassed' },
-        { constraintId: 'test', level: 'guideline', timestamp: 3000, result: 'bypassed' },
+        { constraintId: 'test', level: 'guideline', timestamp: 1000, result: 'fail' },
+        { constraintId: 'test', level: 'guideline', timestamp: 2000, result: 'fail' },
+        { constraintId: 'test', level: 'guideline', timestamp: 3000, result: 'fail' },
         { constraintId: 'test', level: 'guideline', timestamp: 4000, result: 'pass' },
       ];
 
@@ -120,7 +120,6 @@ describe('TraceAnalyzer', () => {
     it('应该支持自定义阈值', () => {
       const customAnalyzer = new TraceAnalyzer(collector, {
         thresholds: {
-          bypassRate: 0.1,
           failRate: 0.2,
         },
       });

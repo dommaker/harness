@@ -12,6 +12,7 @@
 import type { Gate } from './types';
 import { listRegisteredGates } from './registry';
 import { loadRawProjectConfig } from '../core/project-config-loader';
+import { filterEnabledEntries } from '../core/effective-set';
 
 /**
  * config.yml `gates` 段
@@ -40,7 +41,8 @@ export function getEffectiveGates(projectRoot: string = process.cwd()): Gate[] {
   }
 
   // ========================================
-  // 闭环校验：引用未注册 → 抛错
+  // 闭环校验（order 重排与重复 id 检测留门禁侧；
+  // enabled 段的未注册校验走共享筛选器 throw 模式）
   // ========================================
   const orderIds = Array.isArray(config.order) ? (config.order as string[]) : undefined;
   if (orderIds) {
@@ -60,31 +62,22 @@ export function getEffectiveGates(projectRoot: string = process.cwd()): Gate[] {
       seen.add(id);
     }
   }
-  for (const key of Object.keys(config)) {
-    if (key === 'order') continue;
-    if (!known.has(key)) {
-      throw new Error(
-        `[harness] config.yml gates.${key} 引用了未注册的门禁。` +
-        `可用门禁: ${[...known].join(', ')}。`
-      );
-    }
-  }
 
   // ========================================
   // enabled 裁剪（与 getEffectiveConstraints 的 enabled:false 删除同效）
   // ========================================
-  const disabled = new Set<string>();
-  for (const gate of gates) {
-    const entry = config[gate.id];
-    if (
-      entry &&
-      typeof entry === 'object' &&
-      !Array.isArray(entry) &&
-      entry.enabled === false
-    ) {
-      disabled.add(gate.id);
-    }
+  const enabledEntries: Record<string, { enabled?: boolean } | undefined> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (key === 'order') continue;
+    enabledEntries[key] = value as { enabled?: boolean } | undefined;
   }
+  const { disabledIds } = filterEnabledEntries(known, enabledEntries, {
+    onUnknownId: 'throw',
+    unknownIdError: id =>
+      `[harness] config.yml gates.${id} 引用了未注册的门禁。` +
+      `可用门禁: ${[...known].join(', ')}。`,
+  });
+  const disabled = new Set(disabledIds);
   const effective = gates.filter(g => !disabled.has(g.id));
 
   // ========================================

@@ -12,7 +12,8 @@ import {
   checkConstraints,
   checkBeforeExecution,
 } from '../core/constraints/checker';
-import { getConstraintCheck, type CheckEnv } from '../core/constraints/checkers';
+import { getConstraintCheck, buildCheckEnv, type CheckEnv } from '../core/constraints/checkers';
+import { contextEvidenceFlag } from '../core/constraints/checkers/types';
 import type { ConstraintContext } from '../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -650,105 +651,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       expect(result).toBeDefined();
     });
 
-  });
-
-  describe('checkException 例外豁免', () => {
-    it('guideline 匹配例外条件应该被豁免', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        isSimpleTypo: true,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'incremental_progress',
-          kind: 'check',
-          level: 'guideline',
-          rule: 'ONE TASK PER SESSION',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-          exceptions: ['simple_typo', 'config_value_error'],
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-      expect(result.message).toContain('豁免');
-    });
-
-    it('guideline 不匹配例外条件应该正常检查', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        isSimpleTypo: false,
-        isConfigValueError: false,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'incremental_progress',
-          kind: 'check',
-          level: 'guideline',
-          rule: 'ONE TASK PER SESSION',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-          exceptions: ['simple_typo', 'config_value_error'],
-        },
-        context
-      );
-
-      // hasSingleTask 未接线（undefined）→ skip（ADR-0001：flag 未接线不评估，不误报违规）
-      expect(result.skipped).toBe(true);
-      expect(result.satisfied).toBe(true);
-    });
-
-    it('iron_law 不应该检查例外条件', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        isSimpleTypo: true,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'incremental_progress',
-          kind: 'check',
-          level: 'iron_law',
-          rule: 'ONE TASK PER SESSION',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-          exceptions: ['simple_typo'],
-        },
-        context
-      );
-
-      // iron_law 不适用例外；hasSingleTask 未接线（undefined）→ skip（ADR-0001）
-      expect(result.skipped).toBe(true);
-      expect(result.satisfied).toBe(true);
-    });
-
-    it('无 exceptions 字段应该正常检查', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        hasVerificationEvidence: true,
-      };
-
-      const result = await checker.check(
-        {
-          id: 'no_completion_without_verification',
-          kind: 'check',
-          level: 'iron_law',
-          rule: 'NO COMPLETION WITHOUT VERIFICATION',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-    });
   });
 
   describe('checkNoBypassCheckpoint 文件内容检查', () => {
@@ -1403,45 +1305,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
 
 
-  describe('checkConstraintsSafe', () => {
-    it('should not throw even with iron law violations', async () => {
-      const { checkConstraintsSafe } = await import('../core/constraints/checker');
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        hasTest: false,
-        hasVerificationEvidence: false,
-      };
-
-      const result = await checkConstraintsSafe(context);
-      expect(result.passed).toBe(false);
-      // Should have at least one iron law violation even though it didn't throw
-      expect(result.ironLaws.length).toBeGreaterThan(0);
-    });
-
-    it('should return passed=true when all constraints satisfied', async () => {
-      const { checkConstraintsSafe } = await import('../core/constraints/checker');
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        hasTest: true,
-        hasVerificationEvidence: true,
-        hasSingleTask: true,
-        hasRequirementReview: true,
-        hasRequirement: true,
-        hasWorktree: true,
-        hasTwoStageReview: true,
-        hasRootCauseInvestigation: true,
-        hasFailingTest: true,
-        hasReuseCheck: true,
-        completionClaimText: 'All 142 tests passed, coverage 85.2%',
-        taskDescription: 'Implement the new feature with proper testing',
-      };
-
-      const result = await checkConstraintsSafe(context);
-      expect(result.passed).toBe(true);
-      expect(result.warningCount).toBe(0);
-    });
-  });
-
   // S1: per-request customConfig 隔离
   describe('S1: per-request customConfig isolation', () => {
     it('使用 per-request customConfig 不应污染单例状态', () => {
@@ -1608,5 +1471,36 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       fs.rmSync(projDir, { recursive: true, force: true });
     });
+  });
+});
+
+describe('buildCheckEnv - 证据接线契约', () => {
+  const context: ConstraintContext = { operation: 'manual', projectPath: '/nonexistent' };
+
+  it("'none' 变体：证据函数返回空", async () => {
+    const env = buildCheckEnv(context, 'none');
+    expect(env.projectPath).toBe('/nonexistent');
+    expect(await env.stagedDiff()).toBe('');
+    expect(await env.stagedDiffNames()).toBe('');
+    expect(env.srcScan('src')).toEqual([]);
+  });
+
+  it('providers 变体：证据提供者原样透传', async () => {
+    const providers = {
+      stagedDiff: async () => 'diff-content',
+      stagedDiffNames: async () => 'a.ts\nb.ts',
+      srcScan: (root: string) => [`${root}/x.ts`],
+    };
+    const env = buildCheckEnv(context, providers);
+    expect(await env.stagedDiff()).toBe('diff-content');
+    expect(await env.stagedDiffNames()).toBe('a.ts\nb.ts');
+    expect(env.srcScan('src')).toEqual(['src/x.ts']);
+  });
+
+  it("'none' env 下 evidence flag 未接线的 checker 返回 'skip'", async () => {
+    // 「没接证据 → skip」由注释固化为可执行契约
+    const check = contextEvidenceFlag('test-flag', (ctx) => ctx.hasVerificationEvidence);
+    const env = buildCheckEnv(context, 'none');
+    expect(await check.evaluate(env)).toBe('skip');
   });
 });

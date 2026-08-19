@@ -65,22 +65,21 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('compareWithPrevious', () => {
     it('应该计算环比变化', () => {
       const current: any[] = [
-        { constraintId: 'test', passRate: 0.8, failRate: 0.2, bypassRate: 0.1, level: 'iron_law' },
+        { constraintId: 'test', passRate: 0.8, failRate: 0.2, level: 'iron_law' },
       ];
       const previous: any[] = [
-        { constraintId: 'test', passRate: 0.6, failRate: 0.4, bypassRate: 0.2, level: 'iron_law' },
+        { constraintId: 'test', passRate: 0.6, failRate: 0.4, level: 'iron_law' },
       ];
 
       const result = analyzer.compareWithPrevious(current, previous);
-      
+
       expect(result[0]?.changeFromLastPeriod?.passRateDelta).toBeCloseTo(0.2);
       expect(result[0]?.changeFromLastPeriod?.failRateDelta).toBeCloseTo(-0.2);
-      expect(result[0]?.changeFromLastPeriod?.bypassRateDelta).toBeCloseTo(-0.1);
     });
 
     it('无历史数据应该不设置变化', () => {
       const current: any[] = [
-        { constraintId: 'new_test', passRate: 0.8, failRate: 0.2, bypassRate: 0.1, level: 'iron_law' },
+        { constraintId: 'new_test', passRate: 0.8, failRate: 0.2, level: 'iron_law' },
       ];
       const previous: any[] = [];
 
@@ -93,7 +92,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('saveSummary/loadSummary', () => {
     it('应该保存和加载汇总', () => {
       const summaries: any[] = [
-        { constraintId: 'test', passRate: 0.8, failRate: 0.2, bypassRate: 0.1, level: 'iron_law', totalChecks: 10 },
+        { constraintId: 'test', passRate: 0.8, failRate: 0.2, level: 'iron_law', totalChecks: 10 },
       ];
 
       analyzer.saveSummary(summaries);
@@ -157,7 +156,6 @@ describe('TraceAnalyzer - 补充覆盖', () => {
           level: 'iron_law',
           passRate: 0.8,
           failRate: 0.2,
-          bypassRate: 0.1,
           totalChecks: 100,
           recentTrend: 'stable',
         },
@@ -190,46 +188,6 @@ describe('TraceAnalyzer - 补充覆盖', () => {
     });
   });
 
-  describe('findMostCommon', () => {
-    it('应该找出最常见元素', () => {
-      // 通过 bypassReasons 统计来触发
-      const traces: ExecutionTrace[] = [
-        { constraintId: 'common_test', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'common_test', level: 'iron_law', timestamp: 2000, result: 'pass', bypassReason: 'reason_a' },
-        { constraintId: 'common_test', level: 'iron_law', timestamp: 3000, result: 'pass', bypassReason: 'reason_a' },
-        { constraintId: 'common_test', level: 'iron_law', timestamp: 4000, result: 'pass', bypassReason: 'reason_b' },
-      ];
-
-      const summaries = analyzer.summarize(traces);
-
-      // 验证汇总结果存在
-      expect(summaries.length).toBeGreaterThan(0);
-    });
-
-    it('应该通过 exceptionApplied 触发 findMostCommon', () => {
-      const traces: ExecutionTrace[] = [
-        { constraintId: 'exc_test', level: 'guideline', timestamp: 1000, result: 'pass', exceptionApplied: 'simple_typo' },
-        { constraintId: 'exc_test', level: 'guideline', timestamp: 2000, result: 'pass', exceptionApplied: 'simple_typo' },
-        { constraintId: 'exc_test', level: 'guideline', timestamp: 3000, result: 'pass', exceptionApplied: 'config_error' },
-      ];
-
-      const summaries = analyzer.summarize(traces);
-      const summary = summaries.find(s => s.constraintId === 'exc_test');
-
-      expect(summary?.exceptionCount).toBe(3);
-      expect(summary?.mostCommonException).toBe('simple_typo');
-    });
-
-    it('无 exception 时 mostCommonException 应该是 undefined', () => {
-      const traces: ExecutionTrace[] = [
-        { constraintId: 'no_exc', level: 'iron_law', timestamp: 1000, result: 'pass' },
-      ];
-
-      const summaries = analyzer.summarize(traces);
-      expect(summaries[0]?.mostCommonException).toBeUndefined();
-    });
-  });
-
   describe('detectAnomalies - 更多异常类型', () => {
     it('应该检测 rising_fail_rate', () => {
       // 前半段全 fail，后半段全 pass → rising 趋势
@@ -253,44 +211,6 @@ describe('TraceAnalyzer - 补充覆盖', () => {
       const risingFail = anomalies.find(a => a.type === 'rising_fail_rate');
       expect(risingFail).toBeDefined();
     });
-
-    it('应该检测 rising_bypass_rate', () => {
-      // 前半段全 fail，后半段混合 pass+bypass → rising 趋势
-      // bypassRate 需要 > 0.1，且 trend === 'rising'
-      const traces: ExecutionTrace[] = [];
-      for (let i = 0; i < 6; i++) {
-        traces.push({ constraintId: 'rising_bypass', level: 'guideline', timestamp: 1000 + i * 100, result: 'fail' });
-      }
-      for (let i = 6; i < 14; i++) {
-        // 后半段有 pass 也有 bypass，使 passRate 上升（rising），同时 bypassRate > 0.1
-        traces.push({ constraintId: 'rising_bypass', level: 'guideline', timestamp: 1000 + i * 100, result: i % 2 === 0 ? 'pass' : 'bypassed' });
-      }
-
-      const summaries = analyzer.summarize(traces);
-      const anomalies = analyzer.detectAnomalies(summaries);
-
-      const risingBypass = anomalies.find(a => a.type === 'rising_bypass_rate');
-      expect(risingBypass).toBeDefined();
-    });
-
-    it('应该检测 exception_overuse', () => {
-      const traces: ExecutionTrace[] = [];
-      for (let i = 0; i < 10; i++) {
-        traces.push({
-          constraintId: 'exc_overuse',
-          level: 'guideline',
-          timestamp: 1000 + i * 100,
-          result: 'pass',
-          exceptionApplied: i < 8 ? 'simple_typo' : undefined,
-        });
-      }
-
-      const summaries = analyzer.summarize(traces);
-      const anomalies = analyzer.detectAnomalies(summaries);
-
-      const excOveruse = anomalies.find(a => a.type === 'exception_overuse');
-      expect(excOveruse).toBeDefined();
-    });
   });
 
   describe('createAnalyzer 工厂函数', () => {
@@ -300,7 +220,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
     });
 
     it('应该支持自定义配置', () => {
-      const a = createAnalyzer({ thresholds: { bypassRate: 0.05 } });
+      const a = createAnalyzer({ thresholds: { failRate: 0.05 } });
       expect(a).toBeDefined();
     });
   });

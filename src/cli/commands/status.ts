@@ -109,7 +109,7 @@ export async function status(options: StatusOptions): Promise<void> {
       const status = s.passRate >= 1 ? '✅' : '❌';
       console.log(`  ${status} ${s.constraintId}`);
       if (options.detail) {
-        console.log(chalk.gray(`     检查: ${s.totalChecks} | 通过: ${(s.passRate * 100).toFixed(0)}% | 绕过: ${(s.bypassRate * 100).toFixed(0)}%`));
+        console.log(chalk.gray(`     检查: ${s.totalChecks} | 通过: ${(s.passRate * 100).toFixed(0)}% | 失败: ${(s.failRate * 100).toFixed(0)}%`));
       }
     });
     console.log();
@@ -123,7 +123,7 @@ export async function status(options: StatusOptions): Promise<void> {
       const status = s.passRate >= 0.8 ? '✅' : s.passRate >= 0.5 ? '⚠️' : '❌';
       console.log(`  ${status} ${s.constraintId}`);
       if (options.detail) {
-        console.log(chalk.gray(`     检查: ${s.totalChecks} | 通过: ${(s.passRate * 100).toFixed(0)}% | 绕过: ${(s.bypassRate * 100).toFixed(0)}%`));
+        console.log(chalk.gray(`     检查: ${s.totalChecks} | 通过: ${(s.passRate * 100).toFixed(0)}% | 失败: ${(s.failRate * 100).toFixed(0)}%`));
       }
     });
     console.log();

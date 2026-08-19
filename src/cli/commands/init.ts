@@ -37,19 +37,15 @@ export interface InitOptions {
 
 /**
  * 默认配置
+ *
+ * 只写有运行时消费者的字段：preset（ADR-0001 生效集链路由 mergeConstraints 消费）。
+ * 历史模板里的 enabled / ironLaws.enforceErrors / ironLaws.warnWarnings /
+ * validators.{checkpoint,passesGate,cso} 均为零消费者的死字段，不再写入；
+ * strict/standard/relaxed 三档差异曾只存在于这些死字段上（实为两档），
+ * 现在三档差异完全由 preset 键经生效集链路体现。
  */
 const DEFAULT_CONFIG = {
   preset: 'standard',
-  enabled: true,
-  ironLaws: {
-    enforceErrors: true,
-    warnWarnings: true,
-  },
-  validators: {
-    checkpoint: true,
-    passesGate: true,
-    cso: false,
-  },
 };
 
 /**
@@ -59,15 +55,6 @@ const PRESETS = {
   strict: {
     ...DEFAULT_CONFIG,
     preset: 'strict',
-    ironLaws: {
-      enforceErrors: true,
-      warnWarnings: true,
-    },
-    validators: {
-      checkpoint: true,
-      passesGate: true,
-      cso: true,
-    },
   },
   standard: {
     ...DEFAULT_CONFIG,
@@ -76,10 +63,6 @@ const PRESETS = {
   relaxed: {
     ...DEFAULT_CONFIG,
     preset: 'relaxed',
-    ironLaws: {
-      enforceErrors: true,
-      warnWarnings: false,
-    },
   },
 };
 
@@ -483,7 +466,6 @@ custom_constraints:
   #   rule: "NO MOMENT.JS IMPORTS"
   #   message: "禁止使用 moment.js，请使用 date-fns 或 dayjs"
   #   trigger: ["code_implementation"]
-  #   exceptions: ["legacy_migration"]
 
   # 示例 3：要求特定的文件命名
   # my_project_component_naming:
@@ -492,19 +474,6 @@ custom_constraints:
   #   rule: "REACT COMPONENTS SHOULD BE PASCAL CASE"
   #   message: "React 组件文件名应使用 PascalCase"
   #   trigger: ["file_creation"]
-
-# ========================================
-# 扩展内置约束的例外
-# ========================================
-
-# 如果需要为内置约束添加项目特定的例外，
-# 可以在 .harness/config.yml 中配置：
-
-# constraints:
-#   no_fix_without_root_cause:
-#     # 添加项目特定的例外
-#     exceptions:
-#       - my_custom_exception
 `;
 
   await fs.writeFile(customConstraintsPath, content, 'utf-8');

@@ -87,6 +87,34 @@ export class KnowledgeQuery {
   }
 
   /**
+   * Full-text search over the entire corpus.
+   *
+   * Unlike query(), this is NOT budget-constrained: text matching runs on the
+   * full (filtered) corpus first, then results are sorted by
+   * maturity desc → lastReferenced desc and capped at `limit`.
+   * Token budgets only make sense for prompt injection (query()); interactive
+   * search must see every entry or low-ranked entries become unfindable.
+   *
+   * No caching and no recordReference side effect — searching is not citing.
+   */
+  search(query: string, options?: { limit?: number; filter?: QueryFilter }): KnowledgeEntry[] {
+    const limit = options?.limit ?? 20;
+    const candidates = this.store.list({
+      excludeArchived: true,
+      ...options?.filter,
+    });
+
+    const q = query.toLowerCase();
+    const matched = candidates.filter(e =>
+      e.title.toLowerCase().includes(q) ||
+      e.content.toLowerCase().includes(q) ||
+      e.tags.some(t => t.toLowerCase().includes(q))
+    );
+
+    return this.sortEntries(matched).slice(0, limit);
+  }
+
+  /**
    * Estimate token count for a piece of text.
    * Rule of thumb: 1 CJK char ≈ 2 tokens, 1 ASCII char ≈ 0.25 tokens.
    */

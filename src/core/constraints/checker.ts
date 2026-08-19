@@ -17,6 +17,7 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
+import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
@@ -24,49 +25,18 @@ import { runCommand } from '../../utils/exec';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
-import { getConstraintCheck, type CheckEnv, type CheckOutcome } from './checkers';
+import { getConstraintCheck, buildCheckEnv, type CheckOutcome } from './checkers';
 
 /**
- * 例外名称 → ConstraintContext 中布尔字段的映射
- */
-const EXCEPTION_FIELD_MAP: Record<string, keyof ConstraintContext> = {
-  scalability_required: 'scalabilityRequired',
-  security_required: 'securityRequired',
-  performance_required: 'performanceRequired',
-  reliability_required: 'reliabilityRequired',
-  simple_typo: 'isSimpleTypo',
-  config_value_error: 'isConfigValueError',
-  missing_config: 'isMissingConfig',
-  config_file: 'isConfigFile',
-  type_definition: 'isTypeDefinition',
-  simple_accessor: 'isSimpleAccessor',
-  pure_display_component: 'isPureDisplayComponent',
-  json_parse_result: 'isJsonParseResult',
-  third_party_no_types: 'isThirdPartyNoTypes',
-  legacy_migration: 'isLegacyMigration',
-  internal_refactor: 'isInternalRefactor',
-  bug_fix_only: 'isBugFixOnly',
-  performance_optimization: 'isPerformanceOptimization',
-  redundant_code_cleanup: 'isRedundantCodeCleanup',
-  same_effect_refactor: 'isSameEffectRefactor',
-  unused_code_removal: 'isUnusedCodeRemoval',
-  external_dependency: 'isExternalDependency',
-  explicit_instruction: 'isExplicitInstruction',
-  emergency_fix: 'isEmergencyFix',
-  existing_design: 'isExistingDesign',
-};
-
-/**
- * trace 记录器最小接口（工单 15：core→monitoring 循环消除）
+ * trace 记录器最小接口（原工单 15 为消除 core→monitoring 循环；现 monitoring
+ * 不反向依赖 core，方向单向、无环，checker 可直接值引用 getTraceCollector）
  *
- * checker 不再值导入 monitoring/traces 的单例；生产调用方经
- * setTraceRecorder 注入真实收集器，默认 no-op。
+ * checker 不构造收集器；生产路径首次记录时惰性接线 getTraceCollector()
+ * （幂等单点，ADR-0003），测试可经 setTraceRecorder 注入替身。
  */
 export interface TraceRecorder {
   record(trace: ExecutionTrace): void;
 }
-
-const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
 
 /**
  * 约束检查器
@@ -78,15 +48,25 @@ export class ConstraintChecker {
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
   /**
-   * run 级 memo（工单 18）：一次 checkConstraints/checkConstraintsSafe 内
+   * run 级 memo（工单 18）：一次 checkConstraints 内
    * git diff 等命令只执行一次；run 外直接调用私有检查方法时不 memo（恒新鲜）。
    */
   private runCache: Map<string, Promise<string>> | null = null;
 
-  /** trace 记录器（注入式，默认 no-op；生产入口经 setTraceRecorder 接入真实收集器） */
-  private traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER;
+  /** trace 记录器（注入式；null = 未显式注入，首次记录时惰性接线全局收集器） */
+  private traceRecorder: TraceRecorder | null = null;
 
   private constructor() {}
+
+  /**
+   * 取 trace 记录器：未显式注入时惰性接线全局收集器（幂等，ADR-0003 副作用收敛）
+   */
+  private getRecorder(): TraceRecorder {
+    if (!this.traceRecorder) {
+      this.traceRecorder = getTraceCollector();
+    }
+    return this.traceRecorder;
+  }
 
   /**
    * run 内 memoize；无活动 run 时直接执行（工单 18）
@@ -130,7 +110,7 @@ export class ConstraintChecker {
   }
 
   /**
-   * 注入 trace 记录器（工单 15：解耦 core 对 monitoring 的值依赖）
+   * 注入 trace 记录器（测试/定制场景；不调用则首次记录时惰性接线全局收集器）
    */
   setTraceRecorder(recorder: TraceRecorder): void {
     this.traceRecorder = recorder;
@@ -139,29 +119,25 @@ export class ConstraintChecker {
   /**
    * 获取当前的约束集合（内置 + 自定义）
    *
+   * 纯查询，无副作用（ADR-0006：原 `.check` 装配已随唯一消费者
+   * interceptor 的删除一并移除，ADR-0004）。
+   *
    * @param customConfig 可选，per-request 自定义配置；不传则返回内置约束集
    */
   getConstraints(customConfig?: MergedConstraintsConfig | null): {
-    ironLaws: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    guidelines: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    prompts: Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
+    ironLaws: Record<string, Constraint>;
+    guidelines: Record<string, Constraint>;
+    prompts: Record<string, Constraint>;
   } {
     const config = customConfig;
     const source = config
       ? { ironLaws: config.ironLaws, guidelines: config.guidelines, prompts: config.prompts ?? PROMPTS }
       : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, prompts: PROMPTS };
 
-    // Wire unified check() method on every constraint
-    const wire = (constraints: Record<string, Constraint>) => {
-      for (const c of Object.values(constraints)) {
-        (c as any).check = (ctx: ConstraintContext) => this.check(c, ctx);
-      }
-      return constraints as Record<string, Constraint & { check: (ctx: ConstraintContext) => Promise<ConstraintResult> }>;
-    };
     return {
-      ironLaws: wire(source.ironLaws),
-      guidelines: wire(source.guidelines),
-      prompts: wire(source.prompts),
+      ironLaws: source.ironLaws,
+      guidelines: source.guidelines,
+      prompts: source.prompts,
     };
   }
 
@@ -181,20 +157,6 @@ export class ConstraintChecker {
         constraint,
         checkedAt: new Date(),
       };
-    }
-
-    // 检查例外条件（仅 Guidelines 有效）
-    if (constraint.level === 'guideline' && constraint.exceptions) {
-      if (this.checkException(constraint, context)) {
-        return {
-          id: constraint.id,
-          level: constraint.level,
-          satisfied: true,
-          constraint,
-          message: `指导原则 ${constraint.id} 因例外条件被豁免`,
-          checkedAt: new Date(),
-        };
-      }
     }
 
     // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
@@ -223,16 +185,6 @@ export class ConstraintChecker {
       requiredAction: satisfied ? undefined : constraint.enforcement,
       checkedAt: new Date(),
     };
-  }
-
-  /**
-   * 检查例外条件
-   */
-  private checkException(constraint: Constraint, context: ConstraintContext): boolean {
-    if (!constraint.exceptions) return false;
-    return constraint.exceptions.some(
-      (ex) => context[EXCEPTION_FIELD_MAP[ex]] === true
-    );
   }
 
   /**
@@ -279,9 +231,6 @@ export class ConstraintChecker {
       result: checkResult.skipped ? 'skip' : checkResult.satisfied ? 'pass' : 'fail',
       operation: context.operation,
       severity: this.getSeverity(constraint.level),
-      exceptionApplied: checkResult.message?.includes('豁免')
-        ? constraint.exceptions?.[0]
-        : undefined,
       projectPath: context.projectPath,
       sessionId: context.sessionId,
     });
@@ -306,9 +255,7 @@ export class ConstraintChecker {
     }
 
     const projectPath = context.projectPath || process.cwd();
-    const env: CheckEnv = {
-      context,
-      projectPath,
+    const env = buildCheckEnv(context, {
       stagedDiff: () => this.getStagedDiff(projectPath),
       stagedDiffNames: () => this.getStagedDiffNames(projectPath),
       srcScan: (root: string) =>
@@ -317,7 +264,7 @@ export class ConstraintChecker {
             relative(projectPath, f)
           )
         ),
-    };
+    });
 
     return await impl.evaluate(env);
   }
@@ -380,7 +327,7 @@ export class ConstraintChecker {
         warningCount: 0,
       };
 
-      const traceCollector = this.traceRecorder;
+      const traceCollector = this.getRecorder();
       const constraints = this.getConstraints(customConfig);
 
       // 1. Iron Laws: 必须全部通过
@@ -408,53 +355,6 @@ export class ConstraintChecker {
         if (!checkResult.satisfied) {
           result.warningCount++;
         }
-      }
-
-      return result;
-    } finally {
-      this.runCache = null;
-    }
-  }
-
-  /**
-   * S11: 安全全量检查 — 全部约束检查，不抛异常
-   *
-   * 区别 checkConstraints(): Iron Law 违规收集在结果中而不是抛异常。
-   * 调用方通过 result.passed + result.warningCount 判断状态。
-   */
-  async checkConstraintsSafe(
-    context: ConstraintContext,
-    customConfig?: MergedConstraintsConfig | null
-  ): Promise<ConstraintCheckResult> {
-    // run 起始：重置 run 级缓存（工单 18）
-    this.cache.invalidate();
-    this.runCache = new Map();
-
-    try {
-      const result: ConstraintCheckResult = {
-        ironLaws: [],
-        guidelines: [],
-        passed: true,
-        warningCount: 0,
-      };
-
-      const traceCollector = this.traceRecorder;
-      const constraints = this.getConstraints(customConfig);
-
-      for (const constraint of Object.values(constraints.ironLaws)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-        const checkResult = await this.check(constraint, context);
-        result.ironLaws.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-        if (!checkResult.satisfied) result.passed = false;
-      }
-
-      for (const constraint of Object.values(constraints.guidelines)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-        const checkResult = await this.check(constraint, context);
-        result.guidelines.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-        if (!checkResult.satisfied) result.warningCount++;
       }
 
       return result;
@@ -524,26 +424,32 @@ export async function checkConstraint(
 }
 
 /**
- * 快捷函数：执行三层检查
- *
- * @param context 约束上下文
- * @param customConfig 可选，per-request 自定义配置
+ * checkConstraints 选项（ADR-0003：包根/子路径统一 options 对象签名）
  */
-export async function checkConstraints(
-  context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
-): Promise<ConstraintCheckResult> {
-  return ConstraintChecker.getInstance().checkConstraints(context, customConfig);
+export interface CheckConstraintsOptions {
+  /** 每条约束检查后的回调（用于记录 trace 到外部存储） */
+  onTrace?: (result: ConstraintResult) => void;
+  /** 可选，per-request 自定义约束配置；不传则用内置约束集 */
+  customConfig?: MergedConstraintsConfig | null;
 }
 
 /**
- * S11: 快捷函数 — 安全全量检查（不抛异常）
+ * 快捷函数：执行三层检查
+ *
+ * @param context 约束上下文
+ * @param options.onTrace 每条约束检查后的回调（用于记录 trace 到外部存储）
+ * @param options.customConfig 可选，per-request 自定义约束配置；不传则用内置约束集
  */
-export async function checkConstraintsSafe(
+export async function checkConstraints(
   context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
+  options?: CheckConstraintsOptions
 ): Promise<ConstraintCheckResult> {
-  return ConstraintChecker.getInstance().checkConstraintsSafe(context, customConfig);
+  const result = await ConstraintChecker.getInstance().checkConstraints(context, options?.customConfig ?? null);
+  if (options?.onTrace) {
+    for (const r of result.ironLaws) options.onTrace(r);
+    for (const r of result.guidelines) options.onTrace(r);
+  }
+  return result;
 }
 
 /**

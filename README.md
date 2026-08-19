@@ -143,9 +143,8 @@ scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
 | 约束引擎 | check/prompt 二元约束 + 生效集合并（`getEffectiveConstraints`）+ 注入渲染/漂移校验 |
 | 知识引擎 | 约束退役 → KnowledgeStore 沉淀（规则原文 + 原因 + 历史统计），可检索、可追溯 |
 | 门禁系统 | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
-| 安全护栏 | Input/Output/Tool Guardrail + Sandbox (L1-L4) |
 | Hook 管线 | 通用 before/after/around hook：注册 → 排序 → 错误隔离 → 采样执行 |
-| 上下文/监控 | Token 预算 + 会话压缩 + Trace 收集/分析 + 约束诊断（ConstraintDoctor） |
+| 上下文/监控 | Token 预算 + 会话压缩 + Trace 收集/分析 |
 
 ### 代码结构
 
@@ -157,8 +156,7 @@ src/
 ├── cli/                    # CLI 命令实现（sync-docs/ 模块族等）
 ├── knowledge/              # 知识引擎（存储/检索/衰减/诊断）
 ├── gates/                  # 各类门禁实现
-├── safety/                 # 护栏与沙箱
-└── monitoring/             # Trace 收集/分析与诊断（规则数据化）
+└── monitoring/             # Trace 收集/分析与上下文追踪
 ```
 
 各目录的 `CONTEXT.md` 是权威模块文档。变更历史见 [CHANGELOG.md](CHANGELOG.md)。

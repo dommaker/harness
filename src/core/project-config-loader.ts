@@ -16,7 +16,8 @@ import type {
   CapabilitiesConfig,
 } from '../types/project-config';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './constraints/definitions';
-import { applyPreset } from '../presets';
+import { PRESETS_BY_NAME, STANDARD_PRESET } from '../presets';
+import { filterEnabledEntries } from './effective-set';
 
 /**
  * 默认配置
@@ -156,47 +157,72 @@ export class ProjectConfigLoader {
    * 合并内置约束和自定义约束（ADR-0001 生效集完整链路）
    *
    * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
-   * 删除（对内置与 custom 同效）→ custom-constraints 追加/extend_exceptions
+   * 删除（对内置与 custom 同效）→ custom-constraints 追加
    * （禁用/已退役的 custom 不追加）→ scenes 过滤
    * （带 appliesTo 的 prompt 仅当 scenes 交集非空时保留）。
    *
    * config.yml 中未知约束 id（如已移除约束的禁用残留）静默忽略，
    * 记录在结果 unknownIds 中供诊断。
    *
-   * @param options.preset 覆盖 config.yml 的 preset（CLI --preset 用）
+   * @param options.preset 覆盖 config.yml 的 preset（CLI --preset 用）；
+   *   未知预设名回落 standard + stderr 警告
    */
   mergeConstraints(options?: { preset?: string }): MergedConstraintsConfig {
-    // 0. preset 裁剪（未知预设名由 applyPreset 回落 standard）
-    const presetMerged = applyPreset(options?.preset ?? this.config.preset ?? 'standard');
+    // 0. preset 裁剪（strict 是 standard 的别名；未知名回落 standard）
+    const presetName = options?.preset ?? this.config.preset ?? 'standard';
+    let preset = PRESETS_BY_NAME[presetName];
+    if (!preset) {
+      console.error(`[harness] 未知预设 "${presetName}"，已回落 standard`);
+      preset = STANDARD_PRESET;
+    }
+    const pick = (
+      source: Record<string, Constraint>,
+      ids: string[] | null
+    ): Record<string, Constraint> => {
+      if (ids === null) return { ...source };
+      const filtered: Record<string, Constraint> = {};
+      for (const id of ids) {
+        if (source[id]) filtered[id] = source[id];
+      }
+      return filtered;
+    };
+    const presetDisabled = (
+      source: Record<string, Constraint>,
+      ids: string[] | null
+    ): string[] => (ids === null ? [] : Object.keys(source).filter(id => !ids.includes(id)));
+
     const unknownIds: string[] = [];
     const result: MergedConstraintsConfig = {
-      ironLaws: presetMerged.ironLaws,
-      guidelines: presetMerged.guidelines,
-      prompts: presetMerged.prompts ?? {},
-      disabled: [...presetMerged.disabled],
+      ironLaws: pick(IRON_LAWS, preset.ironLaws),
+      guidelines: pick(GUIDELINES, preset.guidelines),
+      prompts: pick(PROMPTS, preset.prompts),
+      disabled: [
+        ...presetDisabled(IRON_LAWS, preset.ironLaws),
+        ...presetDisabled(GUIDELINES, preset.guidelines),
+        ...presetDisabled(PROMPTS, preset.prompts),
+      ],
       custom: [],
       unknownIds,
     };
 
-    // 1. 处理启用/禁用配置
+    // 1. 处理启用/禁用配置（未知 id 静默忽略，记录供诊断）
     if (this.config.constraints) {
-      for (const [constraintId, config] of Object.entries(this.config.constraints)) {
-        const isKnown =
-          !!IRON_LAWS[constraintId] ||
-          !!GUIDELINES[constraintId] ||
-          !!PROMPTS[constraintId] ||
-          !!this.customConstraints[constraintId];
-        if (!isKnown) {
-          // 未知 id（如已移除约束的禁用残留）：不报错，记录供诊断
-          unknownIds.push(constraintId);
-        }
-        if (config.enabled === false) {
-          result.disabled.push(constraintId);
-          // 从对应层级中移除
-          delete result.ironLaws[constraintId];
-          delete result.guidelines[constraintId];
-          delete result.prompts![constraintId];
-        }
+      const knownIds = new Set([
+        ...Object.keys(IRON_LAWS),
+        ...Object.keys(GUIDELINES),
+        ...Object.keys(PROMPTS),
+        ...Object.keys(this.customConstraints),
+      ]);
+      const filtered = filterEnabledEntries(knownIds, this.config.constraints, {
+        onUnknownId: 'collect',
+      });
+      unknownIds.push(...filtered.unknownIds);
+      for (const constraintId of filtered.disabledIds) {
+        result.disabled.push(constraintId);
+        // 从对应层级中移除
+        delete result.ironLaws[constraintId];
+        delete result.guidelines[constraintId];
+        delete result.prompts![constraintId];
       }
     }
 
@@ -207,37 +233,7 @@ export class ProjectConfigLoader {
       if (result.disabled.includes(id) || customDef.retired) {
         continue;
       }
-      const extendExceptions = customDef.extend_exceptions;
-      const isExtendOnly =
-        !!extendExceptions && extendExceptions.length > 0 &&
-        !customDef.rule &&
-        !customDef.exceptions;
-
-      if (isExtendOnly) {
-        const builtIn = this.findBuiltInConstraint(id, result);
-        if (builtIn) {
-          const constraint = { ...builtIn };
-          constraint.exceptions = [
-            ...(builtIn.exceptions || []),
-            ...extendExceptions!,
-          ];
-          if (result.ironLaws[id]) result.ironLaws[id] = constraint;
-          if (result.guidelines[id]) result.guidelines[id] = constraint;
-          if (result.prompts![id]) result.prompts![id] = constraint;
-          continue;
-        }
-      }
-
       const constraint = this.toConstraint(customDef, id);
-
-      if (extendExceptions && extendExceptions.length > 0) {
-        const builtIn = this.findBuiltInConstraint(id, result);
-        constraint.exceptions = [
-          ...(builtIn?.exceptions || []),
-          ...(customDef.exceptions || []),
-          ...extendExceptions,
-        ];
-      }
 
       result.custom.push(id);
 
@@ -273,16 +269,6 @@ export class ProjectConfigLoader {
   }
 
   /**
-   * 在合并结果中查找内置约束
-   */
-  private findBuiltInConstraint(
-    id: string,
-    merged: MergedConstraintsConfig
-  ): Constraint | undefined {
-    return merged.ironLaws[id] || merged.guidelines[id] || merged.prompts?.[id];
-  }
-
-  /**
    * 将自定义约束定义转换为 Constraint
    *
    * kind 推导（ADR-0001）：自定义约束没有注册表中的 checker，统一归为
@@ -298,7 +284,6 @@ export class ProjectConfigLoader {
       rule: def.rule || '',
       message: def.message || '',
       trigger: (def.trigger || 'manual') as ConstraintTrigger | ConstraintTrigger[],
-      exceptions: def.exceptions,
       description: def.description,
       promptInjection: def.promptInjection,
       enabled: def.enabled !== false,

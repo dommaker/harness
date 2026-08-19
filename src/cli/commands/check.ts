@@ -2,17 +2,16 @@
  * harness check 命令
  *
  * 检查约束是否满足（check 层：Iron Laws / Guidelines；prompt 层仅注入不检查）
- * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder；--preset 经 mergeConstraints 生效
- * ADR-0001：约束集统一走 mergeConstraints 生效集链路（preset/config 禁用/custom/scenes）
+ * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder
+ * ADR-0001：约束集统一走 getMergedConstraintsConfig 生效集链路（preset/config 禁用/custom/scenes）
  */
 
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import { constraintChecker } from '../../core/constraints/checker';
-import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
-import { ProjectConfigLoader } from '../../core/project-config-loader';
+import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
@@ -37,18 +36,12 @@ export async function check(options: CheckOptions): Promise<void> {
   console.log(chalk.gray(`预设: ${options.preset}`));
 
   try {
-    // 加载项目级自定义约束
     const projectPath = options.projectPath || process.cwd();
-    const configLoader = new ProjectConfigLoader(projectPath);
-    configLoader.load();
-    constraintChecker.setTraceRecorder(getTraceCollector());
 
     // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
-    // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（保持工单 23 语义：
-    // 项目自定义配置优先于 CLI 预设）。
-    const merged = configLoader.hasCustomConfig()
-      ? configLoader.mergeConstraints()
-      : configLoader.mergeConstraints({ preset: options.preset || 'standard' });
+    // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（工单 23 语义：
+    // 项目自定义配置优先于 CLI 预设），优先级规则收在 getMergedConstraintsConfig 一处。
+    const merged = getMergedConstraintsConfig(projectPath, { preset: options.preset });
     if (merged.custom.length > 0) {
       console.log(chalk.gray(`自定义约束: ${merged.custom.length} 条`));
     }
@@ -199,23 +192,7 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
     hints.push('📊 记录已足够，运行 harness status 查看统计');
     state.shownHints.push('trace_50');
   }
-  
-  // 条件 2: 检查异常趋势（简单检查绕过率）
-  const bypassCount = lines.filter(line => {
-    try {
-      const trace = JSON.parse(line);
-      return trace.result === 'bypassed';
-    } catch {
-      return false;
-    }
-  }).length;
-  
-  const bypassRate = traceCount > 10 ? bypassCount / traceCount : 0;
-  if (bypassRate > 0.3 && !state.shownHints.includes('high_bypass')) {
-    hints.push('⚠️ 发现异常趋势，建议运行 harness status 查看详情');
-    state.shownHints.push('high_bypass');
-  }
-  
+
   // 保存状态
   if (hints.length > 0) {
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
@@ -242,14 +219,11 @@ export function listLaws(): void {
   });
 
   // Guidelines
-  console.log(chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，有例外:\n'));
+  console.log(chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，违背发警告但不阻止:\n'));
   Object.values(GUIDELINES).forEach(constraint => {
     console.log(chalk.yellow(`  ${constraint.id}`));
     console.log(chalk.gray(`    ${constraint.rule}`));
     console.log(chalk.gray(`    ${constraint.message}`));
-    if (constraint.exceptions && constraint.exceptions.length > 0) {
-      console.log(chalk.gray(`    例外: ${constraint.exceptions.join(', ')}`));
-    }
     console.log();
   });
 

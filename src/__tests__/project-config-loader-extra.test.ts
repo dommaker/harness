@@ -2,7 +2,7 @@
  * ProjectConfigLoader 补充测试
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 import { ProjectConfigLoader } from '../core/project-config-loader';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -123,34 +123,6 @@ custom_constraints:
     });
   });
 
-  describe('约束扩展', () => {
-    it('应该扩展例外列表', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'config.yml'),
-        `
-custom_constraints:
-  extended_rule:
-    rule: EXTENDED RULE
-    message: Extended
-    level: guideline
-    trigger: commit
-    exceptions:
-      - simple_typo
-    extend_exceptions:
-      - config_change
-`
-      );
-
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-      const merged = loader.mergeConstraints();
-
-      expect(merged.guidelines['extended_rule']?.exceptions).toBeDefined();
-      expect(merged.guidelines['extended_rule']?.exceptions).toContain('simple_typo');
-      expect(merged.guidelines['extended_rule']?.exceptions).toContain('config_change');
-    });
-  });
-
   describe('isConstraintEnabled', () => {
     it('启用的约束应该返回 true', () => {
       const loader = new ProjectConfigLoader(tempDir);
@@ -260,6 +232,47 @@ custom_constraints:
       const config = loader.getConfig();
       expect(config).toBeDefined();
       expect(config.preset).toBeDefined();
+    });
+  });
+
+  describe('preset 裁剪（内联自原 applyPreset）', () => {
+    it('options.preset 覆盖 config.yml 的 preset', () => {
+      fs.writeFileSync(
+        path.join(harnessDir, 'config.yml'),
+        `preset: standard`
+      );
+
+      const loader = new ProjectConfigLoader(tempDir);
+      loader.load();
+      const merged = loader.mergeConstraints({ preset: 'relaxed' });
+
+      // relaxed 仅启用 3 条铁律 + 2 条指导原则，禁用提示
+      expect(Object.keys(merged.ironLaws)).toHaveLength(3);
+      expect(Object.keys(merged.guidelines)).toHaveLength(2);
+      expect(Object.keys(merged.prompts ?? {})).toHaveLength(0);
+      expect(merged.disabled.length).toBeGreaterThan(0);
+    });
+
+    it('未知预设名回落 standard + stderr 警告', () => {
+      fs.writeFileSync(
+        path.join(harnessDir, 'config.yml'),
+        `preset: no_such_preset`
+      );
+
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const loader = new ProjectConfigLoader(tempDir);
+        loader.load();
+        const merged = loader.mergeConstraints();
+
+        // 回落 standard = 全部启用
+        expect(merged.disabled).toEqual([]);
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('未知预设 "no_such_preset"')
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 

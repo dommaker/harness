@@ -81,22 +81,7 @@ export async function knowledgeSearch(
   const store = new KnowledgeStore({ baseDir: getKnowledgeDir(options.projectPath) });
   const queryEngine = new KnowledgeQuery(store);
 
-  const budget = {
-    phase: 'cli',
-    maxTokens: 10000,
-    maxEntries: options.limit || 20,
-    focusTypes: [] as KnowledgeSubsystem[],
-  };
-
-  const result = queryEngine.query(budget);
-
-  // 简单文本匹配过滤
-  const q = query.toLowerCase();
-  const matched = result.entries.filter(e =>
-    e.title.toLowerCase().includes(q) ||
-    e.content.toLowerCase().includes(q) ||
-    e.tags.some(t => t.toLowerCase().includes(q))
-  );
+  const matched = queryEngine.search(query, { limit: options.limit || 20 });
 
   if (options.json) {
     console.log(JSON.stringify({ query, total: matched.length, entries: matched }, null, 2));

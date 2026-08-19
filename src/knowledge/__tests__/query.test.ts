@@ -268,4 +268,68 @@ describe('KnowledgeQuery', () => {
       expect(result).toBe('Internal: Details');
     });
   });
+
+  describe('search', () => {
+    it('should match against title, content and tags (case-insensitive)', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'Autolink Design' }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'Other', content: 'mentions AUTOLINK here' }));
+      store.save(makeEntry({ id: 'DEC-003', title: 'Tagged', tags: ['autolink'] }));
+      store.save(makeEntry({ id: 'DEC-004', title: 'Unrelated', content: 'nothing' }));
+
+      const result = query.search('autolink');
+      expect(result.map(e => e.id).sort()).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+    });
+
+    it('should match on the full corpus regardless of token volume (harness#63)', () => {
+      // 语料总 token 远超任何 prompt budget；排序队尾的 draft 新条目必须可搜到
+      for (let i = 0; i < 25; i++) {
+        store.save(makeEntry({
+          id: `FILL-${String(i).padStart(3, '0')}`,
+          title: `填充 ${i}`,
+          content: '填'.repeat(399),
+          maturity: 'proven',
+          lastReferenced: '2026-08-01T00:00:00.000Z',
+        }));
+      }
+      store.save(makeEntry({ id: 'PIT-020', title: '新条目', content: 'autolink 要点' }));
+
+      const result = query.search('autolink', { limit: 200 });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('PIT-020');
+    });
+
+    it('should apply limit after matching, not before', () => {
+      for (let i = 0; i < 10; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `共同词 ${i}` }));
+      }
+
+      expect(query.search('共同词', { limit: 3 })).toHaveLength(3);
+      expect(query.search('共同词', { limit: 50 })).toHaveLength(10);
+    });
+
+    it('should sort matches by maturity desc then lastReferenced desc', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'kw a', maturity: 'draft' }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'kw b', maturity: 'proven', lastReferenced: '2026-01-01' }));
+      store.save(makeEntry({ id: 'DEC-003', title: 'kw c', maturity: 'proven', lastReferenced: '2026-08-01' }));
+
+      const result = query.search('kw');
+      expect(result.map(e => e.id)).toEqual(['DEC-003', 'DEC-002', 'DEC-001']);
+    });
+
+    it('should exclude archived entries by default and respect filter overrides', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'kw active' }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'kw archived', maturity: 'archived' }));
+
+      expect(query.search('kw').map(e => e.id)).toEqual(['DEC-001']);
+      expect(query.search('kw', { filter: { excludeArchived: false } })).toHaveLength(2);
+    });
+
+    it('should respect filter.types', () => {
+      store.save(makeEntry({ id: 'DEC-001', type: 'decision', title: 'kw' }));
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall', title: 'kw' }));
+
+      const result = query.search('kw', { filter: { types: ['pitfall'] } });
+      expect(result.map(e => e.id)).toEqual(['PIT-001']);
+    });
+  });
 });

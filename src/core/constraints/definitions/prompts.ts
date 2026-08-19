@@ -76,7 +76,6 @@ export const PROMPTS: Record<string, Constraint> = {
 - 用 fallback/兜底值掩盖上游数据异常而不追根因
 - Read 定位后直接 Edit，不对照设计原型确认意图
 - 从"数字异常"直接跳到根因结论，不验证假设的含义与量纲`,
-    exceptions: ['simple_typo', 'config_value_error', 'missing_config'],
     promptInjection: '修复问题前必须先诊断根因——不止"哪里出错"，而是"为什么设计成这样"：用 Read/Grep 定位后禁止直接 Edit，先对照设计原型（CLAUDE.md、类型定义、commit message）确认原设计意图，呈现确认的根因+方案草案后才能动手。遇到空值/异常/不完整数据，禁止用 fallback/兜底/try-catch 掩盖——先追上游：数据谁产生的？为什么是空的？选择防御性兜底时必须在注释中说明根因；同一位置连续兜底 2+ 次是上游 bug 信号，停止修下游、追踪源头。从数据到结论必须先验证关键假设：数字的含义（累积/单次？量纲？）、正常范围、同类场景对比与反例，禁止"数字异常→直接定根因→直接改"的跳级推理。不绕过问题、不遮掩症状、不用临时方案代替根本修复。',
   },
 
@@ -107,7 +106,6 @@ export const PROMPTS: Record<string, Constraint> = {
 - reliability_required: 需要持久化/高可用
 
 YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件系统；一个抽象只有一个实现者时删除该抽象。`,
-    exceptions: ['scalability_required', 'security_required', 'performance_required', 'reliability_required'],
     promptInjection: '最简方案优先：用最少代码解决当前问题，不添加"以防万一"的冗余功能，不为仅用一次的代码强行设计抽象。创建新模块/文件/能力前，先查现有能力索引确认无可复用——优先级：直接复用 > 扩展现有 > 组合现有 > 新建。遵循 YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件系统；一个 interface/abstract class 只有一个实现者时，删除这个抽象。自检：资深工程师是否会认为此实现过度复杂？若是，立即简化。',
     injectPrompt: true,
   },
@@ -137,7 +135,6 @@ YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件�
 - 类型定义文件（.d.ts、interface）
 - 简单 getter/setter
 - 纯展示 UI 组件（无交互逻辑）`,
-    exceptions: ['config_file', 'type_definition', 'simple_accessor', 'pure_display_component'],
     promptInjection: '新代码必须同时编写测试。实现功能前先写测试用例（RED），然后实现让测试通过（GREEN）。不得提交无测试覆盖的实现代码。',
   },
 
@@ -164,7 +161,6 @@ YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件�
 - 发现冗余代码后的重构优化
 - 用更简洁的实现达到相同效果
 - 删除不再使用的遗留代码`,
-    exceptions: ['redundant_code_cleanup', 'same_effect_refactor', 'unused_code_removal'],
     promptInjection: '不得擅自简化或删除测试、lint 规则、类型检查或约束。如需降低检查标准，必须先提案并获明确批准。',
   },
 
@@ -272,7 +268,6 @@ YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件�
 - 用户明确说"直接做"、"不用问"
 - 紧急修复
 - 已有明确设计文档`,
-    exceptions: ['explicit_instruction', 'emergency_fix', 'existing_design'],
     promptInjection: '涉及架构变更、新增依赖、API 设计等重大决策时，必须先提出讨论获得确认，再开始实现。不要凭单方面判断做架构决策。',
   },
 

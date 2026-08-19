@@ -30,12 +30,11 @@ Every check-layer constraint must reference a registered checker (registry close
 
 `getEffectiveConstraints(projectRoot)` (`src/core/effective-constraints.ts`) is the single source of the effective set: built-ins → preset → config.yml disables → custom additions → scenes filtering. init injection, `check`, and external consumers all go through it.
 
-Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints.
+Presets (`src/presets/`) are pure data: `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints. Filtering lives in `mergeConstraints`; unknown preset names fall back to `standard` with a stderr warning.
 
 ### Core Singletons
 
 - `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context
-- `ConstraintInterceptor` (`src/core/constraints/interceptor.ts`) — registers enforcement executors, intercepts operations
 - `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`)
 
 ### Key Subsystems
@@ -44,23 +43,20 @@ Presets (`src/presets/`): `strict` and `standard` enable all constraints; `relax
 |-----------|---------|
 | `src/core/` | Constraint engine, validators (checkpoint, CSO, passes-gate), session management, project config loading |
 | `src/gates/` | Quality gates: acceptance, command blacklist, contract (OpenAPI), performance, review, security |
-| `src/monitoring/` | Trace collection/analysis, performance monitoring, constraint diagnostics |
+| `src/monitoring/` | Execution Trace collection/analysis, context usage tracking |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
 | `src/context/` | Session management, token budget, compaction, knowledge injection |
-| `src/spec/` | Spec annotation validation in code |
-| `src/safety/` | Security guardrails: Input/Output/Tool Guardrail + Sandbox (L1-L4) |
+| `src/spec/` | (empty) @spec annotation checker removed (ADR-0003); spec story lives in core/spec/validator + SpecAcceptanceGate |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
-| `src/dashboard/` | Dashboard stats aggregation and data source management |
 | `src/tools/` | Tool path management (paths.ts) + 113 yml capability definitions |
-| `src/verification/` | Rules-based verification engine + loop verification |
 | `src/cli/commands/` | 24 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, analyze-sessions, update-user-model, constraints, doc-freshness-check, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
 
 ### Entry Points
 
-- **Library**: `src/index.ts` — exports all types, modules, and convenience functions (`checkConstraints()`, `checkBeforeExecution()`, `interceptOperation()`)
+- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`checkBeforeExecution()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
 - **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management), `./gates` (gates only)
 

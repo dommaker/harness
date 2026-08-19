@@ -4,13 +4,11 @@
  * 把已注册的 ConstraintCheck 适配为统一 Gate，供守卫链（如 studio
  * runCompletionGuards）复用 runGates 的 deny 单调 / ask fail-closed 语义。
  *
- * 证据语义：本接线点构造的 CheckEnv 不带 git staged diff / 源码扫描证据
- * （stagedDiff 空、srcScan 空）——证据 flag 未接线的 checker 按契约返回
- * 'skip'（不阻断，映射为 abstain）；纯上下文判断的 checker 照常判定。
- * studio 侧若需 git 证据，在 #129 接线时扩展 CheckEnv 构造。
+ * env 经 buildCheckEnv(..., 'none') 构造（显式不接证据），语义见工厂 doc。
  */
 
-import type { CheckEnv, ConstraintCheck } from '../core/constraints/checkers';
+import type { ConstraintCheck } from '../core/constraints/checkers';
+import { buildCheckEnv } from '../core/constraints/checkers';
 import type { Gate, GateContext, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -29,13 +27,7 @@ export function createCheckerGate(check: ConstraintCheck, order = 0): Gate {
     async evaluate(ctx: GateContext): Promise<GateDecision> {
       const startTime = Date.now();
       const projectPath = ctx.projectPath || process.cwd();
-      const env: CheckEnv = {
-        context: { operation: 'manual', projectPath },
-        projectPath,
-        stagedDiff: async () => '',
-        stagedDiffNames: async () => '',
-        srcScan: () => [],
-      };
+      const env = buildCheckEnv({ operation: 'manual', projectPath }, 'none');
       const outcome = await check.evaluate(env);
       return decisionFromResult({
         gate: check.id,

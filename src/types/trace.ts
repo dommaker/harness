@@ -35,7 +35,7 @@ export interface ExecutionTrace {
   timestamp: number;
 
   /** 检查结果（skip = 约定未采用/证据未接线，未评估；不计 pass/fail 分母） */
-  result: 'pass' | 'fail' | 'bypassed' | 'skip';
+  result: 'pass' | 'fail' | 'skip';
 
   // ========================================
   // 轻量上下文（可选）
@@ -46,9 +46,6 @@ export interface ExecutionTrace {
 
   /** 严重性（从约束定义继承） */
   severity?: 'error' | 'warning' | 'info';
-
-  /** 例外类型（如果适用了例外） */
-  exceptionApplied?: string;
 
   /** 项目路径（用于区分多项目） */
   projectPath?: string;
@@ -98,10 +95,7 @@ export interface TraceSummary {
   /** 失败次数 */
   failCount: number;
 
-  /** 绕过次数 */
-  bypassCount: number;
-
-  /** 跳过次数（ADR-0001：约定未采用/证据未接线；不计入 pass/fail/bypass 率分母） */
+  /** 跳过次数（ADR-0001：约定未采用/证据未接线；不计入 pass/fail 率分母） */
   skipCount?: number;
 
   /** 用户忽略次数 */
@@ -117,9 +111,6 @@ export interface TraceSummary {
   /** 失败率 (0-1) */
   failRate: number;
 
-  /** 绕过率 (0-1) */
-  bypassRate: number;
-
   // ========================================
   // 趋势分析
   // ========================================
@@ -131,18 +122,7 @@ export interface TraceSummary {
   changeFromLastPeriod?: {
     passRateDelta: number;
     failRateDelta: number;
-    bypassRateDelta: number;
   };
-
-  // ========================================
-  // 例外统计
-  // ========================================
-
-  /** 例外应用次数 */
-  exceptionCount: number;
-
-  /** 最常见例外 */
-  mostCommonException?: string;
 }
 
 /**
@@ -151,11 +131,8 @@ export interface TraceSummary {
 export interface TraceAnomaly {
   /** 异常类型 */
   type:
-    | 'high_bypass_rate'      // 绕过率过高
     | 'rising_fail_rate'      // 失败率上升
-    | 'rising_bypass_rate'    // 绕过率上升
-    | 'low_pass_rate'         // 通过率过低
-    | 'exception_overuse';    // 例外滥用
+    | 'low_pass_rate';        // 通过率过低
 
   /** 约束 ID */
   constraintId: string;
@@ -177,7 +154,7 @@ export interface TraceAnomaly {
   detectedAt: number;
 
   /** 建议的下一步 */
-  suggestedAction?: 'diagnose' | 'adjust_threshold' | 'add_exception' | 'notify_user';
+  suggestedAction?: 'diagnose' | 'adjust_threshold' | 'notify_user';
 }
 
 /**
@@ -191,7 +168,7 @@ export interface TraceFilter {
   level?: 'iron_law' | 'guideline' | 'prompt';
 
   /** 结果类型（可选） */
-  result?: 'pass' | 'fail' | 'bypassed' | 'skip';
+  result?: 'pass' | 'fail' | 'skip';
 
   /** 时间范围（可选） */
   timeRange?: {
@@ -232,8 +209,6 @@ export interface TraceAnalyzerConfig {
 
   /** 异常阈值 */
   thresholds?: {
-    bypassRate?: number;     // 绕过率阈值，默认 0.3
     failRate?: number;       // 失败率阈值，默认 0.5
-    exceptionRate?: number;  // 例外率阈值，默认 0.4
   };
 }

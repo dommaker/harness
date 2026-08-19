@@ -4,9 +4,9 @@
 通用工程约束框架的 TypeScript 核心代码。定义约束系统、检查点验证、质量门控、知识基础设施。
 
 ## 核心导出 (dist/)
-- `index.ts`: 全量导出
+- `index.ts`: 显式公共导出清单（ADR-0003，禁 export *）
 - `core/index.ts`: 核心约束引擎
-- `presets/index.ts`: 预设配置
+- `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理
 - `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径（studio#153）
 
@@ -15,13 +15,12 @@
 |------|------|
 | core/ | 约束引擎、检查点验证器、会话管理 |
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
-| monitoring/ | 追踪收集/分析、性能、诊断 |
+| monitoring/ | Execution Trace 收集/分析、上下文追踪 |
 | failure/ | 错误分类、失败记录 |
 | context/ | 会话管理、token 预算、压缩、知识注入 |
-| spec/ | Spec 注解验证 |
+| spec/ | （空目录）@spec 注释检查已删（ADR-0003）；spec 故事见 core/spec/validator + SpecAcceptanceGate |
 | cli/commands/ | 24 个 CLI 子命令 |
 | tools/ | 工具定义 |
-| safety/ | 沙箱、护栏 |
 
 ## 依赖关系
 - `src/core/` 被所有模块依赖（基础层）

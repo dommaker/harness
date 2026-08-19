@@ -1,19 +1,11 @@
 # spec/
 
 ## 职责
-代码注释规范检查：验证代码中的 @spec 注释是否符合规范。
+（空目录）原 @spec 注释规范检查（annotation-checker）已随 ADR-0003 删除。
 
-## 核心导出
-- `annotation-checker.ts` — AnnotationChecker: 检查 @spec 注释规范(有效/无效/警告)
-
-## 依赖关系
-- 依赖 `fs` / `path` 文件系统操作
-- 被 `src/cli/commands/spec.ts` CLI 命令消费
-
-## 约定
-- Spec 注释格式由 @spec 标签定义
-- 检查结果包含 valid: boolean + errors + warnings
+## 已接线的 spec 故事
+- `src/core/spec/validator.ts` — SpecValidator：spec 文档结构/内容验证（CLI `harness spec` 消费）
+- `src/gates/acceptance.ts` — SpecAcceptanceGate：验收标准门禁
 
 ## 注意事项
-- 无 index.ts 统一导出，独立模块导入
-- 扫描指定目录下所有 TS 文件的 @spec 注释
+- @spec 注释检查若需恢复，应迁移为 ConstraintCheck 注册进闭环注册表（ADR-0003 后续立项），不在本目录重建独立子系统

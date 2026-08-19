@@ -5,7 +5,7 @@
 import { check, listLaws } from '../check';
 import * as fs from 'fs';
 import { constraintChecker } from '../../../core/constraints/checker';
-import { ProjectConfigLoader } from '../../../core/project-config-loader';
+import { getMergedConstraintsConfig } from '../../../core/effective-constraints';
 import { execAsync } from '../../../utils/exec';
 
 // Mock fs
@@ -45,13 +45,16 @@ jest.mock('../../../core/constraints/checker', () => ({
   },
 }));
 
-// Mock ProjectConfigLoader
-jest.mock('../../../core/project-config-loader', () => ({
-  ProjectConfigLoader: jest.fn().mockImplementation(() => ({
-    load: jest.fn(),
-    hasCustomConfig: jest.fn().mockReturnValue(false),
-    mergeConstraints: jest.fn().mockReturnValue({ custom: [], disabled: [] }),
-  })),
+// Mock effective-constraints（ADR-0001：check 经 getMergedConstraintsConfig 走生效集链路）
+jest.mock('../../../core/effective-constraints', () => ({
+  getMergedConstraintsConfig: jest.fn().mockReturnValue({
+    ironLaws: {},
+    guidelines: {},
+    prompts: {},
+    custom: [],
+    disabled: [],
+    unknownIds: [],
+  }),
 }));
 
 // Mock chalk
@@ -65,7 +68,7 @@ jest.mock('chalk', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs> & { readdirSync: jest.Mock };
 const mockChecker = constraintChecker as jest.Mocked<typeof constraintChecker>;
-const MockProjectConfigLoader = ProjectConfigLoader as jest.MockedClass<typeof ProjectConfigLoader>;
+const mockGetMergedConfig = getMergedConstraintsConfig as jest.MockedFunction<typeof getMergedConstraintsConfig>;
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
 describe('check command', () => {
@@ -73,6 +76,15 @@ describe('check command', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks 不清实现，显式恢复默认 merged config，避免用例间泄漏
+    mockGetMergedConfig.mockReturnValue({
+      ironLaws: {},
+      guidelines: {},
+      prompts: {},
+      custom: [],
+      disabled: [],
+      unknownIds: [],
+    });
     consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     process.exitCode = 0;
   });
@@ -123,12 +135,14 @@ describe('check command', () => {
     });
 
     it('应该加载自定义约束', async () => {
-      const mockLoader = {
-        load: jest.fn(),
-        hasCustomConfig: jest.fn().mockReturnValue(true),
-        mergeConstraints: jest.fn().mockReturnValue({ custom: [{ id: 'custom', rule: 'test', message: 'test', level: 'iron_law', trigger: 'code_implementation', enforcement: 'checkpoint-required' }], disabled: ['disabled_constraint'] }),
-      };
-      (MockProjectConfigLoader as any).mockImplementation(() => mockLoader);
+      mockGetMergedConfig.mockReturnValue({
+        ironLaws: {},
+        guidelines: {},
+        prompts: {},
+        custom: ['custom'],
+        disabled: ['disabled_constraint'],
+        unknownIds: [],
+      });
 
       mockChecker.checkConstraints.mockResolvedValue({
         passed: true,
@@ -399,23 +413,6 @@ describe('check command', () => {
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('记录已足够'));
     });
 
-    it('应该在绕过率高时提示查看详情', async () => {
-      // 20 条记录，15 条 bypassed (75% > 30%)
-      const traces = [
-        ...Array(5).fill('{"result":"pass"}'),
-        ...Array(15).fill('{"result":"bypassed"}'),
-      ].join('\n');
-      mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('traces.log')) return true;
-        if (p.includes('.state.json')) return false;
-        return false;
-      });
-      mockFs.readFileSync.mockReturnValue(traces);
-
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('异常趋势'));
-    });
-
     it('应该不重复显示已显示的提示', async () => {
       const traces = Array(50).fill('{"result":"pass"}').join('\n');
       mockFs.existsSync.mockReturnValue(true);
@@ -443,43 +440,6 @@ describe('check command', () => {
       await check({ preset: 'default', staged: false });
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
       expect(output).not.toContain('────────────────');
-    });
-
-    it('应该在绕过率低于 30% 时不提示', async () => {
-      // 20 条记录，2 条 bypassed (10% < 30%)
-      const traces = [
-        ...Array(18).fill('{"result":"pass"}'),
-        ...Array(2).fill('{"result":"bypassed"}'),
-      ].join('\n');
-      mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('traces.log')) return true;
-        if (p.includes('.state.json')) return false;
-        return false;
-      });
-      mockFs.readFileSync.mockReturnValue(traces);
-
-      await check({ preset: 'default', staged: false });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-      expect(output).not.toContain('异常趋势');
-    });
-
-    it('应该处理无效 JSON trace 行', async () => {
-      // 20 条记录，部分无效 JSON，部分 bypassed
-      const traces = [
-        ...Array(5).fill('invalid json'),
-        ...Array(5).fill('{"result":"pass"}'),
-        ...Array(10).fill('{"result":"bypassed"}'),
-      ].join('\n');
-      mockFs.existsSync.mockImplementation((p: any) => {
-        if (p.includes('traces.log')) return true;
-        if (p.includes('.state.json')) return false;
-        return false;
-      });
-      mockFs.readFileSync.mockReturnValue(traces);
-
-      await check({ preset: 'default', staged: false });
-      // 15 条有效，10 条 bypassed，bypassRate = 10/20 = 0.5 > 0.3
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('异常趋势'));
     });
 
     it('应该保存状态文件当有提示时', async () => {

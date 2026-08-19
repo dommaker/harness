@@ -2,7 +2,7 @@
  * knowledge 命令测试 — knowledgeAudit
  */
 
-import { knowledgeAudit, knowledgeStats, knowledgeHealth } from '../knowledge';
+import { knowledgeAudit, knowledgeStats, knowledgeHealth, knowledgeSearch } from '../knowledge';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -231,5 +231,94 @@ describe('knowledgeHealth CLI', () => {
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
     const parsed = JSON.parse(output);
     expect(parsed.summary.staleEntries).toBe(1);
+  });
+});
+
+/**
+ * knowledgeSearch 回归测试 — harness#63
+ * bug：先按 token budget 截断再文本匹配，新条目（lastReferenced 为空、排序队尾）
+ * 在语料超过 budget 时永远进不了匹配阶段。
+ */
+describe('knowledgeSearch CLI (harness#63)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { FileKnowledgeStore } = require('../../../knowledge/store');
+
+  let tmpProject: string;
+  let knowledgeDir: string;
+  let consoleSpy: jest.SpyInstance;
+
+  const FILLER_COUNT = 25; // 25 × ~800 tokens ≈ 20000 > maxTokens 10000
+  const TARGET_ID = 'PIT-020';
+
+  function makeEntry(overrides: Record<string, any>): any {
+    return {
+      id: 'X-000',
+      type: 'pitfall',
+      title: '条目',
+      content: '内容',
+      maturity: 'proven',
+      layer: 'project',
+      created: '2026-08-01T00:00:00.000Z',
+      lastReferenced: '2026-08-01T00:00:00.000Z',
+      contributors: [],
+      projects: [],
+      tags: [],
+      applicablePhases: [],
+      sourceReferences: [],
+      referencedBy: [],
+      executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'agent',
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-k63-'));
+    knowledgeDir = path.join(tmpProject, '.harness', 'knowledge');
+    fs.mkdirSync(knowledgeDir, { recursive: true });
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    const store = new FileKnowledgeStore({ baseDir: knowledgeDir });
+    // 高成熟度 + 有 lastReferenced 的填充条目排在前面，吃满 token budget
+    for (let i = 0; i < FILLER_COUNT; i++) {
+      store.save(makeEntry({
+        id: `FILL-${String(i).padStart(3, '0')}`,
+        title: `填充条目 ${i}`,
+        content: '填'.repeat(399) + '共同词',
+      }));
+    }
+    // 目标条目：新条目，draft + lastReferenced 为空，排在队尾
+    store.save(makeEntry({
+      id: TARGET_ID,
+      title: '新条目',
+      maturity: 'draft',
+      lastReferenced: '',
+      content: 'autolink 相关条目 共同词',
+    }));
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    fs.rmSync(tmpProject, { recursive: true, force: true });
+  });
+
+  async function searchJson(query: string, limit: number): Promise<any> {
+    await knowledgeSearch(query, { projectPath: tmpProject, json: true, limit });
+    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    return JSON.parse(output);
+  }
+
+  it('语料超过 token budget 时，排在队尾的新条目仍可被搜到', async () => {
+    const result = await searchJson('autolink', 200);
+    expect(result.total).toBe(1);
+    expect(result.entries[0].id).toBe(TARGET_ID);
+  });
+
+  it('超高频关键词的返回数 = 实际匹配数（截断只发生在匹配之后）', async () => {
+    const result = await searchJson('共同词', 200);
+    expect(result.total).toBe(FILLER_COUNT + 1);
   });
 });

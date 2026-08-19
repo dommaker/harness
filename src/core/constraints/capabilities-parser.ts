@@ -112,39 +112,39 @@ export function aggregateToSourceSubdir(root: string, file: string): string {
 // ── 能力清单计数 ────────────────────────────────────────────
 
 /**
+ * 能力清单统计规则单份定义（ADR-0008：check/write 两方向共用，
+ * 此前 label+pattern 在 buildCapabilityChecks 与 updateCapabilityCounts 各写一遍）
+ *
+ * - label：CAPABILITIES.md 计数行 label（check 的 DocFreshnessCheck.label +
+ *   write 的替换文本前缀，如 `Quality Gates (6)`）
+ * - pattern：同时供 check（doc_regex_count 字符串 pattern，捕获组为文档计数）
+ *   与 write（编译为替换 regex）
+ * - actual：定义表实际计数（ADR-0002 单一来源）
+ */
+interface CapabilityCountRule {
+  label: string;
+  pattern: string;
+  actual: () => number;
+}
+
+const CAPABILITY_COUNT_RULES: CapabilityCountRule[] = [
+  { label: 'CLI Commands', pattern: 'CLI Commands\\s*\\((\\d+)\\)', actual: cliCommandCount },
+  { label: 'Quality Gates', pattern: 'Quality Gates?\\s*\\((\\d+)\\)', actual: () => GATE_DEFINITIONS.length },
+  { label: 'Iron Laws', pattern: 'Iron Laws?\\s*\\((\\d+)\\)', actual: () => Object.keys(IRON_LAWS).length },
+  { label: 'Guidelines', pattern: 'Guidelines?\\s*\\((\\d+)\\)', actual: () => Object.keys(GUIDELINES).length },
+];
+
+/**
  * 构建 CAPABILITIES.md 能力清单格式的检查配置
  */
 function buildCapabilityChecks(): DocFreshnessCheck[] {
-  return [
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'CLI Commands',
-      pattern: 'CLI Commands\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: cliCommandCount() },
-    },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Quality Gates',
-      pattern: 'Quality Gates?\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: GATE_DEFINITIONS.length },
-    },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Iron Laws',
-      pattern: 'Iron Laws?\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: Object.keys(IRON_LAWS).length },
-    },
-    {
-      type: 'doc_regex_count',
-      doc: 'CAPABILITIES.md',
-      label: 'Guidelines',
-      pattern: 'Guidelines?\\s*\\((\\d+)\\)',
-      actual: { kind: 'const_count', value: Object.keys(GUIDELINES).length },
-    },
-  ];
+  return CAPABILITY_COUNT_RULES.map(rule => ({
+    type: 'doc_regex_count' as const,
+    doc: 'CAPABILITIES.md',
+    label: rule.label,
+    pattern: rule.pattern,
+    actual: { kind: 'const_count' as const, value: rule.actual() },
+  }));
 }
 
 /**
@@ -170,24 +170,14 @@ export function checkCapabilityCounts(
 /**
  * 更新 CAPABILITIES.md 中的能力清单计数（write 模式）
  *
- * 命令/门禁计数取自定义表（ADR-0002 单一来源），regex 替换文档计数行。
+ * 命令/门禁计数取自定义表（ADR-0002 单一来源），regex 替换文档计数行；
+ * 规则与 check 方向共用 CAPABILITY_COUNT_RULES（ADR-0008）。
  */
 export function updateCapabilityCounts(content: string, _projectPath: string): string {
-  const cliCount = cliCommandCount();
-  const gateCount = GATE_DEFINITIONS.length;
-  const ironCount = Object.keys(IRON_LAWS).length;
-  const guideCount = Object.keys(GUIDELINES).length;
-
-  const replacements: [RegExp, string][] = [
-    [/CLI Commands\s*\(\d+\)/, `CLI Commands (${cliCount})`],
-    [/Quality Gates?\s*\(\d+\)/, `Quality Gates (${gateCount})`],
-    [/Iron Laws?\s*\(\d+\)/, `Iron Laws (${ironCount})`],
-    [/Guidelines?\s*\(\d+\)/, `Guidelines (${guideCount})`],
-  ];
-
-  for (const [regex, replacement] of replacements) {
+  for (const rule of CAPABILITY_COUNT_RULES) {
+    const regex = new RegExp(rule.pattern);
     if (regex.test(content)) {
-      content = content.replace(regex, replacement);
+      content = content.replace(regex, `${rule.label} (${rule.actual()})`);
     }
   }
 

@@ -18,7 +18,7 @@
 
 ## 核心导出
 - `KnowledgeStore` — 知识条目 CRUD + 结构化存储
-- `KnowledgeQuery` — 语义搜索 + 类型/标签过滤 + `queryByMode()` + `consume(taskContext)`
+- `KnowledgeQuery` — 语义搜索 + 类型/标签过滤 + `queryByMode()` + `consume(taskContext)`；`query()` 是 budget 截断管线（仅用于 prompt 注入），`search()` 是全语料文本搜索（先匹配→排序→limit，交互搜索专用，勿用 query() 代替）
 - `KnowledgeLifecycle` — per-mode 生命周期管理
 - `KnowledgeIngest` — 知识摄取引擎（含 ingest gate 质量门）+ `ingestExternal()` 外部内容摄入
 - `sanitizeExternalContent` — 外部内容安全清洗（过滤注入模式 + 长度限制）

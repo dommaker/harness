@@ -27,6 +27,48 @@ export interface CheckEnv {
 }
 
 /**
+ * 证据提供者组：git diff / 源码扫描的 memoized I/O
+ *
+ * 由调用方绑定后传入 buildCheckEnv（如 ConstraintChecker 绑实例级
+ * run 缓存的方法）；工厂本身不做 memoization。
+ */
+export interface EvidenceProviders {
+  /** staged 全量 diff */
+  stagedDiff(): Promise<string>;
+  /** staged 变更文件名列表 */
+  stagedDiffNames(): Promise<string>;
+  /** 源码根相对路径文件列表 */
+  srcScan(root: string): string[];
+}
+
+/**
+ * 构造 CheckEnv：生产侧唯一构造点
+ *
+ * - providers 传入 = 证据接线，checker 正常评估
+ * - 'none' = 显式不接证据：证据函数返回空；evidence flag 未接线的
+ *   checker 按契约返回 'skip'（见 contextEvidenceFlag），直接读空
+ *   证据的 checker 在自然输入下判定
+ *
+ * studio 侧若需 git 证据（#129），传真实 providers 即可。
+ */
+export function buildCheckEnv(
+  context: ConstraintContext,
+  evidence: EvidenceProviders | 'none'
+): CheckEnv {
+  const projectPath = context.projectPath || process.cwd();
+  if (evidence === 'none') {
+    return {
+      context,
+      projectPath,
+      stagedDiff: async () => '',
+      stagedDiffNames: async () => '',
+      srcScan: () => [],
+    };
+  }
+  return { context, projectPath, ...evidence };
+}
+
+/**
  * 检查结果三态（ADR-0001 存在性探测 / flag 未接线）：
  * - true = 满足（pass）
  * - false = 违反（fail）

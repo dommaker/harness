@@ -12,7 +12,8 @@ import {
   checkConstraints,
   checkBeforeExecution,
 } from '../core/constraints/checker';
-import { getConstraintCheck, type CheckEnv } from '../core/constraints/checkers';
+import { getConstraintCheck, buildCheckEnv, type CheckEnv } from '../core/constraints/checkers';
+import { contextEvidenceFlag } from '../core/constraints/checkers/types';
 import type { ConstraintContext } from '../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1470,5 +1471,36 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       fs.rmSync(projDir, { recursive: true, force: true });
     });
+  });
+});
+
+describe('buildCheckEnv - 证据接线契约', () => {
+  const context: ConstraintContext = { operation: 'manual', projectPath: '/nonexistent' };
+
+  it("'none' 变体：证据函数返回空", async () => {
+    const env = buildCheckEnv(context, 'none');
+    expect(env.projectPath).toBe('/nonexistent');
+    expect(await env.stagedDiff()).toBe('');
+    expect(await env.stagedDiffNames()).toBe('');
+    expect(env.srcScan('src')).toEqual([]);
+  });
+
+  it('providers 变体：证据提供者原样透传', async () => {
+    const providers = {
+      stagedDiff: async () => 'diff-content',
+      stagedDiffNames: async () => 'a.ts\nb.ts',
+      srcScan: (root: string) => [`${root}/x.ts`],
+    };
+    const env = buildCheckEnv(context, providers);
+    expect(await env.stagedDiff()).toBe('diff-content');
+    expect(await env.stagedDiffNames()).toBe('a.ts\nb.ts');
+    expect(env.srcScan('src')).toEqual(['src/x.ts']);
+  });
+
+  it("'none' env 下 evidence flag 未接线的 checker 返回 'skip'", async () => {
+    // 「没接证据 → skip」由注释固化为可执行契约
+    const check = contextEvidenceFlag('test-flag', (ctx) => ctx.hasVerificationEvidence);
+    const env = buildCheckEnv(context, 'none');
+    expect(await check.evaluate(env)).toBe('skip');
   });
 });

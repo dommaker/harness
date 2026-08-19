@@ -25,7 +25,7 @@ import { runCommand } from '../../utils/exec';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
-import { getConstraintCheck, type CheckEnv, type CheckOutcome } from './checkers';
+import { getConstraintCheck, buildCheckEnv, type CheckOutcome } from './checkers';
 
 /**
  * trace 记录器最小接口（原工单 15 为消除 core→monitoring 循环；现 monitoring
@@ -255,9 +255,7 @@ export class ConstraintChecker {
     }
 
     const projectPath = context.projectPath || process.cwd();
-    const env: CheckEnv = {
-      context,
-      projectPath,
+    const env = buildCheckEnv(context, {
       stagedDiff: () => this.getStagedDiff(projectPath),
       stagedDiffNames: () => this.getStagedDiffNames(projectPath),
       srcScan: (root: string) =>
@@ -266,7 +264,7 @@ export class ConstraintChecker {
             relative(projectPath, f)
           )
         ),
-    };
+    });
 
     return await impl.evaluate(env);
   }

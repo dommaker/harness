@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-19
+
 ### Changes
 - refactor(core): capabilities 统计规则收敛单份定义（ADR-0008，架构评审候选9）——4 项能力清单统计（CLI Commands / Quality Gates / Iron Laws / Guidelines）的 label+pattern+actual 抽为 `CAPABILITY_COUNT_RULES` 单例，check（buildCapabilityChecks）与 write（updateCapabilityCounts）两方向各自投影生成，对外签名与 CAPABILITIES.md 写回结果逐字不变
 - refactor(cli,gates)!: 门禁命令定义形状对齐 CommandDefinition，bin/harness.js 单引擎单循环（ADR-0007，架构评审候选8）——删除 `GateCliDefinition`/`GateCliOption` 公开类型，`GateDefinition.cli` 直接为 `CommandDefinition`；`CommandDefinition` 新增 `bareRunsAction` 字段表达门禁裸跑语义。CLI 行为（命令名/别名/选项/子命令/help 输出）逐字不变

@@ -33,6 +33,7 @@ studio 实际消费的 58 个符号全数收录；逐符号判定见 `docs/publi
 - `src/monitoring/` 六文件（constraint-doctor / diagnosis-rules / knowledge-doctor / knowledge-evolver / performance-collector / performance-analyzer）：诊断规则仅服务已删的 ConstraintDoctor；性能链路与知识医生链路生产断链，知识健康分已由 `knowledge/doctor.ts` 的 KnowledgeHealthScorer 承载。保留 traces / trace-analyzer / analyzer-base / context-tracker（均在接线）。
 - `src/types/performance.ts`、`src/types/monitoring-types.ts`：仅服务上述已删链路的孤儿类型，删除前核验零引用。
 - recordBypass 链整条：`TraceCollector.recordBypass`、`ExecutionTrace.result`/`TraceFilter.result` 的 `'bypassed'`、`TraceSummary.bypassCount/bypassRate`、bypass 两类异常（high_bypass_rate / rising_bypass_rate）、usage-report 的 bypassed 统计、check 命令的 high_bypass 提示分支。「绕过」语义自始无写入方之外的观测闭环。
+- 消费方收口（2026-08-19 补注）：studio 对 safety 三符号（`InputGuardrail`/`OutputGuardrail`/`Sandbox`）的仅存引用——guards REST 路由（/check-input、/check-output、/sandbox）与 checkGuardrail/getSandboxLevel 两个 MCP tool——已在 studio 仓删除（studio@8afdccde），1.2.0 升级无断裂面。
 - 连带修复：`capabilities-parser` 的 CLI Commands / Quality Gates 计数口径从目录文件数（dir_count，递归误数子目录文件，产出与名单矛盾的 26/12）改为定义表计数（`COMMAND_DEFINITIONS.length` + 带 cli 的 `GATE_DEFINITIONS` / `GATE_DEFINITIONS.length`，ADR-0002 单一来源），check 与 update 两个投影共用同一来源。
 
 ### 3. 子路径出口保留并显式化

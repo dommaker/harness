@@ -46,12 +46,16 @@ jobs:
 
       - name: Check coverage not decreased (PR only)
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # 纯删除误伤豁免：删掉高覆盖死代码会同减分子分母、拉低总覆盖率
           #（2026-08-19 PR #64 删 ConstraintInterceptor 实发：88.9%→87.5%）。
           # 统计时排除本 PR 删除的文件，只比较两边都存在的文件；
           # 新增文件仍计入 PR 侧（新代码必须带测试，不受豁免）。
-          export DELETED_FILES=$(git diff --name-only --diff-filter=D ${{ github.base_ref }}...HEAD)
+          # 基线必须用 origin/<base_ref>：actions/checkout 对 PR 只建 origin/* 远端引用，
+          # 本地无 <base_ref> 分支，裸名 diff 会 fatal → DELETED_FILES 空 → 豁免失效（PR #65 实发）。
+          export DELETED_FILES="$(git diff --name-only --diff-filter=D origin/$BASE_REF...HEAD)"
           cov() { node -e "
             const path=require('path');
             const del=(process.env.DELETED_FILES||'').split('\n').filter(Boolean);
@@ -63,7 +67,7 @@ jobs:
             }
             console.log((c/t*100).toFixed(1));
           "; }
-          git checkout ${{ github.base_ref }}
+          git checkout "$BASE_REF"
           npm ci
           # 基线只取覆盖率、不门禁 master 测试（PR 头测试已由上一步严格门禁）：
           # master 红（如时间炸弹测试）时硬失败会死锁所有 PR——包括正在修

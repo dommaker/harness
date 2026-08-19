@@ -17,7 +17,7 @@
  *
  * 公共导出（ADR-0003）：显式清单，禁 export *。
  * 收录标准：属 harness 定位（约束数据 / 执行引擎 / 注入工具 / 知识基建）、
- * 实现真实可用、无同名冲突。interceptor（拟退役第二执行引擎）与内部 seam
+ * 实现真实可用、无同名冲突。内部 seam
  * （ConstraintChecker / constraintChecker / ProjectConfigLoader）不进公共清单。
  */
 

@@ -123,7 +123,7 @@ export async function check(options: CheckOptions): Promise<void> {
       const drift = detectInjectionDrift(projectPath);
       if (drift.hasDrift) {
         console.log();
-        console.log(chalk.yellow('⚠️  检测到 CLAUDE.md 约束注入漂移（仅警告，不阻断）:'));
+        console.log(chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));
         if (drift.versionDrift) {
           console.log(chalk.yellow(`   ⚠️⚠️ 注入段版本 (${drift.versionDrift.actual}) ≠ 已安装 harness 版本 (${drift.versionDrift.expected})：agent 上下文中的规则与已安装 harness 版本不一致`));
         }

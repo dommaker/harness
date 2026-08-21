@@ -3,6 +3,8 @@
  *
  * - 三类漂移各自检出：版本 / 内容（条目级 missing/extra）/ 重复章节
  * - 无漂移静默；无标记段 = 未注入不算漂移；CLAUDE.md 不存在不算漂移
+ * - 落点路由（studio #307）：AGENTS.md PRESERVE:governance 内注入段同样校验；
+ *   两文件均有标记段时 CLAUDE.md 优先（旧模型仓豁免）
  * - config.yml 变更后未重跑 init → 内容漂移（extra）
  *
  * 使用真实临时目录（getEffectiveConstraints 读真实 fs）。
@@ -30,6 +32,17 @@ function writeSyncedClaudeMd(root: string, extra = ''): string {
     '## Governance Rules\n' + renderConstraintsSection(getEffectiveConstraints(root), TEST_VERSION);
   const content = `# Test Project\n\n${section}${extra}`;
   fs.writeFileSync(path.join(root, 'CLAUDE.md'), content, 'utf-8');
+  return content;
+}
+
+/** 新模型仓注入段：AGENTS.md `PRESERVE:governance` 段内含标记段（版本 TEST_VERSION） */
+function writeSyncedAgentsMd(root: string, extra = ''): string {
+  const section =
+    '<!-- PRESERVE:governance -->\n## Governance Rules\n' +
+    renderConstraintsSection(getEffectiveConstraints(root), TEST_VERSION) +
+    '<!-- /PRESERVE:governance -->\n';
+  const content = `# AGENTS.md\n\n${section}${extra}`;
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), content, 'utf-8');
   return content;
 }
 
@@ -160,5 +173,82 @@ describe('detectInjectionDrift', () => {
     const drift = detectInjectionDrift(root, TEST_VERSION);
 
     expect(drift.versionDrift).toEqual({ expected: TEST_VERSION, actual: '(缺失)' });
+  });
+
+  it('新模型仓：AGENTS.md PRESERVE:governance 注入段一致 → 无漂移，injectionFile=AGENTS.md', () => {
+    const root = makeTmpProject();
+    writeSyncedAgentsMd(root);
+
+    const drift = detectInjectionDrift(root, TEST_VERSION);
+
+    expect(drift.notInjected).toBe(false);
+    expect(drift.injectionFile).toBe('AGENTS.md');
+    expect(drift.hasDrift).toBe(false);
+    expect(drift.duplicateHeading).toBe(false);
+  });
+
+  it('新模型仓：版本漂移与内容漂移照常检出', () => {
+    const root = makeTmpProject();
+    const synced = writeSyncedAgentsMd(root);
+    const originalLine = synced.split('\n').find(l => l.startsWith('- **'))!;
+    const editedLine = originalLine.replace(/: .+$/, ': 手工篡改的注入文本');
+    fs.writeFileSync(
+      path.join(root, 'AGENTS.md'),
+      synced
+        .replace(`<!-- version: ${TEST_VERSION} -->`, '<!-- version: 0.0.1-old -->')
+        .replace(originalLine, editedLine),
+      'utf-8'
+    );
+
+    const drift = detectInjectionDrift(root, TEST_VERSION);
+
+    expect(drift.injectionFile).toBe('AGENTS.md');
+    expect(drift.hasDrift).toBe(true);
+    expect(drift.versionDrift).toEqual({ expected: TEST_VERSION, actual: '0.0.1-old' });
+    expect(drift.contentDrift!.missing).toEqual([originalLine]);
+    expect(drift.contentDrift!.extra).toEqual([editedLine]);
+  });
+
+  it('新模型仓：PRESERVE 段之外还有 ## Governance Rules 标题 → duplicateHeading', () => {
+    const root = makeTmpProject();
+    writeSyncedAgentsMd(root, '\n## Governance Rules\n\n旧版遗留的同名章节\n');
+
+    const drift = detectInjectionDrift(root, TEST_VERSION);
+
+    expect(drift.injectionFile).toBe('AGENTS.md');
+    expect(drift.duplicateHeading).toBe(true);
+    expect(drift.hasDrift).toBe(true);
+  });
+
+  it('两文件均有标记段：旧模型仓豁免，CLAUDE.md 优先（AGENTS.md 漂移不影响判定）', () => {
+    const root = makeTmpProject();
+    writeSyncedClaudeMd(root);
+    const agents = writeSyncedAgentsMd(root);
+    // AGENTS.md 注入段手改出漂移，CLAUDE.md 保持一致
+    fs.writeFileSync(
+      path.join(root, 'AGENTS.md'),
+      agents.replace(`<!-- version: ${TEST_VERSION} -->`, '<!-- version: 0.0.1-old -->'),
+      'utf-8'
+    );
+
+    const drift = detectInjectionDrift(root, TEST_VERSION);
+
+    expect(drift.injectionFile).toBe('CLAUDE.md');
+    expect(drift.hasDrift).toBe(false);
+  });
+
+  it('两处均无标记段但 AGENTS.md 有重复 Governance Rules 标题 → notInjected + duplicateHeading', () => {
+    const root = makeTmpProject();
+    fs.writeFileSync(
+      path.join(root, 'AGENTS.md'),
+      '# AGENTS.md\n\n## Governance Rules\n\n甲\n\n## Governance Rules\n\n乙\n',
+      'utf-8'
+    );
+
+    const drift = detectInjectionDrift(root, TEST_VERSION);
+
+    expect(drift.notInjected).toBe(true);
+    expect(drift.hasDrift).toBe(false);
+    expect(drift.duplicateHeading).toBe(true);
   });
 });

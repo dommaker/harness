@@ -592,5 +592,33 @@ describe('sync-docs --agents', () => {
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
+
+    it('PRESERVE:governance 治理契约段开箱即用：重新生成保留、--check 通过（studio #302）', async () => {
+      const testDir = path.join(tempDir, 'preserve-governance');
+      createFixture(testDir, { pnpm: true, withCapabilities: true });
+
+      const GOVERNANCE_BLOCK = [
+        '<!-- PRESERVE:governance -->',
+        '## Governance Rules',
+        '',
+        '<!-- HARNESS_CONSTRAINTS_START -->',
+        '- **law_a**: 治理契约条款',
+        '<!-- HARNESS_CONSTRAINTS_END -->',
+        '<!-- /PRESERVE:governance -->',
+      ].join('\n');
+
+      await syncDocs({ projectPath: testDir, agents: true });
+      appendBlock(testDir, GOVERNANCE_BLOCK);
+      await syncDocs({ projectPath: testDir, agents: true });
+
+      const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain(GOVERNANCE_BLOCK);
+
+      // 幂等 + --check 通过（块内含 HARNESS_CONSTRAINTS 标记不影响漂移比对）
+      expect(await syncDocs({ projectPath: testDir, agents: true })).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
   });
 });

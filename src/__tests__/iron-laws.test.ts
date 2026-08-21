@@ -1,5 +1,5 @@
 /**
- * 约束系统测试（ADR-0001：kind 二元模型，25 条清单构成 + 注册表闭环）
+ * 约束系统测试（ADR-0001：kind 二元模型，26 条清单构成 + 注册表闭环）
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -16,17 +16,17 @@ import { getConstraintCheck, registeredCheckCount } from '../core/constraints/ch
 import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
-  describe('清单构成（ADR-0001：42 → 25）', () => {
-    it('getAllConstraints 返回 25 条：9 check + 16 prompt', () => {
+  describe('清单构成（ADR-0001：42 → 26）', () => {
+    it('getAllConstraints 返回 26 条：10 check + 16 prompt', () => {
       const all = getAllConstraints();
-      expect(all).toHaveLength(25);
-      expect(all.filter(c => c.kind === 'check')).toHaveLength(9);
+      expect(all).toHaveLength(26);
+      expect(all.filter(c => c.kind === 'check')).toHaveLength(10);
       expect(all.filter(c => c.kind === 'prompt')).toHaveLength(16);
     });
 
-    it('check 层 = 5 iron + 4 guideline', () => {
+    it('check 层 = 5 iron + 5 guideline', () => {
       expect(Object.keys(IRON_LAWS)).toHaveLength(5);
-      expect(Object.keys(GUIDELINES)).toHaveLength(4);
+      expect(Object.keys(GUIDELINES)).toHaveLength(5);
       Object.values(IRON_LAWS).forEach(c => {
         expect(c.kind).toBe('check');
         expect(c.level).toBe('iron_law');

@@ -97,4 +97,26 @@ export const GUIDELINES: Record<string, Constraint> = {
 - 测试目录（__tests__、test）
 - 生成代码目录（dist、build、generated）`,
   },
+
+  /**
+   * 治理契约在场守护（studio #302，ADR 2026-08-21 落点模型）
+   * 原因：PRESERVE 只保「存在」不保「在场」——AGENTS.md 治理段被删除/掏空后
+   *       sync-docs 重新生成会静默丢失约束正本
+   */
+  governance_presence: {
+    id: 'governance_presence',
+    kind: 'check',
+    rule: 'GOVERNANCE CONTRACT MUST BE PRESENT (AGENTS.MD PRESERVE:GOVERNANCE BLOCK OR CLAUDE.MD GOVERNANCE RULES)',
+    message: '治理契约缺失：AGENTS.md 缺少非空 PRESERVE:governance 段，且 CLAUDE.md 无 Governance Rules 块',
+    level: 'guideline',
+    trigger: ['file_modification', 'module_creation', 'module_modification', 'doc_update', 'config_change', 'commit'],
+    enforcement: 'governance-presence-check',
+    description: `治理契约（约束清单正本）必须在场，两处居其一：
+- 新模型：AGENTS.md 手写 \`<!-- PRESERVE:governance -->\` 段（块体非空）
+- 旧模型：CLAUDE.md 的 \`## Governance Rules\` 块 / HARNESS_CONSTRAINTS 注入段
+
+PRESERVE 机制只保证「存在的段重新生成时保留」，不保证「段在场」——段被删除或掏空后，
+sync-docs 重新生成会静默丢弃治理契约。本检查在 harness check 时校验在场性，防静默丢失。
+未采用 harness 治理（无 .harness/config.yml）的项目跳过评估（skip）。`,
+  },
 };

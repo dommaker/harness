@@ -22,6 +22,7 @@ import { capabilitySync } from './capability-sync';
 import { contextDocSync } from './context-doc-sync';
 import { docsFreshness } from './docs-freshness';
 import { noHardcodedCredentials } from './no-hardcoded-credentials';
+import { governancePresence } from './governance-presence';
 
 const CHECKS: ConstraintCheck[] = [
   // Iron Laws
@@ -35,6 +36,7 @@ const CHECKS: ConstraintCheck[] = [
   noBypassCheckpoint,
   capabilitySync,
   contextDocSync,
+  governancePresence,
 ];
 
 const registry = new Map<string, ConstraintCheck>(CHECKS.map(c => [c.id, c]));

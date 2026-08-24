@@ -276,7 +276,8 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(first);
   });
 
-  it('已有 PRESERVE:governance 段：替换段内内容，段外手改保持不动', async () => {
+  it('已有 PRESERVE:governance 段（含标记+段内手写内容）：只换标记区间，手写内容原样保留', async () => {
+    // 回归：曾把 PRESERVE 段内 HARNESS 标记之外的手写内容（治理契约引言/流程等）清空
     fs.writeFileSync(agentsMdPath, [
       '# AGENTS.md',
       '',
@@ -284,8 +285,14 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
       '',
       GOVERNANCE_PRESERVE_BEGIN,
       '## Governance Rules',
-      '',
+      CONSTRAINTS_START_MARKER,
+      '<!-- version: 0.0.0 -->',
       '过期的旧约束内容',
+      CONSTRAINTS_END_MARKER,
+      '',
+      '治理契约引言（手写，保留）',
+      '',
+      '### 治理变更流程（手写，保留）',
       GOVERNANCE_PRESERVE_END,
       '',
       '<!-- PRESERVE:other -->',
@@ -301,6 +308,37 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
     expect(content).toContain('另一个手写段（保持不动）');
     expect(content).not.toContain('过期的旧约束内容');
     expect(content).toContain(CONSTRAINTS_START_MARKER);
+    // 段内标记之外的手写内容原样保留
+    expect(content).toContain('治理契约引言（手写，保留）');
+    expect(content).toContain('### 治理变更流程（手写，保留）');
+    expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf('治理契约引言（手写，保留）'));
+    expect(content.indexOf('### 治理变更流程（手写，保留）')).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
+    // 幂等
+    await setupAgentsMdConstraints(tempDir);
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(content);
+  });
+
+  it('已有 PRESERVE:governance 段但无 HARNESS 标记（纯手写段）：段尾追加注入段，手写内容不动', async () => {
+    fs.writeFileSync(agentsMdPath, [
+      '# AGENTS.md',
+      '',
+      GOVERNANCE_PRESERVE_BEGIN,
+      '治理契约引言（手写，保留）',
+      '',
+      '### 发布纪律（手写，保留）',
+      GOVERNANCE_PRESERVE_END,
+      '',
+    ].join('\n'));
+
+    await setupAgentsMdConstraints(tempDir);
+
+    const content = fs.readFileSync(agentsMdPath, 'utf-8');
+    expect(content).toContain('治理契约引言（手写，保留）');
+    expect(content).toContain('### 发布纪律（手写，保留）');
+    expect(content).toContain(CONSTRAINTS_START_MARKER);
+    // 注入段追加在手写内容之后、PRESERVE 段内
+    expect(content.indexOf('### 发布纪律（手写，保留）')).toBeLessThan(content.indexOf(CONSTRAINTS_START_MARKER));
+    expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
     // 幂等
     await setupAgentsMdConstraints(tempDir);
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(content);

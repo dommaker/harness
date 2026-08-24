@@ -31,6 +31,7 @@ H5（#44）起：
 ## 注意事项
 - 新增命令需同步更新 CLAUDE.md / CAPABILITIES.md / src/CONTEXT.md
 - init 治理约束段写入落点（studio #302，ADR 2026-08-21 落点模型）：新仓 → AGENTS.md `PRESERVE:governance` 段（sync-docs 重新生成时保留）；旧模型仓（CLAUDE.md 已有 HARNESS_CONSTRAINTS 标记或 `## Governance Rules` 块）→ 续写 CLAUDE.md，幂等重跑不制造双份正本。治理段「在场守护」由 core 侧 governance_presence checker 承担（段缺失/为空时 check 报警）
+- PRESERVE:governance 段内写入纪律：机器管理的只有 HARNESS_CONSTRAINTS 标记区间——有标记只换标记区间，无标记（纯手写段）在段尾追加注入段；段内其余手写内容（治理契约引言/流程/纪律等）必须原样保留（曾整段替换清空手写内容的回归，init-injection.test 有防回归用例）
 - 注入段读取侧同一路由（studio #307）：`resolveInjectionTarget`（core/constraints/injection-drift）按「CLAUDE.md 有标记优先，否则 AGENTS.md」定位注入段，`detectInjectionDrift` 与 `constraints retire` 的注入段同步共用；未注入 = 两处均无完整标记段
 - knowledge 命令包含 13 个子操作（list/search/import/decay/stats/upsert/sync-status/sync-rag/audit/snapshot/migrate/index/health）
 - 特殊路由（选项条件、子命令兜底、退出码处理、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction / afterRun 字段，bin 是纯通用引擎、不含单命令知识

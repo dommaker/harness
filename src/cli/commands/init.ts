@@ -580,7 +580,9 @@ const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
  *
  * - AGENTS.md 不存在：创建最小骨架（标题 + 说明 + PRESERVE:governance 段），
  *   完整导读由 `harness sync-docs --agents` 生成，PRESERVE 段在重新生成时原样保留
- * - 已有 PRESERVE:governance 段：替换段内内容（含 HARNESS_CONSTRAINTS 标记，幂等）
+ * - 已有 PRESERVE:governance 段：段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间——
+ *   有标记则只替换标记区间，段内其余手写内容（治理契约引言/流程/纪律等）原样保留；
+ *   无标记（纯手写段）则在段尾追加注入段，不动手写内容
  * - 无该段：在文件末尾追加
  * - 段标记残缺（只有单边标记）：不写入，告警交由人工修复（防二次损坏）
  */
@@ -616,10 +618,33 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
   const endIdx = existingContent.indexOf(GOVERNANCE_PRESERVE_END);
 
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    // 替换段内内容（PRESERVE 标记本身保留；尾部换行规范化保证幂等）
+    // 段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间；其余手写内容原样保留
     const before = existingContent.slice(0, startIdx);
+    const blockContent = existingContent.slice(startIdx + GOVERNANCE_PRESERVE_BEGIN.length, endIdx);
     const after = existingContent.slice(endIdx + GOVERNANCE_PRESERVE_END.length).replace(/^\n+/, '');
-    const newContent = before + block + (after ? '\n' + after : '');
+
+    const csIdx = blockContent.indexOf(CONSTRAINTS_START_MARKER);
+    const ceIdx = blockContent.indexOf(CONSTRAINTS_END_MARKER);
+    let newBlockContent: string;
+    if (csIdx !== -1 && ceIdx !== -1 && ceIdx > csIdx) {
+      // 只替换标记区间。bodyOnly 自带结尾换行，故剥掉尾部恰好一个前导换行
+      // （END 标记行的行尾换行），其余手写内容逐字保留，保证幂等。
+      newBlockContent =
+        blockContent.slice(0, csIdx) +
+        bodyOnly +
+        blockContent.slice(ceIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n/, '');
+    } else {
+      // 纯手写段（无约束标记）：段尾追加注入段，手写内容不动
+      newBlockContent = blockContent.trimEnd() + '\n\n## Governance Rules\n' + bodyOnly;
+    }
+
+    const newContent =
+      before +
+      GOVERNANCE_PRESERVE_BEGIN +
+      newBlockContent +
+      GOVERNANCE_PRESERVE_END +
+      '\n' +
+      (after ? '\n' + after : '');
     if (newContent !== existingContent) {
       await fs.writeFile(agentsMdPath, newContent, 'utf-8');
       console.log(chalk.green(`✅ 已更新 AGENTS.md 治理契约 PRESERVE:governance 段 (v${version})`));

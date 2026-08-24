@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-24
+
+### Changes
+- fix: init 更新 PRESERVE:governance 段只换 HARNESS 标记区间，不再清空段内手写内容
+- feat: 注入链读取侧适配 AGENTS.md 落点（studio#307）
+- feat: 适配 AGENTS.md 正本文档模型（studio#302）
+
 ## [1.2.0] - 2026-08-19
 
 ### Changes

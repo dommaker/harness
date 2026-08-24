@@ -2,7 +2,7 @@
  * harness constraints retire 测试（ADR-0001 P5）
  *
  * 执行逻辑（retireConstraint，纯函数化）：config.yml 写入形态、
- * KnowledgeStore 记录、CLAUDE.md 注入段同步、重复 retire / 未知 id 保护。
+ * KnowledgeStore 记录、治理注入段同步（CLAUDE.md / AGENTS.md 落点路由）、重复 retire / 未知 id 保护。
  * 交互流程（runRetireInteractive）：注入 stdin 流测核心分支
  * （候选选择 + iron 二次确认拒绝；无候选手动输入 + 确认执行）。
  *
@@ -145,7 +145,7 @@ describe('retireConstraint 执行逻辑', () => {
 
     const result = retireConstraint(root, 'no_bypass_checkpoint', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
-    expect(result.claudeMdSynced).toBe(true);
+    expect(result.injectionSynced).toBe(true);
 
     const after = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8');
     expect(after).toContain('HARNESS_CONSTRAINTS_START');
@@ -164,8 +164,49 @@ describe('retireConstraint 执行逻辑', () => {
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# 用户自写\n', 'utf-8');
     const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
-    expect(result.claudeMdSynced).toBe(false);
+    expect(result.injectionSynced).toBe(false);
     expect(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8')).toBe('# 用户自写\n');
+  });
+
+  it('新模型仓：AGENTS.md PRESERVE:governance 内含标记段时同步重渲染（无 CLAUDE.md）', () => {
+    const root = makeTmpProject();
+    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
+    expect(before).toContain('no_bypass_checkpoint');
+    fs.writeFileSync(
+      path.join(root, 'AGENTS.md'),
+      `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n\n其他内容\n`,
+      'utf-8'
+    );
+
+    const result = retireConstraint(root, 'no_bypass_checkpoint', { now: FIXED_NOW });
+    expect(result.status).toBe('retired');
+    expect(result.injectionSynced).toBe(true);
+    expect(result.injectionFile).toBe('AGENTS.md');
+
+    const after = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf-8');
+    expect(after).toContain('HARNESS_CONSTRAINTS_START');
+    expect(after).toContain('HARNESS_CONSTRAINTS_END');
+    expect(after).not.toContain('**no_bypass_checkpoint**');
+    expect(after).toContain('PRESERVE:governance');
+    expect(after).toContain('其他内容');
+    // 不制造 CLAUDE.md
+    expect(fs.existsSync(path.join(root, 'CLAUDE.md'))).toBe(false);
+  });
+
+  it('两文件均有标记段时旧模型仓豁免：只同步 CLAUDE.md，AGENTS.md 不动', () => {
+    const root = makeTmpProject();
+    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
+    fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}`, 'utf-8');
+    const agentsMd = `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n`;
+    fs.writeFileSync(path.join(root, 'AGENTS.md'), agentsMd, 'utf-8');
+
+    const result = retireConstraint(root, 'no_bypass_checkpoint', { now: FIXED_NOW });
+    expect(result.status).toBe('retired');
+    expect(result.injectionSynced).toBe(true);
+    expect(result.injectionFile).toBe('CLAUDE.md');
+
+    expect(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8')).not.toContain('**no_bypass_checkpoint**');
+    expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf-8')).toBe(agentsMd);
   });
 
   it('重复 retire：already_retired，不覆盖原 retired 元数据', () => {
@@ -214,7 +255,7 @@ describe('retireConstraint 执行逻辑', () => {
 
     expect(result.status).toBe('retired');
     expect(result.landing).toBe('custom-constraints.yml');
-    expect(result.claudeMdSynced).toBe(true);
+    expect(result.injectionSynced).toBe(true);
     // config.yml 不产生该 id 段
     expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
     // yml 保留规则原文 + retired 元数据

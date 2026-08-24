@@ -20,7 +20,8 @@
  *         retired: { at, reason, stats: { total, fail, failRate } }
  *
  * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'），
- * 并同步 CLAUDE.md 注入段（存在 HARNESS_CONSTRAINTS 标记时）。
+ * 并同步治理注入段（CLAUDE.md 或 AGENTS.md，存在 HARNESS_CONSTRAINTS 标记时；
+ * 落点路由与 init 一致，见 core/constraints/injection-drift resolveInjectionTarget）。
  *
  * retire 不是删除——恢复方法：内置删 config.yml 中 constraints.<id> 段；
  * custom 删 custom-constraints.yml 中 custom_constraints.<id>.retired 段。
@@ -35,7 +36,8 @@ import * as readline from 'readline';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
-import { renderConstraintsSection, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
+import { renderConstraintsSection, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
+import { resolveInjectionTarget } from '../../core/constraints/injection-drift';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
 import { loadRawProjectConfig, ProjectConfigLoader } from '../../core/project-config-loader';
 import { FileKnowledgeStore } from '../../knowledge/store';
@@ -65,8 +67,10 @@ export interface RetireResult {
   /** 退役落点：custom 约束落 custom-constraints.yml（#82 D6），内置落 config.yml */
   landing: 'config.yml' | 'custom-constraints.yml';
   stats: { total: number; fail: number; failRate: number };
-  /** CLAUDE.md 注入段是否已同步 */
-  claudeMdSynced: boolean;
+  /** 治理注入段（CLAUDE.md / AGENTS.md）是否已同步 */
+  injectionSynced: boolean;
+  /** 实际同步的落点文件（injectionSynced 时存在） */
+  injectionFile?: string;
   /** KnowledgeStore 条目 id（status='retired' 时存在） */
   knowledgeEntryId?: string;
 }
@@ -265,27 +269,25 @@ function saveRetireKnowledge(
 }
 
 /**
- * 同步 CLAUDE.md 注入段（存在 HARNESS_CONSTRAINTS 标记时）
+ * 同步治理注入段（CLAUDE.md 或 AGENTS.md，存在 HARNESS_CONSTRAINTS 标记时）
  *
+ * 落点路由复用 resolveInjectionTarget（studio #307：新模型仓注入段在
+ * AGENTS.md PRESERVE:governance 内；旧模型仓 CLAUDE.md 优先）。
  * 复用 renderConstraintsSection（P3 导出纯函数）按退役后生效集重渲染。
  * 无标记段不动（不追加——retire 不承担 init 职责）。
  */
-function syncClaudeMdInjection(projectRoot: string): boolean {
-  const claudeMdPath = path.join(projectRoot, 'CLAUDE.md');
-  if (!fs.existsSync(claudeMdPath)) return false;
+function syncGovernanceInjection(projectRoot: string): { synced: boolean; file?: string } {
+  const target = resolveInjectionTarget(projectRoot);
+  if (!target) return { synced: false };
 
-  const content = fs.readFileSync(claudeMdPath, 'utf-8');
-  const startIdx = content.indexOf(CONSTRAINTS_START_MARKER);
-  const endIdx = content.indexOf(CONSTRAINTS_END_MARKER);
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return false;
-
+  const filePath = path.join(projectRoot, target.file);
   const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessVersion());
-  const after = content.slice(endIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n+/, '');
-  const newContent = content.slice(0, startIdx) + body + (after ? '\n' + after : '');
-  if (newContent !== content) {
-    fs.writeFileSync(claudeMdPath, newContent, 'utf-8');
+  const after = target.content.slice(target.endIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n+/, '');
+  const newContent = target.content.slice(0, target.startIdx) + body + (after ? '\n' + after : '');
+  if (newContent !== target.content) {
+    fs.writeFileSync(filePath, newContent, 'utf-8');
   }
-  return true;
+  return { synced: true, file: target.file };
 }
 
 /**
@@ -307,7 +309,7 @@ export function retireConstraint(
   const landing: RetireResult['landing'] =
     target?.source === 'custom' ? 'custom-constraints.yml' : 'config.yml';
   if (!target) {
-    return { id, status: 'unknown_id', isIronLaw: false, landing, stats: emptyStats, claudeMdSynced: false };
+    return { id, status: 'unknown_id', isIronLaw: false, landing, stats: emptyStats, injectionSynced: false };
   }
 
   // 已退役保护：内置看 config.yml constraints.<id>.enabled === false；
@@ -318,10 +320,10 @@ export function retireConstraint(
     const loader = new ProjectConfigLoader(projectRoot);
     loader.load();
     if (loader.getCustomConstraints()[id]?.retired || existing?.enabled === false) {
-      return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, claudeMdSynced: false };
+      return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, injectionSynced: false };
     }
   } else if (existing?.enabled === false) {
-    return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, claudeMdSynced: false };
+    return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, injectionSynced: false };
   }
 
   // 历史统计（来自 traces.log）
@@ -346,10 +348,19 @@ export function retireConstraint(
   // 2. KnowledgeStore
   const knowledgeEntryId = saveRetireKnowledge(projectRoot, id, target, reason, stats, iso);
 
-  // 3. CLAUDE.md 注入段同步
-  const claudeMdSynced = syncClaudeMdInjection(projectRoot);
+  // 3. 治理注入段同步（CLAUDE.md / AGENTS.md，路由见 syncGovernanceInjection）
+  const injection = syncGovernanceInjection(projectRoot);
 
-  return { id, status: 'retired', isIronLaw: target.isIronLaw, landing, stats, claudeMdSynced, knowledgeEntryId };
+  return {
+    id,
+    status: 'retired',
+    isIronLaw: target.isIronLaw,
+    landing,
+    stats,
+    injectionSynced: injection.synced,
+    injectionFile: injection.file,
+    knowledgeEntryId,
+  };
 }
 
 /**
@@ -367,8 +378,8 @@ export function printRetireResult(result: RetireResult): void {
       console.log(chalk.green(`✅ ${result.id}: 已退役`));
       console.log(`   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
       console.log(`   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
-      if (result.claudeMdSynced) {
-        console.log('   已同步 CLAUDE.md 注入段');
+      if (result.injectionSynced) {
+        console.log(`   已同步 ${result.injectionFile ?? '治理文档'} 注入段`);
       }
       const recovery =
         result.landing === 'custom-constraints.yml'
@@ -485,7 +496,7 @@ export async function runRetireInteractive(
       }
       console.log(`  - KnowledgeStore: 写入 constraint-retired-${p.id}`);
     }
-    console.log('  - CLAUDE.md: 若含 HARNESS_CONSTRAINTS 标记段则同步重渲染');
+    console.log('  - CLAUDE.md / AGENTS.md: 若含 HARNESS_CONSTRAINTS 标记段则同步重渲染');
     const finalConfirm = await ask('确认执行？(y/N) ');
     if (finalConfirm.toLowerCase() !== 'y' && finalConfirm.toLowerCase() !== 'yes') {
       console.log('已取消');

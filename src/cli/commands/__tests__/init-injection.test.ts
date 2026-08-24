@@ -17,6 +17,8 @@ import {
 import {
   setupClaudeMdConstraints,
   setupClaudeMdOutputStyle,
+  setupAgentsMdConstraints,
+  setupGovernanceConstraints,
 } from '../init';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 import { getAllConstraints } from '../../../core/constraints/definitions';
@@ -230,5 +232,205 @@ describe('setupClaudeMdOutputStyle（标记化）', () => {
 
     expect(fs.readFileSync(claudeMdPath, 'utf-8')).toBe(userContent);
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('跳过'));
+  });
+});
+
+const GOVERNANCE_PRESERVE_BEGIN = '<!-- PRESERVE:governance -->';
+const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
+
+describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.md PRESERVE:governance 段）', () => {
+  let tempDir: string;
+  let agentsMdPath: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-init-agents-'));
+    agentsMdPath = path.join(tempDir, 'AGENTS.md');
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('AGENTS.md 不存在时创建骨架并写入 PRESERVE:governance 段', async () => {
+    await setupAgentsMdConstraints(tempDir);
+
+    const content = fs.readFileSync(agentsMdPath, 'utf-8');
+    expect(content).toContain('# AGENTS.md');
+    expect(content).toContain(GOVERNANCE_PRESERVE_BEGIN);
+    expect(content).toContain(GOVERNANCE_PRESERVE_END);
+    expect(content).toContain('## Governance Rules');
+    expect(content).toContain(CONSTRAINTS_START_MARKER);
+    expect(content).toContain(CONSTRAINTS_END_MARKER);
+    expect(content).toContain('### Iron Laws');
+    // PRESERVE 标记在约束段之外（sync-docs 重新生成时整段保留）
+    expect(content.indexOf(GOVERNANCE_PRESERVE_BEGIN)).toBeLessThan(content.indexOf(CONSTRAINTS_START_MARKER));
+    expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
+  });
+
+  it('连跑两次输出一致（幂等）', async () => {
+    await setupAgentsMdConstraints(tempDir);
+    const first = fs.readFileSync(agentsMdPath, 'utf-8');
+    await setupAgentsMdConstraints(tempDir);
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(first);
+  });
+
+  it('已有 PRESERVE:governance 段（含标记+段内手写内容）：只换标记区间，手写内容原样保留', async () => {
+    // 回归：曾把 PRESERVE 段内 HARNESS 标记之外的手写内容（治理契约引言/流程等）清空
+    fs.writeFileSync(agentsMdPath, [
+      '# AGENTS.md',
+      '',
+      '机器生成导读（保持不变）',
+      '',
+      GOVERNANCE_PRESERVE_BEGIN,
+      '## Governance Rules',
+      CONSTRAINTS_START_MARKER,
+      '<!-- version: 0.0.0 -->',
+      '过期的旧约束内容',
+      CONSTRAINTS_END_MARKER,
+      '',
+      '治理契约引言（手写，保留）',
+      '',
+      '### 治理变更流程（手写，保留）',
+      GOVERNANCE_PRESERVE_END,
+      '',
+      '<!-- PRESERVE:other -->',
+      '另一个手写段（保持不动）',
+      '<!-- /PRESERVE:other -->',
+      '',
+    ].join('\n'));
+
+    await setupAgentsMdConstraints(tempDir);
+
+    const content = fs.readFileSync(agentsMdPath, 'utf-8');
+    expect(content).toContain('机器生成导读（保持不变）');
+    expect(content).toContain('另一个手写段（保持不动）');
+    expect(content).not.toContain('过期的旧约束内容');
+    expect(content).toContain(CONSTRAINTS_START_MARKER);
+    // 段内标记之外的手写内容原样保留
+    expect(content).toContain('治理契约引言（手写，保留）');
+    expect(content).toContain('### 治理变更流程（手写，保留）');
+    expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf('治理契约引言（手写，保留）'));
+    expect(content.indexOf('### 治理变更流程（手写，保留）')).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
+    // 幂等
+    await setupAgentsMdConstraints(tempDir);
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(content);
+  });
+
+  it('已有 PRESERVE:governance 段但无 HARNESS 标记（纯手写段）：段尾追加注入段，手写内容不动', async () => {
+    fs.writeFileSync(agentsMdPath, [
+      '# AGENTS.md',
+      '',
+      GOVERNANCE_PRESERVE_BEGIN,
+      '治理契约引言（手写，保留）',
+      '',
+      '### 发布纪律（手写，保留）',
+      GOVERNANCE_PRESERVE_END,
+      '',
+    ].join('\n'));
+
+    await setupAgentsMdConstraints(tempDir);
+
+    const content = fs.readFileSync(agentsMdPath, 'utf-8');
+    expect(content).toContain('治理契约引言（手写，保留）');
+    expect(content).toContain('### 发布纪律（手写，保留）');
+    expect(content).toContain(CONSTRAINTS_START_MARKER);
+    // 注入段追加在手写内容之后、PRESERVE 段内
+    expect(content.indexOf('### 发布纪律（手写，保留）')).toBeLessThan(content.indexOf(CONSTRAINTS_START_MARKER));
+    expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
+    // 幂等
+    await setupAgentsMdConstraints(tempDir);
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(content);
+  });
+
+  it('AGENTS.md 存在但无 PRESERVE:governance 段：末尾追加，既有内容不动', async () => {
+    fs.writeFileSync(agentsMdPath, '# AGENTS.md\n\n既有导读内容\n');
+
+    await setupAgentsMdConstraints(tempDir);
+
+    const content = fs.readFileSync(agentsMdPath, 'utf-8');
+    expect(content).toContain('既有导读内容');
+    expect(content).toContain(GOVERNANCE_PRESERVE_BEGIN);
+    expect(content.indexOf('既有导读内容')).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_BEGIN));
+  });
+
+  it('PRESERVE:governance 标记残缺（只有单边）：不写入并告警', async () => {
+    const original = `# AGENTS.md\n\n${GOVERNANCE_PRESERVE_BEGIN}\n残缺的段\n`;
+    fs.writeFileSync(agentsMdPath, original);
+    const logSpy = jest.spyOn(console, 'log');
+
+    await setupAgentsMdConstraints(tempDir);
+
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(original);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('残缺'));
+  });
+
+  it('段内注入文本与 renderConstraintsSection(getEffectiveConstraints()) 一致', async () => {
+    await setupAgentsMdConstraints(tempDir);
+
+    const content = fs.readFileSync(agentsMdPath, 'utf-8');
+    const start = content.indexOf(CONSTRAINTS_START_MARKER);
+    const end = content.indexOf(CONSTRAINTS_END_MARKER) + CONSTRAINTS_END_MARKER.length + 1;
+    const actual = content.slice(start, end);
+    const version = /<!-- version: ([^ ]+) -->/.exec(content)![1];
+    expect(actual).toBe(renderConstraintsSection(getEffectiveConstraints(tempDir), version));
+  });
+});
+
+describe('setupGovernanceConstraints（落点路由）', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-init-routing-'));
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('新仓（无 CLAUDE.md）：治理契约写向 AGENTS.md，不创建 CLAUDE.md', async () => {
+    await setupGovernanceConstraints(tempDir);
+
+    expect(fs.existsSync(path.join(tempDir, 'AGENTS.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'CLAUDE.md'))).toBe(false);
+    const content = fs.readFileSync(path.join(tempDir, 'AGENTS.md'), 'utf-8');
+    expect(content).toContain(GOVERNANCE_PRESERVE_BEGIN);
+    expect(content).toContain(CONSTRAINTS_START_MARKER);
+  });
+
+  it('旧模型仓（CLAUDE.md 已有 HARNESS_CONSTRAINTS 标记）：继续写 CLAUDE.md，不动 AGENTS.md', async () => {
+    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), [
+      '# CLAUDE.md',
+      '',
+      '## Governance Rules',
+      CONSTRAINTS_START_MARKER,
+      '<!-- version: 0.0.0 -->',
+      '旧约束',
+      CONSTRAINTS_END_MARKER,
+      '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), '# AGENTS.md\n\n既有导读\n');
+
+    await setupGovernanceConstraints(tempDir);
+
+    const claude = fs.readFileSync(path.join(tempDir, 'CLAUDE.md'), 'utf-8');
+    expect(claude).not.toContain('旧约束');
+    expect(claude).toContain('### Iron Laws');
+    // AGENTS.md 不被写入治理段
+    expect(fs.readFileSync(path.join(tempDir, 'AGENTS.md'), 'utf-8')).toBe('# AGENTS.md\n\n既有导读\n');
+  });
+
+  it('旧模型仓（CLAUDE.md 有无标记 Governance Rules 块）：路由到 CLAUDE.md', async () => {
+    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n手写条款\n');
+
+    await setupGovernanceConstraints(tempDir);
+
+    const claude = fs.readFileSync(path.join(tempDir, 'CLAUDE.md'), 'utf-8');
+    expect(claude).toContain('手写条款');
+    expect(claude).toContain(CONSTRAINTS_START_MARKER);
+    expect(fs.existsSync(path.join(tempDir, 'AGENTS.md'))).toBe(false);
   });
 });

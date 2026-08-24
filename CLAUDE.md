@@ -21,9 +21,9 @@ npm run hooks:install  # Install this repo's own pre-commit hook (dogfoods curre
 
 ### Check/Prompt Dual-Model Constraint System (ADR-0001)
 
-Constraints are defined in `src/core/constraints/definitions/{iron-laws,guidelines,prompts}.ts` (25 total):
+Constraints are defined in `src/core/constraints/definitions/{iron-laws,guidelines,prompts}.ts` (26 total):
 - **check · Iron Laws** (5) — severity: error. Real checkers; violation throws `ConstraintViolationError`, blocks execution.
-- **check · Guidelines** (4) — severity: warning. Real checkers; records warning, allows continuation.
+- **check · Guidelines** (5) — severity: warning. Real checkers; records warning, allows continuation.
 - **prompt** (16) — pure text injections with role routing and applicability tags; no check slot, no trace stats.
 
 Every check-layer constraint must reference a registered checker (registry closed loop — build fails otherwise). Convention-probing checks (`capability_sync`/`docs_freshness`/`context_doc_sync`) report `skip` when the project hasn't adopted the convention — no blocking, not counted in pass rate.

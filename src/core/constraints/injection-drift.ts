@@ -1,5 +1,5 @@
 /**
- * CLAUDE.md 约束注入段漂移校验（ADR-0001 决策 7）
+ * 治理约束注入段漂移校验（ADR-0001 决策 7）
  *
  * 检测三类漂移：
  * 1. 版本漂移：标记段内 `<!-- version: x -->` ≠ 当前 harness 包版本
@@ -9,8 +9,12 @@
  * 3. 重复章节：标记段之外还存在另一个 `## Governance Rules` 标题
  *    （init 旧版本在无标记时追加第二个同名章节的历史问题）
  *
+ * 落点路由（studio #307，ADR 2026-08-21 落点模型）：注入段可能在
+ * CLAUDE.md（旧模型仓）或 AGENTS.md `PRESERVE:governance` 段内（新模型仓），
+ * 与 init 的 setupGovernanceConstraints 路由一致——CLAUDE.md 有标记优先。
+ *
  * 纯检测、只读：不改任何文件。check 仅警告不阻断，详细差异进 report。
- * 文件无标记段 = 未注入，不算漂移（report 一句话提示，check 不警告）。
+ * 两处均无标记段 = 未注入，不算漂移（report 一句话提示，check 不警告）。
  */
 
 import * as fs from 'fs';
@@ -22,12 +26,18 @@ import {
   renderConstraintsSection,
 } from './injection-renderer';
 
+/** 注入段落点文件名（检测顺序即路由优先级：旧模型仓 CLAUDE.md 豁免优先） */
+const INJECTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
+export type InjectionFile = (typeof INJECTION_FILES)[number];
+
 /** 注入漂移检测结果 */
 export interface InjectionDrift {
   /** 是否存在任一漂移（版本/内容/重复章节） */
   hasDrift: boolean;
-  /** CLAUDE.md 不存在或无约束标记段（未注入，不算漂移） */
+  /** CLAUDE.md / AGENTS.md 均无约束标记段（未注入，不算漂移） */
   notInjected: boolean;
+  /** 注入段落点文件（未注入时 undefined） */
+  injectionFile?: InjectionFile;
   /** 版本漂移：注入段版本 ≠ 当前 harness 版本 */
   versionDrift?: { expected: string; actual: string };
   /**
@@ -73,8 +83,41 @@ function significantLines(section: string): string[] {
     .filter(l => ENTRY_LINE_RE.test(l) || GROUP_HEADING_RE.test(l));
 }
 
+function readIfExists(filePath: string): string | null {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return typeof content === 'string' ? content : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * 检测 CLAUDE.md 约束注入段漂移
+ * 解析治理约束注入段落点（studio #307，ADR 2026-08-21 落点模型）
+ *
+ * 与 init 的 setupGovernanceConstraints 路由一致：CLAUDE.md 含标记段优先
+ * （旧模型仓豁免），否则看 AGENTS.md（新模型仓注入段在 PRESERVE:governance 内）；
+ * 两处均无完整标记段 → null（未注入）。
+ *
+ * detectInjectionDrift 与 constraints retire 的注入段同步共用本路由。
+ */
+export function resolveInjectionTarget(
+  projectRoot: string
+): { file: InjectionFile; content: string; startIdx: number; endIdx: number } | null {
+  for (const file of INJECTION_FILES) {
+    const content = readIfExists(path.join(projectRoot, file));
+    if (content === null) continue;
+    const startIdx = content.indexOf(CONSTRAINTS_START_MARKER);
+    const endIdx = content.indexOf(CONSTRAINTS_END_MARKER);
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+      return { file, content, startIdx, endIdx };
+    }
+  }
+  return null;
+}
+
+/**
+ * 检测约束注入段漂移
  *
  * @param projectRoot 项目根路径
  * @param currentVersion 当前 harness 版本（缺省读 package.json；测试可显式传入）
@@ -90,30 +133,26 @@ export function detectInjectionDrift(
     fixHint: INJECTION_DRIFT_FIX_HINT,
   };
 
-  const claudeMdPath = path.join(projectRoot, 'CLAUDE.md');
-  let content: string;
-  try {
-    content = fs.readFileSync(claudeMdPath, 'utf-8');
-  } catch {
+  const target = resolveInjectionTarget(projectRoot);
+  if (!target) {
+    // 两处均无标记段 = 未注入，不算漂移（check 不警告）。
+    // 重复章节仍如实记录供 report 提示：旧落点 CLAUDE.md 优先，其次 AGENTS.md。
+    const legacy =
+      readIfExists(path.join(projectRoot, 'CLAUDE.md')) ??
+      readIfExists(path.join(projectRoot, 'AGENTS.md'));
+    if (legacy !== null) {
+      result.duplicateHeading = (legacy.match(GOVERNANCE_HEADING_RE) ?? []).length > 1;
+    }
     result.notInjected = true;
     return result;
   }
-  if (typeof content !== 'string') {
-    result.notInjected = true;
-    return result;
-  }
+
+  result.injectionFile = target.file;
+  const { content, startIdx, endIdx } = target;
 
   // 重复章节：全文统计 `## Governance Rules` 标题数（含标记段所属的合法标题）
   const headingCount = (content.match(GOVERNANCE_HEADING_RE) ?? []).length;
   result.duplicateHeading = headingCount > 1;
-
-  const startIdx = content.indexOf(CONSTRAINTS_START_MARKER);
-  const endIdx = content.indexOf(CONSTRAINTS_END_MARKER);
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
-    // 无标记段 = 未注入，不算漂移（check 不警告；duplicateHeading 仍如实记录供 report 提示）
-    result.notInjected = true;
-    return result;
-  }
 
   const actualSection = content.slice(startIdx, endIdx + CONSTRAINTS_END_MARKER.length);
 

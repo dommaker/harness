@@ -57,14 +57,14 @@ describe('buildConstraintsUsageReport', () => {
     const report = buildConstraintsUsageReport(root);
 
     expect(report.traceFileExists).toBe(false);
-    expect(report.stats.length).toBe(9); // 5 iron + 4 guideline
+    expect(report.stats.length).toBe(10); // 5 iron + 5 guideline
     for (const s of report.stats) {
       expect(s.total).toBe(0);
       expect(s.evaluated).toBe(0);
       expect(s.failRate).toBe(0);
       expect(s.firstAt).toBeUndefined();
     }
-    expect(report.candidates.length).toBe(9);
+    expect(report.candidates.length).toBe(10);
     expect(report.candidates.every(c => c.kind === 'zero_trigger')).toBe(true);
     // prompt 注入清单（standard preset、无 scenes → 14 条通用 prompt）
     expect(report.activePromptIds.length).toBe(14);

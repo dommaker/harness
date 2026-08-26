@@ -889,6 +889,26 @@ async function createContextMd(projectPath: string, dir: string): Promise<void> 
 }
 
 /**
+ * 检测已有 workflow 是否已覆盖 harness 治理命令
+ * （harness check / passes-gate / sync-docs --check，含 npx、scoped 包名等调用形式）
+ */
+const GOVERNANCE_COMMAND_PATTERN = /\bharness\s+(?:check\b|passes-gate\b|sync-docs\b[^\n]*--check)/;
+
+async function findGovernanceCoverage(workflowsDir: string): Promise<string | undefined> {
+  for (const file of await findCiWorkflows(workflowsDir)) {
+    try {
+      const content = await fs.readFile(path.join(workflowsDir, file), 'utf-8');
+      if (GOVERNANCE_COMMAND_PATTERN.test(content)) {
+        return file;
+      }
+    } catch {
+      // 读取失败，忽略该文件
+    }
+  }
+  return undefined;
+}
+
+/**
  * 设置治理 CI workflow
  */
 async function setupGovernanceWorkflow(projectPath: string, level: string): Promise<void> {
@@ -902,6 +922,13 @@ async function setupGovernanceWorkflow(projectPath: string, level: string): Prom
     return;
   } catch {
     // 不存在，继续创建
+  }
+
+  // 能力检测：已有 workflow 已跑 harness 治理命令时跳过，避免重复 CI 面
+  const coveredBy = await findGovernanceCoverage(workflowsDir);
+  if (coveredBy) {
+    console.log(chalk.gray(`治理检查已由 ${coveredBy} 覆盖，跳过创建 harness-governance.yml`));
+    return;
   }
 
   await fs.mkdir(workflowsDir, { recursive: true });

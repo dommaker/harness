@@ -308,6 +308,49 @@ describe('init command', () => {
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harness-governance.yml 已存在'));
     });
 
+    it('应该跳过治理 CI workflow 当已有 workflow 覆盖治理命令', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      // setupGitHubActions 与治理能力检测都会 readdir workflows 目录
+      existingFiles.add(`${PROJECT}/.github/workflows`);
+      mockReaddir.mockResolvedValue(['ci.yml']);
+      mockFs.readFile.mockImplementation((p: any) =>
+        String(p).includes('ci.yml')
+          ? Promise.resolve('run: npx harness sync-docs --agents && npx harness check && npx harness sync-docs --check --agents')
+          : Promise.reject(new Error('ENOENT'))
+      );
+
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
+      const writeCalls = mockFs.writeFile.mock.calls;
+      const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-governance.yml'));
+      expect(workflowCall).toBeUndefined();
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('治理检查已由 ci.yml 覆盖'));
+
+      mockReaddir.mockResolvedValue([]);
+      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+    });
+
+    it('应该正常创建治理 CI workflow 当已有 workflow 不含治理命令', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.github/workflows`);
+      mockReaddir.mockResolvedValue(['ci.yml']);
+      mockFs.readFile.mockImplementation((p: any) =>
+        String(p).includes('ci.yml')
+          ? Promise.resolve('run: npm test')
+          : Promise.reject(new Error('ENOENT'))
+      );
+
+      await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT });
+      const writeCalls = mockFs.writeFile.mock.calls;
+      const workflowCall = writeCalls.find((c: any[]) => String(c[0]).includes('harness-governance.yml'));
+      expect(workflowCall).toBeDefined();
+      expect(workflowCall![1]).toContain('Harness Governance');
+
+      mockReaddir.mockResolvedValue([]);
+      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+    });
+
     it('strict 治理应在 CI 中包含 docs check', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);

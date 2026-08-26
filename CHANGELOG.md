@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-08-26
+
+### Changes
+- fix: init 判重升级为能力检测，已有 workflow 覆盖治理命令时跳过创建 harness-governance.yml
+
 ## [1.2.1] - 2026-08-24
 
 ### Changes

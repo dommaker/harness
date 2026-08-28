@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-08-28
+
+### Changes
+- fix(test): mkdtemp 泄漏防护——setupFilesAfterEnv 劫持 mkdtempSync 统一清理
+
 ## [1.2.2] - 2026-08-26
 
 ### Changes

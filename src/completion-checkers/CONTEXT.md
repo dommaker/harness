@@ -1,7 +1,7 @@
 # completion-checkers/
 
 ## 职责
-WU 收尾软观测三纯判定函数（T7-E1，studio#160）：tdd-chain 引用链 / phase-format subject 结构 / contract-presence 契约在场。纯函数，不碰文件系统与 git，commits 由调用方（studio completion-gates 第四段守卫，T7-E2）供给。
+提交集收尾软观测三纯判定函数：tdd-chain 引用链 / phase-format subject 结构 / contract-presence 契约在场。纯函数，不碰文件系统与 git，commits 由调用方（completion-gates 类守卫）供给。
 
 ## 核心导出
 - `verifyTddChain(commits, config)`（`tdd-chain.ts`）——实现 commit 须带 trailer `Tested-By: <sha>`（`TESTED_BY_RE` 写死）；被引 sha 须在本提交集内、位置在前、文件清单命中 test_globs；`Tests: none`（`TESTS_NONE_RE`）→ waiver；纯测试/纯非代码 commit 天然免检

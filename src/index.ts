@@ -235,6 +235,7 @@ export type { ContextAverages } from './monitoring';
 export {
   ErrorType,
   FailureLevel,
+  DEFAULT_FAILURE_LOG_FILE,
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
   ErrorClassifier,
@@ -339,8 +340,8 @@ export type {
 } from './knowledge';
 
 // ========================================
-// Completion Checkers（T7-E1，studio#160）
-// WU 收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
+// Completion Checkers
+// 提交集收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
 // 纯函数直接 export，不进 ConstraintCheck 闭环注册表。
 // ========================================
 export {

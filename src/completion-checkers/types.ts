@@ -1,12 +1,12 @@
 /**
- * Completion Checkers 类型定义（T7-E1，studio#160）
+ * Completion Checkers 类型定义
  *
  * 三个纯判定函数共享的输入/输出/配置类型。
  * 与 ConstraintCheck 闭环注册表无关：直接 export，不注册、不碰 checkers/index.ts。
- * 函数不碰文件系统与 git，commits 由调用方（studio 侧 git log）供给。
+ * 函数不碰文件系统与 git，commits 由调用方（git log）供给。
  */
 
-/** WU 提交输入（有序，base..HEAD 升序） */
+/** 提交集内的单个提交输入（有序，base..HEAD 升序） */
 export interface CommitInput {
   /** 完整 sha */
   sha: string;
@@ -49,7 +49,7 @@ export interface PhaseFormatResult {
 
 /** verifyContractPresence 上下文（类型→字段的判定方法映射是代码不是配置） */
 export interface ContractPresenceContext {
-  /** review 类型契约：studio agent-loop 已解析的 metadata.reviewReport */
+  /** review 类型契约：调用方已解析的 metadata.reviewReport */
   reviewReport?: unknown;
   [key: string]: unknown;
 }
@@ -62,7 +62,7 @@ export interface ContractPresenceResult {
 }
 
 /**
- * completion_checkers 配置（对应 yml 顶层键 `completion_checkers:`，studio 侧自解）。
+ * completion_checkers 配置（对应 yml 顶层键 `completion_checkers:`，消费方自解）。
  * 只配开关/glob/契约类型清单；协议格式（Tested-By、Tests: none、phase 结构）写死为机制本体。
  * 缺省 = 全开 + 默认 glob。
  */

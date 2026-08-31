@@ -103,7 +103,7 @@ Extra text
     it('handles files without frontmatter via best-effort', () => {
       fs.writeFileSync(
         path.join(tmpDir, 'agent-network-core-concepts.md'),
-        '# Agent Network 核心概念\n\n## WorkUnit\nBody\n'
+        '# 核心概念总览\n\n## 设计要点\nBody\n'
       );
 
       const gen = new KnowledgeIndexGenerator(tmpDir);
@@ -115,7 +115,7 @@ Extra text
       // agent-network-* prefix maps to architecture
       expect(fields[2]).toBe('architecture');
       // H2 terms should still be extracted
-      expect(fields[6]).toContain('WorkUnit');
+      expect(fields[6]).toContain('设计要点');
     });
 
     it('excludes .archive directory', () => {

@@ -68,13 +68,20 @@ const MOCK_REPORT = {
 };
 
 describe('getKnowledgeDir', () => {
+  const fs = require('fs');
   const os = require('os');
   const path = require('path');
   const storeModule = require('../../../knowledge/store');
   let storeCtorSpy: jest.SpyInstance;
+  let homedirSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+  let tmpHome: string;
 
   beforeEach(() => {
     delete process.env.KNOWLEDGE_BASE_DIR;
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-kdir-'));
+    homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(tmpHome);
+    errorSpy = jest.spyOn(console, 'error').mockImplementation();
     storeCtorSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([]),
     }));
@@ -82,7 +89,10 @@ describe('getKnowledgeDir', () => {
 
   afterEach(() => {
     storeCtorSpy.mockRestore();
+    homedirSpy.mockRestore();
+    errorSpy.mockRestore();
     delete process.env.KNOWLEDGE_BASE_DIR;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   it('should use KNOWLEDGE_BASE_DIR env var when set', async () => {
@@ -93,11 +103,33 @@ describe('getKnowledgeDir', () => {
     }));
   });
 
-  it('should default to ~/.studio/knowledge when no env var', async () => {
-    const expected = path.join(os.homedir(), '.studio', 'knowledge');
+  it('should default to ~/.harness/knowledge when no env var and no legacy data', async () => {
     await knowledgeStats({ json: true });
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
-      baseDir: expected,
+      baseDir: path.join(tmpHome, '.harness', 'knowledge'),
+    }));
+  });
+
+  it('should keep legacy ~/.studio/knowledge when it still has data, with deprecation notice shown once', async () => {
+    const legacyDir = path.join(tmpHome, '.studio', 'knowledge');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'guideline-x.md'), 'data');
+    await knowledgeStats({ json: true });
+    expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
+      baseDir: legacyDir,
+    }));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('旧目录'));
+    // 闩锁：同进程重复解析只提示一次
+    await knowledgeStats({ json: true });
+    const notices = errorSpy.mock.calls.filter((c: any[]) => typeof c[0] === 'string' && c[0].includes('旧目录'));
+    expect(notices).toHaveLength(1);
+  });
+
+  it('should ignore legacy dir when it exists but is empty', async () => {
+    fs.mkdirSync(path.join(tmpHome, '.studio', 'knowledge'), { recursive: true });
+    await knowledgeStats({ json: true });
+    expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
+      baseDir: path.join(tmpHome, '.harness', 'knowledge'),
     }));
   });
 

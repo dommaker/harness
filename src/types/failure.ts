@@ -6,6 +6,14 @@
  */
 
 /**
+ * 默认 failure 日志路径（相对项目根目录）
+ *
+ * 读写双方必须统一引用此常量（DEFAULT_TRACE_FILE 同款先例）；
+ * 自定义路径时向 FailureRecorder 传入自定 logFile
+ */
+export const DEFAULT_FAILURE_LOG_FILE = '.harness/logs/failures.log';
+
+/**
  * 错误类型枚举
  */
 export enum ErrorType {

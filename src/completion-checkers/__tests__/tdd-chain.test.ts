@@ -1,5 +1,5 @@
 /**
- * verifyTddChain 测试（studio#160 验收：伪造引用三形态 / Tests: none waiver / 免检分类）
+ * verifyTddChain 测试（伪造引用三形态 / Tests: none waiver / 免检分类）
  */
 
 import { verifyTddChain } from '../tdd-chain';
@@ -34,7 +34,7 @@ describe('verifyTddChain', () => {
     const commits = [commit({ sha: sha(2), body: 'Tested-By: ' + sha(9) })];
     const result = verifyTddChain(commits);
     expect(result.verdict).toBe('violation');
-    expect(result.commits[0].reason).toContain('不在本 WU 提交集内');
+    expect(result.commits[0].reason).toContain('不在本提交集内');
   });
 
   it('伪造引用：被引 commit 位置在本 commit 之后 → violation', () => {

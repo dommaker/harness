@@ -1,5 +1,5 @@
 /**
- * verifyPhaseFormat 测试（studio#160 验收：subject 不合规 / merge commit 违规）
+ * verifyPhaseFormat 测试（subject 不合规 / merge commit 违规）
  */
 
 import { verifyPhaseFormat } from '../phase-format';

@@ -1,13 +1,13 @@
 /**
- * Completion Checkers（T7-E1，studio#160）
+ * Completion Checkers
  *
- * WU 收尾软观测三件套——纯判定函数库：
+ * 提交集收尾软观测三件套——纯判定函数库：
  * - verifyTddChain：实现 commit 的 Tested-By 引用链验证
  * - verifyPhaseFormat：phase(...) subject 结构验证
  * - verifyContractPresence：通用契约在场引擎
  *
  * 与 ConstraintCheck 闭环注册表无关：直接 export，不注册、不碰 checkers/index.ts。
- * 函数不碰文件系统与 git；commits 由调用方（studio 第四段守卫，T7-E2）供给。
+ * 函数不碰文件系统与 git；commits 由调用方（completion-gates 类守卫）供给。
  */
 
 export * from './types';

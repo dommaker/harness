@@ -14,6 +14,7 @@
 
 ## 约定
 - 清单维护模型：声明面推导为主（目录重构动到 package.json 时清单自动跟随）+ extras 随源码维护；**不新增第三处硬编码清单**
+- 覆盖口径（有意裁决，#77）：深度内部文件（tsc 产出的 dist/knowledge/*、core/constraints/checker.js 等）**不在清单**——非公开契约，存在性由 tsc 构建成功保证；历史上外部硬编码它们正是重构误判（studio 6cf3c329）的根因。旧 studio 清单 checker.js/doctor.js、旧 release 清单 13 项均被本清单取代，覆盖收窄是裁决而非遗漏
 - `__tests__/integrity.test.ts` 的「真实包根清单同步闸门」是重构同步闸门：动 exports/main/bin 或 extras 时该测试强制同步
 - bin 新增引导期 require 的 dist 文件 → extras 加一条 + 测试同步
 

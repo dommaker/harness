@@ -98,12 +98,16 @@ export function resolvePackageRoot(fromDir: string = __dirname): string {
   );
 }
 
+function resolveRoot(pkgRoot?: string): string {
+  return pkgRoot ? path.resolve(pkgRoot) : resolvePackageRoot();
+}
+
 /**
  * 关键发布物清单（相对包根路径，排序去重）。
  * pkgRoot 缺省时自动解析本包根——外部消费者（studio）零参数即自检已安装的 harness。
  */
 export function getCriticalArtifacts(pkgRoot?: string): string[] {
-  const root = pkgRoot ? path.resolve(pkgRoot) : resolvePackageRoot();
+  const root = resolveRoot(pkgRoot);
   const manifest: PackagePublishManifest = JSON.parse(
     fs.readFileSync(path.join(root, 'package.json'), 'utf-8')
   );
@@ -121,10 +125,16 @@ export interface ArtifactIntegrityResult {
 
 /**
  * 发布物完整性自检：逐项存在性校验（目录/文件均可）。
+ *
+ * 覆盖口径（有意裁决，#77）：清单只锚定声明面及其运行时依赖；深度内部文件
+ * （tsc 产出的 dist/knowledge/*、core/constraints/checker.js 等）不在清单——
+ * 它们非公开契约，存在性由 tsc 构建成功保证，历史上外部硬编码它们正是
+ * 重构误判（6cf3c329）的根因。
+ *
  * 挂载点：harness release 命令第 4 步；studio publishPackage dist 校验（配套切换 studio#425）。
  */
 export function verifyReleaseArtifacts(pkgRoot?: string): ArtifactIntegrityResult {
-  const root = pkgRoot ? path.resolve(pkgRoot) : resolvePackageRoot();
+  const root = resolveRoot(pkgRoot);
   const checked = getCriticalArtifacts(root);
   const missing = checked.filter(f => !fs.existsSync(path.join(root, f)));
   return { ok: missing.length === 0, pkgRoot: root, checked, missing };

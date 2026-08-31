@@ -44,6 +44,9 @@ GovernanceExecutor (doc-code-config drift detection, detect-only)
 ## Doc Freshness
 FreshnessRunner (config-driven doc freshness checking: changelog_version, context_docs, doc_dir_check, doc_regex_count), FreshnessAutoFix (regex count auto-fix)
 
+## Release Integrity
+verifyReleaseArtifacts / getCriticalArtifacts（#75 N4 收编）：关键发布物清单 = package.json 声明面（main/exports/bin）运行时推导 + 运行时 extras（bin 引导定义表、dist/tools/definitions）随源码维护；pkgRoot 缺省自动解析本包根，外部消费者零参数即自检已安装的 harness。挂载点：release 命令第 4 步、studio publishPackage dist 校验（studio#425 配套切换）
+
 ## Hooks
 HookRegistry, HookPipeline (register → sort → error-isolate → sampled execution)；`assertHookRegistryClosed` 声明（HookConfig）↔ 实现双向闭环（引用未注册/注册无定义/重复 → 抛错，复制 checker 闭环模式，H5）；`toErrorStrategy` blocking→errorStrategy(block/warn) 无损映射（配置归一，G7）
 

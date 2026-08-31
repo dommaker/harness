@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import { execSync } from 'child_process';
 import { release } from '../release';
 
@@ -53,7 +54,13 @@ jest.mock('chalk', () => {
 const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
 const mockFs = fs as jest.Mocked<typeof fs>;
 
-const PKG_JSON = JSON.stringify({ name: '@dommaker/harness', version: '0.18.0' });
+const PKG_JSON = JSON.stringify({
+  name: '@dommaker/harness',
+  version: '0.18.0',
+  main: './dist/index.js',
+  bin: './bin/harness.js',
+  exports: { '.': './dist/index.js' },
+});
 
 describe('release command', () => {
   let consoleSpy: jest.SpyInstance;
@@ -133,6 +140,20 @@ describe('release command', () => {
 
     await expect(release({})).rejects.toThrow('__exit_1__');
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Uncommitted changes'));
+  });
+
+  test('dist 关键发布物缺失：发布前闸门 exit 1（不触 npm version）', async () => {
+    mockFs.existsSync.mockImplementation((p) => {
+      if (String(p).endsWith('package.json')) return true;
+      if (String(p).includes(`${path.sep}dist${path.sep}`)) return false;
+      return true;
+    });
+
+    await expect(release({ bumpType: 'patch' })).rejects.toThrow('__exit_1__');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('dist missing critical artifacts'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('dist/index.js'));
+    const commands = mockExecSync.mock.calls.map(c => String(c[0]));
+    expect(commands.some(c => c.startsWith('npm version'))).toBe(false);
   });
 
   test('dry-run patch：计算目标版本 0.18.1，exit 0', async () => {

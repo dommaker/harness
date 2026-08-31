@@ -61,6 +61,9 @@
 ### 工具路径（2）— 注入工具：studio 实际消费
 `getRegistryPath` `getToolsDir`
 
+### 发布物完整性自检（3）— 注入工具：studio publishPackage dist 校验改调本能力（harness#77，#75 N4 收编）
+`ArtifactIntegrityResult` `getCriticalArtifacts` `verifyReleaseArtifacts`
+
 ### Hooks 管线（14）— 执行引擎：hook 注册/管线/bootstrap，studio 实际消费
 `HookRegistry` `assertHookRegistryClosed` `HookPipeline` `toErrorStrategy` `bootstrapHarness` `bootstrapHarnessSync` `HarnessBootstrap` `HookDefinition` `HookConfig` `HookErrorStrategy` `HookExecutionRecord` `HookPhase` `HookResult` `PipelineResult`
 

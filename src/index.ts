@@ -376,6 +376,14 @@ export type {
 export { getRegistryPath, getToolsDir } from './tools';
 
 // ========================================
+// 发布物完整性自检（#75 N4 收编：harness 自己最知道自己发了什么）
+// 清单 = 包声明面（package.json main/exports/bin）推导 + 运行时 extras 随源码维护；
+// studio publishPackage 的 dist 校验改调本能力，不再硬编码 harness dist 内部清单。
+// ========================================
+export { getCriticalArtifacts, verifyReleaseArtifacts } from './release';
+export type { ArtifactIntegrityResult } from './release';
+
+// ========================================
 // Hooks 管线
 // ========================================
 export {

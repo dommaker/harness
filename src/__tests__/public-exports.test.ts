@@ -104,6 +104,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'getCommandGate',
   'getCommandRiskLevel',
   'getConstraint',
+  'getCriticalArtifacts',
   'getEffectiveConstraints',
   'getEffectiveGates',
   'getFailureLevel',
@@ -128,6 +129,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'validateSpec',
   'verifyContractPresence',
   'verifyPhaseFormat',
+  'verifyReleaseArtifacts',
   'verifyTddChain',
 ];
 

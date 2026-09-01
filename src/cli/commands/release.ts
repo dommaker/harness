@@ -21,6 +21,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
+import { verifyReleaseArtifacts } from '../../release';
 
 export interface ReleaseOptions {
   bumpType?: 'patch' | 'minor' | 'major';
@@ -92,28 +93,13 @@ export async function release(options: ReleaseOptions): Promise<void> {
   }
   console.log(chalk.green('✅ tsc: built'));
 
-  // ── 4. Verify dist ──
-  const criticalFiles = [
-    'dist/index.js',
-    'dist/knowledge/index.js',
-    'dist/knowledge/store.js',
-    'dist/knowledge/ingest.js',
-    'dist/knowledge/query.js',
-    'dist/knowledge/lifecycle.js',
-    'dist/knowledge/lint.js',
-    'dist/knowledge/types.js',
-    'dist/knowledge/import.js',
-    'dist/knowledge/reference-tracker.js',
-    'dist/knowledge/lifecycle-hooks.js',
-    'dist/knowledge/doctor.js',
-    'dist/core/constraints/prompt-injection.js',
-  ];
-  const missing = criticalFiles.filter(f => !fs.existsSync(path.join(pkgPath, f)));
-  if (missing.length > 0) {
-    console.error(chalk.red(`❌ dist missing critical files: ${missing.join(', ')}`));
+  // ── 4. Verify dist（发布物完整性自检，harness#77：清单随源码维护，不再本文件硬编码）──
+  const integrity = verifyReleaseArtifacts(pkgPath);
+  if (!integrity.ok) {
+    console.error(chalk.red(`❌ dist missing critical artifacts (${integrity.missing.length}): ${integrity.missing.join(', ')}`));
     process.exit(1);
   }
-  console.log(chalk.green('✅ dist: verified'));
+  console.log(chalk.green(`✅ dist: verified (${integrity.checked.length} critical artifacts)`));
 
   if (dryRun) {
     const [major, minor, patch] = oldVersion.split('.').map(Number);

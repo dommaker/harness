@@ -251,7 +251,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--title <title>', description: '知识标题（用于 upsert）' },
       { flags: '--content <content>', description: '知识内容 Markdown（用于 upsert）' },
       { flags: '--file <path>', description: '从文件读取内容（用于 upsert）' },
-      { flags: '--source <source>', description: '知识来源 (analyst/cli/design)', defaultValue: 'cli' },
+      { flags: '--source <source>', description: '知识来源 (cli/design)', defaultValue: 'cli' },
       { flags: '--fix', description: '自动修复（用于 audit）', defaultValue: false },
       { flags: '--dry-run', description: '只输出报告不修改（用于 audit）', defaultValue: false },
       { flags: '--threshold <n>', description: '短内容阈值（字符数，用于 audit）', defaultValue: '50' },

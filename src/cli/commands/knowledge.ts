@@ -499,10 +499,35 @@ export async function knowledgeHealth(options: KnowledgeOptions & { dir?: string
   }
 }
 
+/** 缺省知识库数据根（相对用户 home） */
+const KNOWLEDGE_DATA_DIR = path.join('.harness', 'knowledge');
+/** 旧缺省数据根（曾寄居 studio home），仍有数据时兼容沿用，免迁移 */
+const LEGACY_KNOWLEDGE_DATA_DIR = path.join('.studio', 'knowledge');
+
+let legacyKnowledgeDirNotified = false;
+
+function hasKnowledgeData(dir: string): boolean {
+  try {
+    return fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function getKnowledgeDir(projectPath?: string): string {
   if (projectPath) return `${projectPath}/.harness/knowledge`;
   if (process.env.KNOWLEDGE_BASE_DIR) return process.env.KNOWLEDGE_BASE_DIR;
-  return path.join(os.homedir(), '.studio', 'knowledge');
+  const defaultDir = path.join(os.homedir(), KNOWLEDGE_DATA_DIR);
+  const legacyDir = path.join(os.homedir(), LEGACY_KNOWLEDGE_DATA_DIR);
+  if (hasKnowledgeData(legacyDir)) {
+    if (!legacyKnowledgeDirNotified) {
+      legacyKnowledgeDirNotified = true;
+      // stderr：不污染 --json 的 stdout 输出
+      console.error(chalk.yellow(`⚠ 缺省知识库根已改为 ${defaultDir}；旧目录 ${legacyDir} 仍有数据，本次沿用（免迁移，可用 KNOWLEDGE_BASE_DIR 覆盖）`));
+    }
+    return legacyDir;
+  }
+  return defaultDir;
 }
 
 /**

@@ -25,7 +25,7 @@ export interface FailureRecorderConfig {
  *
  * 用法：
  * ```typescript
- * const recorder = new FailureRecorder({ logFile: '.harness/logs/failures.log' });
+ * const recorder = new FailureRecorder({ logFile: DEFAULT_FAILURE_LOG_FILE });
  * await recorder.record({
  *   type: ErrorType.TEST_FAILED,
  *   level: FailureLevel.L1,

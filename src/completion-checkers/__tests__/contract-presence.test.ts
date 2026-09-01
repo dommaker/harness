@@ -1,5 +1,5 @@
 /**
- * verifyContractPresence 测试（studio#160 验收：契约标记缺失 / 无表项 skip）
+ * verifyContractPresence 测试（契约标记缺失 / 无表项 skip）
  */
 
 import { verifyContractPresence } from '../contract-presence';

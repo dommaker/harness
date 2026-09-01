@@ -59,7 +59,7 @@ export class KnowledgeIndexGenerator {
       `# Types: ${Object.entries(byType).map(([t, n]) => `${t}:${n}`).join(' ')}`,
       `#`,
       `# Usage:`,
-      `#   grep "<keyword>" ~/.studio/knowledge/_index.md`,
+      `#   grep "<keyword>" ~/.harness/knowledge/_index.md`,
       `#   Then Read the matching file for full content.`,
       `#`,
       `# filename|id|type|title|maturity|tags|terms`,

@@ -333,3 +333,12 @@ describe('FailureRecorder', () => {
     });
   });
 });
+
+describe('DEFAULT_FAILURE_LOG_FILE', () => {
+  it('锁口径：统一到 .harness/logs/（与 DEFAULT_TRACE_FILE 同目录约定），从 barrel 公开导出', async () => {
+    const { DEFAULT_FAILURE_LOG_FILE } = await import('../types/failure');
+    const barrel = await import('../index');
+    expect(DEFAULT_FAILURE_LOG_FILE).toBe('.harness/logs/failures.log');
+    expect(barrel.DEFAULT_FAILURE_LOG_FILE).toBe(DEFAULT_FAILURE_LOG_FILE);
+  });
+});

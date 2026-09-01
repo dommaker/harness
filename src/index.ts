@@ -235,6 +235,7 @@ export type { ContextAverages } from './monitoring';
 export {
   ErrorType,
   FailureLevel,
+  DEFAULT_FAILURE_LOG_FILE,
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
   ErrorClassifier,
@@ -339,8 +340,8 @@ export type {
 } from './knowledge';
 
 // ========================================
-// Completion Checkers（T7-E1，studio#160）
-// WU 收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
+// Completion Checkers
+// 提交集收尾软观测三纯判定函数：tdd-chain / phase-format / contract-presence。
 // 纯函数直接 export，不进 ConstraintCheck 闭环注册表。
 // ========================================
 export {
@@ -373,6 +374,14 @@ export type {
 // 工具路径
 // ========================================
 export { getRegistryPath, getToolsDir } from './tools';
+
+// ========================================
+// 发布物完整性自检（#75 N4 收编：harness 自己最知道自己发了什么）
+// 清单 = 包声明面（package.json main/exports/bin）推导 + 运行时 extras 随源码维护；
+// studio publishPackage 的 dist 校验改调本能力，不再硬编码 harness dist 内部清单。
+// ========================================
+export { getCriticalArtifacts, verifyReleaseArtifacts } from './release';
+export type { ArtifactIntegrityResult } from './release';
 
 // ========================================
 // Hooks 管线

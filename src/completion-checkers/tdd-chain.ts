@@ -3,7 +3,7 @@
  *
  * 协议（写死为机制本体，不进配置）：
  * - 实现 commit 必须带 trailer `Tested-By: <sha>`
- * - 被引 sha 须 a) 在本 WU 提交集内 b) 序列位置在本 commit 之前（比位置不比时间戳）c) 其文件清单命中 test_globs
+ * - 被引 sha 须 a) 在本提交集内 b) 序列位置在本 commit 之前（比位置不比时间戳）c) 其文件清单命中 test_globs
  * - 豁免：trailer `Tests: none` → waiver（放行记台账）；纯非代码/纯测试 commit 天然免检
  */
 
@@ -44,7 +44,7 @@ export function verifyTddChain(
     const ref = m[1].toLowerCase();
     const j = commits.findIndex((c) => c.sha.toLowerCase().startsWith(ref));
     if (j === -1) {
-      return { sha: commit.sha, verdict: 'violation', reason: `Tested-By 引用 ${ref} 不在本 WU 提交集内` };
+      return { sha: commit.sha, verdict: 'violation', reason: `Tested-By 引用 ${ref} 不在本提交集内` };
     }
     if (j >= i) {
       return { sha: commit.sha, verdict: 'violation', reason: `Tested-By 引用 ${ref} 位置不在本 commit 之前` };

@@ -242,18 +242,18 @@ describe('sync-docs --agents', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  describe('知识入口行：.studio/CONTEXT.md 正本模型（studio #188）', () => {
-    it('.studio/CONTEXT.md 存在时生成正本行，替代散置指引（散置文件同时在场也一样），--check 无漂移', async () => {
-      const testDir = path.join(tempDir, 'studio-context-model');
+  describe('知识入口行：模块上下文正本模型', () => {
+    it('.harness/CONTEXT.md 存在时生成正本行指向新正本，替代散置指引，--check 无漂移', async () => {
+      const testDir = path.join(tempDir, 'canonical-context-model');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
       // 夹具已带散置 src/CONTEXT.md：正本在场时整行替代，与是否残留散置文件无关
-      fs.mkdirSync(path.join(testDir, '.studio'), { recursive: true });
-      fs.writeFileSync(path.join(testDir, '.studio', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
+      fs.mkdirSync(path.join(testDir, '.harness'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, '.harness', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
 
       await syncDocs({ projectPath: testDir, agents: true });
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
-      expect(content).toContain('模块上下文正本：`.studio/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
+      expect(content).toContain('模块上下文正本：`.harness/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
       expect(content).not.toContain('各源码目录的 `CONTEXT.md`');
       expect(content).not.toContain('缺失目录可由 `harness sync-docs` 生成模板');
       // 知识库行不受影响
@@ -267,7 +267,30 @@ describe('sync-docs --agents', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
-    it('.studio/CONTEXT.md 不存在时保持散置模型行，--check 无漂移', async () => {
+    it('旧正本 .studio/CONTEXT.md 仍在场时兼容沿用（免迁移），两者同在以 .harness/ 为准', async () => {
+      const legacyDir = path.join(tempDir, 'legacy-context-model');
+      createFixture(legacyDir, { pnpm: true, withCapabilities: true });
+      fs.mkdirSync(path.join(legacyDir, '.studio'), { recursive: true });
+      fs.writeFileSync(path.join(legacyDir, '.studio', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
+      await syncDocs({ projectPath: legacyDir, agents: true });
+      expect(fs.readFileSync(path.join(legacyDir, 'AGENTS.md'), 'utf-8'))
+        .toContain('模块上下文正本：`.studio/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
+      fs.rmSync(legacyDir, { recursive: true, force: true });
+
+      const bothDir = path.join(tempDir, 'both-context-model');
+      createFixture(bothDir, { pnpm: true, withCapabilities: true });
+      fs.mkdirSync(path.join(bothDir, '.studio'), { recursive: true });
+      fs.writeFileSync(path.join(bothDir, '.studio', 'CONTEXT.md'), '# 旧\n');
+      fs.mkdirSync(path.join(bothDir, '.harness'), { recursive: true });
+      fs.writeFileSync(path.join(bothDir, '.harness', 'CONTEXT.md'), '# 新\n');
+      await syncDocs({ projectPath: bothDir, agents: true });
+      const content = fs.readFileSync(path.join(bothDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain('模块上下文正本：`.harness/CONTEXT.md`');
+      expect(content).not.toContain('.studio/CONTEXT.md');
+      fs.rmSync(bothDir, { recursive: true, force: true });
+    });
+
+    it('正本不存在时保持散置模型行，--check 无漂移', async () => {
       const testDir = path.join(tempDir, 'scattered-context-model');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
@@ -282,10 +305,10 @@ describe('sync-docs --agents', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
-    it('.studio/CONTEXT.md 是目录而非文件时不视为正本', async () => {
-      const testDir = path.join(tempDir, 'studio-context-dir');
+    it('正本路径是目录而非文件时不视为正本', async () => {
+      const testDir = path.join(tempDir, 'context-doc-dir');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
-      fs.mkdirSync(path.join(testDir, '.studio', 'CONTEXT.md'), { recursive: true });
+      fs.mkdirSync(path.join(testDir, '.harness', 'CONTEXT.md'), { recursive: true });
 
       await syncDocs({ projectPath: testDir, agents: true });
 

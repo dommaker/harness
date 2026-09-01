@@ -46,8 +46,8 @@
 ### 监控 / Execution Trace（14）— 执行引擎观测面：collector/analyzer 已接线（checker 惰性接线 + CLI status）
 `DEFAULT_TRACE_FILE` `ExecutionTrace` `TraceFilter` `TraceSummary` `TraceAnomaly` `TraceCollectorConfig` `TraceAnalyzerConfig` `TraceCollector` `getTraceCollector` `configureTraceCollector` `TraceAnalyzer` `createAnalyzer` `ContextTracker` `ContextAverages`
 
-### 失败处理（21）— 执行引擎：错误分类/记录/违规处理策略，studio 实际消费
-`ErrorType` `FailureLevel` `FailureRecord` `ErrorClassificationRule` `ClassificationResult` `DEFAULT_CLASSIFICATION_RULES` `DEFAULT_LEVEL_MAPPING` `ErrorClassifier` `ErrorClassifierConfig` `createErrorClassifier` `classifyError` `getFailureLevel` `FailureRecorder` `FailureRecorderConfig` `createFailureRecorder` `ConstraintViolationHandler` `executeWithBlock` `executeWithCollect` `executeWithSafeBoolean` `ViolationStrategy` `ViolationHandlingResult`
+### 失败处理（22）— 执行引擎：错误分类/记录/违规处理策略，studio 实际消费
+`ErrorType` `FailureLevel` `DEFAULT_FAILURE_LOG_FILE` `FailureRecord` `ErrorClassificationRule` `ClassificationResult` `DEFAULT_CLASSIFICATION_RULES` `DEFAULT_LEVEL_MAPPING` `ErrorClassifier` `ErrorClassifierConfig` `createErrorClassifier` `classifyError` `getFailureLevel` `FailureRecorder` `FailureRecorderConfig` `createFailureRecorder` `ConstraintViolationHandler` `executeWithBlock` `executeWithCollect` `executeWithSafeBoolean` `ViolationStrategy` `ViolationHandlingResult`
 
 ### 上下文管理（20）— 知识基建：Token 预算/压缩/注入，bootstrap 已接线
 `AdaptiveTokenBudget` `TokenBudget` `TokenEstimator` `CompactionConfig` `CompactionLevel` `CompactionResult` `DEFAULT_COMPACTION_CONFIG` `SessionCompaction` `ContextSource` `ContextSourceType` `ContextUsageSnapshot` `SessionCheckpoint` `SessionEvent` `SessionEventType` `SessionHandle` `SessionMessage` `SessionManager` `InjectionConfig` `InjectionResult` `KnowledgeInjector`
@@ -55,11 +55,14 @@
 ### 知识引擎（44）— 定位核心：知识基建，studio 实际消费
 `KnowledgeEntry` `KnowledgeStore` `FileKnowledgeStore` `KnowledgeSubsystem` `KnowledgeOrigin` `KnowledgeReference` `KnowledgeQuery` `QueryFilter` `QueryBudget` `QueryResult` `KnowledgeLifecycle` `MaturityLevel` `MaturityChange` `DecayConfig` `DEFAULT_DECAY_CONFIG` `ConsumptionEvent` `ConsumptionMode` `KnowledgeIngest` `IngestOptions` `sanitizeExternalContent` `ReferenceTracker` `ReferenceRecord` `KnowledgeLinter` `LintIssue` `LintIssueType` `ColdStartImporter` `KnowledgeHealthScorer` `KnowledgeLifecycleHooks` `KnowledgeAudit` `AuditRuleName` `AuditAction` `AuditIssue` `AuditReport` `AuditOptions` `migrateKnowledgeEntries` `SourceRef` `DecisionRecord` `ExecutionResult` `IndexEntry` `StorageLayer` `extractCodeStructure` `CodeStructure` `DeclarationInfo` `ImportInfo`
 
-### Completion Checkers（21）— 注入工具：WU 收尾软观测纯函数（T7-E1，studio#160）
+### Completion Checkers（21）— 注入工具：提交集收尾软观测纯函数
 `CheckerVerdict` `CommitVerdict` `CommitInput` `CommitFileClassification` `CompletionCheckersConfig` `ContractPresenceContext` `ContractPresenceResult` `PhaseFormatResult` `TddChainResult` `DEFAULT_TEST_GLOBS` `DEFAULT_NONCODE_GLOBS` `matchGlob` `matchAnyGlob` `classifyCommitFiles` `resolveGlobs` `verifyTddChain` `TESTED_BY_RE` `TESTS_NONE_RE` `verifyPhaseFormat` `PHASE_SUBJECT_RE` `verifyContractPresence`
 
 ### 工具路径（2）— 注入工具：studio 实际消费
 `getRegistryPath` `getToolsDir`
+
+### 发布物完整性自检（3）— 注入工具：studio publishPackage dist 校验改调本能力（harness#77，#75 N4 收编）
+`ArtifactIntegrityResult` `getCriticalArtifacts` `verifyReleaseArtifacts`
 
 ### Hooks 管线（14）— 执行引擎：hook 注册/管线/bootstrap，studio 实际消费
 `HookRegistry` `assertHookRegistryClosed` `HookPipeline` `toErrorStrategy` `bootstrapHarness` `bootstrapHarnessSync` `HarnessBootstrap` `HookDefinition` `HookConfig` `HookErrorStrategy` `HookExecutionRecord` `HookPhase` `HookResult` `PipelineResult`

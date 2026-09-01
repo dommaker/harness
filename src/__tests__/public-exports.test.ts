@@ -29,6 +29,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'DEFAULT_COMMAND_BLACKLIST',
   'DEFAULT_COMPACTION_CONFIG',
   'DEFAULT_DECAY_CONFIG',
+  'DEFAULT_FAILURE_LOG_FILE',
   'DEFAULT_LEVEL_MAPPING',
   'DEFAULT_NONCODE_GLOBS',
   'DEFAULT_TEST_GLOBS',
@@ -103,6 +104,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'getCommandGate',
   'getCommandRiskLevel',
   'getConstraint',
+  'getCriticalArtifacts',
   'getEffectiveConstraints',
   'getEffectiveGates',
   'getFailureLevel',
@@ -127,6 +129,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'validateSpec',
   'verifyContractPresence',
   'verifyPhaseFormat',
+  'verifyReleaseArtifacts',
   'verifyTddChain',
 ];
 

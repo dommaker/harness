@@ -7,6 +7,7 @@
 import chalk from 'chalk';
 import * as path from 'path';
 import { FailureRecorder } from '../../failure/recorder';
+import { DEFAULT_FAILURE_LOG_FILE } from '../../types/failure';
 
 export interface FailureOptions {
   /** 项目路径 */
@@ -21,7 +22,7 @@ export interface FailureOptions {
 function getRecorder(projectPath?: string): FailureRecorder {
   const base = projectPath || process.cwd();
   return new FailureRecorder({
-    logFile: path.join(base, '.harness', 'failures', 'failures.log'),
+    logFile: path.join(base, DEFAULT_FAILURE_LOG_FILE),
   });
 }
 

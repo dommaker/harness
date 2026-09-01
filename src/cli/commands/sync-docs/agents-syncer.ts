@@ -60,11 +60,11 @@ export interface GovernanceInfo {
  */
 export async function buildAgentsMd(projectPath: string, srcDirs: string[]): Promise<string> {
   const pkg = await readPackageJsonLite(projectPath);
-  const [dirs, governance, hasKnowledge, hasStudioContext, contextDocCount] = await Promise.all([
+  const [dirs, governance, hasKnowledge, contextDocPath, contextDocCount] = await Promise.all([
     getTopLevelDirEntries(projectPath, srcDirs),
     getGovernanceInfo(projectPath),
     hasKnowledgeDir(projectPath),
-    hasStudioContextDoc(projectPath),
+    findCanonicalContextDoc(projectPath),
     countContextDocs(projectPath, srcDirs),
   ]);
 
@@ -128,10 +128,10 @@ export async function buildAgentsMd(projectPath: string, srcDirs: string[]): Pro
     // 写进受 --check 漂移比对的文档会制造「必然过期」竞态（任何知识写入都使已提交文档过期）
     lines.push('- `.harness/knowledge/`：项目知识库，用 `harness knowledge` 查询');
   }
-  if (hasStudioContext) {
-    // 正本模型（studio #152/T12）：模块上下文沉淀归并到业务仓 .studio/CONTEXT.md，
-    // 散置 CONTEXT.md 指引与该裁决矛盾，正本在场时整行替代
-    lines.push('- 模块上下文正本：`.studio/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
+  if (contextDocPath) {
+    // 正本模型：模块上下文沉淀归并到业务仓单一正本（模块锚点组织），
+    // 散置 CONTEXT.md 指引与该模型矛盾，正本在场时整行替代
+    lines.push(`- 模块上下文正本：\`${contextDocPath}\`（模块锚点组织），改动代码时同步更新`);
   } else {
     lines.push(
       contextDocCount > 0
@@ -254,17 +254,30 @@ async function hasKnowledgeDir(projectPath: string): Promise<boolean> {
   }
 }
 
+/** 模块上下文正本候选路径（相对项目根）：新正本优先，旧正本兼容沿用（免迁移） */
+const CONTEXT_DOC_PATHS: string[][] = [
+  ['.harness', 'CONTEXT.md'],
+  ['.studio', 'CONTEXT.md'],
+];
+
 /**
- * 判断 .studio/CONTEXT.md 是否存在（正本模型标记，studio #152/T12）：
+ * 定位模块上下文正本（正本模型）：
  * 模块上下文沉淀归并到业务仓单一正本（模块锚点组织）时，知识入口行改指正本，
- * 不再输出散置 CONTEXT.md 指引。只判存在性，不解析内容。
+ * 不再输出散置 CONTEXT.md 指引。正本路径缺省 `.harness/CONTEXT.md`；
+ * 旧正本 `.studio/CONTEXT.md` 在场时兼容沿用，两者同时在场上以 `.harness/` 为准。
+ * 返回相对 projectPath 的正本路径（posix 分隔符），无正本返回 null。只判存在性，不解析内容。
  */
-async function hasStudioContextDoc(projectPath: string): Promise<boolean> {
-  try {
-    return (await fs.stat(path.join(projectPath, '.studio', 'CONTEXT.md'))).isFile();
-  } catch {
-    return false;
+async function findCanonicalContextDoc(projectPath: string): Promise<string | null> {
+  for (const segments of CONTEXT_DOC_PATHS) {
+    try {
+      if ((await fs.stat(path.join(projectPath, ...segments))).isFile()) {
+        return segments.join('/');
+      }
+    } catch {
+      // 该候选不存在，看下一个
+    }
   }
+  return null;
 }
 
 /** 统计源码根内的 CONTEXT.md 数量（含源码根本身，跨根去重） */

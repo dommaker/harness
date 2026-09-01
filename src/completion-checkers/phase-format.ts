@@ -1,5 +1,5 @@
 /**
- * phase-format：WU 提交 subject 的 phase 结构验证（Q4 定稿）
+ * phase-format：提交 subject 的 phase 结构验证（Q4 定稿）
  *
  * 协议（正则写死在函数里，不进配置）：
  * - 全部非 merge commit 的 subject 命中 `^phase\([a-z0-9-]+\):\s+\S`
@@ -32,7 +32,7 @@ export function verifyPhaseFormat(
 
   const verdicts: CommitVerdict[] = commits.map((commit) => {
     if (isMergeCommit(commit)) {
-      return { sha: commit.sha, verdict: 'violation', reason: 'WU 提交集内出现 merge commit' };
+      return { sha: commit.sha, verdict: 'violation', reason: '提交集内出现 merge commit' };
     }
     if (!PHASE_SUBJECT_RE.test(commit.subject)) {
       return { sha: commit.sha, verdict: 'violation', reason: `subject 不合规：${commit.subject}` };

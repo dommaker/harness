@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-01
+
+### Changes
+- docs(release): 覆盖口径显式化——深度内部文件不在清单是裁决非遗漏（harness#77）
+- feat(release): 发布物完整性自检能力公开导出（harness#77）
+- refactor(boundary): 边界净化——词表泛化 + knowledge 缺省数据根 + failures.log 口径（harness#76）
+
 ## [1.2.3] - 2026-08-28
 
 ### Changes

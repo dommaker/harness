@@ -9,6 +9,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { pass, fail, fromError } from './types';
 import type { GateResult, GateContext, ContractGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -43,13 +44,7 @@ export class ContractGate implements Gate {
     const startTime = Date.now();
 
     if (!this.config.enabled) {
-      return {
-        gate: 'contract',
-        passed: true,
-        message: '契约门禁已禁用',
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return pass('contract', '契约门禁已禁用', startTime);
     }
 
     try {
@@ -60,34 +55,20 @@ export class ContractGate implements Gate {
       try {
         await fs.access(contractPath);
       } catch {
-        return {
-          gate: 'contract',
-          passed: true,
-          message: '未找到契约文件，跳过检查',
-          details: {
-            contractPath,
-            suggestion: '创建 OpenAPI 规范文件',
-          },
-          timestamp: new Date().toISOString(),
-          duration: Date.now() - startTime,
-        };
+        return pass('contract', '未找到契约文件，跳过检查', startTime, {
+          contractPath,
+          suggestion: '创建 OpenAPI 规范文件',
+        });
       }
 
       // 验证契约格式
       const validation = await this.validateContract(contractPath);
 
       if (!validation.valid) {
-        return {
-          gate: 'contract',
-          passed: false,
-          message: `契约格式无效: ${validation.errors.join(', ')}`,
-          details: {
-            contractPath,
-            errors: validation.errors,
-          },
-          timestamp: new Date().toISOString(),
-          duration: Date.now() - startTime,
-        };
+        return fail('contract', `契约格式无效: ${validation.errors.join(', ')}`, startTime, {
+          contractPath,
+          errors: validation.errors,
+        });
       }
 
       // 检查破坏性变更（如果提供了旧契约）
@@ -98,42 +79,22 @@ export class ContractGate implements Gate {
         );
 
         if (breakingChanges.length > 0 && !this.config.allowBreakingChanges) {
-          return {
-            gate: 'contract',
-            passed: false,
-            message: `发现破坏性变更: ${breakingChanges.length} 个`,
-            details: {
-              contractPath,
-              oldContractPath: context.oldContractPath,
-              breakingChanges,
-              suggestion: '更新 API 版本或保持向后兼容',
-            },
-            timestamp: new Date().toISOString(),
-            duration: Date.now() - startTime,
-          };
+          return fail('contract', `发现破坏性变更: ${breakingChanges.length} 个`, startTime, {
+            contractPath,
+            oldContractPath: context.oldContractPath,
+            breakingChanges,
+            suggestion: '更新 API 版本或保持向后兼容',
+          });
         }
       }
 
-      return {
-        gate: 'contract',
-        passed: true,
-        message: '契约检查通过',
-        details: {
-          contractPath,
-          endpoints: validation.endpoints,
-          version: validation.version,
-        },
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return pass('contract', '契约检查通过', startTime, {
+        contractPath,
+        endpoints: validation.endpoints,
+        version: validation.version,
+      });
     } catch (error: any) {
-      return {
-        gate: 'contract',
-        passed: false,
-        message: `契约检查失败: ${error.message}`,
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return fromError('contract', '契约检查失败', error, startTime);
     }
   }
 

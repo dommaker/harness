@@ -8,6 +8,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { gateResult, fromError } from './types';
 import type { GateResult, GateContext, ReviewGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -50,13 +51,7 @@ export class ReviewGate implements Gate {
       // 否则尝试从 git 获取
       return this.checkLocalGit(context);
     } catch (error: any) {
-      return {
-        gate: 'review',
-        passed: false,
-        message: `审查检查失败: ${error.message}`,
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return fromError('review', '审查检查失败', error, startTime);
     }
   }
 
@@ -86,33 +81,25 @@ export class ReviewGate implements Gate {
         approvals.length >= this.config.minReviewers &&
         (!this.config.blockOnChangesRequested || changesRequested.length === 0);
 
-      return {
-        gate: 'review',
+      return gateResult(
+        'review',
         passed,
-        message: passed
+        passed
           ? `审查通过: ${approvals.length} 个审批`
           : `审查未通过: ${approvals.length}/${this.config.minReviewers} 审批, ${changesRequested.length} 个变更请求`,
-        details: {
+        startTime,
+        {
           approvals: approvals.length,
           changesRequested: changesRequested.length,
           pending: pending.length,
           minReviewers: this.config.minReviewers,
-        },
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+        }
+      );
     } catch (error: any) {
       // gh CLI 不可用或 PR 不存在
-      return {
-        gate: 'review',
-        passed: false,
-        message: `无法获取 PR 状态: ${error.message}`,
-        details: {
-          suggestion: '确保已安装 gh CLI 并配置了 GitHub token',
-        },
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return fromError('review', '无法获取 PR 状态', error, startTime, {
+        suggestion: '确保已安装 gh CLI 并配置了 GitHub token',
+      });
     }
   }
 
@@ -138,28 +125,21 @@ export class ReviewGate implements Gate {
       const hasUnpushed = unpushed.trim().length > 0;
 
       // 本地模式无法验证审查，返回警告
-      return {
-        gate: 'review',
-        passed: !this.config.requireApproval,
-        message: this.config.requireApproval
+      return gateResult(
+        'review',
+        !this.config.requireApproval,
+        this.config.requireApproval
           ? '本地模式无法验证审查，请通过 PR 进行代码审查'
           : '审查要求未启用，跳过检查',
-        details: {
+        startTime,
+        {
           lastCommit: logOutput,
           hasUnpushedCommits: hasUnpushed,
           requireApproval: this.config.requireApproval,
-        },
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+        }
+      );
     } catch (error: any) {
-      return {
-        gate: 'review',
-        passed: false,
-        message: `Git 检查失败: ${error.message}`,
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return fromError('review', 'Git 检查失败', error, startTime);
     }
   }
 

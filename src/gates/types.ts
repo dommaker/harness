@@ -1,5 +1,5 @@
 /**
- * 门禁类型定义
+ * 门禁类型定义 + GateResult 构造器
  */
 
 /**
@@ -15,6 +15,65 @@ export interface GateResult {
   details?: Record<string, any>;
   timestamp: string;
   duration?: number;
+}
+
+/**
+ * GateResult 构造器：报告层的唯一落点
+ *
+ * gate/passed/message 逐次手写最容易漏的是 duration（无类型可救，字段是可选的）；
+ * 时间戳与耗时口径也由此统一。无 details 时不出该键（与手写形状一致）。
+ */
+export function gateResult(
+  gate: string,
+  passed: boolean,
+  message: string,
+  startedAt: number,
+  details?: Record<string, any>
+): GateResult {
+  return {
+    gate,
+    passed,
+    message,
+    ...(details ? { details } : {}),
+    timestamp: new Date().toISOString(),
+    duration: Date.now() - startedAt,
+  };
+}
+
+/** 通过报告 */
+export function pass(
+  gate: string,
+  message: string,
+  startedAt: number,
+  details?: Record<string, any>
+): GateResult {
+  return gateResult(gate, true, message, startedAt, details);
+}
+
+/** 未通过报告 */
+export function fail(
+  gate: string,
+  message: string,
+  startedAt: number,
+  details?: Record<string, any>
+): GateResult {
+  return gateResult(gate, false, message, startedAt, details);
+}
+
+/**
+ * 异常报告：message = `${label}: ${原因}`
+ *
+ * 非 Error 抛出物按 String() 取原因（原 `error.message` 会得到 undefined）。
+ */
+export function fromError(
+  gate: string,
+  label: string,
+  error: unknown,
+  startedAt: number,
+  details?: Record<string, any>
+): GateResult {
+  const reason = error instanceof Error ? error.message : String(error);
+  return fail(gate, `${label}: ${reason}`, startedAt, details);
 }
 
 /**

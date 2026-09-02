@@ -8,6 +8,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { pass, gateResult, fromError } from './types';
 import type { GateResult, GateContext, SecurityGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -43,13 +44,7 @@ export class SecurityGate implements Gate {
     const startTime = Date.now();
 
     if (!this.config.enabled) {
-      return {
-        gate: 'security',
-        passed: true,
-        message: '安全门禁已禁用',
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return pass('security', '安全门禁已禁用', startTime);
     }
 
     try {
@@ -65,13 +60,14 @@ export class SecurityGate implements Gate {
 
       const passed = this.isPassed(analysis);
 
-      return {
-        gate: 'security',
+      return gateResult(
+        'security',
         passed,
-        message: passed
+        passed
           ? '安全扫描通过'
           : `发现 ${analysis.critical} 个严重漏洞, ${analysis.high} 个高危漏洞`,
-        details: {
+        startTime,
+        {
           critical: analysis.critical,
           high: analysis.high,
           moderate: analysis.moderate,
@@ -79,18 +75,10 @@ export class SecurityGate implements Gate {
           total: analysis.total,
           vulnerabilities: analysis.vulnerabilities.slice(0, 10), // 只返回前 10 个
           scanCommand,
-        },
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+        }
+      );
     } catch (error: any) {
-      return {
-        gate: 'security',
-        passed: false,
-        message: `安全扫描失败: ${error.message}`,
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return fromError('security', '安全扫描失败', error, startTime);
     }
   }
 

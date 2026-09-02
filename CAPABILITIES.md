@@ -1,9 +1,9 @@
 # Harness Capabilities
 
 ## CLI Commands (23)
-check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, posteval-plan, update-user-model, release, analyze-sessions, constraints, doc-freshness-check, spec-baseline-check
+check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, posteval-plan, update-user-model, release, analyze-sessions, constraints, spec-baseline-check
 
-约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置写 config.yml retired 元数据，custom 写 custom-constraints.yml 条目 retired 段（#82 D6 一处真相）+ KnowledgeStore 沉淀 + CLAUDE.md 注入段同步，可回滚）。
+约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置写 config.yml retired 元数据，custom 写 custom-constraints.yml 条目 retired 段（studio#82 D6 一处真相）+ KnowledgeStore 沉淀 + CLAUDE.md 注入段同步，可回滚）。
 
 命令注册表（H5）：`COMMAND_DEFINITIONS`（非门禁命令）+ `GATE_DEFINITIONS.cli`（6 门禁命令）是命令形状单一来源，两者形状同为 `CommandDefinition`（ADR-0007），bin/harness.js 单引擎单循环注册表驱动生成（无手写命令块，R6）；实现引用 module+export per-command 懒加载（O2，任一命令执行只加载该命令模块，--help/--version 零命令实现加载）。
 

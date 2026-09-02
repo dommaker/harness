@@ -67,6 +67,14 @@ export interface RetireCandidate {
   reason: string;
 }
 
+/** 候选种类的呈现名（constraints report / retire 共用） */
+export const CANDIDATE_KIND_LABEL: Record<RetireCandidateKind, string> = {
+  zero_trigger: '零触发',
+  unevaluable: '不可评估',
+  high_noise: '高噪',
+  zero_intercept: '零拦截',
+};
+
 /**
  * 候选诊断阈值（CLI 可覆盖）
  */

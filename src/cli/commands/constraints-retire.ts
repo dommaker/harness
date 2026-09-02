@@ -45,9 +45,9 @@ import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
 import {
   buildConstraintsUsageReport,
+  CANDIDATE_KIND_LABEL,
   collectUsageByConstraint,
   readProjectTraces,
-  type RetireCandidate,
 } from '../../core/constraints/usage-report';
 
 export interface RetireExecuteOptions {
@@ -405,13 +405,6 @@ function createAsk(io: RetireIO): { ask: (q: string) => Promise<string>; close: 
     close: () => rl.close(),
   };
 }
-
-const CANDIDATE_KIND_LABEL: Record<RetireCandidate['kind'], string> = {
-  zero_trigger: '零触发',
-  unevaluable: '不可评估',
-  high_noise: '高噪',
-  zero_intercept: '零拦截',
-};
 
 /**
  * 交互式退役（候选列表 → 编号多选 → 摘要 → 确认 → 执行）

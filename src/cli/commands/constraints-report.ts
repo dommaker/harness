@@ -14,11 +14,11 @@ import * as path from 'path';
 import chalk from 'chalk';
 import {
   buildConstraintsUsageReport,
+  CANDIDATE_KIND_LABEL,
   DEFAULT_DIAGNOSE_THRESHOLDS,
   type ConstraintsUsageReport,
   type ConstraintUsageStats,
   type DiagnoseThresholds,
-  type RetireCandidate,
 } from '../../core/constraints/usage-report';
 import { getConstraintsMeta } from './constraints';
 import { detectInjectionDrift, type InjectionDrift } from '../../core/constraints/injection-drift';
@@ -35,13 +35,6 @@ export interface ConstraintsReportOptions {
   /** 高噪候选最小评估样本数 */
   noiseMinTotal?: number;
 }
-
-const CANDIDATE_KIND_LABEL: Record<RetireCandidate['kind'], string> = {
-  zero_trigger: '零触发',
-  unevaluable: '不可评估',
-  high_noise: '高噪',
-  zero_intercept: '零拦截',
-};
 
 function formatTime(ts: number | undefined): string {
   return ts === undefined ? '-' : new Date(ts).toISOString().slice(0, 10);

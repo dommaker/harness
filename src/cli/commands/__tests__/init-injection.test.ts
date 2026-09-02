@@ -127,6 +127,14 @@ describe('setupClaudeMdConstraints（消费生效集）', () => {
     expect(content).toContain('用户自定义内容');
   });
 
+  it('标记残缺（只有单边）：拒写不追加并告警（writer 半标记守护，候选1）', async () => {
+    const broken = `# My Project\n\n${CONSTRAINTS_START_MARKER}\n半残段\n`;
+    fs.writeFileSync(claudeMdPath, broken);
+    await setupClaudeMdConstraints(tempDir);
+    expect(fs.readFileSync(claudeMdPath, 'utf-8')).toBe(broken);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('残缺'));
+  });
+
   it('尊重 config.yml 禁用：注入段不含被禁条目', async () => {
     writeConfig('constraints:\n  no_fuzzy_completion_claim:\n    enabled: false\n');
     await setupClaudeMdConstraints(tempDir);
@@ -364,6 +372,24 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
 
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(original);
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('残缺'));
+  });
+
+  it('PRESERVE 段内 HARNESS 标记残缺（单边）：拒写并告警（候选1 守护，旧行为会再追加一份注入段）', async () => {
+    const broken = [
+      '# AGENTS.md',
+      '',
+      GOVERNANCE_PRESERVE_BEGIN,
+      '手写契约',
+      '',
+      CONSTRAINTS_START_MARKER,
+      '半残注入',
+      GOVERNANCE_PRESERVE_END,
+      '',
+    ].join('\n');
+    fs.writeFileSync(agentsMdPath, broken);
+    await setupAgentsMdConstraints(tempDir);
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(broken);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('残缺'));
   });
 
   it('段内注入文本与 renderConstraintsSection(getEffectiveConstraints()) 一致', async () => {

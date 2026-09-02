@@ -20,15 +20,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getEffectiveConstraints } from '../effective-constraints';
-import {
-  CONSTRAINTS_START_MARKER,
-  CONSTRAINTS_END_MARKER,
-  renderConstraintsSection,
-} from './injection-renderer';
+import { CONSTRAINTS_END_MARKER, renderConstraintsSection } from './injection-renderer';
+import { resolveInjectionTarget, readIfExists, type InjectionFile } from './injection-writer';
 
-/** 注入段落点文件名（检测顺序即路由优先级：旧模型仓 CLAUDE.md 豁免优先） */
-const INJECTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
-export type InjectionFile = (typeof INJECTION_FILES)[number];
+export type { InjectionFile };
 
 /** 注入漂移检测结果 */
 export interface InjectionDrift {
@@ -81,39 +76,6 @@ function significantLines(section: string): string[] {
     .split('\n')
     .map(l => l.trim())
     .filter(l => ENTRY_LINE_RE.test(l) || GROUP_HEADING_RE.test(l));
-}
-
-function readIfExists(filePath: string): string | null {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return typeof content === 'string' ? content : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 解析治理约束注入段落点（studio #307，ADR 2026-08-21 落点模型）
- *
- * 与 init 的 setupGovernanceConstraints 路由一致：CLAUDE.md 含标记段优先
- * （旧模型仓豁免），否则看 AGENTS.md（新模型仓注入段在 PRESERVE:governance 内）；
- * 两处均无完整标记段 → null（未注入）。
- *
- * detectInjectionDrift 与 constraints retire 的注入段同步共用本路由。
- */
-export function resolveInjectionTarget(
-  projectRoot: string
-): { file: InjectionFile; content: string; startIdx: number; endIdx: number } | null {
-  for (const file of INJECTION_FILES) {
-    const content = readIfExists(path.join(projectRoot, file));
-    if (content === null) continue;
-    const startIdx = content.indexOf(CONSTRAINTS_START_MARKER);
-    const endIdx = content.indexOf(CONSTRAINTS_END_MARKER);
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      return { file, content, startIdx, endIdx };
-    }
-  }
-  return null;
 }
 
 /**

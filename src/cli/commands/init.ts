@@ -17,6 +17,12 @@ import {
   CONSTRAINTS_END_MARKER,
   renderConstraintsSection,
 } from '../../core/constraints/injection-renderer';
+import {
+  replaceStandaloneRange,
+  replaceEnclosedRange,
+  cutMarkerBlock,
+  resolveGovernanceLanding,
+} from '../../core/constraints/injection-writer';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -524,18 +530,18 @@ export async function setupClaudeMdOutputStyle(projectPath: string): Promise<voi
   }
 
   const section = renderOutputStyleSection();
-  const startIdx = content.indexOf(OUTPUT_STYLE_START);
-  const endIdx = content.indexOf(OUTPUT_STYLE_END);
+  const write = replaceStandaloneRange(content, OUTPUT_STYLE_START, OUTPUT_STYLE_END, section);
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    // 替换标记间内容（标记本身也替换，保持最新文本）。
-    // 尾部换行规范化：标记后恰好保留一个换行分隔，保证重复运行幂等。
-    const after = content.slice(endIdx + OUTPUT_STYLE_END.length).replace(/^\n+/, '');
-    const newContent = content.slice(0, startIdx) + section + (after ? '\n' + after : '');
-    if (newContent !== content) {
-      await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+  if (write.kind === 'updated') {
+    // 尾部换行规范化在 writer 内（幂等）。
+    if (write.content !== content) {
+      await fs.writeFile(claudeMdPath, write.content, 'utf-8');
       console.log(chalk.green('✅ 已更新 CLAUDE.md Output Style 段'));
     }
+    return;
+  }
+  if (write.kind === 'half') {
+    console.log(chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_OUTPUT_STYLE 标记残缺（单边或乱序），跳过 Output Style 注入，请人工修复'));
     return;
   }
 
@@ -584,7 +590,7 @@ const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
  *   有标记则只替换标记区间，段内其余手写内容（治理契约引言/流程/纪律等）原样保留；
  *   无标记（纯手写段）则在段尾追加注入段，不动手写内容
  * - 无该段：在文件末尾追加
- * - 段标记残缺（只有单边标记）：不写入，告警交由人工修复（防二次损坏）
+ * - 段标记残缺（外层或段内 HARNESS_CONSTRAINTS 单边/乱序）：不写入，告警交由人工修复（防二次损坏）
  */
 export async function setupAgentsMdConstraints(projectPath: string): Promise<void> {
   const agentsMdPath = path.join(projectPath, 'AGENTS.md');
@@ -614,46 +620,36 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
     return;
   }
 
-  const startIdx = existingContent.indexOf(GOVERNANCE_PRESERVE_BEGIN);
-  const endIdx = existingContent.indexOf(GOVERNANCE_PRESERVE_END);
+  const preserve = cutMarkerBlock(existingContent, GOVERNANCE_PRESERVE_BEGIN, GOVERNANCE_PRESERVE_END);
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    // 段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间；其余手写内容原样保留
-    const before = existingContent.slice(0, startIdx);
-    const blockContent = existingContent.slice(startIdx + GOVERNANCE_PRESERVE_BEGIN.length, endIdx);
-    const after = existingContent.slice(endIdx + GOVERNANCE_PRESERVE_END.length).replace(/^\n+/, '');
-
-    const csIdx = blockContent.indexOf(CONSTRAINTS_START_MARKER);
-    const ceIdx = blockContent.indexOf(CONSTRAINTS_END_MARKER);
-    let newBlockContent: string;
-    if (csIdx !== -1 && ceIdx !== -1 && ceIdx > csIdx) {
-      // 只替换标记区间。bodyOnly 自带结尾换行，故剥掉尾部恰好一个前导换行
-      // （END 标记行的行尾换行），其余手写内容逐字保留，保证幂等。
-      newBlockContent =
-        blockContent.slice(0, csIdx) +
-        bodyOnly +
-        blockContent.slice(ceIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n/, '');
-    } else {
-      // 纯手写段（无约束标记）：段尾追加注入段，手写内容不动
-      newBlockContent = blockContent.trimEnd() + '\n\n## Governance Rules\n' + bodyOnly;
-    }
-
-    const newContent =
-      before +
-      GOVERNANCE_PRESERVE_BEGIN +
-      newBlockContent +
-      GOVERNANCE_PRESERVE_END +
-      '\n' +
-      (after ? '\n' + after : '');
-    if (newContent !== existingContent) {
-      await fs.writeFile(agentsMdPath, newContent, 'utf-8');
-      console.log(chalk.green(`✅ 已更新 AGENTS.md 治理契约 PRESERVE:governance 段 (v${version})`));
-    }
+  if (preserve === 'half') {
+    console.log(chalk.yellow('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复'));
     return;
   }
 
-  if (startIdx !== -1 || endIdx !== -1) {
-    console.log(chalk.yellow('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复'));
+  if (preserve !== 'absent') {
+    // 段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间；其余手写内容原样保留
+    const inner = replaceEnclosedRange(preserve.inner, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, bodyOnly);
+    if (inner.kind === 'half') {
+      console.log(chalk.yellow('⚠️  AGENTS.md PRESERVE:governance 段内 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理契约写入，请人工修复'));
+      return;
+    }
+    const newInner =
+      inner.kind === 'updated'
+        ? inner.content
+        : // 纯手写段（无约束标记）：段尾追加注入段，手写内容不动
+          preserve.inner.trimEnd() + '\n\n## Governance Rules\n' + bodyOnly;
+
+    const write = replaceStandaloneRange(
+      existingContent,
+      GOVERNANCE_PRESERVE_BEGIN,
+      GOVERNANCE_PRESERVE_END,
+      GOVERNANCE_PRESERVE_BEGIN + newInner + GOVERNANCE_PRESERVE_END + '\n'
+    );
+    if (write.kind === 'updated' && write.content !== existingContent) {
+      await fs.writeFile(agentsMdPath, write.content, 'utf-8');
+      console.log(chalk.green(`✅ 已更新 AGENTS.md 治理契约 PRESERVE:governance 段 (v${version})`));
+    }
     return;
   }
 
@@ -708,17 +704,14 @@ export async function setupClaudeMdConstraints(projectPath: string): Promise<voi
     return;
   }
 
-  const startIdx = existingContent.indexOf(CONSTRAINTS_START_MARKER);
-  const endIdx = existingContent.indexOf(CONSTRAINTS_END_MARKER);
+  const write = replaceStandaloneRange(existingContent, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, bodyOnly);
 
-  if (startIdx !== -1 && endIdx !== -1) {
-    // 替换标记间内容（标记本身也替换，保持包括最新版本号）。
-    // 尾部换行规范化：标记后恰好保留一个换行分隔，保证重复运行幂等。
-    const before = existingContent.slice(0, startIdx);
-    const after = existingContent.slice(endIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n+/, '');
-    const newContent = before + bodyOnly + (after ? '\n' + after : '');
-    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
+  if (write.kind === 'updated') {
+    // 替换标记区间含标记本身（保持包括最新版本号），尾部换行规范化在 writer 内
+    await fs.writeFile(claudeMdPath, write.content, 'utf-8');
     console.log(chalk.green(`✅ 已更新 CLAUDE.md 治理约束 (v${version})`));
+  } else if (write.kind === 'half') {
+    console.log(chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理约束注入，请人工修复'));
   } else {
     // 在文件末尾追加完整段
     const newContent = existingContent.trimEnd() + '\n\n' + fullSection;
@@ -730,25 +723,16 @@ export async function setupClaudeMdConstraints(projectPath: string): Promise<voi
 /**
  * 治理约束段写入落点路由（studio #302，ADR 2026-08-21 落点模型）
  *
+ * 判定收口在 core/constraints/injection-writer resolveGovernanceLanding：
  * - 旧模型仓（CLAUDE.md 已有 HARNESS_CONSTRAINTS 标记或 `## Governance Rules` 块）：
  *   继续写 CLAUDE.md——init 幂等重跑不破坏既有仓，不制造双份约束正本
  * - 其余（新仓初始化）：写 AGENTS.md PRESERVE:governance 段（入库公共面正本）
  */
 export async function setupGovernanceConstraints(projectPath: string): Promise<void> {
-  let claudeContent: string | null = null;
-  try {
-    claudeContent = await fs.readFile(path.join(projectPath, 'CLAUDE.md'), 'utf-8');
-  } catch {
-    // CLAUDE.md 不存在 → 新仓
-  }
-
-  if (
-    claudeContent !== null &&
-    (claudeContent.includes(CONSTRAINTS_START_MARKER) || /^##\s+Governance Rules/m.test(claudeContent))
-  ) {
-    return setupClaudeMdConstraints(projectPath);
-  }
-  return setupAgentsMdConstraints(projectPath);
+  const { target } = resolveGovernanceLanding(projectPath);
+  return target === 'claude-md'
+    ? setupClaudeMdConstraints(projectPath)
+    : setupAgentsMdConstraints(projectPath);
 }
 
 /**

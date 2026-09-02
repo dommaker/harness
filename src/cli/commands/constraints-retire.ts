@@ -36,8 +36,8 @@ import * as readline from 'readline';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
-import { renderConstraintsSection, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
-import { resolveInjectionTarget } from '../../core/constraints/injection-drift';
+import { renderConstraintsSection, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
+import { replaceStandaloneRange, resolveInjectionTarget } from '../../core/constraints/injection-writer';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
 import { loadRawProjectConfig, ProjectConfigLoader } from '../../core/project-config-loader';
 import { FileKnowledgeStore } from '../../knowledge/store';
@@ -280,12 +280,10 @@ function syncGovernanceInjection(projectRoot: string): { synced: boolean; file?:
   const target = resolveInjectionTarget(projectRoot);
   if (!target) return { synced: false };
 
-  const filePath = path.join(projectRoot, target.file);
   const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessVersion());
-  const after = target.content.slice(target.endIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n+/, '');
-  const newContent = target.content.slice(0, target.startIdx) + body + (after ? '\n' + after : '');
-  if (newContent !== target.content) {
-    fs.writeFileSync(filePath, newContent, 'utf-8');
+  const write = replaceStandaloneRange(target.content, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, body);
+  if (write.kind === 'updated' && write.content !== target.content) {
+    fs.writeFileSync(path.join(projectRoot, target.file), write.content, 'utf-8');
   }
   return { synced: true, file: target.file };
 }

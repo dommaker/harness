@@ -23,7 +23,7 @@
 - `KnowledgeIngest` — 知识摄取引擎（含 ingest gate 质量门）+ `ingestExternal()` 外部内容摄入
 - `sanitizeExternalContent` — 外部内容安全清洗（过滤注入模式 + 长度限制）
 - `migrateKnowledgeEntries` — AS-021 迁移工具（为现有条目添加 consumptionMode/origin）
-- `KnowledgeAudit` — 6 维度质量审计引擎
+- `KnowledgeAudit` — 6 维度质量审计引擎。per-entry 规则记录带 `scope: 'active' | 'all'`（active = 不判定 archived 条目）；人口过滤由 `ruleDetail()` 统一执行，规则内禁止再写 `entry.maturity === 'archived'` 早返回
 - `flywheel-metrics`（包内，不进导出面）— 知识飞轮指标唯一实现：`evaluateFlywheel(env)` 出 canonical 比例、`genuineRefs()` 出 synthetic 过滤口径，audit D6 / `knowledge stats` / `knowledge health` 三处共消费（ADR-0013）
 - `ReferenceTracker` — 知识引用关系图谱
 - `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)

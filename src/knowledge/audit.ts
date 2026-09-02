@@ -107,8 +107,12 @@ interface AuditRule {
   name: AuditRuleName;
   severity: AuditIssue['severity'];
   action: AuditAction;
+  /** 规则适用人口：active = 跳过 archived 条目；all = 全人口（含已归档） */
+  scope: AuditRuleScope;
   detect: (entry: KnowledgeEntry, ctx: AuditContext) => string | null;
 }
+
+type AuditRuleScope = 'active' | 'all';
 
 interface AuditContext {
   shortContentThreshold: number;
@@ -123,6 +127,7 @@ const perEntryRules: AuditRule[] = [
     name: 'frontmatter-missing',
     severity: 'high',
     action: 'reject',
+    scope: 'all',
     detect: (entry) => {
       const missing = REQUIRED_FRONTMATTER.filter(f => {
         const val = (entry as any)[f];
@@ -140,8 +145,8 @@ const perEntryRules: AuditRule[] = [
     name: 'test-data-pollution',
     severity: 'critical',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       // Match test ID patterns
       if (/^(test-|inj-test)/.test(entry.id)) {
         return `测试 ID: "${entry.id}"`;
@@ -160,8 +165,8 @@ const perEntryRules: AuditRule[] = [
     name: 'daily-audit-noise',
     severity: 'high',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       if (DAILY_AUDIT_PATTERN.test(entry.title)) {
         return `每日审计摘要: "${entry.title}"`;
       }
@@ -172,8 +177,8 @@ const perEntryRules: AuditRule[] = [
     name: 'event-noise',
     severity: 'critical',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       for (const pattern of EVENT_NOISE_PATTERNS) {
         if (pattern.test(entry.title)) {
           return `运维事件标题: "${entry.title}"`;
@@ -186,6 +191,7 @@ const perEntryRules: AuditRule[] = [
     name: 'zero-content-proven',
     severity: 'critical',
     action: 'demote',
+    scope: 'all',
     detect: (entry) => {
       if (entry.maturity === 'proven' && entry.content.trim().length < ZERO_CONTENT_THRESHOLD) {
         return `proven 条目内容仅 ${entry.content.trim().length} 字符`;
@@ -197,6 +203,7 @@ const perEntryRules: AuditRule[] = [
     name: 'maturity-inflation',
     severity: 'high',
     action: 'demote',
+    scope: 'all',
     detect: (entry) => {
       if (entry.maturity === 'verified' && entry.content.trim().length < ZERO_CONTENT_THRESHOLD) {
         return `verified 条目内容仅 ${entry.content.trim().length} 字符`;
@@ -208,8 +215,8 @@ const perEntryRules: AuditRule[] = [
     name: 'short-content',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       const len = entry.content.trim().length;
       if (len < ctx.shortContentThreshold && len >= ZERO_CONTENT_THRESHOLD) {
         return `内容 ${len} 字符 (阈值 ${ctx.shortContentThreshold})`;
@@ -223,8 +230,8 @@ const perEntryRules: AuditRule[] = [
     name: 'title-duplicate',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       if (!ctx.allEntries) return null;
       if (!entry.title) return null;
       const dupes = ctx.allEntries.filter(e =>
@@ -243,6 +250,7 @@ const perEntryRules: AuditRule[] = [
     name: 'source-refs-bloat',
     severity: 'low',
     action: 'trim',
+    scope: 'all',
     detect: (entry) => {
       if ((entry.sourceReferences?.length || 0) > MAX_SOURCE_REFS) {
         return `sourceReferences ${entry.sourceReferences!.length} 条 (上限 ${MAX_SOURCE_REFS})`;
@@ -254,8 +262,8 @@ const perEntryRules: AuditRule[] = [
     name: 'fragment-cluster',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       if (!ctx.allEntries || entry.content.trim().length >= 100) return null;
       if (!entry.tags?.length) return null;
 
@@ -281,6 +289,7 @@ const perEntryRules: AuditRule[] = [
     name: 'promotion-blocked',
     severity: 'medium',
     action: 'flag',
+    scope: 'all',
     detect: (entry, ctx) => {
       if (entry.maturity !== 'draft') return null;
       const created = new Date(entry.created);
@@ -295,6 +304,7 @@ const perEntryRules: AuditRule[] = [
     name: 'orphan-draft',
     severity: 'low',
     action: 'flag',
+    scope: 'all',
     detect: (entry) => {
       if (entry.maturity !== 'draft') return null;
       if (entry.contributors.length === 0 && entry.projects.length === 0 && genuineRefs(entry.referencedBy).length === 0) {
@@ -309,8 +319,8 @@ const perEntryRules: AuditRule[] = [
     name: 'stale-entry',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       const lastRef = entry.lastReferenced || entry.created;
       if (!lastRef) return null;
       const daysSinceRef = (Date.now() - new Date(lastRef).getTime()) / (1000 * 60 * 60 * 24);
@@ -326,8 +336,8 @@ const perEntryRules: AuditRule[] = [
     name: 'deprecated-domain',
     severity: 'high',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       const tags = (entry.tags ?? []).map(t => t.toLowerCase());
       // Tag-level: "pipeline" tag is deprecated (Studio Pipeline superseded by Agent Network)
       if (tags.includes('pipeline')) {
@@ -344,6 +354,12 @@ const perEntryRules: AuditRule[] = [
 ];
 
 // ── Audit Engine ──────────────────────────────────────────
+
+/** 按 scope 决定是否评估：active 规则对 archived 条目不判定（人口过滤唯一落点） */
+function ruleDetail(rule: AuditRule, entry: KnowledgeEntry, ctx: AuditContext): string | null {
+  if (rule.scope === 'active' && entry.maturity === 'archived') return null;
+  return rule.detect(entry, ctx);
+}
 
 export class KnowledgeAudit {
   private store: KnowledgeStore;
@@ -369,7 +385,7 @@ export class KnowledgeAudit {
     };
     const issues: AuditIssue[] = [];
     for (const rule of perEntryRules) {
-      const detail = rule.detect(entry, ctx);
+      const detail = ruleDetail(rule, entry, ctx);
       if (detail) {
         issues.push({
           rule: rule.name,
@@ -400,7 +416,7 @@ export class KnowledgeAudit {
     const allIssues: AuditIssue[] = [];
     for (const entry of entries) {
       for (const rule of perEntryRules) {
-        const detail = rule.detect(entry, ctx);
+        const detail = ruleDetail(rule, entry, ctx);
         if (detail) {
           allIssues.push({
             rule: rule.name,
@@ -597,7 +613,7 @@ export class KnowledgeAudit {
     const issues: AuditIssue[] = [];
     for (const entry of entries) {
       for (const rule of perEntryRules) {
-        const detail = rule.detect(entry, ctx);
+        const detail = ruleDetail(rule, entry, ctx);
         if (detail) {
           issues.push({
             rule: rule.name,

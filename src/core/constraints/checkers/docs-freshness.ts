@@ -12,8 +12,9 @@ import { join } from 'path';
 import { loadRawProjectConfig } from '../../project-config-loader';
 import { FreshnessRunner, type FreshnessCheckResult } from '../doc-freshness/runner';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
+import { reconcileCapabilities } from '../capabilities-reconcile';
 import type { DocFreshnessConfig, DocFreshnessCheck } from '../../../types/project-config';
-import type { ConstraintCheck } from './types';
+import type { ConstraintCheck, CheckEnv } from './types';
 
 /**
  * 内置默认文档新鲜度检查配置
@@ -30,45 +31,31 @@ function getBuiltInDocFreshnessConfig(): DocFreshnessCheck[] {
 }
 
 /**
- * CAPABILITIES.md 文件表新鲜度：列出的文件路径必须仍存在。
- * 多根查找：支持不同项目的源码根（harness=src/, studio=apps/api/src/ 等）。
- * 无表格行（能力清单格式）时跳过。
+ * CAPABILITIES.md 文件表新鲜度：登记的条目（文件与目录）必须仍存在（ADR-0009 口径从严）。
+ * 判定逻辑统一走 capabilities-reconcile；多根查找支持不同项目的源码根
+ * （harness=src/, studio=apps/api/src/ 等）。无表格（能力清单格式）时自然零幽灵。
  */
-function checkCapabilitiesFreshness(projectPath: string): boolean {
+function findDeadCapabilityEntries(projectPath: string, env: CheckEnv): string[] {
   try {
     const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
-    if (!existsSync(capabilitiesPath)) return true;
+    if (!existsSync(capabilitiesPath)) return [];
     const content = readFileSync(capabilitiesPath, 'utf-8');
 
-    const listedFiles: string[] = [];
-    const tableRowRegex = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
-    let match;
-    while ((match = tableRowRegex.exec(content)) !== null) {
-      listedFiles.push(match[1].trim());
-    }
-
-    if (listedFiles.length === 0) return true;
-
     const sourceRoots = detectSourceRoots(projectPath);
-    const fileExists = (file: string): boolean => {
-      if (existsSync(join(projectPath, file))) return true;
-      for (const root of sourceRoots) {
-        if (existsSync(join(projectPath, root, file))) return true;
-      }
-      return false;
-    };
-
-    const missing = listedFiles.filter(f => !fileExists(f));
-    if (missing.length > 0) {
-      // 报出具体文件名：此前只返回 false，CLI 只能打印通用提示，
-      // 幽灵条目 basename 碰撞时 sync-docs 也不剔除，用户无从定位（2026-08-08 studio CI 4 连红）
-      console.error(`[docs_freshness] CAPABILITIES.md 列出的文件不存在: ${missing.join(', ')}`);
-      return false;
+    const population: string[] = [];
+    for (const root of sourceRoots) {
+      if (existsSync(join(projectPath, root))) population.push(...env.srcScan(root));
     }
 
-    return true;
+    const verdict = reconcileCapabilities({
+      content,
+      populationFiles: population,
+      sourceRoots,
+      fileExists: (rel) => existsSync(join(projectPath, rel)),
+    });
+    return verdict.deadEntries;
   } catch {
-    return true;
+    return [];
   }
 }
 
@@ -119,8 +106,14 @@ export const docsFreshness: ConstraintCheck = {
     // ADR-0001 存在性探测：项目无任何 freshness 配置/目标 → skip（不计 pass/fail）
     if (!hasFreshnessTargets(projectPath)) return 'skip';
 
-    // Step 1: 文件表格式 — 检查列出的文件是否还存在
-    if (!checkCapabilitiesFreshness(projectPath)) return false;
+    // Step 1: 文件表格式 — 登记的条目（文件+目录）是否仍存在（ADR-0009）
+    const deadEntries = findDeadCapabilityEntries(projectPath, env);
+    if (deadEntries.length > 0) {
+      // 报出具体条目：此前只返回 false，CLI 只能打印通用提示，
+      // 幽灵条目 basename 碰撞时 sync-docs 也不剔除，用户无从定位（2026-08-08 studio CI 4 连红）
+      console.error(`[docs_freshness] CAPABILITIES.md 登记的条目不存在: ${deadEntries.join(', ')}`);
+      return false;
+    }
 
     // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
     try {

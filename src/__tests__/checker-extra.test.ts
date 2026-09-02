@@ -266,8 +266,9 @@ describe('ConstraintChecker - 补充覆盖', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    it('file 模式原行为不变：目录条目不参与覆盖判定', async () => {
-      // file 模式下 step2 要求逐文件精确匹配，src/core/ 目录条目不能 rescue bar.ts
+    it('file 模式目录条目也参与覆盖（ADR-0009 check/fix 同规则）', async () => {
+      // 历史行为：checker 在 file 模式忽略目录条目、sync-docs 却按前缀覆盖——
+      // 两侧口径分叉导致 check/fix 不收敛。ADR-0009 统一为目录条目恒参与覆盖。
       const dir = setupCapProject(
         'capfile-dir-no-rescue',
         'file',
@@ -276,7 +277,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
       );
 
       const result = await runCapCheck(dir);
-      expect(result.satisfied).toBe(false);
+      expect(result.satisfied).toBe(true);
 
       fs.rmSync(dir, { recursive: true, force: true });
     });

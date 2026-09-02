@@ -22,9 +22,6 @@ function cliCommandCount(): number {
 /** 匹配表格单元格中的源码文件条目（如 `src/foo.ts`、`foo.tsx`） */
 const FILE_CELL_REGEX = /\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/g;
 
-/** 仅匹配表格第二列的文件条目（checker 的历史语义：第一列为模块名，第二列为文件） */
-const FILE_SECOND_COLUMN_REGEX = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/gm;
-
 /**
  * 匹配表格单元格中的目录条目（如 `agents/`）。
  *
@@ -35,26 +32,25 @@ const FILE_SECOND_COLUMN_REGEX = /^\|[^|]+\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/
 const DIR_CELL_REGEX = /\|\s*([\w][\w@./-]*\/)\s*\|/g;
 
 export interface CapabilitiesParseOptions {
-  /** 是否同时收集目录条目（sync-docs 需要；checker 只做文件覆盖比对，不需要） */
+  /** 是否同时收集目录条目，默认 false */
   includeDirs?: boolean;
-  /** 只取表格第二列的文件条目（checker 的历史严格语义），默认 false */
-  secondColumnOnly?: boolean;
 }
 
 /**
  * 从 CAPABILITIES.md 内容中提取表格列出的条目
  *
+ * 解析口径（ADR-0009）：表格所有单元格收集；「只看第二列」的历史读法废弃。
+ *
  * @param content markdown 内容
  * @returns 文件路径原样 + （可选）目录条目，按出现顺序去重
  */
 export function parseCapabilitiesEntries(content: string, options: CapabilitiesParseOptions = {}): string[] {
-  const { includeDirs = false, secondColumnOnly = false } = options;
+  const { includeDirs = false } = options;
   const entries: string[] = [];
 
-  const fileRegex = secondColumnOnly ? FILE_SECOND_COLUMN_REGEX : FILE_CELL_REGEX;
   let match: RegExpExecArray | null;
-  fileRegex.lastIndex = 0;
-  while ((match = fileRegex.exec(content)) !== null) {
+  FILE_CELL_REGEX.lastIndex = 0;
+  while ((match = FILE_CELL_REGEX.exec(content)) !== null) {
     const raw = match[1].trim();
     if (!entries.includes(raw)) entries.push(raw);
   }

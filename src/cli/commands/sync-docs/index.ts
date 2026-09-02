@@ -17,12 +17,11 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import {
-  aggregateToSourceSubdir,
-  readCapabilitiesEntries,
   isCapabilityListingFormat,
   checkCapabilityCounts,
   updateCapabilityCounts,
 } from '../../../core/constraints/capabilities-parser';
+import { reconcileCapabilities } from '../../../core/constraints/capabilities-reconcile';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getCapabilitiesMode } from '../../../core/project-config-loader';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
@@ -134,73 +133,27 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
     capCountMismatches = countCheck.mismatches;
     // 不填充 result.added/removed（文件级对比不适用于此格式）
   } else {
-    // 传统的文件表格格式
+    // 传统的文件表格格式：覆盖/幽灵判定统一走 capabilities-reconcile（ADR-0009），
+    // 与 capability_sync / docs_freshness 检查器共享同一份规则，check 与 fix 口径必然一致
     const getBasename = (f: string) => {
       const clean = f.endsWith('/') ? f.slice(0, -1) : f;
       return clean.split('/').pop()!;
     };
-    const currentBasenames = currentModules.map(m => getBasename(m.file));
-    // 目录条目（如 src/、agents/）按前缀覆盖其中的文件，且不参与 removed 对比
-    // （basename 列表里永远不会有目录，直接对比会把目录行误报为「已删除的模块」）
-    const existingDirs = existingFiles.filter(f => f.endsWith('/'));
-    const existingFileNames = existingFiles.filter(f => !f.endsWith('/'));
+    const verdict = reconcileCapabilities({
+      content: capsContent,
+      populationFiles: currentModules.map((m) => m.file),
+      fileExists: (rel) => existsSync(path.join(projectPath, rel)),
+      sourceRoots: detectSourceRoots(projectPath),
+    });
     if (capsMode === 'module') {
-      // module 模式：文件条目精确匹配或目录条目前缀覆盖；
-      // added 不再是逐文件列表，聚合为「未覆盖目录」（与 capability_sync checker 同规则）
-      const entries = readCapabilitiesEntries(capabilitiesPath, { includeDirs: true });
-      const fileEntries = entries.filter(e => !e.endsWith('/'));
-      const dirEntries = entries.filter(e => e.endsWith('/'));
-      const uncoveredDirs = new Set<string>();
-      for (const m of currentModules) {
-        const covered =
-          fileEntries.includes(m.file) || dirEntries.some(d => m.file.startsWith(d));
-        if (!covered) {
-          const root = srcDirs.find(d => m.file.startsWith(d + '/')) || srcDirs[0] || '';
-          uncoveredDirs.add(aggregateToSourceSubdir(root, m.file));
-        }
-      }
-      result.added = [...uncoveredDirs];
+      // module 模式：added 为聚合后的「未覆盖目录」，需人工登记目录条目
+      result.added = verdict.uncoveredDirs;
     } else {
-      result.added = currentModules
-        .filter(
-          m =>
-            !existingDirs.some(d => m.file.startsWith(d)) &&
-            !existingFileNames.includes(getBasename(m.file))
-        )
-        .map(m => getBasename(m.file));
+      result.added = verdict.uncoveredFiles.map((f) => getBasename(f));
     }
-    // removed：basename 对比 + 全路径存在性兜底（#33）。
-    // 表格格式承诺 ts|tsx|js|jsx，但扫描只覆盖 .ts/.tsx——
-    // 指向真实存在文件的登记行（.js/.jsx 等扫描盲区）不得误判为「已删除」。
-    // 兜底按 basename 豁免；路径不存在的幽灵行进不了豁免，由下方清扫按完整路径补入 removed。
-    const sourceRoots = detectSourceRoots(projectPath);
-    const entryExists = (entry: string): boolean =>
-      existsSync(path.join(projectPath, entry)) ||
-      sourceRoots.some(root => existsSync(path.join(projectPath, root, entry)));
-
-    const registeredEntries = readCapabilitiesEntries(capabilitiesPath);
-    const livePathBasenames = new Set(
-      registeredEntries
-        .filter(e => !e.endsWith('/') && e.includes('/') && entryExists(e))
-        .map(getBasename)
-    );
-    result.removed = existingFileNames.filter(
-      f => !currentBasenames.includes(f) && !livePathBasenames.has(f)
-    );
-
-    // 幽灵条目清扫（2026-08-08 studio CI 4 连红事故）：上方按 basename 对比，
-    // 同名碰撞时幽灵不可见（如 agent-configs/routes.ts 已删但 agents/routes.ts 仍存在，
-    // basename routes.ts 仍在扫描结果中，永远不会被判 removed）。
-    // 这里按完整路径直接判存在性（与 docs_freshness 检查器同语义：项目根 + 源码根前缀）。
-    for (const entry of registeredEntries) {
-      // 纯文件名条目（无路径）无法用存在性判定，交由上方 basename 对比
-      if (!entry.includes('/') || entryExists(entry)) continue;
-      const basename = entry.split('/').pop()!;
-      // basename 对比已覆盖（无碰撞场景）时不重复加入
-      if (!result.removed.includes(basename) && !result.removed.includes(entry)) {
-        result.removed.push(entry);
-      }
-    }
+    // removed：文件与目录条目一起查（幽灵目录行若不清除，docs_freshness 从严后
+    // check 会持续报失败而 fix 修不掉——check/fix 必须同规则才能收敛）
+    result.removed = verdict.deadEntries;
   }
 
   // 4. 检查 CONTEXT.md（缺失 + 过时）

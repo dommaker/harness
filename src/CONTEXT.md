@@ -42,6 +42,7 @@
 | 文件驱动 CLI | yml 状态真值 + 一次性进程、无常驻生命周期；故不引 dispose 链（止步档 1） |
 | 对照（reconcile） | CAPABILITIES.md 声明与源码实况的双向一致性判定（代码→文档查漏登，文档→代码查幽灵）；唯一实现 `core/constraints/capabilities-reconcile.ts`，capability_sync / docs_freshness / sync-docs 共消费（ADR-0009） |
 | 测试产物解读（test-output） | 从测试运行器 stdout 读出「过了没 / 哪些失败 / 覆盖率」的判定；唯一实现 `core/validators/test-output.ts`（包内，不进导出面），passes-gate / acceptance 共消费（ADR-0012）。两门禁判定依据不一致待 #93 裁决，覆盖率取数归属待 #94 裁决 |
+| 飞轮指标（flywheel） | 知识条目的引用与消费度量（refCoverage / avgRefs / consumptionHitRate）；唯一实现 `knowledge/flywheel-metrics.ts`（包内，不进导出面），canonical 分子为过滤 synthetic 后的 genuine refs，audit D6 / knowledge stats / knowledge health 共消费（ADR-0013，#81） |
 
 ## 注意事项
 - 公共包，禁止硬编码业务路径

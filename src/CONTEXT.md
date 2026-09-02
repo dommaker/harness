@@ -19,7 +19,7 @@
 | failure/ | 错误分类、失败记录 |
 | context/ | 会话管理、token 预算、压缩、知识注入 |
 | spec/ | （空目录）@spec 注释检查已删（ADR-0003）；spec 故事见 core/spec/validator + SpecAcceptanceGate |
-| cli/commands/ | 24 个 CLI 子命令 |
+| cli/commands/ | 23 个 CLI 子命令 |
 | tools/ | 工具定义 |
 
 ## 依赖关系

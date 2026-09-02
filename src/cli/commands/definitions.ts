@@ -563,22 +563,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     ],
   },
   {
-    command: 'doc-freshness-check',
-    argument: '<docPath>',
-    description: '检查文档声明的新鲜度：提取可验证声明，与代码对照',
-    options: [
-      { flags: '--changed-files <list>', description: '变更文件列表（逗号分隔）' },
-      { flags: '--format <format>', description: '输出格式 (table/json)', defaultValue: 'table' },
-      { flags: '-p, --project-path <path>', description: '项目路径' },
-    ],
-    action: { module: 'doc-freshness-check', export: 'docFreshnessCheck' },
-    mapActionArgs: (positionals, options) => [positionals[0], {
-      changedFiles: options.changedFiles,
-      format: options.format,
-      projectPath: options.projectPath,
-    }],
-  },
-  {
     command: 'spec-baseline-check',
     argument: '<specPath>',
     description: '验证 spec 文件的前置条件是否满足',

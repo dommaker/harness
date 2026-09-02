@@ -18,9 +18,6 @@ import {
   type TraceCollectorConfig,
 } from '../types/trace';
 
-// 路径常量再导出，保持既有从 monitoring/traces 导入的用法不破
-export { DEFAULT_TRACE_FILE };
-
 /**
  * 默认配置
  */

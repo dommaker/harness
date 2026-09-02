@@ -27,10 +27,10 @@
 
 - `extractCoverage(output)` / `extractFailures(output)` / `parseTestOutput(output)` 三个纯函数迁入并具名导出，**正则、分支顺序、返回形状逐字迁移**，不改任何判定语义。
 - 消费方退化：`passes-gate.ts` 删两个 private 方法改 import（`:295 :312 :320`）；`acceptance.ts` 删 private `parseTestOutput` 改 import（`:461`）。exec 编排、retry、`detectTestCommand`、`generateEvidence` 留在各自 implementation 内部——它们是各自私有细节，不进 interface。
-- **落点选 core 不选 gates**：合法依赖方向只有 gates→core。全仓现存 core→上层值导入仅 1 条（`capabilities-parser.ts:13`，#88 待删），落 `gates/` 会新增第二条上行边与 #88 对冲。落 `utils/` 亦合法但不当：`utils/` 现职责是通用进程助手（`exec`/`file-walk`/`detect-source-roots`），runner 输出解读是验证领域知识，与 passes-gate 同族。
+- **落点选 core 不选 gates**：合法依赖方向只有 gates→core。全仓 core→上层值导入现存 3 条（`capabilities-parser.ts:12`→cli、`:13`→gates，两条均 #88 待删；`checker.ts:20`→monitoring，core/CONTEXT.md 依赖关系已记为允许），其中指向 `gates/` 的只有 1 条——落 `gates/` 会把对 `gates/` 的上行边加成两条，与 #88 对冲。落 `utils/` 亦合法但不当：`utils/` 现职责是通用进程助手（`exec`/`file-walk`/`detect-source-roots`），runner 输出解读是验证领域知识，与 passes-gate 同族。
 - 不加 `runner` 开关参数、不加注册表：两个真 adapter（passes-gate + acceptance）已在，seam 是显式化既有事实，不是新造。
 - 保持不动（范围外，逐条已另票）：
-  1. 两门禁判定依据不一致 —— passes-gate 成功分支硬编码 `passed = true`（`:293`，只看退出码），acceptance 只看文本且通用兜底可被测试名中的 `FAIL` 反转 → **#93**。
+  1. 两门禁判定依据不一致 —— passes-gate 成功分支硬编码 `passed = true`（`:294`，只看退出码），acceptance 只看文本且通用兜底可被测试名中的 `FAIL` 反转 → **#93**。
   2. `extractCoverage` 无判定消费方（`check()` `:89` 只读 `passed`/`evidence`），CLI `--coverage` 另走 json-summary 一条独立路 → **#94**。本 ADR 只搬不改，`TaskTestResult.coverage` 字段去留随 #94 裁决。
 - 测试面：表驱动真实样本，每种 runner 一段真实输出文本（jest / mocha / pytest / go / istanbul / playwright + 无匹配 + 畸形各一行）直接测新模块 interface；删除 `passes-gate.test.ts:116-130` 两条占位断言；`acceptance.test.ts` 仅保留 `runE2ETest` 编排所需的 exec mock，6 份近重复中的解析用例全部搬入新表。
 

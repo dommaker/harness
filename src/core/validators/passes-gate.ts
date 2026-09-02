@@ -6,6 +6,7 @@
  */
 
 import { execAsync, delay } from '../../utils/exec';
+import { extractCoverage, extractFailures } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type {
@@ -292,7 +293,7 @@ export class PassesGate {
       });
 
       const passed = true;
-      const coverage = this.extractCoverage(stdout);
+      const coverage = extractCoverage(stdout);
       const failures: string[] = [];
 
       return {
@@ -309,7 +310,7 @@ export class PassesGate {
       const stderrOutput = error.stderr || '';
       const combinedOutput = output + '\n' + stderrOutput;
 
-      const failures = this.extractFailures(combinedOutput);
+      const failures = extractFailures(combinedOutput);
       const passed = this.config.allowPartialPass && failures.length === 0;
 
       return {
@@ -317,7 +318,7 @@ export class PassesGate {
         command: testCommand,
         output: combinedOutput,
         failures,
-        coverage: this.extractCoverage(output),
+        coverage: extractCoverage(output),
         timestamp,
         evidence: await this.generateEvidence(workDir, combinedOutput),
       };
@@ -372,64 +373,6 @@ export class PassesGate {
 
     // 默认命令
     return 'npm test';
-  }
-
-  /**
-   * 从输出中提取覆盖率
-   */
-  private extractCoverage(output: string): number | undefined {
-    // Jest 格式: All files | 80.5 | 70.2 | ...
-    const jestMatch = output.match(/All files[|\s]+(\d+\.?\d*)/);
-    if (jestMatch?.[1]) {
-      return parseFloat(jestMatch[1]);
-    }
-
-    // Istanbul/nyc 格式: Statements   : 80.5% ( 100/124 )
-    const istanbulMatch = output.match(/Statements\s*:\s*(\d+\.?\d*)%/);
-    if (istanbulMatch?.[1]) {
-      return parseFloat(istanbulMatch[1]);
-    }
-
-    // pytest-cov 格式: TOTAL  1234  80%
-    const pytestMatch = output.match(/TOTAL\s+\d+\s+(\d+)%/);
-    if (pytestMatch?.[1]) {
-      return parseInt(pytestMatch[1], 10);
-    }
-
-    return undefined;
-  }
-
-  /**
-   * 从输出中提取失败信息
-   */
-  private extractFailures(output: string): string[] {
-    const failures: string[] = [];
-
-    // Jest 格式
-    const jestMatches = output.matchAll(/✕\s+(.+?)\s+\(/g);
-    for (const match of jestMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    // Mocha 格式
-    const mochaMatches = output.matchAll(/\d+\)\s+(.+?):/g);
-    for (const match of mochaMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    // pytest 格式
-    const pytestMatches = output.matchAll(/FAILED\s+(.+?)::/g);
-    for (const match of pytestMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    // Go test 格式
-    const goMatches = output.matchAll(/--- FAIL:\s+(.+?)\s+\(/g);
-    for (const match of goMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    return failures;
   }
 
   /**

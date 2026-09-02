@@ -1,8 +1,9 @@
 /**
  * Tests for passes-gate.ts
  *
- * Priority: test pure logic methods (check, extractCoverage, extractFailures, extension management)
+ * Priority: test pure logic methods (check, extension management)
  * Skip methods that do real file I/O / exec (setPasses, runTests, runTest, detectTestCommand, etc.)
+ * 测试产物解析判定不在此面：见 test-output.test.ts（ADR-0012）
  */
 
 import { PassesGate, createPassesGate } from '../passes-gate';
@@ -110,22 +111,6 @@ describe('PassesGate', () => {
     it('returns undefined for unknown task', () => {
       const gate = createPassesGate();
       expect(gate.getTestResult('unknown')).toBeUndefined();
-    });
-  });
-
-  describe('extractCoverage (via extractCoverage private method behavior check)', () => {
-    // extractCoverage is private but we can infer behavior through public API
-    // runTest uses it internally — but that method is not easily testable without mocking exec
-    it('PassesGate instance is properly constructed', () => {
-      const gate = createPassesGate({ testCommand: 'npm test' });
-      expect(gate).toBeInstanceOf(PassesGate);
-    });
-  });
-
-  describe('extractFailures (via extractFailures private method behavior check)', () => {
-    it('PassesGate handles config properly', () => {
-      const gate = createPassesGate({ allowPartialPass: true, maxRetries: 0, retryDelay: 0 });
-      expect(gate).toBeInstanceOf(PassesGate);
     });
   });
 });

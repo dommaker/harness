@@ -18,6 +18,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { parseTestOutput } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -458,7 +459,7 @@ export class SpecAcceptanceGate implements Gate {
       });
 
       const output = stdout + stderr;
-      const passed = this.parseTestOutput(output);
+      const passed = parseTestOutput(output);
 
       return {
         criteria: testFile,
@@ -478,33 +479,6 @@ export class SpecAcceptanceGate implements Gate {
         output: error.stdout?.substring(0, 2000) ?? error.message,
       };
     }
-  }
-
-  /**
-   * 解析测试输出判断是否通过
-   */
-  private parseTestOutput(output: string): boolean {
-    // Playwright 格式
-    if (output.includes('passed')) {
-      // 检查是否有失败
-      const failedMatch = output.match(/(\d+)\s+failed/);
-      if (failedMatch && parseInt(failedMatch[1]) > 0) {
-        return false;
-      }
-      return true;
-    }
-    
-    // Jest 格式
-    if (output.includes('Test Suites:')) {
-      const match = output.match(/Test Suites:\s+(\d+)\s+failed/);
-      if (match && parseInt(match[1]) > 0) {
-        return false;
-      }
-      return output.includes('passed');
-    }
-    
-    // 通用格式
-    return output.includes('PASS') && !output.includes('FAIL');
   }
 }
 

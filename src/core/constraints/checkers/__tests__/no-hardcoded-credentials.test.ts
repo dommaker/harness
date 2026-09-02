@@ -1,16 +1,17 @@
 /**
- * no_hardcoded_credentials checker 测试（ADR-0001）
+ * no_hardcoded_credentials 检查器旁测（ADR-0001）
  *
  * 注意：测试夹具中的假凭证一律用字符串拼接构造，
  * 避免本文件自身被凭证扫描（含 harness 自身 staged diff）命中。
+ * 测试面 = evaluate(env)（架构评审候选4，自 src/__tests__/ 就近迁入）。
  */
 
 import { describe, it, expect } from '@jest/globals';
 import {
   noHardcodedCredentials,
   containsHardcodedCredential,
-} from '../core/constraints/checkers/no-hardcoded-credentials';
-import type { CheckEnv } from '../core/constraints/checkers';
+} from '../no-hardcoded-credentials';
+import type { CheckEnv } from '../types';
 
 function makeEnv(stagedDiff: string): CheckEnv {
   return {

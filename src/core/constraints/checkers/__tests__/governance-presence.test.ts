@@ -1,8 +1,9 @@
 /**
- * governance_presence checker 测试（studio #302，ADR 2026-08-21 落点模型）
+ * governance_presence 检查器旁测（studio #302，ADR 2026-08-21 落点模型）
  *
  * 在场守护：PRESERVE 只保「存在」不保「在场」——治理契约段被删除/掏空后
  * sync-docs 重新生成会静默丢失，本 checker 在 harness check 时校验在场性。
+ * 测试面 = evaluate(env)（架构评审候选4，自 src/__tests__/ 就近迁入）。
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
@@ -12,8 +13,8 @@ import {
   governancePresence,
   hasGovernancePreserveBlock,
   hasClaudeGovernance,
-} from '../core/constraints/checkers/governance-presence';
-import type { CheckEnv } from '../core/constraints/checkers';
+} from '../governance-presence';
+import type { CheckEnv } from '../types';
 
 function makeEnv(projectPath: string): CheckEnv {
   return {

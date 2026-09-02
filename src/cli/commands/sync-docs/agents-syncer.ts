@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { loadRawProjectConfig } from '../../../core/project-config-loader';
+import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
 import {
   readPackageJsonLite,
   getConfigDescription,
@@ -293,7 +294,7 @@ async function countContextDocs(projectPath: string, srcDirs: string[]): Promise
     }
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'dist') continue;
+      if (DEFAULT_SKIP_DIRS.includes(entry.name)) continue;
       const entryPath = path.join(dir, entry.name);
       if (existsSync(path.join(entryPath, 'CONTEXT.md'))) {
         found.add(entryPath);

@@ -30,7 +30,7 @@ function getRecorder(projectPath?: string): FailureRecorder {
  * 失败记录列表
  */
 export async function failureList(
-  options: FailureOptions & { limit?: number; type?: string; level?: string },
+  options: FailureOptions & { limit?: number | string; type?: string; level?: string },
 ): Promise<void> {
   const recorder = getRecorder(options.projectPath);
 
@@ -42,8 +42,10 @@ export async function failureList(
   if (options.level) {
     records = records.filter(r => r.level === options.level);
   }
-  if (options.limit && options.limit > 0) {
-    records = records.slice(-options.limit);
+  // CLI 直传时 limit 为 commander 字符串值；程序内调用传 number（候选7：编组在命令函数）
+  const limit = typeof options.limit === 'string' ? parseInt(options.limit, 10) : options.limit;
+  if (limit && limit > 0) {
+    records = records.slice(-limit);
   }
 
   if (options.json) {

@@ -102,6 +102,26 @@ export async function knowledgeSearch(
 }
 
 /**
+ * knowledge search 子命令入口（候选7）：缺参闸门 + limit 强转编组，
+ * 自 definitions.ts 的 args 复印块移回命令模块（interface/测试面所在）。
+ */
+export async function knowledgeSearchCommand(
+  positionals: (string | undefined)[],
+  options: Record<string, unknown>,
+): Promise<void> {
+  const query = positionals[0];
+  if (!query) {
+    console.error('请提供搜索关键词');
+    process.exit(1);
+  }
+  return knowledgeSearch(String(query), {
+    projectPath: options.projectPath as string | undefined,
+    json: options.json as boolean | undefined,
+    limit: parseInt(String(options.limit), 10),
+  });
+}
+
+/**
  * 知识库导入（冷启动）
  */
 export async function knowledgeImport(
@@ -252,8 +272,8 @@ export async function knowledgeStats(options: KnowledgeOptions): Promise<void> {
 }
 
 export interface KnowledgeUpsertOptions {
-  scope: string;
-  title: string;
+  scope?: string;
+  title?: string;
   content?: string;
   file?: string;
   type?: string;

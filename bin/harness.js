@@ -82,9 +82,20 @@ function buildCommand(parent, def) {
 }
 
 /**
+ * 子命令解析：主名直查，别名表遍历匹配（候选7：别名是数据，不再复印条目）
+ */
+function resolveSubcommand(subcommands, name) {
+  if (subcommands[name]) return subcommands[name];
+  for (const entry of Object.values(subcommands)) {
+    if (entry.aliases && entry.aliases.includes(name)) return entry;
+  }
+  return null;
+}
+
+/**
  * 执行一条命令定义：
  * 1. optionRoutes（选项条件路由，全部匹配项按序执行，替代默认 action）
- * 2. subcommands（位置参数首值路由；strict 下未知值报错退出）
+ * 2. subcommands（位置参数首值路由，含别名；strict 下未知值报错退出）
  * 3. 默认 action
  * afterRun 统一接收返回值（如 sync-docs --check 失败 exit(1)）
  */
@@ -93,7 +104,7 @@ async function runDefinition(command, def, positionals, options) {
     const matched = def.optionRoutes.filter(r => options[r.flag] === r.when);
     if (matched.length > 0) {
       for (const route of matched) {
-        await callImpl(route.impl, route.args ? route.args(positionals, options) : [options]);
+        await callImpl(route.impl, [options]);
       }
       return;
     }
@@ -102,9 +113,12 @@ async function runDefinition(command, def, positionals, options) {
   if (def.subcommands) {
     const sub = positionals[0];
     if (sub != null) {
-      const entry = def.subcommands[sub];
+      const entry = resolveSubcommand(def.subcommands, sub);
       if (entry) {
-        const result = await callImpl(entry.impl, entry.args ? entry.args(positionals.slice(1), options) : [options]);
+        const callArgs = entry.withPositionals
+          ? [positionals.slice(1), options]
+          : [options];
+        const result = await callImpl(entry.impl, callArgs);
         if (def.afterRun) def.afterRun(result, options);
         return;
       }

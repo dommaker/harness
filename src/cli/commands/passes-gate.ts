@@ -124,6 +124,17 @@ export async function runPassesGate(options: PassesGateOptions): Promise<void> {
 }
 
 /**
+ * --coverage 路由入口（候选7）：projectPath 兜底 + 阈值强转编组，
+ * 自 definitions.ts 的 optionRoutes args 闭包移回命令模块。
+ */
+export async function coverageCheck(options: Record<string, unknown>): Promise<boolean> {
+  return checkCoverage(
+    (options.projectPath as string) || process.cwd(),
+    parseInt(String(options.coverageThreshold), 10),
+  );
+}
+
+/**
  * 检查测试覆盖率
  */
 export async function checkCoverage(projectPath: string, threshold: number = 80): Promise<boolean> {

@@ -80,25 +80,30 @@ describe('命令注册表闭环', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('全部命令定义的路由构造可执行（mapActionArgs/subcommands.args/optionRoutes.args/afterRun 冒烟）', () => {
+  it('子命令别名唯一：别名不与主名/其他别名碰撞（候选7：别名是数据，冲突即行为歧义）', () => {
+    const walk = (def: CommandDefinition) => {
+      const entries = Object.entries(def.subcommands || {});
+      const seen = new Set<string>();
+      for (const [name, entry] of entries) {
+        expect(seen.has(name)).toBe(false);
+        seen.add(name);
+        for (const alias of entry.aliases || []) {
+          expect(seen.has(alias)).toBe(false);
+          seen.add(alias);
+        }
+      }
+      for (const child of def.children || []) walk(child);
+    };
+    for (const def of [...COMMAND_DEFINITIONS, ...GATE_DEFINITIONS.map(d => d.cli)]) walk(def);
+  });
+
+  it('全部命令定义的路由构造可执行（mapActionArgs/afterRun 冒烟；候选7 后子命令/选项路由零闭包）', () => {
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     try {
       const walk = (def: CommandDefinition) => {
         if (def.mapActionArgs) {
           def.mapActionArgs(['positional'], {});
           def.mapActionArgs([], {});
-        }
-        for (const entry of Object.values(def.subcommands || {})) {
-          if (entry.args) {
-            entry.args(['positional'], {});
-            entry.args([], {});
-          }
-        }
-        for (const route of def.optionRoutes || []) {
-          if (route.args) {
-            route.args([], {});
-            route.args(['positional'], {});
-          }
         }
         if (def.afterRun) {
           def.afterRun(true, {});
@@ -199,5 +204,20 @@ smoke('bin/harness.js 端到端（dist 存在时）', () => {
     const r = runWithModuleProbe(['knowledge', 'bogus']);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('未知子命令: bogus');
+  });
+
+  it('别名子命令解析到同一实现（knowledge ls = list，候选7）', () => {
+    const r = runWithModuleProbe(['knowledge', 'ls', '--json']);
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout)).toHaveProperty('total');
+    expect(r.implModules).toEqual([
+      expect.stringContaining('/dist/cli/commands/knowledge.js'),
+    ]);
+  });
+
+  it('search 编组闸门随别名命令名生效且提示逐字不变（kb s 缺参 → exit 1）', () => {
+    const r = runWithModuleProbe(['kb', 's']);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('请提供搜索关键词');
   });
 });

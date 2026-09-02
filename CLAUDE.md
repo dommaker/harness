@@ -46,7 +46,6 @@ Presets (`src/presets/`) are pure data: `strict` and `standard` enable all const
 | `src/monitoring/` | Execution Trace collection/analysis, context usage tracking |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
 | `src/context/` | Session management, token budget, compaction, knowledge injection |
-| `src/spec/` | (empty) @spec annotation checker removed (ADR-0003); spec story lives in core/spec/validator + SpecAcceptanceGate |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |

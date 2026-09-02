@@ -1,14 +1,13 @@
 /**
- * src/types 模块导出覆盖测试
+ * src/types 类型层行为测试
  */
 
 import { describe, it, expect } from '@jest/globals';
 
-// 从 barrel index.ts 导入，覆盖 re-export 行
-import { ConstraintViolationError } from '..';
+import { ConstraintViolationError } from '../constraint';
 
-describe('types barrel exports', () => {
-  it('ConstraintViolationError 应该可从 index 导入', () => {
+describe('ConstraintViolationError 导出', () => {
+  it('ConstraintViolationError 应该可导入', () => {
     expect(ConstraintViolationError).toBeDefined();
     expect(typeof ConstraintViolationError).toBe('function');
   });

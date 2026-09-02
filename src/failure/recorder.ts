@@ -74,6 +74,10 @@ export class FailureRecorder {
 
   /**
    * 获取历史记录
+   *
+   * 坏行策略：显式 skip（harness#96）——单行损坏（半写入截断、手工编辑、磁盘满）
+   * 不上抛，跳过后继续；每条读路向 stderr 打一次含坏行条数的警告，
+   * stdout（含 --json）逐字节不变。
    */
   async getHistory(limit?: number): Promise<FailureRecord[]> {
     if (!fs.existsSync(this.logFile)) {
@@ -83,7 +87,18 @@ export class FailureRecorder {
     const content = fs.readFileSync(this.logFile, 'utf-8');
     const lines = content.trim().split('\n').filter(Boolean);
 
-    const records = lines.map((line) => JSON.parse(line) as FailureRecord);
+    const records: FailureRecord[] = [];
+    let skippedLines = 0;
+    for (const line of lines) {
+      try {
+        records.push(JSON.parse(line) as FailureRecord);
+      } catch {
+        skippedLines++;
+      }
+    }
+    if (skippedLines > 0) {
+      console.error(`[harness] ${path.basename(this.logFile)} 跳过 ${skippedLines} 行损坏记录`);
+    }
 
     if (limit && limit > 0) {
       return records.slice(-limit);

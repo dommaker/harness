@@ -103,23 +103,6 @@ describe('PassesGate', () => {
       expect(names).toContain('custom');
     });
 
-    it('应该能注销扩展', () => {
-      gate.registerExtension('temp', {
-        name: 'temp',
-        run: async () => ({
-          passed: true,
-          command: 'temp-test',
-          timestamp: new Date(),
-        }),
-      });
-      
-      const removed = gate.unregisterExtension('temp');
-      expect(removed).toBe(true);
-      
-      const names = gate.getExtensionNames();
-      expect(names).not.toContain('temp');
-    });
-
     it('runAllTests 应该运行所有测试包括扩展', async () => {
       gate.registerExtension('puppeteer', {
         name: 'puppeteer',

@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FileKnowledgeStore } from './store';
 import type { KnowledgeStore } from './store';
+import { evaluateFlywheel, genuineRefs } from './flywheel-metrics';
 import type { KnowledgeEntry } from './types';
 
 // ── Types ─────────────────────────────────────────────────
@@ -99,12 +100,6 @@ const EVENT_NOISE_PATTERNS = [
   /^\[Session Feature\]\s/,
 ];
 const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'];
-const SYNTHETIC_REF_PATTERN = /^(search|test-agent|prompt-inject|monitor|analyst|auditor|triage|executor|session|trend|incident):\d{4}-\d{2}-\d{2}/;
-
-/** Filter out synthetic references (automated search/ops records, not genuine consumption) */
-function genuineRefs(refs: string[]): string[] {
-  return refs.filter(r => !SYNTHETIC_REF_PATTERN.test(r));
-}
 
 // ── Per-Entry Rules ───────────────────────────────────────
 
@@ -496,33 +491,23 @@ export class KnowledgeAudit {
     const staleRatio = active.length > 0 ? d5Issues.length / active.length : 0;
     const d5Score = active.length === 0 ? 100 : Math.max(0, 100 - (staleRatio * 100));
 
-    // D6: 飞轮验证
-    const withRefs = active.filter(e => genuineRefs(e.referencedBy).length > 0).length;
-    const refCoverage = active.length > 0 ? withRefs / active.length : 0;
-    const avgRefs = active.length > 0
-      ? active.reduce((sum, e) => sum + genuineRefs(e.referencedBy).length, 0) / active.length
-      : 0;
-
-    // Consumption hit rate from aggregated stats file (written by MonitorAgent)
-    let consumptionHitRate = 0;
+    // D6: 飞轮验证 —— 指标计算唯一实现在 flywheel-metrics，此处只做 fs 读取与报告层映射
     let dailyConsumptionEvents = 0;
     try {
       const statsPath = path.join(this.store.getBaseDir(), '.consumption-stats.json');
       if (fs.existsSync(statsPath)) {
         const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
         dailyConsumptionEvents = stats.dailyEvents || 0;
-        // hitRate: daily events / active entries, capped at 1
-        consumptionHitRate = active.length > 0
-          ? Math.min(dailyConsumptionEvents / active.length, 1)
-          : 0;
       }
     } catch { /* best-effort */ }
 
+    const metrics = evaluateFlywheel({ entries: active, dailyConsumptionEvents });
+
     // Score: refCoverage * 50 + avgRefs * 20 + consumptionHitRate * 30
     const d6Score = Math.min(100, Math.round(
-      refCoverage * 50 +
-      Math.min(avgRefs / 5, 1) * 20 +
-      consumptionHitRate * 30
+      metrics.refCoverage * 50 +
+      Math.min(metrics.avgRefs / 5, 1) * 20 +
+      metrics.consumptionHitRate * 30
     ));
 
     return {
@@ -576,12 +561,12 @@ export class KnowledgeAudit {
         score: d6Score,
         issues: 0,
         details: {
-          activeEntries: active.length,
-          entriesWithRefs: withRefs,
-          refCoverage: Math.round(refCoverage * 100),
-          avgRefCount: Math.round(avgRefs * 10) / 10,
-          dailyConsumptionEvents,
-          consumptionHitRate: Math.round(consumptionHitRate * 100),
+          activeEntries: metrics.activeEntries,
+          entriesWithRefs: metrics.entriesWithRefs,
+          refCoverage: Math.round(metrics.refCoverage * 100),
+          avgRefCount: Math.round(metrics.avgRefs * 10) / 10,
+          dailyConsumptionEvents: metrics.dailyConsumptionEvents,
+          consumptionHitRate: Math.round(metrics.consumptionHitRate * 100),
         },
       },
       incremental: this.computeIncremental(),

@@ -24,6 +24,7 @@
 - `sanitizeExternalContent` — 外部内容安全清洗（过滤注入模式 + 长度限制）
 - `migrateKnowledgeEntries` — AS-021 迁移工具（为现有条目添加 consumptionMode/origin）
 - `KnowledgeAudit` — 6 维度质量审计引擎
+- `flywheel-metrics`（包内，不进导出面）— 知识飞轮指标唯一实现：`evaluateFlywheel(env)` 出 canonical 比例、`genuineRefs()` 出 synthetic 过滤口径，audit D6 / `knowledge stats` / `knowledge health` 三处共消费（ADR-0013）
 - `ReferenceTracker` — 知识引用关系图谱
 - `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)
 - `ColdStartImporter` — 冷启动知识导入
@@ -43,9 +44,11 @@
 - Ingest gate: ingestEntry() 先经 audit.validate() 检查，reject 不入库
 - 外部内容三层防御：ingest sanitization + retrieval marking + prompt constraint
 - 消费饱和度替代固定 TTL 用于 signal 过期判断
+- **飞轮指标只有一个实现**（ADR-0013）：`refCoverage` / `avgRefs` / `consumptionHitRate` 一律出自 `flywheel-metrics.evaluateFlywheel()`，canonical 分子 = `genuineRefs()` 过滤后的真实消费引用（`search|test-agent|prompt-inject|monitor|analyst|...:<date>` 自动化按天记账键不算消费，`unknown:` 注入键算消费）。audit D6 / `knowledge stats` / `knowledge health` 只在展示层做单位与字段名映射（百分比取整、一位小数、`avgRefs`→`avgRefCount`），人口筛选留在各调用方。新增消费方禁止自行数 `referencedBy.length`。
 
 ## 注意事项
 - Phase 1+4 实现的知识引擎核心
 - 约束"退役不删除"——retire 落盘 config.yml `enabled: false` + retired 元数据，保留规则原文 + 退役原因 + 历史统计（可回滚）
 - `MaturityLevel` 包含 6 个值: draft/verified/proven/archived/active/deprecated
 - `excludeArchived` 同时排除 archived 和 deprecated
+- 仍有两处按**原始** `referencedBy.length` 判定，不属飞轮指标、ADR-0013 明确列为范围外：`lifecycle.ts` 的 signal 饱和 / reference 激活（退役阈值调整另票）、`knowledge health` 的 D1「verified 零引用」线索提示（逐条 issue 线索，非聚合分子）

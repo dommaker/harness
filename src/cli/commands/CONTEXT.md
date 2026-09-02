@@ -34,4 +34,5 @@ H5（#44）起：
 - PRESERVE:governance 段内写入纪律：机器管理的只有 HARNESS_CONSTRAINTS 标记区间——有标记只换标记区间，无标记（纯手写段）在段尾追加注入段；段内其余手写内容（治理契约引言/流程/纪律等）必须原样保留（曾整段替换清空手写内容的回归，init-injection.test 有防回归用例）
 - 注入段落点路由与 marker-range 替换收口在 `core/constraints/injection-writer`（ADR-0011）：读侧 `resolveInjectionTarget`（漂移检测/retire 同步共用「CLAUDE.md 有标记优先，否则 AGENTS.md」）+ 写侧 `resolveGovernanceLanding`（init 落点选择）；init 三个治理段 writer 与 retire 注入同步均为「渲染 body + 调 writer」，半标记（单边/乱序）一律拒写告警；未注入 = 两处均无完整标记段
 - knowledge 命令包含 13 个子操作（list/search/import/decay/stats/upsert/sync-status/sync-rag/audit/snapshot/migrate/index/health）
+- `stats` / `health` 的飞轮数字不在 CLI 内计算：分子口径唯一实现是 `knowledge/flywheel-metrics.ts`（`evaluateFlywheel`，ADR-0013），本层只做百分比取整/一位小数与字段名映射；`.consumption-stats.json` 的读取留在各命令（module 零 IO）
 - 特殊路由（选项条件、子命令兜底、退出码处理、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction / afterRun 字段，bin 是纯通用引擎、不含单命令知识

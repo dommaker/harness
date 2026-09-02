@@ -13,6 +13,7 @@ import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
 import { KnowledgeAudit } from '../../knowledge/audit';
+import { evaluateFlywheel } from '../../knowledge/flywheel-metrics';
 import { migrateKnowledgeEntries } from '../../knowledge/migration';
 import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
 import type { KnowledgeSubsystem, MaturityLevel, QueryFilter } from '../../knowledge/types';
@@ -223,21 +224,20 @@ export async function knowledgeStats(options: KnowledgeOptions): Promise<void> {
     byLayer[entry.layer] = (byLayer[entry.layer] || 0) + 1;
   }
 
-  // D6 flywheel metrics
-  const withRefs = active.filter(e => e.referencedBy.length > 0).length;
-  const refCoverage = active.length > 0 ? Math.round(withRefs / active.length * 100) : 0;
-  const avgRefs = active.length > 0
-    ? Math.round(active.reduce((sum, e) => sum + e.referencedBy.length, 0) / active.length * 10) / 10
-    : 0;
-  let consumptionHitRate = 0;
+  // 飞轮指标：计算唯一实现在 knowledge/flywheel-metrics，此处只做 fs 读取 + 展示层单位映射
+  let dailyConsumptionEvents = 0;
   try {
     const statsPath = path.join(store.getBaseDir(), '.consumption-stats.json');
     if (fs.existsSync(statsPath)) {
       const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
-      const dailyEvents = stats.dailyEvents || 0;
-      consumptionHitRate = active.length > 0 ? Math.min(Math.round(dailyEvents / active.length * 100), 100) : 0;
+      dailyConsumptionEvents = stats.dailyEvents || 0;
     }
   } catch { /* best-effort */ }
+
+  const metrics = evaluateFlywheel({ entries: active, dailyConsumptionEvents });
+  const refCoverage = Math.round(metrics.refCoverage * 100);
+  const avgRefs = Math.round(metrics.avgRefs * 10) / 10;
+  const consumptionHitRate = Math.round(metrics.consumptionHitRate * 100);
 
   const flywheel = { refCoverage, avgRefs, consumptionHitRate };
 
@@ -459,12 +459,10 @@ export async function knowledgeHealth(options: KnowledgeOptions & { dir?: string
     issues.push({ severity: 'info', entry: '-', detail: `消费追踪数据不存在（${statsPath}）` });
   }
 
-  // D4: 飞轮指标
-  const withRefs = entries.filter(e => e.referencedBy.length > 0).length;
-  const refCoverage = entries.length > 0 ? Math.round(withRefs / entries.length * 100) : 0;
-  const avgRefs = entries.length > 0
-    ? Math.round(entries.reduce((sum, e) => sum + e.referencedBy.length, 0) / entries.length * 10) / 10
-    : 0;
+  // D4: 飞轮指标（计算唯一实现在 knowledge/flywheel-metrics；人口为本命令的 excludeArchived 切片）
+  const metrics = evaluateFlywheel({ entries });
+  const refCoverage = Math.round(metrics.refCoverage * 100);
+  const avgRefs = Math.round(metrics.avgRefs * 10) / 10;
 
   // 健康分计算
   const totalIssues = issues.filter(i => i.severity === 'error').length * 3

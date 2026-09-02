@@ -210,21 +210,6 @@ export function detectRequirement(projectPath: string): boolean {
 }
 
 /**
- * 检测是否在 git worktree 中
- */
-export function detectWorktree(projectPath: string): boolean {
-  try {
-    const gitDir = path.join(projectPath, '.git');
-    if (fs.existsSync(gitDir)) {
-      const content = fs.readFileSync(gitDir, 'utf-8');
-      // 实际 worktree 的 .git 是文件（指向主 repo），不是目录
-      return content.startsWith('gitdir:');
-    }
-  } catch { /* ignore */ }
-  return false;
-}
-
-/**
  * 检测是否有复用检查
  * 检查 .harness/reuse/ 目录或相关文档
  */
@@ -266,6 +251,5 @@ export async function buildConstraintContext(options: {
     hasVerificationEvidence: await detectVerificationEvidence(projectPath),
     hasReuseCheck: detectReuseCheck(projectPath),
     hasRequirement: detectRequirement(projectPath),
-    hasWorktree: detectWorktree(projectPath),
   };
 }

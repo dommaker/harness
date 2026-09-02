@@ -36,7 +36,6 @@ await checkBeforeExecution({
   operation: 'code_implementation',
   taskDescription: '重构用户认证模块',
   projectPath: '/path/to/project',
-  hasWorktree: true,
 });
 
 // 获取约束元数据

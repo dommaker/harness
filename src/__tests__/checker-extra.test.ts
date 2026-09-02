@@ -79,14 +79,10 @@ describe('ConstraintChecker - 补充覆盖', () => {
         operation: 'code_implementation',
         hasTest: true,
         hasVerificationEvidence: true,
-        hasWorktree: true,
         hasRequirement: true,
         taskDescription: 'Test task — single focused change',
         hasSingleTask: true,
-        hasRequirementReview: true,
-        hasTwoStageReview: true,
-        completionClaimText: 'All 142 tests passed, coverage 87.3%',
-      } as any;
+      };
 
       // 不应该抛出异常
       await expect(checkBeforeExecution(context)).resolves.not.toThrow();

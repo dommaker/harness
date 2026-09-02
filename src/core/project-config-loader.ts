@@ -228,7 +228,7 @@ export class ProjectConfigLoader {
 
     // 2. 添加自定义约束（config.yml 禁用的 id 不追加：step 1 已将其
     // 收集进 disabled，custom 在 step 1 时尚未入桶，须在此兜底跳过；
-    // 条目带 retired 元数据的同样不追加——#82 D6 退役落点在条目自身）
+    // 条目带 retired 元数据的同样不追加——studio#82 D6 退役落点在条目自身）
     for (const [id, customDef] of Object.entries(this.customConstraints)) {
       if (result.disabled.includes(id) || customDef.retired) {
         continue;

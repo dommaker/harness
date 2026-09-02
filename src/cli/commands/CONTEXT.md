@@ -12,7 +12,7 @@ H5（#44）起：
 - 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / spec-baseline-check
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）
 
-`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置落 config.yml retired 元数据，custom 落 custom-constraints.yml 条目 retired 段（#82 D6 一处真相）+ KnowledgeStore 沉淀 + 治理注入段同步）。
+`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置落 config.yml retired 元数据，custom 落 custom-constraints.yml 条目 retired 段（studio#82 D6 一处真相）+ KnowledgeStore 沉淀 + 治理注入段同步）。
 
 ## 依赖关系
 - 依赖 `src/core/constraints/` 约束引擎

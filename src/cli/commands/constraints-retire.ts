@@ -2,7 +2,7 @@
  * harness constraints retire —— 约束退役（ADR-0001 决策 2/5）
  *
  * 建议层全自动（候选诊断复用 report 数据层），执行层保留一次人确认。
- * 落盘形态（#82 D6 一处真相）：
+ * 落盘形态（studio#82 D6 一处真相）：
  *
  * - 内置约束 → config.yml `enabled: false` + `retired` 元数据：
  *
@@ -64,7 +64,7 @@ export interface RetireResult {
   status: RetireStatus;
   /** 是否 check 层 iron（交互模式据此追加确认） */
   isIronLaw: boolean;
-  /** 退役落点：custom 约束落 custom-constraints.yml（#82 D6），内置落 config.yml */
+  /** 退役落点：custom 约束落 custom-constraints.yml（studio#82 D6），内置落 config.yml */
   landing: 'config.yml' | 'custom-constraints.yml';
   stats: { total: number; fail: number; failRate: number };
   /** 治理注入段（CLAUDE.md / AGENTS.md）是否已同步 */
@@ -174,7 +174,7 @@ function writeRetireConfig(
 }
 
 /**
- * 写 custom-constraints.yml 退役段（#82 D6 统一落点）
+ * 写 custom-constraints.yml 退役段（studio#82 D6 统一落点）
  *
  * 在 custom_constraints.<id> 条目内追加 retired 元数据，保留规则原文。
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明。

@@ -38,7 +38,7 @@
 | GateDecision | 三态决策 `deny \| abstain \| ask`；deny 单调（下游不可改回 allow）、ask 枚举预留 fail-closed = deny |
 | GateResult | 报告结构（gate/passed/message/details/timestamp/duration），保留为报告层，不作决策 |
 | 守卫 guard | 仅 dsh 借鉴语境（工具管线单调守卫），不进入 harness 命名 |
-| 回滚 | 分工：版本化回退（单段——yml 数据文件 git 版本化，删段恢复）+ 提案回滚（多段 inverse，挂 #82 D6） |
+| 回滚 | 分工：版本化回退（单段——yml 数据文件 git 版本化，删段恢复）+ 提案回滚（多段 inverse，挂 studio#82 D6） |
 | 文件驱动 CLI | yml 状态真值 + 一次性进程、无常驻生命周期；故不引 dispose 链（止步档 1） |
 | 对照（reconcile） | CAPABILITIES.md 声明与源码实况的双向一致性判定（代码→文档查漏登，文档→代码查幽灵）；唯一实现 `core/constraints/capabilities-reconcile.ts`，capability_sync / docs_freshness / sync-docs 共消费（ADR-0009） |
 | 测试产物解读（test-output） | 从测试运行器 stdout 读出「过了没 / 哪些失败 / 覆盖率」的判定；唯一实现 `core/validators/test-output.ts`（包内，不进导出面），passes-gate / acceptance 共消费（ADR-0012）。两门禁判定依据不一致待 #93 裁决，覆盖率取数归属待 #94 裁决 |

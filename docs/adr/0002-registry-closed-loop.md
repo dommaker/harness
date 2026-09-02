@@ -49,7 +49,7 @@ harness 有 4 类「注册型能力」——能力以「id → 实现」的方�
 
 - **插件** = harness 扩展点统称（hook / checker / 门禁 / 命令），非运行时插件容器。
 - **Gate（门禁）** = 统一守卫接口；「守卫 guard」仅 dsh 借鉴语境，不进入 harness 命名。
-- **回滚** = 两者分工：版本化回退（单段——yml 数据文件 git 版本化，`retire` 落盘 `enabled:false` + `retired` 元数据、回滚即删段恢复）+ 提案回滚（多段 inverse，形态 A 内联 inverse 字段，挂 #82 D6）。
+- **回滚** = 两者分工：版本化回退（单段——yml 数据文件 git 版本化，`retire` 落盘 `enabled:false` + `retired` 元数据、回滚即删段恢复）+ 提案回滚（多段 inverse，形态 A 内联 inverse 字段，挂 studio#82 D6）。
 - **文件驱动 CLI** = yml 状态真值 + 一次性进程、无常驻生命周期；故不引 dispose 链。
 
 ## 后果

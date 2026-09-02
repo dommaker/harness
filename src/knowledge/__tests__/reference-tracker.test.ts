@@ -125,6 +125,22 @@ describe('ReferenceTracker', () => {
       expect(tracker.getReferencesForEntry('any')).toEqual([]);
     });
 
+    it('单行损坏只丢该行，合法记录保留（harness#82：原「坏一行丢全部」改 skip）', () => {
+      const filePath = path.join(tempDir, 'references.jsonl');
+      fs.writeFileSync(
+        filePath,
+        [
+          JSON.stringify({ decisionId: 'decision-1', entryIds: ['entry-1'], timestamp: '2026-09-03' }),
+          'NOT VALID JSON',
+          JSON.stringify({ decisionId: 'decision-2', entryIds: ['entry-2'], timestamp: '2026-09-03' }),
+        ].join('\n') + '\n',
+        'utf-8'
+      );
+      expect(tracker.getReferencesForEntry('entry-1')).toEqual(['decision-1']);
+      expect(tracker.getReferencesForEntry('entry-2')).toEqual(['decision-2']);
+      expect(tracker.getReferencesForDecision('decision-2')).toEqual(['entry-2']);
+    });
+
     it('should return empty when file does not exist', () => {
       expect(tracker.getReferencesForDecision('any')).toEqual([]);
     });

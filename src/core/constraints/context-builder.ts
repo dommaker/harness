@@ -11,7 +11,9 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { execAsync } from '../../utils/exec';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
+import type { ExecutionTrace } from '../../types/trace';
 import type { ConstraintContext, ConstraintTrigger } from '../../types/constraint';
 
 /**
@@ -111,22 +113,9 @@ export function detectTrigger(
 export async function detectFailingTest(projectPath: string): Promise<boolean> {
   try {
     const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
-    if (!fs.existsSync(traceFile)) return false;
-
-    const content = fs.readFileSync(traceFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-    if (lines.length === 0) return false;
-
-    // 检查最近 20 条记录是否有 fail
-    const recent = lines.slice(-20);
-    return recent.some(line => {
-      try {
-        const trace = JSON.parse(line);
-        return trace.result === 'fail';
-      } catch {
-        return false;
-      }
-    });
+    // 坏行策略：skip（原逐行 catch→false 语义不变）；只 parse 最近 20 行
+    const { records } = readJsonl<ExecutionTrace>(traceFile, 'skip', { tail: 20 });
+    return records.some(trace => trace.result === 'fail');
   } catch {
     return false;
   }
@@ -161,22 +150,9 @@ export function detectRootCauseInvestigation(projectPath: string): boolean {
 export async function detectVerificationEvidence(projectPath: string): Promise<boolean> {
   try {
     const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
-    if (!fs.existsSync(traceFile)) return false;
-
-    const content = fs.readFileSync(traceFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-    if (lines.length === 0) return false;
-
-    // 检查最近 10 条记录是否有 pass
-    const recent = lines.slice(-10);
-    return recent.some(line => {
-      try {
-        const trace = JSON.parse(line);
-        return trace.result === 'pass';
-      } catch {
-        return false;
-      }
-    });
+    // 坏行策略：skip（原逐行 catch→false 语义不变）；只 parse 最近 10 行
+    const { records } = readJsonl<ExecutionTrace>(traceFile, 'skip', { tail: 10 });
+    return records.some(trace => trace.result === 'pass');
   } catch {
     return false;
   }

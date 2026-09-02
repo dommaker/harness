@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl } from '../../utils/jsonl';
 
 export interface MinedTurn {
   role: string;
@@ -65,17 +66,17 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
     const turns: MinedTurn[] = [];
     const toolCalls: string[] = [];
 
-    let content: string;
+    let records: Record<string, any>[];
     try {
-      content = fs.readFileSync(filePath, 'utf-8');
+      // 损坏行静默跳过（坏行策略 skip，与原实现一致，harness#82 走 jsonl 正本）；
+      // 外层 catch 兜文件不可读，沿用原「跳过该文件」语义
+      records = readJsonl<Record<string, any>>(filePath, 'skip').records;
     } catch {
       continue;
     }
 
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue;
+    for (const entry of records) {
       try {
-        const entry = JSON.parse(line);
         const msg = entry.message;
         if (msg?.role && (msg.content || entry.type === 'user')) {
           turns.push({ role: msg.role, content: extractText(msg.content) });
@@ -88,7 +89,7 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
           }
         }
       } catch {
-        // 损坏行跳过
+        // 单条记录提取异常跳过（原逐行 catch 语义：parse 已由 module skip，此处兜提取）
       }
     }
 

@@ -112,8 +112,8 @@ describe('FailureRecorder 坏行容错（harness#96）', () => {
 
   describe('failure list 命令', () => {
     it('坏行不崩、stdout 与无坏行时逐字节一致、stderr 警告一次', async () => {
-      const validOnly = writeLogFile(path.join(dir, 'clean'), [validRecord('a'), validRecord('b')]);
-      const withCorrupt = writeLogFile(path.join(dir, 'dirty'), [validRecord('a'), CORRUPT_LINE, validRecord('b')]);
+      writeLogFile(path.join(dir, 'clean'), [validRecord('a'), validRecord('b')]);
+      writeLogFile(path.join(dir, 'dirty'), [validRecord('a'), CORRUPT_LINE, validRecord('b')]);
 
       const cleanCapture = captureConsole();
       await failureList({ projectPath: path.join(dir, 'clean') });
@@ -142,8 +142,8 @@ describe('FailureRecorder 坏行容错（harness#96）', () => {
 
   describe('failure stats 命令', () => {
     it('坏行不崩、stdout 与无坏行时逐字节一致', async () => {
-      const validOnly = writeLogFile(path.join(dir, 'clean'), [validRecord('a'), validRecord('b')]);
-      const withCorrupt = writeLogFile(path.join(dir, 'dirty'), [CORRUPT_LINE, validRecord('a'), validRecord('b')]);
+      writeLogFile(path.join(dir, 'clean'), [validRecord('a'), validRecord('b')]);
+      writeLogFile(path.join(dir, 'dirty'), [CORRUPT_LINE, validRecord('a'), validRecord('b')]);
 
       const cleanCapture = captureConsole();
       await failureStats({ projectPath: path.join(dir, 'clean') });

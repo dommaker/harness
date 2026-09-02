@@ -9,7 +9,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TraceCollector } from '../../monitoring/traces';
 import { TraceAnalyzer } from '../../monitoring/trace-analyzer';
+import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
+import type { ExecutionTrace } from '../../types/trace';
 import type { TraceSummary, TraceAnomaly } from '../../types/trace';
 
 export interface StatusOptions {
@@ -49,19 +51,12 @@ export async function status(options: StatusOptions): Promise<void> {
     return;
   }
 
-  // 读取 trace 文件
-  const tracesContent = fs.readFileSync(tracesPath, 'utf-8');
-  const lines = tracesContent.trim().split('\n').filter(Boolean);
-  const traceCount = lines.length;
-
-  // 解析 traces
-  const traces = lines.map(line => {
-    try {
-      return JSON.parse(line);
-    } catch {
-      return null;
-    }
-  }).filter(Boolean);
+  // 读取 trace 文件：坏行策略 skip（原 null + filter(Boolean) 语义不变，harness#82）
+  // traceCount 保持原始非空行数口径（合法 + 跳过），与改前显示一致；
+  // filter(Boolean) 沿用原语义：parse 成功但值为 falsy 的行（如 "null"）不进分析
+  const { records, skippedLines } = readJsonl<ExecutionTrace>(tracesPath, 'skip');
+  const traces = records.filter(Boolean);
+  const traceCount = records.length + skippedLines;
 
   // 创建收集器和分析器
   const collector = new TraceCollector({ traceFile: tracesPath });

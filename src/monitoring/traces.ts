@@ -11,6 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl, appendJsonl } from '../utils/jsonl';
 import {
   DEFAULT_TRACE_FILE,
   type ExecutionTrace,
@@ -75,9 +76,8 @@ export class TraceCollector {
     // 检查文件大小，必要时滚动
     this.checkFileSize();
 
-    // 追加写入
-    const line = JSON.stringify(trace);
-    fs.appendFileSync(this.traceFile, line + '\n', 'utf-8');
+    // 追加写入（写链收口：ensureDir + append，harness#82）
+    appendJsonl(this.traceFile, trace);
   }
 
   /**
@@ -123,21 +123,11 @@ export class TraceCollector {
    * - 结果类型
    */
   read(filter?: TraceFilter): ExecutionTrace[] {
-    if (!fs.existsSync(this.traceFile)) {
-      return [];
-    }
+    // 坏行策略：skip（harness#82 裁决 4：原裸 parse「抛」改 skip，
+    // 签名与返回类型不变——studio 两侧点经 readRecent/readByConstraint 活消费）
+    const { records } = readJsonl<ExecutionTrace>(this.traceFile, 'skip');
 
-    const content = fs.readFileSync(this.traceFile, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
-
-    let traces = lines.map(line => JSON.parse(line) as ExecutionTrace);
-
-    // 应用过滤条件
-    if (filter) {
-      traces = this.applyFilter(traces, filter);
-    }
-
-    return traces;
+    return filter ? this.applyFilter(records, filter) : records;
   }
 
   /**
@@ -274,25 +264,24 @@ export class TraceCollector {
     }
 
     const stats = fs.statSync(this.traceFile);
-    const content = fs.readFileSync(this.traceFile, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
+    // 坏行策略：skip（同 read，裁决 4）；首/末时间戳取首/末条合法记录；
+    // totalLines 保持原始非空行数口径（合法 + 坏行）
+    const { records, skippedLines } = readJsonl<ExecutionTrace>(this.traceFile, 'skip');
 
-    let oldest: number | undefined;
-    let newest: number | undefined;
+    let oldestTrace: number | undefined;
+    let newestTrace: number | undefined;
 
-    if (lines.length > 0) {
-      const firstTrace = JSON.parse(lines[0]) as ExecutionTrace;
-      const lastTrace = JSON.parse(lines[lines.length - 1]) as ExecutionTrace;
-      oldest = firstTrace.timestamp;
-      newest = lastTrace.timestamp;
+    if (records.length > 0) {
+      oldestTrace = records[0].timestamp;
+      newestTrace = records[records.length - 1].timestamp;
     }
 
     return {
       fileExists: true,
       fileSize: stats.size,
-      totalLines: lines.length,
-      oldestTrace: oldest,
-      newestTrace: newest,
+      totalLines: records.length + skippedLines,
+      oldestTrace,
+      newestTrace,
     };
   }
 }

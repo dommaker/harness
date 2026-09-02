@@ -13,6 +13,7 @@ import * as path from 'path';
 import type { Constraint } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
+import { readJsonl } from '../../utils/jsonl';
 import { getEffectiveConstraints, lintEffectiveConfig } from '../effective-constraints';
 import type { EffectiveConfigLint } from '../effective-constraints';
 
@@ -110,24 +111,15 @@ export interface ConstraintsUsageReport {
 }
 
 /**
- * 读取项目 traces.log（只读，容错：坏行跳过）
+ * 读取项目 traces.log（只读）
+ *
+ * 坏行策略：skip（原语义不变——report 只读，不因单行损坏失败）
  */
 export function readProjectTraces(projectRoot: string): ExecutionTrace[] {
-  const tracePath = path.join(projectRoot, DEFAULT_TRACE_FILE);
-  if (!fs.existsSync(tracePath)) return [];
-
-  const content = fs.readFileSync(tracePath, 'utf-8');
-  const traces: ExecutionTrace[] = [];
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      traces.push(JSON.parse(trimmed) as ExecutionTrace);
-    } catch {
-      // 坏行跳过（report 只读，不因单行损坏失败）
-    }
-  }
-  return traces;
+  return readJsonl<ExecutionTrace>(
+    path.join(projectRoot, DEFAULT_TRACE_FILE),
+    'skip'
+  ).records;
 }
 
 /**

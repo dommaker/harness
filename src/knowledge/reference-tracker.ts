@@ -5,8 +5,8 @@
  * Storage: append-only JSONL at .harness/knowledge/references.jsonl
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
+import { appendJsonl, readJsonl } from '../utils/jsonl';
 import type { ReferenceRecord } from './types';
 import type { KnowledgeStore } from './store';
 
@@ -33,7 +33,8 @@ export class ReferenceTracker {
       entryIds,
       timestamp: new Date().toISOString(),
     };
-    fs.appendFileSync(this.filePath, JSON.stringify(record) + '\n', 'utf-8');
+    // 写链收口：ensureDir + append（harness#82；原实现不 ensureDir，依赖 store 建目录）
+    appendJsonl(this.filePath, record);
   }
 
   /**
@@ -85,13 +86,11 @@ export class ReferenceTracker {
   // ── Internal ───────────────────────────────────────────────
 
   private readAll(): ReferenceRecord[] {
-    if (!fs.existsSync(this.filePath)) return [];
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
-      return raw
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => JSON.parse(line) as ReferenceRecord);
+      // 坏行策略：skip（harness#82：原「逐行 map 会抛 + 外层 catch 吞成整文件 []」
+      // ——坏一行丢全部记录——不可接受，改为单行损坏只丢该行）；
+      // 外层 catch 仅兜 IO 读取错误，沿用原吞掉语义
+      return readJsonl<ReferenceRecord>(this.filePath, 'skip').records;
     } catch {
       return [];
     }

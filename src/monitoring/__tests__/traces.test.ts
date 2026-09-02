@@ -3,6 +3,7 @@
  */
 
 import { TraceCollector, getTraceCollector, configureTraceCollector } from '../traces';
+import type { ExecutionTrace, TraceFilter } from '../../types/trace';
 import * as fs from 'fs';
 
 // Mock fs
@@ -159,6 +160,62 @@ describe('TraceCollector', () => {
       mockFs.statSync.mockReturnValueOnce({ size: 1024 } as any);
       const stats = collector.getStats();
       expect(stats.fileExists).toBe(true);
+    });
+  });
+
+  describe('坏行容错（harness#82 裁决 4：原「抛」改 skip，签名与返回类型不变）', () => {
+    it('read() 单行损坏只丢该行，合法 trace 照常返回', () => {
+      mockFs.readFileSync.mockReturnValueOnce(
+        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"b","broken"\n' +
+        '{"constraintId":"c","level":"guideline","timestamp":200,"result":"fail"}\n'
+      );
+      const traces = collector.read();
+      expect(traces.map(t => t.constraintId)).toEqual(['a', 'c']);
+    });
+
+    it('read() 坏行不阻断过滤', () => {
+      mockFs.readFileSync.mockReturnValueOnce(
+        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
+        'not-json\n' +
+        '{"constraintId":"a","level":"iron_law","timestamp":200,"result":"fail"}\n'
+      );
+      const traces = collector.read({ constraintId: 'a' });
+      expect(traces).toHaveLength(2);
+    });
+
+    it('getStats() 首末行坏时不抛：totalLines 保持原始行数，时间戳取合法记录', () => {
+      mockFs.readFileSync.mockReturnValueOnce(
+        'not-json\n' +
+        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"b","level":"guideline","timestamp":200,"result":"fail"}\n' +
+        'also-bad\n'
+      );
+      mockFs.statSync.mockReturnValueOnce({ size: 2048 } as any);
+      const stats = collector.getStats();
+      expect(stats.fileExists).toBe(true);
+      expect(stats.totalLines).toBe(4);
+      expect(stats.oldestTrace).toBe(100);
+      expect(stats.newestTrace).toBe(200);
+    });
+
+    it('四个读方法签名与返回类型编译期固定（studio analyzeRecent 消费面零改动证据）', () => {
+      const read: (filter?: TraceFilter) => ExecutionTrace[] = collector.read.bind(collector);
+      const readRecent: (hours: number) => ExecutionTrace[] = collector.readRecent.bind(collector);
+      const readByConstraint: (constraintId: string) => ExecutionTrace[] =
+        collector.readByConstraint.bind(collector);
+      const getStats: () => {
+        fileExists: boolean;
+        fileSize: number;
+        totalLines: number;
+        oldestTrace?: number;
+        newestTrace?: number;
+      } = collector.getStats.bind(collector);
+
+      expect(read).toBeDefined();
+      expect(readRecent).toBeDefined();
+      expect(readByConstraint).toBeDefined();
+      expect(getStats).toBeDefined();
     });
   });
 });

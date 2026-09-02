@@ -8,6 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl, appendJsonl } from '../utils/jsonl';
 import { ContextTracker } from '../monitoring/context-tracker';
 import type {
   SessionEvent,
@@ -65,20 +66,10 @@ export class SessionManager {
     // 从磁盘恢复
     const eventsPath = path.join(this.getSessionDir(id), 'events.jsonl');
     try {
-      if (!fs.existsSync(eventsPath)) return undefined;
-
-      const content = fs.readFileSync(eventsPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(Boolean);
-      if (lines.length === 0) return undefined;
-
-      const events: SessionEvent[] = [];
-      for (const line of lines) {
-        try {
-          events.push(JSON.parse(line) as SessionEvent);
-        } catch {
-          // 跳过损坏行
-        }
-      }
+      // 坏行策略：skip（原逐行 catch 跳过语义不变，harness#82）；
+      // 空文件判定保持原始非空行数口径（合法 + 坏行 = 0 才算空）
+      const { records: events, skippedLines } = readJsonl<SessionEvent>(eventsPath, 'skip');
+      if (events.length + skippedLines === 0) return undefined;
 
       const stat = fs.statSync(eventsPath);
       const handle: SessionHandle = {
@@ -178,22 +169,13 @@ export class SessionManager {
           // 从 events.jsonl 恢复事件
           const eventsPath = path.join(sessionsDir, sessionId, 'events.jsonl');
           if (fs.existsSync(eventsPath)) {
-            const content = fs.readFileSync(eventsPath, 'utf-8');
-            const lines = content.trim().split('\n').filter(Boolean);
-
-            // 只恢复 checkpoint 之前的事件
-            const events = lines
-              .slice(0, checkpointData.eventCount)
-              .map(line => {
-                try {
-                  return JSON.parse(line) as SessionEvent;
-                } catch {
-                  return null;
-                }
-              })
-              .filter((e): e is SessionEvent => e !== null);
-
-            handle.events = events;
+            // 坏行策略：skip（原逐行 null-filter 语义不变，harness#82）；
+            // 只恢复 checkpoint 之前的原始行（head 截断在 parse 之前）；
+            // !== null 沿用原过滤口径
+            const { records } = readJsonl<SessionEvent>(eventsPath, 'skip', {
+              head: checkpointData.eventCount,
+            });
+            handle.events = records.filter((e): e is SessionEvent => e !== null);
           }
 
           return handle;
@@ -237,9 +219,8 @@ export class SessionManager {
    */
   private appendEvent(sessionId: string, event: SessionEvent): void {
     try {
-      const eventsPath = path.join(this.getSessionDir(sessionId), 'events.jsonl');
-      const line = JSON.stringify(event) + '\n';
-      fs.appendFileSync(eventsPath, line, 'utf-8');
+      // 写链收口：ensureDir + append（harness#82）
+      appendJsonl(path.join(this.getSessionDir(sessionId), 'events.jsonl'), event);
     } catch {
       // 持久化失败，静默处理
     }

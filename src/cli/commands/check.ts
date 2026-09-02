@@ -14,6 +14,7 @@ import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitio
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
+import { countJsonlLines } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ConstraintTrigger } from '../../types/constraint';
 
@@ -163,17 +164,12 @@ export async function check(options: CheckOptions): Promise<void> {
 async function getSmartHint(projectPath: string): Promise<string | null> {
   const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
   const statePath = path.join(projectPath, '.harness', '.state.json');
-  
-  // 检查 trace 文件是否存在
-  if (!fs.existsSync(tracesPath)) {
+
+  // 只数非空行数（含坏行），零 parse——原语义不变，走 jsonl 正本（harness#82）
+  const traceCount = countJsonlLines(tracesPath);
+  if (traceCount === 0) {
     return null;
   }
-  
-  // 读取 trace 记录数
-  const tracesContent = fs.readFileSync(tracesPath, 'utf-8');
-  const lines = tracesContent.trim().split('\n').filter(Boolean);
-  const traceCount = lines.length;
-  
   // 读取状态
   let state: { 
     shownHints?: string[];

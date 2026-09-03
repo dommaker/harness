@@ -3,10 +3,12 @@
  * 
  * 确保 task.passes 字段只能通过测试结果修改
  * 禁止 Agent 自评通过
+ *
+ * 「过了没」的判定依据不在本文件：唯一入口是 test-output.ts 的 judgeTestRun（ADR-0014）
  */
 
 import { execAsync, delay } from '../../utils/exec';
-import { extractCoverage, extractFailures } from './test-output';
+import { extractCoverage, judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type {
@@ -286,43 +288,39 @@ export class PassesGate {
     const testCommand = await this.detectTestCommand(workDir);
     const timestamp = new Date();
 
+    let exitCode = 0;
+    let stdout = '';
+    let output = '';
+
     try {
-      const { stdout } = await execAsync(testCommand, {
+      const result = await execAsync(testCommand, {
         cwd: workDir,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
-
-      const passed = true;
-      const coverage = extractCoverage(stdout);
-      const failures: string[] = [];
-
-      return {
-        passed,
-        command: testCommand,
-        output: stdout,
-        failures,
-        coverage,
-        timestamp,
-        evidence: await this.generateEvidence(workDir, stdout),
-      };
+      stdout = result.stdout;
+      output = result.stdout + result.stderr;
     } catch (error: any) {
-      const output = error.stdout || '';
-      const stderrOutput = error.stderr || '';
-      const combinedOutput = output + '\n' + stderrOutput;
-
-      const failures = extractFailures(combinedOutput);
-      const passed = this.config.allowPartialPass && failures.length === 0;
-
-      return {
-        passed,
-        command: testCommand,
-        output: combinedOutput,
-        failures,
-        coverage: extractCoverage(output),
-        timestamp,
-        evidence: await this.generateEvidence(workDir, combinedOutput),
-      };
+      // 非零退出（超时 / buffer 溢出等执行失败也落这里）：判定依据就是退出码，文本不参与
+      exitCode = typeof error.code === 'number' ? error.code : 1;
+      stdout = error.stdout || '';
+      output = stdout + '\n' + (error.stderr || '');
     }
+
+    const { passed, failures } = judgeTestRun({
+      exitCode,
+      output,
+      allowPartialPass: this.config.allowPartialPass,
+    });
+
+    return {
+      passed,
+      command: testCommand,
+      output,
+      failures,
+      coverage: extractCoverage(stdout),
+      timestamp,
+      evidence: await this.generateEvidence(workDir, output),
+    };
   }
 
   /**

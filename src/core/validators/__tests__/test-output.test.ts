@@ -1,18 +1,21 @@
 /**
- * test-output 表驱动旁测（架构评审候选1 / #80，ADR-0012）
+ * test-output 表驱动旁测（架构评审候选1 / #80 → ADR-0012；判定口径 #93 → ADR-0014）
  *
- * 三个 runner 输出解析器的唯一测试面：真实 stdout 样本进、判定值出。
+ * 三个 runner 输出解读口的唯一测试面：真实 stdout 样本进、判定值出。
  * 迁移前 extractCoverage / extractFailures / parseTestOutput 是 PassesGate 与
  * SpecAcceptanceGate 的 private 方法，分支覆盖率 0%——passes-gate.test.ts 里只剩
  * toBeInstanceOf 占位断言，acceptance.test.ts 要写 6 份近重复 exec mock 才碰得到分支。
  *
- * 断言钉的是**迁移前的既有行为**（ADR-0012 硬门槛：行为零变更）。标 ⚠ 的行是已知的
- * 粗糙判定，原样钉住不代表认可：分歧的裁决归 #93（两门禁判定依据不一致）/
- * #94（覆盖率取数归属），本票不改语义。
+ * extractCoverage / extractFailures 的期望值钉的是**迁移前的既有行为**（ADR-0012 硬门槛：
+ * 行为零变更），标 ⚠ 的行是已知的粗糙解析，原样钉住不代表认可。
+ *
+ * judgeTestRun 是 #93 裁决后的**判定唯一入口**（退出码为主 + 文本交叉否决），取代
+ * 原 parseTestOutput（纯文本判定，可被测试名里的 FAIL 反转）；两门禁消费同一函数的
+ * 一致性用例在 gates/__tests__/test-verdict-consistency.test.ts。
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { extractCoverage, extractFailures, parseTestOutput } from '../test-output';
+import { extractCoverage, extractFailures, judgeTestRun } from '../test-output';
 
 // ========================================
 // 真实输出样本（各 runner 家族的原始 stdout）
@@ -263,39 +266,124 @@ describe('extractFailures', () => {
 });
 
 // ========================================
-// parseTestOutput
+// judgeTestRun — 判定唯一入口（ADR-0014 / #93）
 // ========================================
 
-type VerdictCase = { name: string; output: string; expected: boolean };
+type JudgeCase = {
+  name: string;
+  exitCode: number;
+  output: string;
+  allowPartialPass?: boolean;
+  expected: boolean;
+};
 
-const VERDICT_CASES: VerdictCase[] = [
-  { name: 'playwright 全过 → true', output: PW_PASS, expected: true },
-  { name: 'playwright 有失败 → false', output: PW_FAIL, expected: false },
-  { name: 'jest 全绿汇总（含 passed 字样 → 进 Playwright 分支）→ true', output: JEST_SUITES_PASS, expected: true },
-  { name: 'jest Test Suites: N failed（含 passed 字样 → 进 Playwright 分支）→ false', output: JEST_SUITES_FAIL, expected: false },
-  { name: 'jest 全失败（无 passed 字样 → 进 Jest 分支）→ false', output: JEST_ALL_FAILED, expected: false },
-  { name: '通用 PASS 行 → true', output: GENERIC_PASS, expected: true },
-  { name: '通用 PASS + FAIL 混合 → false', output: GENERIC_MIXED, expected: false },
+const JUDGE_CASES: JudgeCase[] = [
+  // ── 退出码为主：文本不能把非零退出救成 pass ──
+  { name: 'exit 1 + 全绿 jest 输出 → false（文本不赦免非零退出）', exitCode: 1, output: JEST_COV, expected: false },
+  { name: 'exit 1 + 空输出 → false', exitCode: 1, output: '', expected: false },
   {
-    name: '⚠ 全绿但测试名含 FAIL → 被反转成 false（子串兜底，#93）',
+    name: 'exit 2 + allowPartialPass → false（部分通过不碰退出码这一维）',
+    exitCode: 2,
+    output: JEST_COV,
+    allowPartialPass: true,
+    expected: false,
+  },
+  // ── 后果1：exit 0 但输出印着失败 → 文本交叉否决 ──
+  { name: 'exit 0 + jest ✕ 用例清单 → false', exitCode: 0, output: JEST_FAILURES, expected: false },
+  { name: 'exit 0 + jest 带堆栈失败清单 → false', exitCode: 0, output: JEST_FAILURES_WITH_STACK, expected: false },
+  {
+    name: 'exit 0 + 只有 jest 汇总行（无 ✕ 行，非 verbose）→ false（统一用结构化汇总行）',
+    exitCode: 0,
+    output: JEST_ALL_FAILED,
+    expected: false,
+  },
+  {
+    name: 'exit 0 + jest 汇总行有 failed 也有 passed → false',
+    exitCode: 0,
+    output: JEST_SUITES_FAIL,
+    expected: false,
+  },
+  { name: 'exit 0 + 套件级 FAIL 行 → false', exitCode: 0, output: GENERIC_MIXED, expected: false },
+  { name: 'exit 0 + mocha 汇总行 1 failing → false', exitCode: 0, output: MOCHA_PLAIN, expected: false },
+  { name: 'exit 0 + pytest FAILED 行 → false', exitCode: 0, output: PYTEST_FAILURES, expected: false },
+  { name: 'exit 0 + go --- FAIL: 行 → false', exitCode: 0, output: GO_FAILURES, expected: false },
+  { name: 'exit 0 + playwright 失败汇总 → false', exitCode: 0, output: PW_FAIL, expected: false },
+  // ── 后果2：裸 includes(FAIL) 兜底弃用后不再误伤 ──
+  {
+    name: 'exit 0 + 全绿但通过的用例名里带大写 FAIL → true（旧兜底子串反转已修）',
+    exitCode: 0,
     output: GENERIC_FAIL_IN_TEST_NAME,
-    expected: false,
+    expected: true,
   },
   {
-    name: '⚠ jest 零失败但无 "passed" 字样 → false（能进 Jest 分支就说明该 includes 恒 false）',
-    output: JEST_SUITES_NO_PASSED_WORD,
-    expected: false,
+    name: 'exit 0 + 路径含大写 FAIL 目录名 → true（子串兜底已弃用）',
+    exitCode: 0,
+    output: 'PASS src/fixtures/FAIL/app.test.js\nTests:       3 passed, 3 total\n',
+    expected: true,
   },
-  { name: '⚠ 零测试也判过："0 passed" → true', output: '  0 passed (1.0s)\n', expected: true },
-  { name: '⚠ 畸形："X passed X failed" 无数字前缀 → true（failed 计数正则落空）', output: '  X passed X failed\n', expected: true },
-  { name: '无匹配：仅表格分隔线 → false', output: '----------|---------|\n', expected: false },
-  { name: '无匹配：空字符串 → false', output: '', expected: false },
+  // ── 全绿样本 ──
+  { name: 'exit 0 + jest 全绿带覆盖率表 → true', exitCode: 0, output: JEST_COV, expected: true },
+  { name: 'exit 0 + jest 全绿汇总行 → true', exitCode: 0, output: JEST_SUITES_PASS, expected: true },
+  {
+    name: 'exit 0 + jest 零失败但无 "passed" 字样 → true（旧判定要求该字样，误伤）',
+    exitCode: 0,
+    output: JEST_SUITES_NO_PASSED_WORD,
+    expected: true,
+  },
+  { name: 'exit 0 + playwright 全过 → true', exitCode: 0, output: PW_PASS, expected: true },
+  { name: 'exit 0 + 通用 PASS 行 → true', exitCode: 0, output: GENERIC_PASS, expected: true },
+  // ── allowPartialPass 的新位置：只作用于文本否决这一维 ──
+  {
+    name: 'exit 0 + jest ✕ 清单 + allowPartialPass → true（部分通过 = 放弃文本否决）',
+    exitCode: 0,
+    output: JEST_FAILURES,
+    allowPartialPass: true,
+    expected: true,
+  },
+  // ── 退出码权威的边界：文本否决只管「看出失败」，不管「没跑出测试」 ──
+  {
+    name: '⚠ exit 0 + 空输出 → true（零测试识别不属本判定，另票）',
+    exitCode: 0,
+    output: '',
+    expected: true,
+  },
+  {
+    name: '⚠ exit 0 + 零测试汇总 "0 passed" → true（同上）',
+    exitCode: 0,
+    output: '  0 passed (1.0s)\n',
+    expected: true,
+  },
+  {
+    name: '⚠ exit 0 + 畸形 "X passed X failed"（计数位非数字）→ true（同上：无结构化失败信号）',
+    exitCode: 0,
+    output: '  X passed X failed\n',
+    expected: true,
+  },
+  { name: 'exit 0 + 仅覆盖率表格分隔线 → true（无失败信号）', exitCode: 0, output: '----------|---------|\n', expected: true },
 ];
 
-describe('parseTestOutput', () => {
-  for (const c of VERDICT_CASES) {
+describe('judgeTestRun', () => {
+  for (const c of JUDGE_CASES) {
     it(c.name, () => {
-      expect(parseTestOutput(c.output)).toBe(c.expected);
+      expect(judgeTestRun({ exitCode: c.exitCode, output: c.output, allowPartialPass: c.allowPartialPass })).toEqual(
+        expect.objectContaining({ passed: c.expected }),
+      );
     });
   }
+
+  it('allowPartialPass 缺省 = false（否决默认生效）', () => {
+    expect(judgeTestRun({ exitCode: 0, output: JEST_FAILURES }).passed).toBe(false);
+  });
+
+  it('否决时 failures 带出用例名（判负有据）', () => {
+    expect(judgeTestRun({ exitCode: 0, output: JEST_FAILURES }).failures).toEqual(['renders title', 'handles click']);
+  });
+
+  it('全绿时 failures 为空数组', () => {
+    expect(judgeTestRun({ exitCode: 0, output: GENERIC_FAIL_IN_TEST_NAME }).failures).toEqual([]);
+  });
+
+  it('非零退出时仍带出文本里的失败名（供上层拼错误信息）', () => {
+    expect(judgeTestRun({ exitCode: 1, output: GO_FAILURES }).failures).toEqual(['TestLogin', 'TestLogout']);
+  });
 });

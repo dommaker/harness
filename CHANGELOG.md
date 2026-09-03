@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- fix(core,gates)!: 两个测试门禁判「过没过」的依据统一为**退出码为主 + 文本交叉否决**（ADR-0014，harness#93）——判定收在 `core/validators/test-output.ts` 新增的 `judgeTestRun({exitCode, output, allowPartialPass})` 一处，两门禁的结论一律从它取：passes-gate 成功分支不再硬编码 `passed = true`（exit 0 而输出含 `✕` 用例 / `FAIL <path>` 套件行 / `N failed` 汇总行 → 判负），acceptance 弃用裸 `includes('PASS') && !includes('FAIL')` 兜底（通过的用例名里带大写 `FAIL`、路径含 `FAIL/` 目录名不再反转结论；jest 零失败汇总行无 "passed" 字样也不再误伤），文本再也救不回非零退出。`allowPartialPass`（CLI `--allow-partial`）的落点从「赦免非零退出」移到「关闭文本否决」这一维。exit 0 的空输出/零测试不再判负（零测试识别另票）。按 minor 发布：`PassesGate.check()` 的 `allowed` 得出条件属行为变更，studio 消费的 `{allowed, violations}` 形状不变
+
 ## [1.3.0] - 2026-09-01
 
 ### Changes

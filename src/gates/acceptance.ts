@@ -18,7 +18,7 @@
  */
 
 import { execAsync } from '../utils/exec';
-import { parseTestOutput } from '../core/validators/test-output';
+import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
@@ -459,7 +459,8 @@ export class SpecAcceptanceGate implements Gate {
       });
 
       const output = stdout + stderr;
-      const passed = parseTestOutput(output);
+      // 退出码为 0 的分支：文本只能否决，不能反向加分（与 passes-gate 同一判定入口，ADR-0014）
+      const { passed } = judgeTestRun({ exitCode: 0, output });
 
       return {
         criteria: testFile,
@@ -469,7 +470,7 @@ export class SpecAcceptanceGate implements Gate {
         output: output.substring(0, 2000),
       };
     } catch (error: any) {
-      // 超时或执行失败
+      // 超时或非零退出的分支：判负，文本不参与（文本救不回非零退出，ADR-0014）
       return {
         criteria: testFile,
         testFile,

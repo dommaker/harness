@@ -15,7 +15,10 @@ export interface PassesGateConfig {
   /** 是否需要证据 */
   requireEvidence?: boolean;
   
-  /** 是否允许部分通过 */
+  /**
+   * 是否允许部分通过：退出码为 0 时，输出里的失败信号不再否决判定。
+   * 不赦免非零退出码（判定依据收在 core/validators/test-output.ts 的 judgeTestRun，ADR-0014）
+   */
   allowPartialPass?: boolean;
   
   /** 最大重试次数 */

@@ -10,7 +10,7 @@
 - 执行器：`runGates`（`runner.ts`）——按 order 升序；deny 单调（下游 abstain 不得改回 allow）+ ask 枚举预留 fail-closed = deny；决策浅冻结
 - 生效集：`getEffectiveGates(projectRoot)`（`effective-gates.ts`）——对齐 getEffectiveConstraints 裁剪模式：config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除；enabled 段未注册校验与裁剪走 core/effective-set 共享筛选器（throw 模式），order 重排与重复 id 检测留本侧
 - checker-as-guard 接线点：`createCheckerGate(check)`（`checker-gate.ts`）——ConstraintCheck → Gate（studio #129 随动）；false→deny，true/'skip'→abstain；env 经 `buildCheckEnv(..., 'none')` 构造（显式不接证据，语义见 core/constraints/checkers/types.ts 工厂 doc）
-- 门禁类：`ReviewGate` / `SecurityGate` / `PerformanceGate` / `ContractGate` / `SpecAcceptanceGate` / `CommandGate`（各自执行细节私有，保留 `check()`/`scan()` 报告方法）；SpecAcceptanceGate 的 runner 输出解读已外移 `core/validators/test-output.ts` 与 passes-gate 共用（ADR-0012，本层不再自带正则）
+- 门禁类：`ReviewGate` / `SecurityGate` / `PerformanceGate` / `ContractGate` / `SpecAcceptanceGate` / `CommandGate`（各自执行细节私有，保留 `check()`/`scan()` 报告方法）；SpecAcceptanceGate 的 runner 输出解读与 e2e 判负都从 `core/validators/test-output.ts` 的 `judgeTestRun` 取（解析收口 ADR-0012、判定依据 ADR-0014，本层既不自带正则也不自写判定 `if`）
 - `types.ts` — GateResult（报告结构，保留）/ GateContext / GateDecision 等公共类型 + 报告构造器 `pass` / `fail` / `fromError`（动态 passed 走 `gateResult`）：timestamp 与 duration 口径唯一落点，门禁实现禁止手写 GateResult 字面量（duration 是可选字段，漏写无编译期报错）
 - 便捷工厂函数：createReviewGate / createSecurityGate / createPerformanceGate / createContractGate / createSpecAcceptanceGate / createCommandGate
 

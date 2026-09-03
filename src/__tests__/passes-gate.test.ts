@@ -61,13 +61,13 @@ describe('PassesGate', () => {
   });
 
   describe('runTests', () => {
-    // 跳过：会调用真实测试套件，需要 mock 重构
-    it.skip('应该返回测试结果', async () => {
-      const result = await gate.runTests();
-      
-      expect(result).toBeDefined();
-      expect(result.passed).toBeDefined();
-      expect(result.duration).toBeGreaterThan(0);
+    // 执行根由调用方传入（#95）：tempDir 的 package.json 测试命令是 echo，不再跑真实套件
+    it('应该返回测试结果', async () => {
+      const result = await gate.runTests(tempDir);
+
+      expect(result.passed).toBe(true);
+      expect(result.passedTests).toBe(1);
+      expect(result.duration).toBeGreaterThanOrEqual(0);
     });
   });
 

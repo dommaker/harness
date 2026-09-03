@@ -32,7 +32,7 @@ import { decisionFromResult } from './decision';
  * 验收标准门禁配置
  */
 export interface SpecAcceptanceGateConfig {
-  /** tasks.yml 路径 */
+  /** tasks.yml 路径；相对值按 check 上下文的 projectPath 解析，缺省 `<projectPath>/tasks.yml` */
   tasksPath?: string;
   /** 是否检查所有任务 */
   checkAllTasks?: boolean;
@@ -54,7 +54,7 @@ export interface AcceptanceGateContext {
   projectPath: string;
   /** 任务 ID */
   taskId?: string;
-  /** tasks.yml 路径 */
+  /** tasks.yml 路径；相对值按 projectPath 解析 */
   tasksPath?: string;
 }
 
@@ -145,7 +145,6 @@ export class SpecAcceptanceGate implements Gate {
 
   constructor(config?: Partial<SpecAcceptanceGateConfig>) {
     this.config = {
-      tasksPath: './tasks.yml',
       checkAllTasks: false,
       e2eTestCommand: 'npx playwright test',
       e2eTestTimeout: 120000,
@@ -177,10 +176,11 @@ export class SpecAcceptanceGate implements Gate {
    */
   async check(context: AcceptanceGateContext): Promise<AcceptanceGateResult> {
     try {
-      // 确定 tasks.yml 路径
-      const tasksPath = context.tasksPath ?? 
-        this.config.tasksPath ?? 
-        path.join(context.projectPath, 'tasks.yml');
+      // 确定 tasks.yml 路径：相对值一律锚在 projectPath（此处不取 cwd）
+      const tasksPath = path.resolve(
+        context.projectPath,
+        context.tasksPath ?? this.config.tasksPath ?? 'tasks.yml',
+      );
 
       // 加载 tasks 文件
       const tasks = await this.loadTasks(tasksPath);

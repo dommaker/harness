@@ -96,7 +96,7 @@ function stubRunner(exitCode: ExitResult, stdout: string): void {
 async function verdictFromPassesGate(sample: VerdictSample): Promise<boolean> {
   stubRunner(sample.exitCode, sample.output);
   const gate = new PassesGate({ testCommand: 'npm test', requireEvidence: false });
-  return (await gate.runTests()).passed;
+  return (await gate.runTests('/test/project')).passed;
 }
 
 async function verdictFromAcceptance(sample: VerdictSample): Promise<boolean> {

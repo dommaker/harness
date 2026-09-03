@@ -222,8 +222,11 @@ export class PassesGate {
 
   /**
    * 运行测试（CLI 使用）
+   *
+   * `workDir` 必传：执行位置与证据落盘根都从这里来，不在本层取 cwd
+   * （projectPath 只在 CLI 入口兜底一次，见 src/cli/commands/CONTEXT.md）
    */
-  async runTests(): Promise<{
+  async runTests(workDir: string): Promise<{
     passed: boolean;
     passedTests: number;
     failedTests: number;
@@ -233,8 +236,7 @@ export class PassesGate {
     message?: string;
   }> {
     const startTime = Date.now();
-    const workDir = process.cwd();
-    
+
     try {
       const testCommand = this.config.testCommand || await this.detectTestCommand(workDir);
       

@@ -95,7 +95,7 @@ export async function runPassesGate(
   const passesGate = new PassesGate(config);
 
   try {
-    const result = await passesGate.runTests();
+    const result = await passesGate.runTests(projectPath);
 
     log(io);
     log(io, chalk.gray('测试结果:'));

@@ -3,6 +3,7 @@
  */
 
 import { contract, validateSchema } from '../contract';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs/promises';
 import { ContractGate } from '../../../gates/contract';
 
@@ -34,20 +35,12 @@ const MockGate = ContractGate as jest.MockedClass<typeof ContractGate>;
 const yaml = require('js-yaml');
 
 describe('contract command', () => {
-  let consoleSpy: jest.SpyInstance;
-  let exitSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    process.exitCode = 0;
-  });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-    process.exitCode = 0;
+    io = captureIO();
+    jest.clearAllMocks();
   });
 
   describe('contract', () => {
@@ -60,19 +53,19 @@ describe('contract command', () => {
       });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await contract({});
+      const result = await contract({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('契约门控检查通过'));
-      expect(exitSpy).not.toHaveBeenCalled();
+      expect(io.outText()).toContain('契约门控检查通过');
+      expect(result.kind).toBe('ok');
     });
 
     it('should exit 1 when file does not exist', async () => {
       mockFs.access.mockRejectedValue(new Error('ENOENT'));
 
-      await contract({});
+      const result = await contract({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('契约文件不存在'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('契约文件不存在');
+      expect(result.kind).toBe('fail');
     });
 
     it('should print failure and exit 1 when check fails', async () => {
@@ -87,10 +80,10 @@ describe('contract command', () => {
       });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await contract({});
+      const result = await contract({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('契约门控检查失败'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('契约门控检查失败');
+      expect(result.kind).toBe('fail');
     });
 
     it('should handle thrown errors and exit 1', async () => {
@@ -98,10 +91,10 @@ describe('contract command', () => {
       const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await contract({});
+      const result = await contract({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('契约门控检查出错'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('契约门控检查出错');
+      expect(result.kind).toBe('fail');
     });
   });
 
@@ -114,38 +107,38 @@ describe('contract command', () => {
         paths: { '/users': {} },
       });
 
-      await validateSchema({});
+      await validateSchema({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Schema 验证通过'));
+      expect(io.outText()).toContain('Schema 验证通过');
     });
 
     it('should report missing fields', async () => {
       mockFs.readFile.mockResolvedValue('{}');
       yaml.load.mockReturnValue({});
 
-      await validateSchema({});
+      const result = await validateSchema({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Schema 验证失败'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('Schema 验证失败');
+      expect(result.kind).toBe('fail');
     });
 
     it('should report YAML parse errors', async () => {
       mockFs.readFile.mockResolvedValue('invalid: yaml: content:');
       yaml.load.mockImplementation(() => { throw new Error('parse error'); });
 
-      await validateSchema({});
+      const result = await validateSchema({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('YAML 解析错误'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('YAML 解析错误');
+      expect(result.kind).toBe('fail');
     });
 
     it('should handle file read errors', async () => {
       mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
 
-      await validateSchema({});
+      const result = await validateSchema({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('验证失败'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('验证失败');
+      expect(result.kind).toBe('fail');
     });
   });
 });

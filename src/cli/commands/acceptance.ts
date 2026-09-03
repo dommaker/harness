@@ -8,6 +8,8 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SpecAcceptanceGate } from '../../gates/acceptance';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+
 
 export interface AcceptanceOptions {
   /** 任务 ID */
@@ -25,8 +27,11 @@ export interface AcceptanceOptions {
 /**
  * 执行验收门控
  */
-export async function acceptance(options: AcceptanceOptions): Promise<void> {
-  console.log(chalk.blue('📋 验收标准门控检查...'));
+export async function acceptance(
+  options: AcceptanceOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
+  log(io, chalk.blue('📋 验收标准门控检查...'));
 
   const projectPath = options.projectPath || process.cwd();
 
@@ -47,36 +52,40 @@ export async function acceptance(options: AcceptanceOptions): Promise<void> {
     const result = await gate.check(context as any);
 
     if (result.passed) {
-      console.log();
-      console.log(chalk.green('✅ 验收标准检查通过'));
+      log(io);
+      log(io, chalk.green('✅ 验收标准检查通过'));
       if (result.details) {
-        console.log(chalk.gray(`   通过项: ${result.details.checkedCriteria ?? 0}`));
-        console.log(chalk.gray(`   总项数: ${result.details.totalCriteria ?? 0}`));
+        log(io, chalk.gray(`   通过项: ${result.details.checkedCriteria ?? 0}`));
+        log(io, chalk.gray(`   总项数: ${result.details.totalCriteria ?? 0}`));
       }
     } else {
-      console.log();
-      console.log(chalk.red('❌ 验收标准检查失败'));
-      console.log(chalk.red(`   ${result.message}`));
+      log(io);
+      log(io, chalk.red('❌ 验收标准检查失败'));
+      log(io, chalk.red(`   ${result.message}`));
       if (result.details?.uncheckedCriteria) {
         (result.details.uncheckedCriteria as string[]).forEach((criteria: string) => {
-          console.log(chalk.red(`   - ${criteria}`));
+          log(io, chalk.red(`   - ${criteria}`));
         });
       }
-      process.exit(1);
+      return { kind: 'fail', reason: `acceptance gate denied: ${result.message}` };
     }
+    return { kind: 'ok' };
   } catch (error: any) {
-    console.log();
-    console.log(chalk.red('❌ 验收标准检查出错'));
-    console.log(chalk.red(`   ${error.message}`));
-    process.exit(1);
+    log(io);
+    log(io, chalk.red('❌ 验收标准检查出错'));
+    log(io, chalk.red(`   ${error.message}`));
+    return { kind: 'fail', reason: `acceptance gate error: ${error.message}` };
   }
 }
 
 /**
  * 列出所有任务及其验收标准
  */
-export async function listAcceptanceCriteria(options: AcceptanceOptions): Promise<void> {
-  console.log(chalk.blue('📋 任务验收标准列表...\n'));
+export async function listAcceptanceCriteria(
+  options: AcceptanceOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
+  log(io, chalk.blue('📋 任务验收标准列表...\n'));
 
   const projectPath = options.projectPath || process.cwd();
   const tasksPath = options.tasksPath || path.join(projectPath, 'tasks.yml');
@@ -87,25 +96,27 @@ export async function listAcceptanceCriteria(options: AcceptanceOptions): Promis
     const tasks = yaml.load(content) as any;
 
     if (!tasks || typeof tasks !== 'object') {
-      console.log(chalk.yellow('⚠️  未找到任务定义'));
-      return;
+      log(io, chalk.yellow('⚠️  未找到任务定义'));
+      return { kind: 'skip', reason: `未找到任务定义: ${tasksPath}` };
     }
 
     for (const [taskId, task] of Object.entries(tasks)) {
       if (typeof task === 'object' && task !== null) {
-        console.log(chalk.cyan(`${taskId}:`));
+        log(io, chalk.cyan(`${taskId}:`));
         const taskObj = task as any;
         if (taskObj.acceptanceCriteria) {
           taskObj.acceptanceCriteria.forEach((criteria: string, i: number) => {
-            console.log(chalk.gray(`  ${i + 1}. ${criteria}`));
+            log(io, chalk.gray(`  ${i + 1}. ${criteria}`));
           });
         } else {
-          console.log(chalk.gray('  (无验收标准)'));
+          log(io, chalk.gray('  (无验收标准)'));
         }
-        console.log();
+        log(io);
       }
     }
+    return { kind: 'ok' };
   } catch (error: any) {
-    console.log(chalk.red(`❌ 读取 tasks.yml 失败: ${error.message}`));
+    log(io, chalk.red(`❌ 读取 tasks.yml 失败: ${error.message}`));
+    return { kind: 'skip', reason: `读取 tasks.yml 失败: ${error.message}` };
   }
 }

@@ -3,6 +3,7 @@
  */
 
 import { report } from '../report';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs/promises';
 
 // Mock fs/promises
@@ -19,30 +20,29 @@ jest.mock('chalk', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('report command - 补充覆盖', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
   });
 
   describe('format 边界情况', () => {
     it('未知格式应该默认输出 JSON', async () => {
-      await report({ format: 'json' });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      await report({ format: 'json' }, io);
+      const output = io.outText();
       expect(output).toContain('timestamp');
     });
   });
 
   describe('Markdown 报告完整内容', () => {
     it('Markdown 报告应该包含所有区块', async () => {
-      await report({ format: 'markdown' });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      await report({ format: 'markdown' }, io);
+      const output = io.outText();
 
       expect(output).toContain('# Harness 检查报告');
       expect(output).toContain('## 约束检查');
@@ -54,8 +54,8 @@ describe('report command - 补充覆盖', () => {
 
   describe('HTML 报告完整内容', () => {
     it('HTML 报告应该包含所有区块', async () => {
-      await report({ format: 'html' });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      await report({ format: 'html' }, io);
+      const output = io.outText();
 
       expect(output).toContain('<!DOCTYPE html>');
       expect(output).toContain('<title>Harness 检查报告</title>');
@@ -68,22 +68,22 @@ describe('report command - 补充覆盖', () => {
     it('Markdown 输出到文件', async () => {
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await report({ format: 'markdown', output: 'report.md' });
+      await report({ format: 'markdown', output: 'report.md' }, io);
       expect(mockFs.writeFile).toHaveBeenCalledWith('report.md', expect.stringContaining('# Harness'), 'utf-8');
     });
 
     it('HTML 输出到文件', async () => {
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      await report({ format: 'html', output: 'report.html' });
+      await report({ format: 'html', output: 'report.html' }, io);
       expect(mockFs.writeFile).toHaveBeenCalledWith('report.html', expect.stringContaining('<!DOCTYPE html>'), 'utf-8');
     });
   });
 
   describe('JSON 报告内容', () => {
     it('JSON 应该包含完整数据结构', async () => {
-      await report({ format: 'json' });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      await report({ format: 'json' }, io);
+      const output = io.outText();
       const jsonStart = output.indexOf('{');
       const jsonStr = output.slice(jsonStart);
       const data = JSON.parse(jsonStr);

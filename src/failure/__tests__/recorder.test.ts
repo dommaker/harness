@@ -7,6 +7,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../cli/command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { FailureRecorder } from '../recorder';
@@ -46,6 +47,11 @@ function captureConsole(): { stdout: string[]; stderr: string[] } {
   });
   return captured;
 }
+
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
 
 describe('FailureRecorder 坏行容错（harness#96）', () => {
   let dir: string;
@@ -115,15 +121,17 @@ describe('FailureRecorder 坏行容错（harness#96）', () => {
       writeLogFile(path.join(dir, 'clean'), [validRecord('a'), validRecord('b')]);
       writeLogFile(path.join(dir, 'dirty'), [validRecord('a'), CORRUPT_LINE, validRecord('b')]);
 
-      const cleanCapture = captureConsole();
-      await failureList({ projectPath: path.join(dir, 'clean') });
-      const cleanStdout = cleanCapture.stdout.join('\n');
+      // 列表正文走注入 io；损坏行警告由 recorder 自身 console.error 打印
+      const cleanIo = captureIO();
+      await failureList({ projectPath: path.join(dir, 'clean') }, cleanIo);
 
       const dirtyCapture = captureConsole();
-      await expect(failureList({ projectPath: path.join(dir, 'dirty') })).resolves.toBeUndefined();
-      const dirtyStdout = dirtyCapture.stdout.join('\n');
+      const dirtyIo = captureIO();
+      const dirtyResult = await failureList({ projectPath: path.join(dir, 'dirty') }, dirtyIo);
+      expect(dirtyResult).toEqual({ kind: 'ok' });
 
-      expect(dirtyStdout).toBe(cleanStdout);
+      expect(dirtyIo.outText()).toBe(cleanIo.outText());
+      expect(dirtyIo.outText()).not.toBe('');
       expect(dirtyCapture.stderr).toHaveLength(1);
       expect(dirtyCapture.stderr[0]).toContain('1');
     });
@@ -131,10 +139,10 @@ describe('FailureRecorder 坏行容错（harness#96）', () => {
     it('--json 输出不受 stderr 警告污染且不含坏行', async () => {
       writeLogFile(dir, [validRecord('a'), CORRUPT_LINE]);
       const captured = captureConsole();
-      await failureList({ projectPath: dir, json: true });
+      await failureList({ projectPath: dir, json: true }, io);
 
       expect(captured.stderr).toHaveLength(1);
-      const parsed = JSON.parse(captured.stdout.join('\n'));
+      const parsed = JSON.parse(io.outText());
       expect(parsed.total).toBe(1);
       expect(parsed.records[0].message).toBe('a');
     });
@@ -145,14 +153,15 @@ describe('FailureRecorder 坏行容错（harness#96）', () => {
       writeLogFile(path.join(dir, 'clean'), [validRecord('a'), validRecord('b')]);
       writeLogFile(path.join(dir, 'dirty'), [CORRUPT_LINE, validRecord('a'), validRecord('b')]);
 
-      const cleanCapture = captureConsole();
-      await failureStats({ projectPath: path.join(dir, 'clean') });
-      const cleanStdout = cleanCapture.stdout.join('\n');
+      const cleanIo = captureIO();
+      await failureStats({ projectPath: path.join(dir, 'clean') }, cleanIo);
 
       const dirtyCapture = captureConsole();
-      await expect(failureStats({ projectPath: path.join(dir, 'dirty') })).resolves.toBeUndefined();
+      const dirtyIo = captureIO();
+      await failureStats({ projectPath: path.join(dir, 'dirty') }, dirtyIo);
 
-      expect(dirtyCapture.stdout.join('\n')).toBe(cleanStdout);
+      expect(dirtyIo.outText()).toBe(cleanIo.outText());
+      expect(dirtyIo.outText()).not.toBe('');
       expect(dirtyCapture.stderr).toHaveLength(1);
     });
   });

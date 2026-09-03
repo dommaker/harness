@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import type { ExecutionTrace } from '../../../types/trace';
@@ -41,14 +42,12 @@ function tracesOf(id: string, result: ExecutionTrace['result'], n: number, start
   return Array.from({ length: n }, (_, i) => ({ constraintId: id, result, timestamp: startTs + i * 1000 }));
 }
 
-let logSpy: jest.SpyInstance;
-
 beforeEach(() => {
-  logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
-afterEach(() => {
-  logSpy.mockRestore();
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
 });
 
 describe('buildConstraintsUsageReport', () => {
@@ -202,9 +201,9 @@ describe('constraintsReport CLI', () => {
     );
     writeTraces(root, tracesOf('no_hardcoded_credentials', 'pass', 3));
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('约束使用报告');
     expect(output).toContain('no_hardcoded_credentials');
     expect(output).toContain('total=3');
@@ -221,7 +220,7 @@ describe('constraintsReport CLI', () => {
       { constraintId: 'no_bypass_checkpoint', result: 'fail', projectPath: root, timestamp: 1700001000000 },
     ]);
 
-    await constraintsReport({ projectPath: root, export: true });
+    await constraintsReport({ projectPath: root, export: true }, io);
 
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const exportPath = path.join(root, '.harness', 'reports', `constraints-${date}.md`);
@@ -237,13 +236,13 @@ describe('constraintsReport CLI', () => {
     expect(content).not.toContain('projectPath');
 
     // 打印了导出路径
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain(exportPath);
   });
 
   it('--export 指定文件：写到给定路径', async () => {
     const root = makeTmpProject();
-    await constraintsReport({ projectPath: root, export: 'my-report.md' });
+    await constraintsReport({ projectPath: root, export: 'my-report.md' }, io);
     expect(fs.existsSync(path.join(root, 'my-report.md'))).toBe(true);
   });
 
@@ -282,9 +281,9 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
     const editedLine = originalLine.replace(/: .+$/, ': 手工篡改');
     fs.writeFileSync(claudeMdPath, content.replace(originalLine, editedLine), 'utf-8');
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('注入漂移');
     expect(output).toContain('版本漂移');
     expect(output).toContain('0.0.1-old');
@@ -298,9 +297,9 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
     writeSyncedClaudeMd(root);
     fs.appendFileSync(path.join(root, 'CLAUDE.md'), '\n## Governance Rules\n\n旧版遗留\n', 'utf-8');
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('重复章节');
   });
 
@@ -308,9 +307,9 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
     const root = makeTmpProject();
     writeSyncedClaudeMd(root);
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('注入漂移');
     expect(output).toContain('无漂移');
   });
@@ -319,9 +318,9 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
     const root = makeTmpProject();
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Test Project\n', 'utf-8');
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('未注入');
   });
 });

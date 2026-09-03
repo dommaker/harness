@@ -34,6 +34,7 @@ import {
 import { createContextMd, findExistingContextFiles, getLatestTsMtime } from './context-syncer';
 import { buildAgentsMd } from './agents-syncer';
 import { extractPreserveBlocks, composeAgentsMd } from './preserve-block';
+import { log, processIO, type CommandIO, type CommandResult } from '../../command-contract';
 
 export interface SyncDocsOptions {
   /** 项目路径 */
@@ -53,9 +54,14 @@ export interface SyncDocsOptions {
 /**
  * 同步文档
  */
-export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
+export async function syncDocs(
+  options: SyncDocsOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
   const projectPath = options.projectPath || process.cwd();
   const isCheck = options.check === true;
+  // 漂移译成 kind：--check 下判定失败；写入模式下漂移已被修掉 → 退出码面不变（历史行为）
+  const drift = (reason: string): CommandResult => (isCheck ? { kind: 'fail', reason } : { kind: 'ok' });
   const isJson = options.json === true;
   const capsMode = getCapabilitiesMode(projectPath);
 
@@ -67,22 +73,22 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       const compacted = compactCapabilitiesContent(content);
       if (compacted !== content) {
         await fs.writeFile(capsPath, compacted, 'utf-8');
-        if (!isJson) console.log(chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
+        if (!isJson) log(io, chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
       } else {
-        if (!isJson) console.log(chalk.green('✅ CAPABILITIES.md 无需折叠'));
+        if (!isJson) log(io, chalk.green('✅ CAPABILITIES.md 无需折叠'));
       }
-      return true;
+      return { kind: 'ok' };
     } catch {
-      if (!isJson) console.log(chalk.red('❌ CAPABILITIES.md 不存在，无法折叠'));
-      return false;
+      if (!isJson) log(io, chalk.red('❌ CAPABILITIES.md 不存在，无法折叠'));
+      return drift('CAPABILITIES.md 不存在，无法折叠');
     }
   }
 
   if (!isJson) {
     if (isCheck) {
-      console.log(chalk.blue('🔍 检查文档新鲜度...'));
+      log(io, chalk.blue('🔍 检查文档新鲜度...'));
     } else {
-      console.log(chalk.blue('📝 同步文档...'));
+      log(io, chalk.blue('📝 同步文档...'));
     }
   }
 
@@ -102,7 +108,7 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       currentModules.push(...modules);
     } catch {
       if (!isJson) {
-        console.log(chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
+        log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
       }
     }
   }
@@ -295,55 +301,55 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       }
     }
 
-    console.log(JSON.stringify(jsonOutput, null, 2));
-    return !hasIssues;
+    log(io, JSON.stringify(jsonOutput, null, 2));
+    return hasIssues ? drift('文档不是最新的（详见 --json 输出 issues 字段）') : { kind: 'ok' };
   }
 
   // 6. 人读输出模式
   if (capsIsCapabilityListing && hasCapIssues) {
-    console.log(chalk.yellow(`\n📊 CAPABILITIES.md 计数不一致:`));
-    capCountMismatches.forEach(m => console.log(chalk.gray(`  - ${m}`)));
+    log(io, chalk.yellow(`\n📊 CAPABILITIES.md 计数不一致:`));
+    capCountMismatches.forEach(m => log(io, chalk.gray(`  - ${m}`)));
   }
 
   if (result.added.length > 0) {
     if (capsMode === 'module') {
-      console.log(chalk.yellow(`\n📄 CAPABILITIES.md 未登记以下模块（目录）:`));
-      result.added.forEach(d => console.log(chalk.gray(`  + ${d}`)));
-      console.log(
+      log(io, chalk.yellow(`\n📄 CAPABILITIES.md 未登记以下模块（目录）:`));
+      result.added.forEach(d => log(io, chalk.gray(`  + ${d}`)));
+      log(io, 
         chalk.gray('  请在 CAPABILITIES.md 中为这些目录登记一行目录条目（如 `| 模块名 | src/xxx/ | 说明 |`）')
       );
     } else {
-      console.log(chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
-      result.added.forEach(f => console.log(chalk.gray(`  + ${f}`)));
+      log(io, chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
+      result.added.forEach(f => log(io, chalk.gray(`  + ${f}`)));
     }
   }
 
   if (result.removed.length > 0) {
-    console.log(chalk.yellow(`\n📄 CAPABILITIES.md 包含已删除的模块:`));
-    result.removed.forEach(f => console.log(chalk.gray(`  - ${f}`)));
+    log(io, chalk.yellow(`\n📄 CAPABILITIES.md 包含已删除的模块:`));
+    result.removed.forEach(f => log(io, chalk.gray(`  - ${f}`)));
   }
 
   if (result.contextMissing.length > 0) {
-    console.log(chalk.yellow(`\n📋 缺少 CONTEXT.md:`));
-    result.contextMissing.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
+    log(io, chalk.yellow(`\n📋 缺少 CONTEXT.md:`));
+    result.contextMissing.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
   if (result.contextStale.length > 0) {
-    console.log(chalk.yellow(`\n📋 CONTEXT.md 可能过时（源码比文档新）:`));
-    result.contextStale.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
+    log(io, chalk.yellow(`\n📋 CONTEXT.md 可能过时（源码比文档新）:`));
+    result.contextStale.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
   if (hasAgentsIssues) {
-    console.log(
+    log(io, 
       chalk.yellow(agentsMdExists
         ? `\n🤖 AGENTS.md 与当前项目状态不一致:`
         : `\n🤖 缺少 AGENTS.md（agent 导读）:`)
     );
-    console.log(chalk.gray(`  - AGENTS.md`));
+    log(io, chalk.gray(`  - AGENTS.md`));
   }
 
   if (agentsMdMalformedPreserve.length > 0) {
-    console.log(
+    log(io, 
       chalk.yellow(
         `\n⚠️ AGENTS.md 中 PRESERVE 标记块未闭合（不予保留，重新生成将丢弃）: ${agentsMdMalformedPreserve.join(', ')}`
       )
@@ -351,37 +357,37 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   }
 
   if (!hasIssues) {
-    console.log(chalk.green('✅ 所有文档都是最新的'));
-    return true;
+    log(io, chalk.green('✅ 所有文档都是最新的'));
+    return { kind: 'ok' };
   }
 
   // 7. 检查模式：只报告，不修改
   if (isCheck) {
-    console.log(chalk.red('\n❌ 文档不是最新的，请运行 harness sync-docs 更新'));
-    return false;
+    log(io, chalk.red('\n❌ 文档不是最新的，请运行 harness sync-docs 更新'));
+    return drift('文档不是最新的，请运行 harness sync-docs 更新');
   }
 
   // 8. 写入模式：更新文档
   if (capsIsCapabilityListing && hasCapIssues) {
     capsContent = updateCapabilityCounts(capsContent, projectPath);
     await fs.writeFile(capabilitiesPath, capsContent, 'utf-8');
-    console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md 计数`));
+    log(io, chalk.green(`\n✅ 已更新 CAPABILITIES.md 计数`));
   }
 
   if (!capsIsCapabilityListing && hasTableIssues) {
     await updateCapabilitiesFile(capabilitiesPath, currentModules, existingFiles, result, capsMode);
-    console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md`));
+    log(io, chalk.green(`\n✅ 已更新 CAPABILITIES.md`));
   }
 
   for (const dir of result.contextMissing) {
     await createContextMd(projectPath, dir);
-    console.log(chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+    log(io, chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
   }
 
   if (hasAgentsIssues && agentsMdExpected !== null) {
     await fs.writeFile(path.join(projectPath, 'AGENTS.md'), agentsMdExpected, 'utf-8');
-    console.log(chalk.green(agentsMdExists ? `✅ 已更新 AGENTS.md` : `✅ 已生成 AGENTS.md`));
+    log(io, chalk.green(agentsMdExists ? `✅ 已更新 AGENTS.md` : `✅ 已生成 AGENTS.md`));
   }
 
-  return !hasIssues;
+  return hasIssues ? drift('写入模式已修复漂移（历史面：退出码仍为 0）') : { kind: 'ok' };
 }

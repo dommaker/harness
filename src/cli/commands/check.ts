@@ -18,6 +18,7 @@ import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { countJsonlLines } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ConstraintTrigger } from '../../types/constraint';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface CheckOptions {
   /** 预设名称 */
@@ -33,9 +34,12 @@ export interface CheckOptions {
 /**
  * 执行约束检查
  */
-export async function check(options: CheckOptions): Promise<void> {
-  console.log(chalk.blue('🔍 检查约束...'));
-  console.log(chalk.gray(`预设: ${options.preset}`));
+export async function check(
+  options: CheckOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
+  log(io, chalk.blue('🔍 检查约束...'));
+  log(io, chalk.gray(`预设: ${options.preset}`));
 
   try {
     const projectPath = options.projectPath || process.cwd();
@@ -45,14 +49,14 @@ export async function check(options: CheckOptions): Promise<void> {
     // 项目自定义配置优先于 CLI 预设），优先级规则收在 getMergedConstraintsConfig 一处。
     const merged = getMergedConstraintsConfig(projectPath, { preset: options.preset });
     if (merged.custom.length > 0) {
-      console.log(chalk.gray(`自定义约束: ${merged.custom.length} 条`));
+      log(io, chalk.gray(`自定义约束: ${merged.custom.length} 条`));
     }
     if (merged.disabled.length > 0) {
-      console.log(chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
+      log(io, chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
     }
     const unknownIds = merged.unknownIds ?? [];
     if (unknownIds.length > 0) {
-      console.log(chalk.yellow(`⚠️  配置中存在未知约束 id（已忽略，可清理）: ${unknownIds.join(', ')}`));
+      log(io, chalk.yellow(`⚠️  配置中存在未知约束 id（已忽略，可清理）: ${unknownIds.join(', ')}`));
     }
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
@@ -63,15 +67,15 @@ export async function check(options: CheckOptions): Promise<void> {
     });
     const changedFiles = context.changedFiles ?? [];
     if (changedFiles.length > 0) {
-      console.log(chalk.gray(`变更文件: ${changedFiles.length} 个`));
+      log(io, chalk.gray(`变更文件: ${changedFiles.length} 个`));
     }
-    console.log(chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
+    log(io, chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
     // 执行三层检查（per-request 传 customConfig，避免单例状态污染）
     const result = await constraintChecker.checkConstraints(context, merged);
 
     // 输出结果
-    console.log();
+    log(io);
 
     // skipped（约定未采用/证据未接线）单独列示，不进 pass/fail 统计（ADR-0001）
     const skippedResults = [
@@ -83,39 +87,42 @@ export async function check(options: CheckOptions): Promise<void> {
     const evaluatedIronLaws = result.ironLaws.filter(r => !r.skipped);
     const ironLawViolations = evaluatedIronLaws.filter(r => !r.satisfied);
     if (ironLawViolations.length === 0 && evaluatedIronLaws.length > 0) {
-      console.log(chalk.green(`✅ 铁律: 全部通过 (${evaluatedIronLaws.length} 条)`));
+      log(io, chalk.green(`✅ 铁律: 全部通过 (${evaluatedIronLaws.length} 条)`));
     } else if (ironLawViolations.length > 0) {
-      console.log(chalk.red(`❌ 铁律违规: ${ironLawViolations.length} 条`));
+      log(io, chalk.red(`❌ 铁律违规: ${ironLawViolations.length} 条`));
       ironLawViolations.forEach(r => {
         if (r.constraint) {
-          console.log(chalk.red(`   - ${r.constraint.id}: ${r.constraint.message}`));
-          console.log(chalk.red(`     ${r.constraint.rule}`));
+          log(io, chalk.red(`   - ${r.constraint.id}: ${r.constraint.message}`));
+          log(io, chalk.red(`     ${r.constraint.rule}`));
         }
       });
-      console.log();
-      console.log(chalk.red('🛑 铁律检查失败，请修复后再提交'));
-      process.exit(1);
+      log(io);
+      log(io, chalk.red('🛑 铁律检查失败，请修复后再提交'));
+      return {
+        kind: 'fail',
+        reason: `iron law violated: ${ironLawViolations.map(r => r.constraint?.id ?? 'unknown').join(', ')}`,
+      };
     }
 
     // Guidelines
     if (result.warningCount > 0) {
-      console.log(chalk.yellow(`⚠️  指导原则警告: ${result.warningCount} 条`));
+      log(io, chalk.yellow(`⚠️  指导原则警告: ${result.warningCount} 条`));
       result.guidelines.filter(r => !r.satisfied).forEach(r => {
         if (r.constraint) {
-          console.log(chalk.yellow(`   - ${r.constraint.id}: ${r.constraint.message}`));
+          log(io, chalk.yellow(`   - ${r.constraint.id}: ${r.constraint.message}`));
         }
       });
     } else if (result.guidelines.length > 0) {
       const evaluatedGuidelines = result.guidelines.filter(r => !r.skipped);
       const passedGuidelines = evaluatedGuidelines.filter(r => r.satisfied).length;
-      console.log(chalk.green(`✅ 指导原则: ${passedGuidelines}/${evaluatedGuidelines.length} 通过`));
+      log(io, chalk.green(`✅ 指导原则: ${passedGuidelines}/${evaluatedGuidelines.length} 通过`));
     }
 
     // Skipped：约定未采用 / 证据未接线，未评估（不计通过/失败）
     if (skippedResults.length > 0) {
-      console.log(chalk.gray(`⏭️  跳过评估: ${skippedResults.length} 条（约定未采用或证据未接线，不计通过/失败）`));
+      log(io, chalk.gray(`⏭️  跳过评估: ${skippedResults.length} 条（约定未采用或证据未接线，不计通过/失败）`));
       skippedResults.forEach(r => {
-        console.log(chalk.gray(`   - ${r.id}`));
+        log(io, chalk.gray(`   - ${r.id}`));
       });
     }
 
@@ -124,38 +131,39 @@ export async function check(options: CheckOptions): Promise<void> {
     try {
       const drift = detectInjectionDrift(projectPath);
       if (drift.hasDrift) {
-        console.log();
-        console.log(chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));
+        log(io);
+        log(io, chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));
         if (drift.versionDrift) {
-          console.log(chalk.yellow(`   ⚠️⚠️ 注入段版本 (${drift.versionDrift.actual}) ≠ 已安装 harness 版本 (${drift.versionDrift.expected})：agent 上下文中的规则与已安装 harness 版本不一致`));
+          log(io, chalk.yellow(`   ⚠️⚠️ 注入段版本 (${drift.versionDrift.actual}) ≠ 已安装 harness 版本 (${drift.versionDrift.expected})：agent 上下文中的规则与已安装 harness 版本不一致`));
         }
         if (drift.contentDrift) {
-          console.log(chalk.yellow(`   内容漂移: 缺失 ${drift.contentDrift.missing.length} 条 / 多余 ${drift.contentDrift.extra.length} 条（条目级差异见 harness constraints report）`));
+          log(io, chalk.yellow(`   内容漂移: 缺失 ${drift.contentDrift.missing.length} 条 / 多余 ${drift.contentDrift.extra.length} 条（条目级差异见 harness constraints report）`));
         }
         if (drift.duplicateHeading) {
-          console.log(chalk.yellow(`   检测到重复的 "${GOVERNANCE_HEADING}" 章节`));
+          log(io, chalk.yellow(`   检测到重复的 "${GOVERNANCE_HEADING}" 章节`));
         }
-        console.log(chalk.yellow(`   修复: ${drift.fixHint}`));
+        log(io, chalk.yellow(`   修复: ${drift.fixHint}`));
       }
     } catch {
       // 漂移检测失败不影响 check 结果
     }
 
-    console.log();
-    console.log(chalk.green('✅ 约束检查通过'));
+    log(io);
+    log(io, chalk.green('✅ 约束检查通过'));
 
     // 智能提示
     const hint = await getSmartHint(projectPath);
     if (hint) {
-      console.log();
-      console.log(chalk.gray('────────────────────────────────────'));
-      console.log(hint);
-      console.log(chalk.gray('────────────────────────────────────'));
+      log(io);
+      log(io, chalk.gray('────────────────────────────────────'));
+      log(io, hint);
+      log(io, chalk.gray('────────────────────────────────────'));
     }
+    return { kind: 'ok' };
   } catch (error) {
-    console.log();
-    console.log(chalk.red(`❌ 约束检查异常: ${error instanceof Error ? error.message : String(error)}`));
-    process.exit(1);
+    log(io);
+    log(io, chalk.red(`❌ 约束检查异常: ${error instanceof Error ? error.message : String(error)}`));
+    return { kind: 'fail', reason: `check error: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
 
@@ -203,33 +211,35 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
 /**
  * 列出所有约束
  */
-export function listLaws(): void {
-  console.log(chalk.blue('\n📜 所有约束:\n'));
+/** optionRoutes 一律以 (options) 调用；--list 不消费检查选项，形参仅占位 */
+export function listLaws(_options: Partial<CheckOptions> = {}, io: CommandIO = processIO): CommandResult {
+  log(io, chalk.blue('\n📜 所有约束:\n'));
 
   // Iron Laws
-  console.log(chalk.red('🔴 铁律 (Iron Laws) - 绝对禁止，无例外:\n'));
+  log(io, chalk.red('🔴 铁律 (Iron Laws) - 绝对禁止，无例外:\n'));
   Object.values(IRON_LAWS).forEach(constraint => {
-    console.log(chalk.red(`  ${constraint.id}`));
-    console.log(chalk.gray(`    ${constraint.rule}`));
-    console.log(chalk.gray(`    ${constraint.message}`));
-    console.log();
+    log(io, chalk.red(`  ${constraint.id}`));
+    log(io, chalk.gray(`    ${constraint.rule}`));
+    log(io, chalk.gray(`    ${constraint.message}`));
+    log(io);
   });
 
   // Guidelines
-  console.log(chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，违背发警告但不阻止:\n'));
+  log(io, chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，违背发警告但不阻止:\n'));
   Object.values(GUIDELINES).forEach(constraint => {
-    console.log(chalk.yellow(`  ${constraint.id}`));
-    console.log(chalk.gray(`    ${constraint.rule}`));
-    console.log(chalk.gray(`    ${constraint.message}`));
-    console.log();
+    log(io, chalk.yellow(`  ${constraint.id}`));
+    log(io, chalk.gray(`    ${constraint.rule}`));
+    log(io, chalk.gray(`    ${constraint.message}`));
+    log(io);
   });
 
   // Prompts（ADR-0001：纯注入层，不执行检查）
-  console.log(chalk.blue('🔵 提示 (Prompts) - 纯文本注入，不参与检查:\n'));
+  log(io, chalk.blue('🔵 提示 (Prompts) - 纯文本注入，不参与检查:\n'));
   Object.values(PROMPTS).forEach(constraint => {
-    console.log(chalk.blue(`  ${constraint.id}`));
-    console.log(chalk.gray(`    ${constraint.rule}`));
-    console.log(chalk.gray(`    ${constraint.message}`));
-    console.log();
+    log(io, chalk.blue(`  ${constraint.id}`));
+    log(io, chalk.gray(`    ${constraint.rule}`));
+    log(io, chalk.gray(`    ${constraint.message}`));
+    log(io);
   });
+  return { kind: 'ok' };
 }

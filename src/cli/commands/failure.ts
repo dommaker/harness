@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import * as path from 'path';
 import { FailureRecorder } from '../../failure/recorder';
 import { DEFAULT_FAILURE_LOG_FILE } from '../../types/failure';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface FailureOptions {
   /** 项目路径 */
@@ -31,7 +32,8 @@ function getRecorder(projectPath?: string): FailureRecorder {
  */
 export async function failureList(
   options: FailureOptions & { limit?: number | string; type?: string; level?: string },
-): Promise<void> {
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
 
   let records = await recorder.getHistory();
@@ -49,72 +51,75 @@ export async function failureList(
   }
 
   if (options.json) {
-    console.log(JSON.stringify({ total: records.length, records }, null, 2));
-    return;
+    log(io, JSON.stringify({ total: records.length, records }, null, 2));
+    return { kind: 'ok' };
   }
 
   if (records.length === 0) {
-    console.log(chalk.yellow('没有失败记录'));
-    return;
+    log(io, chalk.yellow('没有失败记录'));
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.red(`📋 失败记录 (${records.length} 条)\n`));
+  log(io, chalk.red(`📋 失败记录 (${records.length} 条)\n`));
   for (const record of records) {
     const levelColor = record.level === 'L4' ? chalk.red
       : record.level === 'L3' ? chalk.yellow
       : record.level === 'L2' ? chalk.cyan
       : chalk.gray;
     const time = new Date(record.timestamp).toLocaleString();
-    console.log(`  ${levelColor(`[${record.level}]`)} ${chalk.bold(record.type)} ${chalk.gray(time)}`);
-    console.log(`    ${record.message}`);
+    log(io, `  ${levelColor(`[${record.level}]`)} ${chalk.bold(record.type)} ${chalk.gray(time)}`);
+    log(io, `    ${record.message}`);
   }
+  return { kind: 'ok' };
 }
 
 /**
  * 失败记录统计
  */
-export async function failureStats(options: FailureOptions): Promise<void> {
+export async function failureStats(options: FailureOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
   const stats = await recorder.getStats();
 
   if (options.json) {
-    console.log(JSON.stringify(stats, null, 2));
-    return;
+    log(io, JSON.stringify(stats, null, 2));
+    return { kind: 'ok' };
   }
 
   if (stats.total === 0) {
-    console.log(chalk.green('✅ 没有失败记录'));
-    return;
+    log(io, chalk.green('✅ 没有失败记录'));
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.red(`📊 失败统计\n`));
-  console.log(chalk.bold(`  总计: ${stats.total} 条\n`));
+  log(io, chalk.red(`📊 失败统计\n`));
+  log(io, chalk.bold(`  总计: ${stats.total} 条\n`));
 
-  console.log(chalk.bold('  按类型:'));
+  log(io, chalk.bold('  按类型:'));
   for (const [type, count] of Object.entries(stats.byType)) {
-    console.log(`    ${type}: ${count}`);
+    log(io, `    ${type}: ${count}`);
   }
 
-  console.log(chalk.bold('\n  按等级:'));
+  log(io, chalk.bold('\n  按等级:'));
   for (const [level, count] of Object.entries(stats.byLevel)) {
     const color = level === 'L4' ? chalk.red : level === 'L3' ? chalk.yellow : chalk.gray;
-    console.log(`    ${color(level)}: ${count}`);
+    log(io, `    ${color(level)}: ${count}`);
   }
+  return { kind: 'ok' };
 }
 
 /**
  * 清空失败记录
  */
-export async function failureClear(options: FailureOptions): Promise<void> {
+export async function failureClear(options: FailureOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
   const stats = await recorder.getStats();
 
   await recorder.clear();
 
   if (options.json) {
-    console.log(JSON.stringify({ cleared: stats.total }));
-    return;
+    log(io, JSON.stringify({ cleared: stats.total }));
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.green(`✅ 已清空 ${stats.total} 条失败记录`));
+  log(io, chalk.green(`✅ 已清空 ${stats.total} 条失败记录`));
+  return { kind: 'ok' };
 }

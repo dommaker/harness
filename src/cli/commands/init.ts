@@ -25,6 +25,7 @@ import {
   resolveGovernanceLanding,
   GOVERNANCE_HEADING,
 } from '../../core/constraints/injection-writer';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -143,31 +144,31 @@ const GOVERNANCE_PRESETS: Record<string, GovernanceConfig> = {
 /**
  * 初始化项目
  */
-export async function init(options: InitOptions): Promise<void> {
+export async function init(options: InitOptions, io: CommandIO = processIO): Promise<CommandResult> {
   // 只输出代码片段
   if (options.printSnippets) {
-    printSnippets();
-    return;
+    printSnippets(io);
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.blue('🚀 初始化 harness 配置...'));
+  log(io, chalk.blue('🚀 初始化 harness 配置...'));
 
   const projectPath = options.projectPath || process.cwd();
   const configDir = path.join(projectPath, '.harness');
 
   // 创建配置目录
   await fs.mkdir(configDir, { recursive: true });
-  console.log(chalk.gray(`配置目录: ${configDir}`));
+  log(io, chalk.gray(`配置目录: ${configDir}`));
 
   // 选择预设
   const preset = PRESETS[options.preset];
-  console.log(chalk.gray(`预设: ${options.preset}`));
+  log(io, chalk.gray(`预设: ${options.preset}`));
 
   // 合并治理配置
   const configData: Record<string, unknown> = { ...preset };
   if (options.governance) {
     configData.governance = GOVERNANCE_PRESETS[options.governance];
-    console.log(chalk.gray(`治理级别: ${options.governance}`));
+    log(io, chalk.gray(`治理级别: ${options.governance}`));
   }
 
   // 写入 harness 版本
@@ -178,44 +179,45 @@ export async function init(options: InitOptions): Promise<void> {
   const configPath = path.join(configDir, 'config.yml');
   const configContent = yaml.dump(configData, { indent: 2 });
   await fs.writeFile(configPath, configContent, 'utf-8');
-  console.log(chalk.green(`✅ 已创建配置文件: ${configPath} (v${pkgVersion})`));
+  log(io, chalk.green(`✅ 已创建配置文件: ${configPath} (v${pkgVersion})`));
 
   // 创建检查点示例
-  await createExampleCheckpoint(projectPath);
+  await createExampleCheckpoint(projectPath, io);
 
   // 创建 Resolutions（RKB 狗粮 — 约束 → 已知解法映射）
-  await createExampleResolutions(projectPath);
+  await createExampleResolutions(projectPath, io);
 
   // 创建自定义约束示例
-  await createCustomConstraintsExample(projectPath);
+  await createCustomConstraintsExample(projectPath, io);
 
   // CAPABILITIES.md / CHANGELOG.md 由 sync-docs（AI 治理）管理，init 不创建
 
   // 创建 Git hooks
   if (options.gitHooks !== false) {
-    await setupGitHooks(projectPath);
+    await setupGitHooks(projectPath, io);
   }
 
   // 创建 GitHub Actions
   if (options.githubActions !== false) {
-    await setupGitHubActions(projectPath);
+    await setupGitHubActions(projectPath, io);
   }
 
   // 治理相关文件生成
   if (options.governance) {
-    await setupGovernance(projectPath, options.governance);
+    await setupGovernance(projectPath, options.governance, io);
   }
 
-  console.log();
-  console.log(chalk.green('✅ harness 初始化完成！'));
-  console.log();
-  console.log(chalk.gray('下一步:'));
-  console.log(chalk.gray('  1. 编辑 .harness/config.yml 自定义配置'));
-  console.log(chalk.gray('  2. 编辑 .harness/custom-constraints.yml 添加项目约束'));
-  console.log(chalk.gray('  3. 正常开发，每次 git commit 会自动检查约束'));
-  console.log(chalk.gray('  4. 运行 harness status 查看状态'));
-  console.log();
-  console.log(chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
+  log(io);
+  log(io, chalk.green('✅ harness 初始化完成！'));
+  log(io);
+  log(io, chalk.gray('下一步:'));
+  log(io, chalk.gray('  1. 编辑 .harness/config.yml 自定义配置'));
+  log(io, chalk.gray('  2. 编辑 .harness/custom-constraints.yml 添加项目约束'));
+  log(io, chalk.gray('  3. 正常开发，每次 git commit 会自动检查约束'));
+  log(io, chalk.gray('  4. 运行 harness status 查看状态'));
+  log(io);
+  log(io, chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
+  return { kind: 'ok' };
 }
 
 /**
@@ -233,21 +235,21 @@ function getPackageVersion(): string {
 /**
  * 输出代码片段
  */
-function printSnippets(): void {
-  console.log(chalk.blue('📄 Harness 配置代码片段'));
-  console.log();
+function printSnippets(io: CommandIO): void {
+  log(io, chalk.blue('📄 Harness 配置代码片段'));
+  log(io);
   
-  console.log(chalk.yellow('Git pre-commit hook:'));
-  console.log(chalk.gray('添加到 .git/hooks/pre-commit'));
-  console.log();
-  console.log(chalk.cyan(PRE_COMMIT_SNIPPET));
+  log(io, chalk.yellow('Git pre-commit hook:'));
+  log(io, chalk.gray('添加到 .git/hooks/pre-commit'));
+  log(io);
+  log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
   
-  console.log(chalk.yellow('GitHub Actions:'));
-  console.log(chalk.gray('添加到 .github/workflows/*.yml 的 jobs 中'));
-  console.log();
-  console.log(chalk.cyan(GITHUB_ACTIONS_SNIPPET));
+  log(io, chalk.yellow('GitHub Actions:'));
+  log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 中'));
+  log(io);
+  log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
   
-  console.log(chalk.blue('💡 提示: 运行 npx @dommaker/harness init 自动创建配置文件'));
+  log(io, chalk.blue('💡 提示: 运行 npx @dommaker/harness init 自动创建配置文件'));
 }
 
 /**
@@ -295,7 +297,7 @@ const GITHUB_ACTIONS_SNIPPET = `
 /**
  * 设置 Git hooks
  */
-async function setupGitHooks(projectPath: string): Promise<void> {
+async function setupGitHooks(projectPath: string, io: CommandIO): Promise<void> {
   const gitDir = path.join(projectPath, '.git');
   const hooksDir = path.join(gitDir, 'hooks');
   const preCommitPath = path.join(hooksDir, 'pre-commit');
@@ -303,8 +305,8 @@ async function setupGitHooks(projectPath: string): Promise<void> {
   try {
     await fs.access(gitDir);
   } catch {
-    console.log(chalk.yellow('⚠️  未检测到 Git 仓库，跳过 Git hooks'));
-    console.log(chalk.gray('💡 初始化 Git 后可运行 npx @dommaker/harness init --print-snippets 查看配置'));
+    log(io, chalk.yellow('⚠️  未检测到 Git 仓库，跳过 Git hooks'));
+    log(io, chalk.gray('💡 初始化 Git 后可运行 npx @dommaker/harness init --print-snippets 查看配置'));
     return;
   }
 
@@ -314,10 +316,10 @@ async function setupGitHooks(projectPath: string): Promise<void> {
   try {
     await fs.access(preCommitPath);
     // 已存在，输出代码片段
-    console.log(chalk.yellow('⚠️  .git/hooks/pre-commit 已存在'));
-    console.log(chalk.gray('💡 请手动添加以下内容到文件末尾：'));
-    console.log();
-    console.log(chalk.cyan(PRE_COMMIT_SNIPPET));
+    log(io, chalk.yellow('⚠️  .git/hooks/pre-commit 已存在'));
+    log(io, chalk.gray('💡 请手动添加以下内容到文件末尾：'));
+    log(io);
+    log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
   } catch {
     // 不存在，创建文件
     const preCommitContent = `#!/bin/sh
@@ -352,14 +354,14 @@ echo "✅ All checks passed"
 `;
     await fs.writeFile(preCommitPath, preCommitContent, 'utf-8');
     await fs.chmod(preCommitPath, 0o755);
-    console.log(chalk.green(`✅ 已创建 .git/hooks/pre-commit`));
+    log(io, chalk.green(`✅ 已创建 .git/hooks/pre-commit`));
   }
 }
 
 /**
  * 设置 GitHub Actions
  */
-async function setupGitHubActions(projectPath: string): Promise<void> {
+async function setupGitHubActions(projectPath: string, io: CommandIO): Promise<void> {
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
   const workflowPath = path.join(workflowsDir, 'harness-check.yml');
 
@@ -368,13 +370,13 @@ async function setupGitHubActions(projectPath: string): Promise<void> {
   
   if (existingFiles.length > 0) {
     // 已有 CI 配置，输出代码片段
-    console.log(chalk.yellow('⚠️  检测到已存在的 CI 配置：'));
+    log(io, chalk.yellow('⚠️  检测到已存在的 CI 配置：'));
     existingFiles.forEach(f => {
-      console.log(chalk.gray(`  - .github/workflows/${f}`));
+      log(io, chalk.gray(`  - .github/workflows/${f}`));
     });
-    console.log(chalk.gray('💡 请手动添加以下内容到 jobs 中：'));
-    console.log();
-    console.log(chalk.cyan(GITHUB_ACTIONS_SNIPPET));
+    log(io, chalk.gray('💡 请手动添加以下内容到 jobs 中：'));
+    log(io);
+    log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
     return;
   }
 
@@ -414,7 +416,7 @@ jobs:
 `;
 
   await fs.writeFile(workflowPath, workflowContent, 'utf-8');
-  console.log(chalk.green(`✅ 已创建 .github/workflows/harness-check.yml`));
+  log(io, chalk.green(`✅ 已创建 .github/workflows/harness-check.yml`));
 }
 
 /**
@@ -436,14 +438,14 @@ async function findCiWorkflows(workflowsDir: string): Promise<string[]> {
 /**
  * 创建自定义约束示例
  */
-async function createCustomConstraintsExample(projectPath: string): Promise<void> {
+async function createCustomConstraintsExample(projectPath: string, io: CommandIO): Promise<void> {
   const configDir = path.join(projectPath, '.harness');
   const customConstraintsPath = path.join(configDir, 'custom-constraints.yml');
 
   // 如果已存在，不覆盖
   try {
     await fs.access(customConstraintsPath);
-    console.log(chalk.gray(`custom-constraints.yml 已存在`));
+    log(io, chalk.gray(`custom-constraints.yml 已存在`));
     return;
   } catch {
     // 文件不存在，创建
@@ -485,7 +487,7 @@ custom_constraints:
 `;
 
   await fs.writeFile(customConstraintsPath, content, 'utf-8');
-  console.log(chalk.green(`✅ 已创建自定义约束示例: custom-constraints.yml`));
+  log(io, chalk.green(`✅ 已创建自定义约束示例: custom-constraints.yml`));
 }
 
 /**
@@ -521,7 +523,7 @@ function renderOutputStyleSection(): string {
  * - 无标记且 `## Output Style` 段为用户自写（特征串不匹配）：跳过并提示，不重复追加
  * - 完全没有该段：在文件顶部插入标记版
  */
-export async function setupClaudeMdOutputStyle(projectPath: string): Promise<void> {
+export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandIO = processIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
   let content: string;
   try {
@@ -538,12 +540,12 @@ export async function setupClaudeMdOutputStyle(projectPath: string): Promise<voi
     // 尾部换行规范化在 writer 内（幂等）。
     if (write.content !== content) {
       await fs.writeFile(claudeMdPath, write.content, 'utf-8');
-      console.log(chalk.green('✅ 已更新 CLAUDE.md Output Style 段'));
+      log(io, chalk.green('✅ 已更新 CLAUDE.md Output Style 段'));
     }
     return;
   }
   if (write.kind === 'half') {
-    console.log(chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_OUTPUT_STYLE 标记残缺（单边或乱序），跳过 Output Style 注入，请人工修复'));
+    log(io, chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_OUTPUT_STYLE 标记残缺（单边或乱序），跳过 Output Style 注入，请人工修复'));
     return;
   }
 
@@ -558,7 +560,7 @@ export async function setupClaudeMdOutputStyle(projectPath: string): Promise<voi
 
     if (!legacySection.includes(LEGACY_OUTPUT_STYLE_FINGERPRINT)) {
       // 用户自写的同名 section：不动，也不追加（避免重复）
-      console.log(chalk.yellow('⚠️  CLAUDE.md 已存在自定义 "## Output Style" 段，跳过 harness Output Style 注入'));
+      log(io, chalk.yellow('⚠️  CLAUDE.md 已存在自定义 "## Output Style" 段，跳过 harness Output Style 注入'));
       return;
     }
 
@@ -567,13 +569,13 @@ export async function setupClaudeMdOutputStyle(projectPath: string): Promise<voi
     const after = content.slice(sectionEnd);
     const newContent = before + section + (after.length > 0 ? '\n' + after : '');
     await fs.writeFile(claudeMdPath, newContent, 'utf-8');
-    console.log(chalk.green('✅ 已将 CLAUDE.md Output Style 段迁移为标记化管理'));
+    log(io, chalk.green('✅ 已将 CLAUDE.md Output Style 段迁移为标记化管理'));
     return;
   }
 
   // 完全没有该段：插入文件顶部
   await fs.writeFile(claudeMdPath, section + '\n' + content, 'utf-8');
-  console.log(chalk.green('✅ 已在 CLAUDE.md 顶部写入 Output Style 段'));
+  log(io, chalk.green('✅ 已在 CLAUDE.md 顶部写入 Output Style 段'));
 }
 
 /**
@@ -594,7 +596,7 @@ const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
  * - 无该段：在文件末尾追加
  * - 段标记残缺（外层或段内 HARNESS_CONSTRAINTS 单边/乱序）：不写入，告警交由人工修复（防二次损坏）
  */
-export async function setupAgentsMdConstraints(projectPath: string): Promise<void> {
+export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
   const agentsMdPath = path.join(projectPath, 'AGENTS.md');
   const version = getPackageVersion();
 
@@ -618,14 +620,14 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
       block,
     ].join('\n');
     await fs.writeFile(agentsMdPath, skeleton, 'utf-8');
-    console.log(chalk.green(`✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v${version})`));
+    log(io, chalk.green(`✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v${version})`));
     return;
   }
 
   const preserve = cutMarkerBlock(existingContent, GOVERNANCE_PRESERVE_BEGIN, GOVERNANCE_PRESERVE_END);
 
   if (preserve === 'half') {
-    console.log(chalk.yellow('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复'));
+    log(io, chalk.yellow('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复'));
     return;
   }
 
@@ -633,7 +635,7 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
     // 段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间；其余手写内容原样保留
     const inner = replaceEnclosedRange(preserve.inner, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, bodyOnly);
     if (inner.kind === 'half') {
-      console.log(chalk.yellow('⚠️  AGENTS.md PRESERVE:governance 段内 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理契约写入，请人工修复'));
+      log(io, chalk.yellow('⚠️  AGENTS.md PRESERVE:governance 段内 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理契约写入，请人工修复'));
       return;
     }
     const newInner =
@@ -650,7 +652,7 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
     );
     if (write.kind === 'updated' && write.content !== existingContent) {
       await fs.writeFile(agentsMdPath, write.content, 'utf-8');
-      console.log(chalk.green(`✅ 已更新 AGENTS.md 治理契约 PRESERVE:governance 段 (v${version})`));
+      log(io, chalk.green(`✅ 已更新 AGENTS.md 治理契约 PRESERVE:governance 段 (v${version})`));
     }
     return;
   }
@@ -658,7 +660,7 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
   // 无该段：文件末尾追加
   const newContent = existingContent.trimEnd() + '\n\n' + block;
   await fs.writeFile(agentsMdPath, newContent, 'utf-8');
-  console.log(chalk.green(`✅ 已追加治理契约 PRESERVE:governance 段到 AGENTS.md (v${version})`));
+  log(io, chalk.green(`✅ 已追加治理契约 PRESERVE:governance 段到 AGENTS.md (v${version})`));
 }
 
 /**
@@ -671,7 +673,7 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
  * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
  * - 如果不存在标记，在文件末尾追加约束段
  */
-export async function setupClaudeMdConstraints(projectPath: string): Promise<void> {
+export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
 
   // 读取 harness 版本
@@ -702,7 +704,7 @@ export async function setupClaudeMdConstraints(projectPath: string): Promise<voi
   if (!fileExists) {
     // 创建新文件
     await fs.writeFile(claudeMdPath, fullSection, 'utf-8');
-    console.log(chalk.green(`✅ 已创建 CLAUDE.md 并写入治理约束 (v${version})`));
+    log(io, chalk.green(`✅ 已创建 CLAUDE.md 并写入治理约束 (v${version})`));
     return;
   }
 
@@ -711,14 +713,14 @@ export async function setupClaudeMdConstraints(projectPath: string): Promise<voi
   if (write.kind === 'updated') {
     // 替换标记区间含标记本身（保持包括最新版本号），尾部换行规范化在 writer 内
     await fs.writeFile(claudeMdPath, write.content, 'utf-8');
-    console.log(chalk.green(`✅ 已更新 CLAUDE.md 治理约束 (v${version})`));
+    log(io, chalk.green(`✅ 已更新 CLAUDE.md 治理约束 (v${version})`));
   } else if (write.kind === 'half') {
-    console.log(chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理约束注入，请人工修复'));
+    log(io, chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理约束注入，请人工修复'));
   } else {
     // 在文件末尾追加完整段
     const newContent = existingContent.trimEnd() + '\n\n' + fullSection;
     await fs.writeFile(claudeMdPath, newContent, 'utf-8');
-    console.log(chalk.green(`✅ 已追加治理约束到 CLAUDE.md (v${version})`));
+    log(io, chalk.green(`✅ 已追加治理约束到 CLAUDE.md (v${version})`));
   }
 }
 
@@ -740,15 +742,15 @@ export async function setupGovernanceConstraints(projectPath: string): Promise<v
 /**
  * 设置治理相关文件
  */
-async function setupGovernance(projectPath: string, level: string): Promise<void> {
+async function setupGovernance(projectPath: string, level: string, io: CommandIO): Promise<void> {
   const governance = GOVERNANCE_PRESETS[level];
   if (!governance) return;
 
-  console.log();
-  console.log(chalk.blue('📋 设置治理文件...'));
+  log(io);
+  log(io, chalk.blue('📋 设置治理文件...'));
 
   // 1. 生成 CHANGELOG.md
-  await createChangelog(projectPath, governance);
+  await createChangelog(projectPath, governance, io);
 
   // 2. 在 CLAUDE.md 中写入 Output Style 段（仅在不存在时创建）
   await setupClaudeMdOutputStyle(projectPath);
@@ -765,23 +767,23 @@ async function setupGovernance(projectPath: string, level: string): Promise<void
       requiredDirs = detectSourceRoots(projectPath);
     }
     for (const dir of requiredDirs) {
-      await createContextMd(projectPath, dir);
+      await createContextMd(projectPath, dir, io);
     }
   }
 
   // 4. 生成治理 CI workflow
-  await setupGovernanceWorkflow(projectPath, level);
+  await setupGovernanceWorkflow(projectPath, level, io);
 }
 
 /**
  * 创建 CHANGELOG.md
  */
-async function createChangelog(projectPath: string, governance: GovernanceConfig): Promise<void> {
+async function createChangelog(projectPath: string, governance: GovernanceConfig, io: CommandIO): Promise<void> {
   const changelogPath = path.join(projectPath, 'CHANGELOG.md');
 
   try {
     await fs.access(changelogPath);
-    console.log(chalk.gray(`CHANGELOG.md 已存在`));
+    log(io, chalk.gray(`CHANGELOG.md 已存在`));
     return;
   } catch {
     // 文件不存在，创建
@@ -821,18 +823,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   }
 
   await fs.writeFile(changelogPath, content, 'utf-8');
-  console.log(chalk.green(`✅ 已创建 CHANGELOG.md`));
+  log(io, chalk.green(`✅ 已创建 CHANGELOG.md`));
 }
 
 /**
  * 在指定目录创建 CONTEXT.md
  */
-async function createContextMd(projectPath: string, dir: string): Promise<void> {
+async function createContextMd(projectPath: string, dir: string, io: CommandIO): Promise<void> {
   const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
 
   try {
     await fs.access(contextPath);
-    console.log(chalk.gray(`${dir}/CONTEXT.md 已存在`));
+    log(io, chalk.gray(`${dir}/CONTEXT.md 已存在`));
     return;
   } catch {
     // 文件不存在，创建
@@ -843,7 +845,7 @@ async function createContextMd(projectPath: string, dir: string): Promise<void> 
   try {
     await fs.access(dirPath);
   } catch {
-    console.log(chalk.yellow(`⚠️  目录 ${dir} 不存在，跳过 CONTEXT.md`));
+    log(io, chalk.yellow(`⚠️  目录 ${dir} 不存在，跳过 CONTEXT.md`));
     return;
   }
 
@@ -870,7 +872,7 @@ async function createContextMd(projectPath: string, dir: string): Promise<void> 
 `;
 
   await fs.writeFile(contextPath, content, 'utf-8');
-  console.log(chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+  log(io, chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
 }
 
 /**
@@ -896,14 +898,14 @@ async function findGovernanceCoverage(workflowsDir: string): Promise<string | un
 /**
  * 设置治理 CI workflow
  */
-async function setupGovernanceWorkflow(projectPath: string, level: string): Promise<void> {
+async function setupGovernanceWorkflow(projectPath: string, level: string, io: CommandIO): Promise<void> {
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
   const workflowPath = path.join(workflowsDir, 'harness-governance.yml');
 
   // 检查是否已存在
   try {
     await fs.access(workflowPath);
-    console.log(chalk.gray(`harness-governance.yml 已存在`));
+    log(io, chalk.gray(`harness-governance.yml 已存在`));
     return;
   } catch {
     // 不存在，继续创建
@@ -912,7 +914,7 @@ async function setupGovernanceWorkflow(projectPath: string, level: string): Prom
   // 能力检测：已有 workflow 已跑 harness 治理命令时跳过，避免重复 CI 面
   const coveredBy = await findGovernanceCoverage(workflowsDir);
   if (coveredBy) {
-    console.log(chalk.gray(`治理检查已由 ${coveredBy} 覆盖，跳过创建 harness-governance.yml`));
+    log(io, chalk.gray(`治理检查已由 ${coveredBy} 覆盖，跳过创建 harness-governance.yml`));
     return;
   }
 
@@ -957,5 +959,5 @@ ${docsCheckStep}
 `;
 
   await fs.writeFile(workflowPath, workflowContent, 'utf-8');
-  console.log(chalk.green(`✅ 已创建 .github/workflows/harness-governance.yml`));
+  log(io, chalk.green(`✅ 已创建 .github/workflows/harness-governance.yml`));
 }

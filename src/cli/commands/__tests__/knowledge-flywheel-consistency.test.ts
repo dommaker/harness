@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { FileKnowledgeStore } from '../../../knowledge/store';
@@ -66,16 +67,14 @@ function setupKnowledgeBase(): string {
   return projectRoot;
 }
 
-let logSpy: jest.SpyInstance;
-
-afterEach(() => {
-  logSpy?.mockRestore();
-});
-
-function lastJsonOutput(): any {
-  const output = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
-  return JSON.parse(output);
+function lastJsonOutput(io: CapturingIO): any {
+  return JSON.parse(io.outText());
 }
+
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
 
 describe('飞轮指标三处同源', () => {
   it('audit D6 / stats / health 报出同一组数字', async () => {
@@ -84,14 +83,12 @@ describe('飞轮指标三处同源', () => {
 
     const report = new KnowledgeAudit({ baseDir }).run();
     const auditDetails = report.dimensions.flywheel.details;
+    await knowledgeStats({ projectPath: projectRoot, json: true }, io);
+    const statsFlywheel = lastJsonOutput(io).flywheel;
 
-    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    await knowledgeStats({ projectPath: projectRoot, json: true });
-    const statsFlywheel = lastJsonOutput().flywheel;
-
-    logSpy.mockClear();
-    await knowledgeHealth({ dir: baseDir, json: true });
-    const healthSummary = lastJsonOutput().summary;
+    io = captureIO();
+    await knowledgeHealth({ dir: baseDir, json: true }, io);
+    const healthSummary = lastJsonOutput(io).summary;
 
     // 逐字段一致（avgRefs 在 audit 报告层的呈现名是 avgRefCount）
     expect(statsFlywheel.refCoverage).toBe(auditDetails.refCoverage);

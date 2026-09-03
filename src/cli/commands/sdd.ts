@@ -2,6 +2,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { SDDIndexGenerator } from '../../sdd/index-generator';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface SDDOptions {
   projectPath?: string;
@@ -14,7 +15,7 @@ function getSDDDir(projectPath?: string): string {
   return base;
 }
 
-export function sddIndex(options: SDDOptions & { dir?: string }): void {
+export function sddIndex(options: SDDOptions & { dir?: string }, io: CommandIO = processIO): CommandResult {
   const baseDir = options.dir || getSDDDir(options.projectPath);
   const gen = new SDDIndexGenerator(baseDir);
 
@@ -30,15 +31,16 @@ export function sddIndex(options: SDDOptions & { dir?: string }): void {
   );
 
   if (options.json) {
-    console.log(JSON.stringify({
+    log(io, JSON.stringify({
       path: indexPath,
       entries: result.count,
       size: afterSize,
       previousSize: beforeSize,
     }));
   } else {
-    console.log(`SDD Index regenerated: ${indexPath}`);
-    console.log(`  Entries: ${result.count}`);
-    console.log(`  Size: ${beforeSize} → ${afterSize} bytes`);
+    log(io, `SDD Index regenerated: ${indexPath}`);
+    log(io, `  Entries: ${result.count}`);
+    log(io, `  Size: ${beforeSize} → ${afterSize} bytes`);
   }
+  return { kind: 'ok' };
 }

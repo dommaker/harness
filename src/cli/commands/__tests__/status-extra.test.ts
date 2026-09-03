@@ -3,6 +3,7 @@
  */
 
 import { status } from '../status';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs';
 import { TraceAnalyzer } from '../../../monitoring/trace-analyzer';
 
@@ -42,20 +43,19 @@ jest.mock('chalk', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>;
 const MockTraceAnalyzer = TraceAnalyzer as jest.MockedClass<typeof TraceAnalyzer>;
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('status command - 补充覆盖', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue('');
     mockFs.writeFileSync.mockImplementation();
     mockFs.mkdirSync.mockImplementation();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
   });
 
   describe('异常检测完整流程', () => {
@@ -87,9 +87,9 @@ describe('status command - 补充覆盖', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ anomalies: true });
+      await status({ anomalies: true }, io);
       
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      const output = io.outText();
       expect(output).toContain('异常');
       expect(mockAnalyze.detectAnomalies).toHaveBeenCalled();
     });
@@ -103,9 +103,9 @@ describe('status command - 补充覆盖', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ anomalies: true });
+      await status({ anomalies: true }, io);
       
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      const output = io.outText();
       expect(output).toContain('未发现异常');
     });
   });
@@ -128,9 +128,9 @@ describe('status command - 补充覆盖', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
+      await status({}, io);
       
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      const output = io.outText();
       expect(output).toContain('约束统计');
     });
 
@@ -149,9 +149,9 @@ describe('status command - 补充覆盖', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
+      await status({}, io);
       
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(io.outText()).not.toBe('');
     });
   });
 
@@ -173,9 +173,9 @@ describe('status command - 补充覆盖', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ detail: true });
+      await status({ detail: true }, io);
       
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      const output = io.outText();
       expect(output).toContain('约束统计');
     });
   });
@@ -190,10 +190,10 @@ describe('status command - 补充覆盖', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
+      await status({}, io);
       
       // 应该成功处理，不会抛出异常
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(io.outText()).not.toBe('');
     });
   });
 });

@@ -3,13 +3,17 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { extractBaselineSection, specBaselineCheck } from '../spec-baseline-check';
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('spec-baseline-check', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-spec-baseline');
-  let consoleSpy: jest.SpyInstance;
-  let errorSpy: jest.SpyInstance;
   let originalExitCode: string | number | undefined;
 
   beforeAll(() => {
@@ -26,15 +30,10 @@ describe('spec-baseline-check', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    errorSpy = jest.spyOn(console, 'error').mockImplementation();
     originalExitCode = process.exitCode;
-    process.exitCode = 0;
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
-    errorSpy.mockRestore();
     process.exitCode = originalExitCode;
   });
 
@@ -153,19 +152,20 @@ describe('spec-baseline-check', () => {
 
   describe('specBaselineCheck CLI', () => {
     it('应该在文件不存在时报错', async () => {
-      await specBaselineCheck('/nonexistent/spec.md');
+      const result = await specBaselineCheck('/nonexistent/spec.md', {}, io);
 
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('文件不存在'));
-      expect(process.exitCode).toBe(1);
+      expect(io.errText()).toContain('文件不存在');
+      expect(result).toEqual({ kind: 'usage-error', reason: expect.stringContaining('spec 文件不存在') });
     });
 
     it('没有 Baseline section 应该提示', async () => {
       const specPath = path.join(tempDir, 'no-baseline.md');
       fs.writeFileSync(specPath, '# Spec\n## Overview\nNo baseline here.');
 
-      await specBaselineCheck(specPath, { projectPath: tempDir });
+      const result = await specBaselineCheck(specPath, { projectPath: tempDir }, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未找到'));
+      expect(io.outText()).toContain('未找到');
+      expect(result).toEqual({ kind: 'skip', reason: expect.stringContaining('无可判定项') });
     });
 
     it('应该输出 table 格式结果', async () => {
@@ -182,9 +182,9 @@ describe('spec-baseline-check', () => {
         '- 普通文本描述',
       ].join('\n'));
 
-      await specBaselineCheck(specPath, { projectPath: subDir });
+      await specBaselineCheck(specPath, { projectPath: subDir }, io);
 
-      const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+      const output = io.outText();
       expect(output).toContain('前置条件检查');
     });
 
@@ -196,9 +196,9 @@ describe('spec-baseline-check', () => {
         '- `package.json` exists',
       ].join('\n'));
 
-      await specBaselineCheck(specPath, { json: true, projectPath: tempDir });
+      await specBaselineCheck(specPath, { json: true, projectPath: tempDir }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find((c: any[]) => {
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find((c: any[]) => {
         try {
           const parsed = JSON.parse(c[0]);
           return Array.isArray(parsed);
@@ -207,7 +207,7 @@ describe('spec-baseline-check', () => {
         }
       });
       expect(jsonCall).toBeTruthy();
-      const parsed = JSON.parse(jsonCall[0]);
+      const parsed = JSON.parse(jsonCall![0]);
       expect(parsed.length).toBe(1);
       expect(parsed[0]).toHaveProperty('prerequisite');
       expect(parsed[0]).toHaveProperty('satisfied');
@@ -218,9 +218,9 @@ describe('spec-baseline-check', () => {
       const specPath = path.join(tempDir, 'empty-baseline.md');
       fs.writeFileSync(specPath, '# Test\n## Baseline\n\n## Next');
 
-      await specBaselineCheck(specPath, { json: true, projectPath: tempDir });
+      await specBaselineCheck(specPath, { json: true, projectPath: tempDir }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find((c: any[]) => {
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find((c: any[]) => {
         try {
           const parsed = JSON.parse(c[0]);
           return parsed.prerequisites !== undefined;
@@ -229,7 +229,7 @@ describe('spec-baseline-check', () => {
         }
       });
       expect(jsonCall).toBeTruthy();
-      expect(JSON.parse(jsonCall[0]).prerequisites).toHaveLength(0);
+      expect(JSON.parse(jsonCall![0]).prerequisites).toHaveLength(0);
     });
   });
 });

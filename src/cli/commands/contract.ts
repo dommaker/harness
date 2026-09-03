@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ContractGate } from '../../gates/contract';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ContractOptions {
   /** 项目路径 */
@@ -23,8 +24,11 @@ export interface ContractOptions {
 /**
  * 执行契约门控
  */
-export async function contract(options: ContractOptions): Promise<void> {
-  console.log(chalk.blue('📜 API 契约门控检查...'));
+export async function contract(
+  options: ContractOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
+  log(io, chalk.blue('📜 API 契约门控检查...'));
 
   const projectPath = options.projectPath || process.cwd();
   const contractPath = options.contractPath || 'openapi.yaml';
@@ -34,10 +38,10 @@ export async function contract(options: ContractOptions): Promise<void> {
   try {
     await fs.access(fullPath);
   } catch {
-    console.log();
-    console.log(chalk.red('❌ 契约文件不存在'));
-    console.log(chalk.red(`   ${fullPath}`));
-    process.exit(1);
+    log(io);
+    log(io, chalk.red('❌ 契约文件不存在'));
+    log(io, chalk.red(`   ${fullPath}`));
+    return { kind: 'fail', reason: `contract file not found: ${fullPath}` };
   }
 
   // 创建契约门控实例
@@ -53,57 +57,61 @@ export async function contract(options: ContractOptions): Promise<void> {
     } as any);
 
     if (result.passed) {
-      console.log();
-      console.log(chalk.green('✅ 契约门控检查通过'));
+      log(io);
+      log(io, chalk.green('✅ 契约门控检查通过'));
 
       if (result.details) {
-        console.log(chalk.gray(`   Schema 有效: ✅`));
+        log(io, chalk.gray(`   Schema 有效: ✅`));
         if (result.details.endpoints) {
-          console.log(chalk.gray(`   端点数: ${result.details.endpoints}`));
+          log(io, chalk.gray(`   端点数: ${result.details.endpoints}`));
         }
         if (result.details.breakingChanges === false) {
-          console.log(chalk.gray(`   破坏性变更: 无`));
+          log(io, chalk.gray(`   破坏性变更: 无`));
         }
       }
     } else {
-      console.log();
-      console.log(chalk.red('❌ 契约门控检查失败'));
-      console.log(chalk.red(`   ${result.message}`));
+      log(io);
+      log(io, chalk.red('❌ 契约门控检查失败'));
+      log(io, chalk.red(`   ${result.message}`));
 
       if (result.details?.errors) {
-        console.log();
-        console.log(chalk.red('验证错误:'));
+        log(io);
+        log(io, chalk.red('验证错误:'));
         (result.details.errors as string[]).forEach((error: string) => {
-          console.log(chalk.red(`  - ${error}`));
+          log(io, chalk.red(`  - ${error}`));
         });
       }
 
       if (result.details?.breakingChanges) {
-        console.log();
-        console.log(chalk.red('破坏性变更:'));
+        log(io);
+        log(io, chalk.red('破坏性变更:'));
         (result.details.breakingChanges as any[]).forEach((change: any) => {
-          console.log(chalk.red(`  - ${change.type}: ${change.path}`));
+          log(io, chalk.red(`  - ${change.type}: ${change.path}`));
           if (change.description) {
-            console.log(chalk.gray(`    ${change.description}`));
+            log(io, chalk.gray(`    ${change.description}`));
           }
         });
       }
 
-      process.exit(1);
+      return { kind: 'fail', reason: `contract gate denied: ${result.message}` };
     }
+    return { kind: 'ok' };
   } catch (error: any) {
-    console.log();
-    console.log(chalk.red('❌ 契约门控检查出错'));
-    console.log(chalk.red(`   ${error.message}`));
-    process.exit(1);
+    log(io);
+    log(io, chalk.red('❌ 契约门控检查出错'));
+    log(io, chalk.red(`   ${error.message}`));
+    return { kind: 'fail', reason: `contract gate error: ${error.message}` };
   }
 }
 
 /**
  * 验证 OpenAPI Schema 语法
  */
-export async function validateSchema(options: ContractOptions): Promise<void> {
-  console.log(chalk.blue('📜 验证 OpenAPI Schema...\n'));
+export async function validateSchema(
+  options: ContractOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
+  log(io, chalk.blue('📜 验证 OpenAPI Schema...\n'));
 
   const projectPath = options.projectPath || process.cwd();
   const contractPath = options.contractPath || 'openapi.yaml';
@@ -118,8 +126,8 @@ export async function validateSchema(options: ContractOptions): Promise<void> {
     try {
       schema = yaml.load(content);
     } catch (e: any) {
-      console.log(chalk.red(`❌ YAML 解析错误: ${e.message}`));
-      process.exit(1);
+      log(io, chalk.red(`❌ YAML 解析错误: ${e.message}`));
+      return { kind: 'fail', reason: `contract YAML parse error: ${e.message}` };
     }
 
     // 基本验证
@@ -143,26 +151,27 @@ export async function validateSchema(options: ContractOptions): Promise<void> {
     }
 
     if (errors.length > 0) {
-      console.log(chalk.red('❌ Schema 验证失败:\n'));
-      errors.forEach(err => console.log(chalk.red(`  - ${err}`)));
-      process.exit(1);
+      log(io, chalk.red('❌ Schema 验证失败:\n'));
+      errors.forEach(err => log(io, chalk.red(`  - ${err}`)));
+      return { kind: 'fail', reason: `contract schema invalid: ${errors.join('; ')}` };
     }
 
-    console.log(chalk.green('✅ Schema 验证通过'));
-    console.log();
-    console.log(chalk.gray('Schema 信息:'));
-    console.log(chalk.gray(`  版本: ${schema.openapi}`));
-    console.log(chalk.gray(`  标题: ${schema.info.title}`));
-    console.log(chalk.gray(`  API 版本: ${schema.info.version}`));
+    log(io, chalk.green('✅ Schema 验证通过'));
+    log(io);
+    log(io, chalk.gray('Schema 信息:'));
+    log(io, chalk.gray(`  版本: ${schema.openapi}`));
+    log(io, chalk.gray(`  标题: ${schema.info.title}`));
+    log(io, chalk.gray(`  API 版本: ${schema.info.version}`));
 
     if (schema.paths) {
       const endpoints = Object.keys(schema.paths).flatMap(path =>
         Object.keys(schema.paths[path]).map(method => `${method.toUpperCase()} ${path}`)
       );
-      console.log(chalk.gray(`  端点数: ${endpoints.length}`));
+      log(io, chalk.gray(`  端点数: ${endpoints.length}`));
     }
+    return { kind: 'ok' };
   } catch (error: any) {
-    console.log(chalk.red(`❌ 验证失败: ${error.message}`));
-    process.exit(1);
+    log(io, chalk.red(`❌ 验证失败: ${error.message}`));
+    return { kind: 'fail', reason: `contract schema read error: ${error.message}` };
   }
 }

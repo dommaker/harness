@@ -9,6 +9,7 @@ H5（#44）起：
 
 ## 核心导出
 - `COMMAND_DEFINITIONS`（definitions.ts）— 全部非门禁命令定义（纯数据模块、零闭包，禁止 import 命令实现；ADR-0010）
+- 命令契约（`src/cli/command-contract.ts`，上层目录）— `CommandResult` / `CommandKind` / `CommandIO` / `processIO` / `captureIO` / `log` / `logError`
 - 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / spec-baseline-check
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）
 
@@ -35,4 +36,7 @@ H5（#44）起：
 - 注入段落点路由与 marker-range 替换收口在 `core/constraints/injection-writer`（ADR-0011）：读侧 `resolveInjectionTarget`（漂移检测/retire 同步共用「CLAUDE.md 有标记优先，否则 AGENTS.md」）+ 写侧 `resolveGovernanceLanding`（init 落点选择）；init 三个治理段 writer 与 retire 注入同步均为「渲染 body + 调 writer」，半标记（单边/乱序）一律拒写告警；未注入 = 两处均无完整标记段
 - knowledge 命令包含 13 个子操作（list/search/import/decay/stats/upsert/sync-status/sync-rag/audit/snapshot/migrate/index/health）
 - `stats` / `health` 的飞轮数字不在 CLI 内计算：分子口径唯一实现是 `knowledge/flywheel-metrics.ts`（`evaluateFlywheel`，ADR-0013），本层只做百分比取整/一位小数与字段名映射；`.consumption-stats.json` 的读取留在各命令（module 零 IO）
-- 特殊路由（选项条件、子命令兜底、退出码处理、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction / afterRun 字段，bin 是纯通用引擎、不含单命令知识
+- 特殊路由（选项条件、子命令兜底、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction 字段，bin 是纯通用引擎、不含单命令知识
+- **命令 interface = `CommandResult` + 注入 io（架构评审候选7）**：命令实现一律声明 `Promise<CommandResult>`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位的 `reason`，多闸门命令 reason 含 `gate <id>`），末位可选形参 `io: CommandIO = processIO`；类型与写入面在 `src/cli/command-contract.ts`
+- **本目录零 `process.exit` / `process.exitCode`**：kind → 退出码的唯一映射在 `bin/harness.js`（`ok`/`skip` → 0，`fail`/`usage-error` → 1，未知 kind fail-closed）。历史上两处条件式（`command --level` 按严重级、门禁按 passed）已由命令侧译成 kind；`sync-docs --check` 的漂移改由实现返回 `fail`（定义表的 `afterRun` 逃生门随之废除）
+- **输出不得直接用 console**：流式打印走 `log(io, …)` / `logError(io, …)`（`util.format` + 换行，与 console 逐字节等价，见 `src/cli/__tests__/command-contract.test.ts`）；测试断言输出用 `captureIO()`，不再 `spyOn(process, 'exit')`。例外：`constraints retire` 交互正文仍走 console（其 `RetireIO` 只注入 readline 流），退役结果打印已接注入流

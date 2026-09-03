@@ -3,6 +3,7 @@
  */
 
 import { review, reviewStatus } from '../review';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import { execAsync } from '../../../utils/exec';
 import { ReviewGate } from '../../../gates/review';
 
@@ -29,20 +30,12 @@ const mockExec = execAsync as jest.MockedFunction<typeof execAsync>;
 const MockGate = ReviewGate as jest.MockedClass<typeof ReviewGate>;
 
 describe('review command', () => {
-  let consoleSpy: jest.SpyInstance;
-  let exitSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    process.exitCode = 0;
-  });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-    process.exitCode = 0;
+    io = captureIO();
+    jest.clearAllMocks();
   });
 
   describe('review', () => {
@@ -55,10 +48,10 @@ describe('review command', () => {
       });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await review({});
+      const result = await review({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('代码审查门控检查通过'));
-      expect(exitSpy).not.toHaveBeenCalled();
+      expect(io.outText()).toContain('代码审查门控检查通过');
+      expect(result.kind).toBe('ok');
     });
 
     it('should print failure and exit 1 when check fails', async () => {
@@ -70,10 +63,13 @@ describe('review command', () => {
       });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await review({});
+      const result = await review({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('代码审查门控检查失败'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('代码审查门控检查失败');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'review gate denied: needs approval',
+      });
     });
 
     it('should handle errors and exit 1', async () => {
@@ -81,19 +77,25 @@ describe('review command', () => {
       const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await review({});
+      const result = await review({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('代码审查门控检查出错'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('代码审查门控检查出错');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'review gate error: gate error',
+      });
     });
 
     it('should show hint when not in a git repo', async () => {
       mockExec.mockRejectedValue(new Error('not a git repository'));
 
-      await review({});
+      const result = await review({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('需要在 Git 仓库中运行'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('需要在 Git 仓库中运行');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'review gate error: not a git repository',
+      });
     });
 
     it('should parse allowedReviewers from comma-separated string', async () => {
@@ -101,7 +103,7 @@ describe('review command', () => {
       const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await review({ allowedReviewers: 'alice, bob, charlie' });
+      await review({ allowedReviewers: 'alice, bob, charlie' }, io);
 
       expect(MockGate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -126,10 +128,10 @@ describe('review command', () => {
           stderr: '',
         });
 
-      await reviewStatus({});
+      await reviewStatus({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PR #42'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('APPROVED'));
+      expect(io.outText()).toContain('PR #42');
+      expect(io.outText()).toContain('APPROVED');
     });
 
     it('should handle no PR found', async () => {
@@ -137,17 +139,17 @@ describe('review command', () => {
         .mockResolvedValueOnce({ stdout: 'feature-branch\n', stderr: '' })
         .mockRejectedValueOnce(new Error('no PR'));
 
-      await reviewStatus({});
+      await reviewStatus({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未找到关联的 PR'));
+      expect(io.outText()).toContain('未找到关联的 PR');
     });
 
     it('should handle git errors', async () => {
       mockExec.mockRejectedValue(new Error('not a git repository'));
 
-      await reviewStatus({});
+      await reviewStatus({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('获取审查状态失败'));
+      expect(io.outText()).toContain('获取审查状态失败');
     });
   });
 });

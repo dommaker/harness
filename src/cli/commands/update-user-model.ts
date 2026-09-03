@@ -26,6 +26,7 @@ import {
   cleanCorrectionConcept,
   jaccardChinese,
 } from '../session-mining';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface UpdateUserModelOptions {
   days?: number;    // 只处理最近 N 天（自然日，含今天）的会话；缺省不过滤（向后兼容）
@@ -51,7 +52,7 @@ interface ModelState {
 const STATE_FILE = path.join(os.homedir(), '.claude', 'user-model-state.json');
 const PROFILE_FILE = path.join(os.homedir(), '.claude', 'projects', '-root-projects', 'memory', 'user_profile.md');
 
-export async function updateUserModel(options: UpdateUserModelOptions): Promise<void> {
+export async function updateUserModel(options: UpdateUserModelOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const transcriptDir = process.env.CLAUDE_TRANSCRIPTS_DIR
     || path.join(os.homedir(), '.claude', 'projects', '-root--claude');
 
@@ -61,8 +62,8 @@ export async function updateUserModel(options: UpdateUserModelOptions): Promise<
   // 2. Scan new data
   const newSessions = findNewSessions(transcriptDir, state.sessionsProcessed, options.days);
   if (newSessions.length === 0) {
-    console.log(chalk.gray('No new sessions to process'));
-    return;
+    log(io, chalk.gray('No new sessions to process'));
+    return { kind: 'skip', reason: '没有新会话可处理' };
   }
 
   // 3. Extract signals from new data
@@ -94,12 +95,13 @@ export async function updateUserModel(options: UpdateUserModelOptions): Promise<
 
   // 6. Output
   if (options.json) {
-    console.log(JSON.stringify({ newSessions: newSessions.length, changes }, null, 2));
-    return;
+    log(io, JSON.stringify({ newSessions: newSessions.length, changes }, null, 2));
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.blue(`📊 Processed ${newSessions.length} new sessions\n`));
-  printChanges(changes, signals);
+  log(io, chalk.blue(`📊 Processed ${newSessions.length} new sessions\n`));
+  printChanges(changes, signals, io);
+  return { kind: 'ok' };
 }
 
 // ── State I/O ──
@@ -430,9 +432,9 @@ function updateProfile(state: ModelState): void {
 
 // ── Output ──
 
-function printChanges(changes: Change[], signals: SessionSignals[]): void {
+function printChanges(changes: Change[], signals: SessionSignals[], io: CommandIO): void {
   if (changes.length === 0) {
-    console.log(chalk.green('No significant changes detected'));
+    log(io, chalk.green('No significant changes detected'));
     return;
   }
 
@@ -443,31 +445,31 @@ function printChanges(changes: Change[], signals: SessionSignals[]): void {
   };
 
   if (byType.new_pattern.length > 0) {
-    console.log(chalk.yellow(`🌱 New patterns: ${byType.new_pattern.length}`));
+    log(io, chalk.yellow(`🌱 New patterns: ${byType.new_pattern.length}`));
     for (const c of byType.new_pattern.slice(0, 5)) {
-      console.log(chalk.gray(`   ${c.key}: ${c.detail}`));
+      log(io, chalk.gray(`   ${c.key}: ${c.detail}`));
     }
-    console.log();
+    log(io);
   }
 
   if (byType.rising.length > 0) {
-    console.log(chalk.green(`📈 Re-emerging: ${byType.rising.length}`));
+    log(io, chalk.green(`📈 Re-emerging: ${byType.rising.length}`));
     for (const c of byType.rising.slice(0, 5)) {
-      console.log(chalk.gray(`   ${c.key}: ${c.detail}`));
+      log(io, chalk.gray(`   ${c.key}: ${c.detail}`));
     }
-    console.log();
+    log(io);
   }
 
   if (byType.lens_shift.length > 0) {
-    console.log(chalk.cyan(`🎯 Lens shifts:`));
+    log(io, chalk.cyan(`🎯 Lens shifts:`));
     for (const c of byType.lens_shift) {
-      console.log(chalk.gray(`   ${c.key}: ${c.detail}`));
+      log(io, chalk.gray(`   ${c.key}: ${c.detail}`));
     }
-    console.log();
+    log(io);
   }
 
-  console.log(chalk.bold(`Total signals processed:`));
-  console.log(`  Sessions: ${signals.length}`);
-  console.log(`  Correction phrases: ${signals.reduce((s, sig) => s + sig.correctionPhrases.length, 0)}`);
-  console.log(`  Concepts extracted: ${signals.reduce((s, sig) => s + Object.keys(sig.concepts).length, 0)}`);
+  log(io, chalk.bold(`Total signals processed:`));
+  log(io, `  Sessions: ${signals.length}`);
+  log(io, `  Correction phrases: ${signals.reduce((s, sig) => s + sig.correctionPhrases.length, 0)}`);
+  log(io, `  Concepts extracted: ${signals.reduce((s, sig) => s + Object.keys(sig.concepts).length, 0)}`);
 }

@@ -23,6 +23,7 @@ import {
 import { getConstraintsMeta } from './constraints';
 import { detectInjectionDrift, type InjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ConstraintsReportOptions {
   projectPath?: string;
@@ -144,7 +145,7 @@ export function renderInjectionDriftLines(drift: InjectionDrift): string[] {
 /**
  * CLI handler: harness constraints report
  */
-export async function constraintsReport(options: ConstraintsReportOptions = {}): Promise<void> {
+export async function constraintsReport(options: ConstraintsReportOptions = {}, io: CommandIO = processIO): Promise<CommandResult> {
   const projectRoot = options.projectPath || process.cwd();
   const thresholds: Partial<DiagnoseThresholds> = {};
   if (options.zeroInterceptMin !== undefined) thresholds.zeroInterceptMinEvaluated = options.zeroInterceptMin;
@@ -154,58 +155,58 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}):
   const report = buildConstraintsUsageReport(projectRoot, thresholds);
 
   if (options.json) {
-    console.log(JSON.stringify(report, null, 2));
-    return;
+    log(io, JSON.stringify(report, null, 2));
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.blue('📊 约束使用报告'));
+  log(io, chalk.blue('📊 约束使用报告'));
   if (!report.traceFileExists) {
-    console.log(chalk.gray('   （trace 文件不存在，全部按零触发统计）'));
+    log(io, chalk.gray('   （trace 文件不存在，全部按零触发统计）'));
   }
-  console.log();
+  log(io);
 
   // 统计表
-  console.log(chalk.bold('统计表（check 层）:'));
+  log(io, chalk.bold('统计表（check 层）:'));
   for (const s of report.stats) {
-    console.log(`  ${renderStatsRow(s)}`);
+    log(io, `  ${renderStatsRow(s)}`);
   }
-  console.log();
+  log(io);
 
   // 候选诊断
-  console.log(chalk.bold(`退役候选（${report.candidates.length} 条，阈值: 零拦截≥${thresholds.zeroInterceptMinEvaluated ?? DEFAULT_DIAGNOSE_THRESHOLDS.zeroInterceptMinEvaluated} 次评估, 高噪 fail率>${Math.round((thresholds.highNoiseFailRate ?? DEFAULT_DIAGNOSE_THRESHOLDS.highNoiseFailRate) * 100)}% 且 ≥${thresholds.highNoiseMinEvaluated ?? DEFAULT_DIAGNOSE_THRESHOLDS.highNoiseMinEvaluated} 次评估）:`));
+  log(io, chalk.bold(`退役候选（${report.candidates.length} 条，阈值: 零拦截≥${thresholds.zeroInterceptMinEvaluated ?? DEFAULT_DIAGNOSE_THRESHOLDS.zeroInterceptMinEvaluated} 次评估, 高噪 fail率>${Math.round((thresholds.highNoiseFailRate ?? DEFAULT_DIAGNOSE_THRESHOLDS.highNoiseFailRate) * 100)}% 且 ≥${thresholds.highNoiseMinEvaluated ?? DEFAULT_DIAGNOSE_THRESHOLDS.highNoiseMinEvaluated} 次评估）:`));
   if (report.candidates.length === 0) {
-    console.log(chalk.green('  （无候选）'));
+    log(io, chalk.green('  （无候选）'));
   } else {
     for (const c of report.candidates) {
-      console.log(`  [${CANDIDATE_KIND_LABEL[c.kind]}] ${c.id} — ${c.reason}`);
+      log(io, `  [${CANDIDATE_KIND_LABEL[c.kind]}] ${c.id} — ${c.reason}`);
     }
-    console.log(chalk.gray('  可运行 `harness constraints retire` 交互式处理候选'));
+    log(io, chalk.gray('  可运行 `harness constraints retire` 交互式处理候选'));
   }
-  console.log();
+  log(io);
 
   // 注入清单
-  console.log(chalk.bold(`当前生效 prompt 注入（${report.activePromptIds.length} 条）:`));
+  log(io, chalk.bold(`当前生效 prompt 注入（${report.activePromptIds.length} 条）:`));
   for (const id of report.activePromptIds) {
-    console.log(`  ${id}`);
+    log(io, `  ${id}`);
   }
-  console.log();
+  log(io);
 
   // 配置健康
   if (report.lint.unknownIds.length > 0) {
-    console.log(chalk.yellow('⚠️  配置健康:'));
+    log(io, chalk.yellow('⚠️  配置健康:'));
     for (const id of report.lint.unknownIds) {
-      console.log(chalk.yellow(`  config.yml 中禁用了不存在/已移除的约束 id: ${id}（残留配置，建议清理）`));
+      log(io, chalk.yellow(`  config.yml 中禁用了不存在/已移除的约束 id: ${id}（残留配置，建议清理）`));
     }
-    console.log();
+    log(io);
   }
 
   // 注入漂移（ADR-0001 决策 7：条目级差异 + 修复指引；--export 摘要不含本地漂移状态）
-  console.log(chalk.bold('注入漂移:'));
+  log(io, chalk.bold('注入漂移:'));
   const drift = detectInjectionDrift(projectRoot);
   for (const line of renderInjectionDriftLines(drift)) {
-    console.log(drift.hasDrift ? chalk.yellow(line) : line);
+    log(io, drift.hasDrift ? chalk.yellow(line) : line);
   }
-  console.log();
+  log(io);
 
   // --export
   if (options.export !== undefined && options.export !== false) {
@@ -223,6 +224,7 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}):
 
     fs.mkdirSync(path.dirname(exportPath), { recursive: true });
     fs.writeFileSync(exportPath, markdown, 'utf-8');
-    console.log(chalk.green(`✅ 脱敏报告已导出: ${exportPath}`));
+    log(io, chalk.green(`✅ 脱敏报告已导出: ${exportPath}`));
   }
+  return { kind: 'ok' };
 }

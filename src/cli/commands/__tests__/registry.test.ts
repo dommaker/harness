@@ -66,6 +66,28 @@ describe('命令注册表闭环', () => {
     }
   });
 
+  it('全部命令实现声明 CommandResult 返回（候选7：判定经返回值外溢）', () => {
+    const refs = collectRefs([
+      ...COMMAND_DEFINITIONS,
+      ...GATE_DEFINITIONS.map(d => d.cli),
+    ]);
+    for (const ref of refs) {
+      const file = fs.existsSync(path.join(repoCommandsDir, ref.module + '.ts'))
+        ? path.join(repoCommandsDir, ref.module + '.ts')
+        : path.join(repoCommandsDir, ref.module, 'index.ts');
+      const source = fs.readFileSync(file, 'utf-8');
+      const declAt = source.search(new RegExp(`function\\s+${ref.export}\\s*\\(`));
+      expect(declAt).toBeGreaterThanOrEqual(0);
+      const decl = source.slice(declAt, declAt + 900);
+      expect(decl).toMatch(/\)\s*:\s*(?:Promise<)?CommandResult/);
+      // bin 的调用约定：任何路由/子命令/action 至少传 options（mapActionArgs 编组）
+      // → 首参不得是 io，否则 options 会被当成 io 传入（写流即崩，退出码 1）
+      const params = source.slice(declAt + ref.export.length, declAt + 900);
+      const firstParam = (params.slice(params.indexOf('(') + 1).match(/^\s*([A-Za-z_$][\w$]*)/) || [''])[1];
+      expect(['io', '_io']).not.toContain(firstParam);
+    }
+  });
+
   it('顶层命令面与预期 24 命令一致（含 6 门禁）', () => {
     const names = [
       ...COMMAND_DEFINITIONS.map(d => d.command.split(' ')[0]),
@@ -97,33 +119,25 @@ describe('命令注册表闭环', () => {
     for (const def of [...COMMAND_DEFINITIONS, ...GATE_DEFINITIONS.map(d => d.cli)]) walk(def);
   });
 
-  it('全部命令定义的路由构造可执行（mapActionArgs/afterRun 冒烟；候选7 后子命令/选项路由零闭包）', () => {
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    try {
-      const walk = (def: CommandDefinition) => {
-        if (def.mapActionArgs) {
-          def.mapActionArgs(['positional'], {});
-          def.mapActionArgs([], {});
-        }
-        if (def.afterRun) {
-          def.afterRun(true, {});
-          def.afterRun(false, { check: true });
-        }
-        for (const child of def.children || []) walk(child);
-      };
-      for (const def of [
-        ...COMMAND_DEFINITIONS,
-        ...GATE_DEFINITIONS.map(d => d.cli),
-      ]) walk(def);
-      // sync-docs --check 失败路径确实会请求退出
-      expect(exitSpy).toHaveBeenCalled();
-    } finally {
-      exitSpy.mockRestore();
-    }
+  it('全部命令定义的路由构造可执行（mapActionArgs 冒烟；候选7 后定义表零副作用闭包）', () => {
+    const walk = (def: CommandDefinition) => {
+      if (def.mapActionArgs) {
+        def.mapActionArgs(['positional'], {});
+        def.mapActionArgs([], {});
+      }
+      // 候选7：定义表不得再持有退出码处理闭包（afterRun 已废除，判定进返回值）
+      expect((def as unknown as Record<string, unknown>).afterRun).toBeUndefined();
+      for (const child of def.children || []) walk(child);
+    };
+    for (const def of [
+      ...COMMAND_DEFINITIONS,
+      ...GATE_DEFINITIONS.map(d => d.cli),
+    ]) walk(def);
   });
 });
 
 const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+const repoCommandsDir = path.join(repoRoot, 'src', 'cli', 'commands');
 const distBin = path.join(repoRoot, 'bin', 'harness.js');
 const distCommands = path.join(repoRoot, 'dist', 'cli', 'commands');
 const hasDist = fs.existsSync(distCommands);

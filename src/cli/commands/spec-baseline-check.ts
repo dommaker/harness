@@ -8,6 +8,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { walkFiles } from '../../utils/file-walk';
 
 export interface SpecBaselineCheckOptions {
@@ -333,13 +334,13 @@ function formatTable(results: PrerequisiteResult[]): string {
 export async function specBaselineCheck(
   specPath: string,
   options: SpecBaselineCheckOptions = {},
-): Promise<void> {
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
   // 验证文件存在
   const resolvedPath = path.resolve(specPath);
   if (!fs.existsSync(resolvedPath)) {
-    console.error(chalk.red(`文件不存在: ${resolvedPath}`));
-    process.exitCode = 1;
-    return;
+    logError(io, chalk.red(`文件不存在: ${resolvedPath}`));
+    return { kind: 'usage-error', reason: `spec 文件不存在: ${resolvedPath}` };
   }
 
   const projectPath = options.projectPath || path.dirname(resolvedPath);
@@ -352,11 +353,11 @@ export async function specBaselineCheck(
 
   if (prerequisites.length === 0) {
     if (options.json) {
-      console.log(JSON.stringify({ prerequisites: [], message: '未找到 Baseline / 前置条件 section' }, null, 2));
+      log(io, JSON.stringify({ prerequisites: [], message: '未找到 Baseline / 前置条件 section' }, null, 2));
     } else {
-      console.log(chalk.yellow('未找到 ## Baseline 或 ## 前置条件 section'));
+      log(io, chalk.yellow('未找到 ## Baseline 或 ## 前置条件 section'));
     }
-    return;
+    return { kind: 'skip', reason: '未找到 Baseline / 前置条件 section，无可判定项' };
   }
 
   // 验证每条前置条件
@@ -364,14 +365,18 @@ export async function specBaselineCheck(
 
   // 输出
   if (options.json) {
-    console.log(JSON.stringify(results, null, 2));
+    log(io, JSON.stringify(results, null, 2));
   } else {
-    console.log(formatTable(results));
+    log(io, formatTable(results));
   }
 
-  // 有未满足的前置条件时 exit 1
+  // 有未满足的前置条件时非零退出
   const failed = results.filter(r => !r.satisfied);
   if (failed.length > 0) {
-    process.exitCode = 1;
+    return {
+      kind: 'fail',
+      reason: `${failed.length} 条前置条件未满足: ${failed.map(f => f.prerequisite).join('; ')}`,
+    };
   }
+  return { kind: 'ok' };
 }

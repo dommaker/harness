@@ -5,6 +5,7 @@
  */
 
 import { check } from '../check';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import { constraintChecker } from '../../../core/constraints/checker';
 
 // Mock fs
@@ -70,17 +71,12 @@ function fakeConstraint(id: string, level: 'iron_law' | 'guideline') {
 }
 
 describe('check 命令 skip 输出', () => {
-  let consoleSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    process.exitCode = 0;
-  });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    process.exitCode = 0;
+    io = captureIO();
+    jest.clearAllMocks();
   });
 
   it('skipped 单独列示，不计入铁律通过条数', async () => {
@@ -94,15 +90,15 @@ describe('check 命令 skip 输出', () => {
       warningCount: 0,
     });
 
-    await check({ preset: 'default', staged: false });
+    await check({ preset: 'default', staged: false }, io);
 
     // 通过条数只计实际评估的 1 条
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('铁律: 全部通过 (1 条)'));
+    expect(io.outText()).toContain('铁律: 全部通过 (1 条)');
     // skipped 单独列示
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('跳过评估: 1 条'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('- law_skip'));
+    expect(io.outText()).toContain('跳过评估: 1 条');
+    expect(io.outText()).toContain('- law_skip');
     // skip 不影响整体通过
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('约束检查通过'));
+    expect(io.outText()).toContain('约束检查通过');
   });
 
   it('指导原则通过计数排除 skipped', async () => {
@@ -116,9 +112,9 @@ describe('check 命令 skip 输出', () => {
       warningCount: 0,
     });
 
-    await check({ preset: 'default', staged: false });
+    await check({ preset: 'default', staged: false }, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('指导原则: 1/1 通过'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('跳过评估: 1 条'));
+    expect(io.outText()).toContain('指导原则: 1/1 通过');
+    expect(io.outText()).toContain('跳过评估: 1 条');
   });
 });

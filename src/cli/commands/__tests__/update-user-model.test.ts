@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { updateUserModel } from '../update-user-model';
 import { readTranscriptSessions, type MinedSession } from '../../session-mining';
@@ -72,33 +73,34 @@ function mkSession(partial: Partial<MinedSession> = {}): MinedSession {
   };
 }
 
-function lastJsonOutput(consoleSpy: jest.SpyInstance): Record<string, unknown> {
-  const jsonLine = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-  return JSON.parse(jsonLine);
+function lastJsonOutput(capture: CapturingIO): Record<string, unknown> {
+  return JSON.parse(capture.outText());
 }
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('update-user-model command', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     fs.rmSync(TEST_HOME, { recursive: true, force: true });
     fs.mkdirSync(path.join(TEST_HOME, '.claude', 'projects', '-root-projects', 'memory'), { recursive: true });
     process.env.CLAUDE_TRANSCRIPTS_DIR = path.join(TEST_HOME, 'transcripts');
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
     delete process.env.CLAUDE_TRANSCRIPTS_DIR;
   });
 
   test('无新会话：提示 No new sessions to process', async () => {
     mockReadTranscriptSessions.mockReturnValue([]);
 
-    await updateUserModel({});
+    await updateUserModel({}, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No new sessions to process'));
+    expect(io.outText()).toContain('No new sessions to process');
     expect(fs.existsSync(STATE_FILE)).toBe(false);
   });
 
@@ -108,9 +110,9 @@ describe('update-user-model command', () => {
       mkSession({ id: 'session-b' }),
     ]);
 
-    await updateUserModel({ json: true, dryRun: true });
+    await updateUserModel({ json: true, dryRun: true }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(2);
     expect(output.changes).toEqual(
       expect.arrayContaining([
@@ -125,16 +127,16 @@ describe('update-user-model command', () => {
   test('--dry-run：只展示变化，不写 state 文件', async () => {
     mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
 
-    await updateUserModel({ dryRun: true });
+    await updateUserModel({ dryRun: true }, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Processed 1 new sessions'));
+    expect(io.outText()).toContain('Processed 1 new sessions');
     expect(fs.existsSync(STATE_FILE)).toBe(false);
   });
 
   test('默认（非 dry-run）：落盘 state 并记录已处理会话', async () => {
     mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
 
-    await updateUserModel({});
+    await updateUserModel({}, io);
 
     expect(fs.existsSync(STATE_FILE)).toBe(true);
     const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
@@ -154,9 +156,9 @@ describe('update-user-model command', () => {
       }),
     ]);
 
-    await updateUserModel({ json: true, dryRun: true, days: 1 });
+    await updateUserModel({ json: true, dryRun: true, days: 1 }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(1);
   });
 
@@ -173,9 +175,9 @@ describe('update-user-model command', () => {
       }),
     ]);
 
-    await updateUserModel({ json: true, dryRun: true });
+    await updateUserModel({ json: true, dryRun: true }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(2);
   });
 
@@ -197,9 +199,9 @@ describe('update-user-model command', () => {
       mkSession({ id: 'session-b' }),
     ]);
 
-    await updateUserModel({ json: true, dryRun: true, days: 7 });
+    await updateUserModel({ json: true, dryRun: true, days: 7 }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(1);
   });
 });

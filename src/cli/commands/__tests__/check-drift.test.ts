@@ -7,6 +7,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { check } from '../check';
@@ -46,13 +47,12 @@ function writeClaudeMd(root: string, version: string): void {
 }
 
 describe('check 命令注入漂移警告', () => {
-  let consoleSpy: jest.SpyInstance;
-  let exitSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
+
+    io = captureIO();
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     mockChecker.checkConstraints.mockResolvedValue({
       passed: true,
       ironLaws: [],
@@ -61,18 +61,13 @@ describe('check 命令注入漂移警告', () => {
     });
   });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-  });
-
-  const outputText = () => consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+  const outputText = () => io.outText();
 
   it('版本漂移：黄色警告块 + ⚠️⚠️ 版本行，但不阻断（exit 未调用，仍判通过）', async () => {
     const root = makeTmpProject();
     writeClaudeMd(root, '0.0.1-old');
 
-    await check({ preset: 'standard', staged: false, projectPath: root });
+    const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
 
     const output = outputText();
     expect(output).toContain('约束注入漂移');
@@ -82,7 +77,7 @@ describe('check 命令注入漂移警告', () => {
     expect(output).toContain('npx @dommaker/harness init');
     // 不阻断：检查仍通过、未调用 process.exit
     expect(output).toContain('约束检查通过');
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(result.kind).toBe('ok');
   });
 
   it('内容漂移：手改一条 → 警告块含缺失/多余计数，exit 未调用', async () => {
@@ -93,32 +88,32 @@ describe('check 命令注入漂移警告', () => {
     const originalLine = content.split('\n').find(l => l.startsWith('- **'))!;
     fs.writeFileSync(claudeMdPath, content.replace(originalLine, originalLine.replace(/: .+$/, ': 篡改')), 'utf-8');
 
-    await check({ preset: 'standard', staged: false, projectPath: root });
+    const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
 
     const output = outputText();
     expect(output).toContain('内容漂移: 缺失 1 条 / 多余 1 条');
     expect(output).toContain('约束检查通过');
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(result.kind).toBe('ok');
   });
 
   it('无漂移：零警告输出（不增加噪音）', async () => {
     const root = makeTmpProject();
     writeClaudeMd(root, REAL_VERSION);
 
-    await check({ preset: 'standard', staged: false, projectPath: root });
+    const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
 
     const output = outputText();
     expect(output).not.toContain('注入漂移');
     expect(output).toContain('约束检查通过');
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(result.kind).toBe('ok');
   });
 
   it('未注入（无 CLAUDE.md）：不警告', async () => {
     const root = makeTmpProject();
 
-    await check({ preset: 'standard', staged: false, projectPath: root });
+    const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
 
     expect(outputText()).not.toContain('注入漂移');
-    expect(exitSpy).not.toHaveBeenCalled();
+    expect(result.kind).toBe('ok');
   });
 });

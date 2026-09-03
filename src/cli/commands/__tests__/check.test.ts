@@ -3,6 +3,7 @@
  */
 
 import { check, listLaws } from '../check';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs';
 import { constraintChecker } from '../../../core/constraints/checker';
 import { getMergedConstraintsConfig } from '../../../core/effective-constraints';
@@ -72,9 +73,11 @@ const mockGetMergedConfig = getMergedConstraintsConfig as jest.MockedFunction<ty
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
 describe('check command', () => {
-  let consoleSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
+
+    io = captureIO();
     jest.clearAllMocks();
     // clearAllMocks 不清实现，显式恢复默认 merged config，避免用例间泄漏
     mockGetMergedConfig.mockReturnValue({
@@ -85,13 +88,6 @@ describe('check command', () => {
       disabled: [],
       unknownIds: [],
     });
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    process.exitCode = 0;
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    process.exitCode = 0;
   });
 
   describe('check', () => {
@@ -103,8 +99,8 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('约束检查通过'));
+      await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('约束检查通过');
     });
 
     it('应该显示铁律违规', async () => {
@@ -115,11 +111,13 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      const result = await check({ preset: 'default', staged: false }, io);
 
-      await check({ preset: 'default', staged: false });
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'iron law violated: no_bypass_checkpoint',
+      });
+      expect(io.outText()).toContain('🛑 铁律检查失败');
     });
 
     it('应该显示指导原则警告', async () => {
@@ -130,8 +128,8 @@ describe('check command', () => {
         warningCount: 1,
       });
 
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('指导原则警告'));
+      await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('指导原则警告');
     });
 
     it('应该加载自定义约束', async () => {
@@ -151,12 +149,12 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false, projectPath: '/project' });
+      await check({ preset: 'default', staged: false, projectPath: '/project' }, io);
       expect(mockChecker.checkConstraints).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ disabled: ['disabled_constraint'] })
       );
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已禁用约束'));
+      expect(io.outText()).toContain('已禁用约束');
     });
 
     it('应该显示通过的指导原则', async () => {
@@ -167,8 +165,8 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('指导原则'));
+      await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('指导原则');
     });
 
     it('应该显示变更文件数量', async () => {
@@ -181,8 +179,8 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: true });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('变更文件: 2 个'));
+      await check({ preset: 'default', staged: true }, io);
+      expect(io.outText()).toContain('变更文件: 2 个');
     });
 
     it('应该使用 unstaged diff 当 staged 为 false', async () => {
@@ -194,7 +192,7 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
+      await check({ preset: 'default', staged: false }, io);
       expect(mockExecAsync).toHaveBeenCalledWith('git diff --name-only');
     });
 
@@ -207,7 +205,7 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: true });
+      await check({ preset: 'default', staged: true }, io);
       expect(mockExecAsync).toHaveBeenCalledWith('git diff --cached --name-only');
     });
 
@@ -220,9 +218,9 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
+      await check({ preset: 'default', staged: false }, io);
       // 不应显示变更文件数量
-      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('变更文件'));
+      expect(io.outText()).not.toContain('变更文件');
     });
 
     it('应该检测 module_modification 触发条件（.ts 文件）', async () => {
@@ -244,8 +242,8 @@ describe('check command', () => {
         return [];
       });
 
-      await check({ preset: 'default', staged: false, projectPath: mockProjectPath });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
+      await check({ preset: 'default', staged: false, projectPath: mockProjectPath }, io);
+      expect(io.outText()).toContain('module_modification');
     });
 
     it('应该检测 module_modification 触发条件（.js 文件）', async () => {
@@ -267,8 +265,8 @@ describe('check command', () => {
         return [];
       });
 
-      await check({ preset: 'default', staged: false, projectPath: mockProjectPath });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
+      await check({ preset: 'default', staged: false, projectPath: mockProjectPath }, io);
+      expect(io.outText()).toContain('module_modification');
     });
 
     it('应该检测 file_modification 触发条件（非 src/ 目录）', async () => {
@@ -277,8 +275,8 @@ describe('check command', () => {
         passed: true, ironLaws: [], guidelines: [], warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('file_modification'));
+      await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('file_modification');
     });
 
     it('应该检测 module_modification 触发条件', async () => {
@@ -304,8 +302,8 @@ describe('check command', () => {
         return [];
       });
 
-      await check({ preset: 'default', staged: false, projectPath: mockProjectPath });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('module_modification'));
+      await check({ preset: 'default', staged: false, projectPath: mockProjectPath }, io);
+      expect(io.outText()).toContain('module_modification');
     });
 
     it('应该使用指定的触发条件', async () => {
@@ -317,8 +315,8 @@ describe('check command', () => {
         warningCount: 0,
       });
 
-      await check({ preset: 'default', staged: false, trigger: 'code_implementation' });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('code_implementation'));
+      await check({ preset: 'default', staged: false, trigger: 'code_implementation' }, io);
+      expect(io.outText()).toContain('code_implementation');
     });
 
     it('应该显示铁律违规的约束详情', async () => {
@@ -343,12 +341,13 @@ describe('check command', () => {
         guidelines: [],
         warningCount: 0,
       });
-
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('no_bypass_checkpoint'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('NO BYPASSING CHECKPOINTS'));
-      mockExit.mockRestore();
+      const result = await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('no_bypass_checkpoint');
+      expect(io.outText()).toContain('NO BYPASSING CHECKPOINTS');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'iron law violated: no_bypass_checkpoint',
+      });
     });
 
     it('应该显示指导原则的约束详情', async () => {
@@ -374,8 +373,8 @@ describe('check command', () => {
         warningCount: 1,
       });
 
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('prefer_composition'));
+      await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('prefer_composition');
     });
 
   });
@@ -394,9 +393,9 @@ describe('check command', () => {
     it('应该在 trace 不存在时无提示', async () => {
       mockFs.existsSync.mockReturnValue(false);
 
-      await check({ preset: 'default', staged: false });
+      await check({ preset: 'default', staged: false }, io);
       // 不应有提示分隔线
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      const output = io.outText();
       expect(output).not.toContain('────────────────');
     });
 
@@ -409,8 +408,8 @@ describe('check command', () => {
       });
       mockFs.readFileSync.mockReturnValue(traces);
 
-      await check({ preset: 'default', staged: false });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('记录已足够'));
+      await check({ preset: 'default', staged: false }, io);
+      expect(io.outText()).toContain('记录已足够');
     });
 
     it('应该不重复显示已显示的提示', async () => {
@@ -423,8 +422,8 @@ describe('check command', () => {
         return traces;
       });
 
-      await check({ preset: 'default', staged: false });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      await check({ preset: 'default', staged: false }, io);
+      const output = io.outText();
       expect(output).not.toContain('记录已足够');
     });
 
@@ -437,8 +436,8 @@ describe('check command', () => {
       });
       mockFs.readFileSync.mockReturnValue(traces);
 
-      await check({ preset: 'default', staged: false });
-      const output = consoleSpy.mock.calls.map(c => c[0]).join('\n');
+      await check({ preset: 'default', staged: false }, io);
+      const output = io.outText();
       expect(output).not.toContain('────────────────');
     });
 
@@ -451,7 +450,7 @@ describe('check command', () => {
       });
       mockFs.readFileSync.mockReturnValue(traces);
 
-      await check({ preset: 'default', staged: false });
+      await check({ preset: 'default', staged: false }, io);
       expect(mockFs.writeFileSync).toHaveBeenCalled();
       expect(mockFs.mkdirSync).toHaveBeenCalled();
     });
@@ -459,23 +458,31 @@ describe('check command', () => {
 
   describe('listLaws', () => {
     it('应该列出所有约束', () => {
-      listLaws();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('所有约束'));
+      const result = listLaws({}, io);
+
+      expect(io.outText()).toContain('所有约束');
+      expect(result).toEqual({ kind: 'ok' });
     });
 
     it('应该列出铁律', () => {
-      listLaws();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('铁律'));
+      const result = listLaws({}, io);
+
+      expect(io.outText()).toContain('铁律');
+      expect(result).toEqual({ kind: 'ok' });
     });
 
     it('应该列出指导原则', () => {
-      listLaws();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('指导原则'));
+      const result = listLaws({}, io);
+
+      expect(io.outText()).toContain('指导原则');
+      expect(result).toEqual({ kind: 'ok' });
     });
 
     it('应该列出提示', () => {
-      listLaws();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('提示'));
+      const result = listLaws({}, io);
+
+      expect(io.outText()).toContain('提示');
+      expect(result).toEqual({ kind: 'ok' });
     });
   });
 });

@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { PassThrough, Writable } from 'stream';
@@ -58,14 +59,12 @@ function readCustom(root: string): any {
   return yaml.load(fs.readFileSync(path.join(root, '.harness', 'custom-constraints.yml'), 'utf-8'));
 }
 
-let logSpy: jest.SpyInstance;
-
 beforeEach(() => {
-  logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
-afterEach(() => {
-  logSpy.mockRestore();
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
 });
 
 describe('retireConstraint 执行逻辑', () => {
@@ -153,8 +152,8 @@ describe('retireConstraint 执行逻辑', () => {
     expect(after).not.toContain('**no_bypass_checkpoint**');
     expect(after).toContain('其他内容');
 
-    printRetireResult(result);
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    printRetireResult(result, io);
+    const output = io.outText();
     expect(output).toContain('已同步 CLAUDE.md 注入段');
     expect(output).toContain('恢复方法');
   });
@@ -271,8 +270,8 @@ describe('retireConstraint 执行逻辑', () => {
     expect(after).not.toContain('**my_custom_rule**');
     expect(after).toContain('其他内容');
     // 打印的恢复提示指向 yml
-    printRetireResult(result);
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    printRetireResult(result, io);
+    const output = io.outText();
     expect(output).toContain('custom_constraints.my_custom_rule.retired');
   });
 
@@ -327,39 +326,25 @@ describe('retireConstraint 执行逻辑', () => {
 });
 
 describe('constraintsRetire 非交互直达', () => {
-  let originalExitCode: typeof process.exitCode;
-
-  beforeEach(() => {
-    originalExitCode = process.exitCode;
-    process.exitCode = 0;
-  });
-
-  afterEach(() => {
-    process.exitCode = originalExitCode;
-  });
-
   it('无 --yes 直达：报错 + 非零退出码 + 不落盘任何文件（#24 人确认闸门）', async () => {
     const root = makeTmpProject();
-    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' });
+    {
+      const result = await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' }, io);
 
-      const output = errSpy.mock.calls.map(c => String(c[0])).join('\n');
+      const output = io.errText();
       expect(output).toContain('--yes');
       expect(output).toContain('交互');
-      expect(process.exitCode).toBe(1);
+      expect(result).toEqual({ kind: 'usage-error', reason: expect.stringContaining('缺少显式 --yes 人确认') });
       // 无副作用：任何文件都不落盘
       expect(fs.existsSync(path.join(root, '.harness'))).toBe(false);
-    } finally {
-      errSpy.mockRestore();
     }
   });
 
   it('--yes 直达 iron 退役：打印额外警示并落盘', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true });
+    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('Iron Law');
     expect(output).toContain('已退役');
 
@@ -369,9 +354,9 @@ describe('constraintsRetire 非交互直达', () => {
 
   it('--yes 直达非 iron（guideline）退役：不打印 iron 警示并落盘', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true });
+    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).not.toContain('Iron Law');
     expect(output).toContain('已退役');
 
@@ -381,17 +366,30 @@ describe('constraintsRetire 非交互直达', () => {
 
   it('--yes 直达未知 id：明确提示', async () => {
     const root = makeTmpProject();
-    await constraintsRetire('ghost', { projectPath: root, yes: true });
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    await constraintsRetire('ghost', { projectPath: root, yes: true }, io);
+    const output = io.outText();
     expect(output).toContain('约束不存在');
   });
 });
 
 describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
-  /** 逐行 drip-feed，等待 readline 消费上一行 */
+  /**
+   * 交互正文仍走 console（RetireIO 只注入 readline 的 input/output 流，
+   * 且 retireConstraint 核心直接 console.warn 式打印）→ 用 console 捕获。
+   */
+  function captureLog(): { text: () => string; restore: () => void } {
+    let out = '';
+    const spy = jest.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+      out += String(args[0] ?? '') + '\n';
+    });
+    return { text: () => out, restore: () => spy.mockRestore() };
+  }
+
+  /** 逐行 drip-feed，等待 readline 消费上一行；output 收集写入文本 */
   function makeIo(lines: string[]) {
     const input = new PassThrough();
-    const output = new Writable({ write(_c, _e, cb) { cb(); } });
+    const chunks: string[] = [];
+    const output = new Writable({ write(c, _e, cb) { chunks.push(String(c)); cb(); } });
     let i = 0;
     const timer = setInterval(() => {
       if (i < lines.length) {
@@ -401,18 +399,20 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
         clearInterval(timer);
       }
     }, 30);
-    return { input, output, done: () => clearInterval(timer) };
+    return { input, output, text: () => chunks.join(''), done: () => clearInterval(timer) };
   }
 
   it('候选编号选择 + iron 二次确认拒绝 → 不落盘', async () => {
     const root = makeTmpProject();
     // 无 trace → 候选全部为零触发，1 号候选是第一条 iron（no_completion_without_verification）
-    const io = makeIo(['1', 'n']); // 选 1 号 → iron 确认拒绝
+    const streams = makeIo(['1', 'n']); // 选 1 号 → iron 确认拒绝
+    const printed = captureLog();
 
-    await runRetireInteractive(root, io);
-    io.done();
+    await runRetireInteractive(root, streams);
+    streams.done();
+    printed.restore();
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = printed.text() + streams.text();
     expect(output).toContain('退役候选');
     expect(output).toContain('已跳过 no_completion_without_verification');
     expect(output).toContain('无可执行项');
@@ -431,11 +431,13 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
       ]);
     writeTraces(root, healthy);
 
-    const io = makeIo(['no_hardcoded_credentials', '误报太多', 'y']);
-    await runRetireInteractive(root, io);
-    io.done();
+    const streams = makeIo(['no_hardcoded_credentials', '误报太多', 'y']);
+    const printed = captureLog();
+    await runRetireInteractive(root, streams);
+    streams.done();
+    printed.restore();
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = printed.text() + streams.text();
     expect(output).toContain('没有退役候选');
     expect(output).toContain('已退役');
 
@@ -457,9 +459,9 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
       ]);
     writeTraces(root, healthy);
 
-    const io = makeIo(['my_custom_rule', '作用对象消失', 'y']);
-    await runRetireInteractive(root, io);
-    io.done();
+    const streams = makeIo(['my_custom_rule', '作用对象消失', 'y']);
+    await runRetireInteractive(root, streams);
+    streams.done();
 
     const custom = readCustom(root).custom_constraints.my_custom_rule;
     expect(custom.retired.reason).toBe('作用对象消失');
@@ -473,11 +475,13 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
       .flatMap(c => [{ constraintId: c.id, result: 'pass' as const }]);
     writeTraces(root, healthy);
 
-    const io = makeIo(['ghost_id']);
-    await runRetireInteractive(root, io);
-    io.done();
+    const streams = makeIo(['ghost_id']);
+    const printed = captureLog();
+    await runRetireInteractive(root, streams);
+    streams.done();
+    printed.restore();
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = printed.text() + streams.text();
     expect(output).toContain('ghost_id');
     expect(output).toContain('约束不存在');
     expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);

@@ -89,8 +89,6 @@ export interface CommandDefinition {
   optionRoutes?: CommandOptionRoute[];
   /** 默认 action 实参构造（缺省为 [options]） */
   mapActionArgs?: (positionals: (string | undefined)[], options: Record<string, unknown>) => unknown[];
-  /** action 完成后处理（接收返回值，如 sync-docs --check 失败 exit(1)） */
-  afterRun?: (result: unknown, options: Record<string, unknown>) => void;
 }
 
 /**
@@ -221,12 +219,8 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--agents', description: '同步 AGENTS.md（agent 导读；PRESERVE 标记段重新生成时保留）', defaultValue: false },
       { flags: '--compact', description: '一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目', defaultValue: false },
     ],
+    // --check 下的漂移由实现返回 fail（候选7：退出码映射只在 bin 一处），故无需 afterRun
     action: { module: 'sync-docs', export: 'syncDocs' },
-    afterRun: (ok, options) => {
-      if (!ok && options.check) {
-        process.exit(1);
-      }
-    },
   },
   {
     command: 'knowledge',

@@ -3,8 +3,14 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { syncDocs } from '../sync-docs';
+
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
 
 describe('sync-docs command', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-sync-docs');
@@ -21,15 +27,8 @@ describe('sync-docs command', () => {
     }
   });
 
-  let consoleSpy: jest.SpyInstance;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
   });
 
   describe('generateModuleTable', () => {
@@ -38,11 +37,11 @@ describe('sync-docs command', () => {
       fs.mkdirSync(testDir, { recursive: true });
 
       // No src dir → no modules → nothing to report
-      const result = await syncDocs({ projectPath: testDir });
+      const result = await syncDocs({ projectPath: testDir }, io);
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ kind: 'ok' });
       // When no modules and no changes, all docs are current
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('所有文档'));
+      expect(io.outText()).toContain('所有文档');
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -55,7 +54,7 @@ describe('sync-docs command', () => {
       // Create a source file with JSDoc comment
       fs.writeFileSync(path.join(srcDir, 'mymodule.ts'), '/**\n * My test module\n */\nexport const x = 1;');
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
 
       const capPath = path.join(testDir, 'CAPABILITIES.md');
       const content = fs.readFileSync(capPath, 'utf-8');
@@ -75,7 +74,7 @@ describe('sync-docs command', () => {
 
       fs.writeFileSync(path.join(srcDir, 'jsdoc-mod.ts'), '/**\n * JSDoc module description\n */\nexport const y = 2;');
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
 
       const capPath = path.join(testDir, 'CAPABILITIES.md');
       const content = fs.readFileSync(capPath, 'utf-8');
@@ -93,7 +92,7 @@ describe('sync-docs command', () => {
       const filePath = path.join(srcDir, 'line-mod.ts');
       fs.writeFileSync(filePath, '// Line comment module\nexport const z = 3;');
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
 
       const capPath = path.join(testDir, 'CAPABILITIES.md');
       const content = fs.readFileSync(capPath, 'utf-8');
@@ -109,7 +108,7 @@ describe('sync-docs command', () => {
 
       fs.writeFileSync(path.join(srcDir, 'bare.ts'), 'export const a = 1;');
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
 
       const capPath = path.join(testDir, 'CAPABILITIES.md');
       const content = fs.readFileSync(capPath, 'utf-8');
@@ -120,16 +119,15 @@ describe('sync-docs command', () => {
     });
   });
 
-
   describe('syncDocs', () => {
     it('无 src/ 目录应该跳过模块扫描', async () => {
       const emptyDir = path.join(tempDir, 'empty');
       fs.mkdirSync(emptyDir, { recursive: true });
 
-      const result = await syncDocs({ projectPath: emptyDir });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: emptyDir }, io);
+      expect(result).toEqual({ kind: 'ok' });
       // 无 src/ 目录，模块扫描返回空，无差异
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('所有文档都是最新的'));
+      expect(io.outText()).toContain('所有文档都是最新的');
 
       fs.rmSync(emptyDir, { recursive: true, force: true });
     });
@@ -142,8 +140,8 @@ describe('sync-docs command', () => {
       // 创建 CAPABILITIES.md，无表格
       fs.writeFileSync(path.join(testDir, 'CAPABILITIES.md'), '# Capabilities\n\nNo table.');
 
-      const result = await syncDocs({ projectPath: testDir });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: testDir }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -162,9 +160,9 @@ describe('sync-docs command', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
       );
 
-      const result = await syncDocs({ projectPath: testDir, check: true });
-      expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('文档不是最新的'));
+      const result = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+      expect(io.outText()).toContain('文档不是最新的');
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -183,15 +181,15 @@ describe('sync-docs command', () => {
       );
 
       // 第一轮：生成 CAPABILITIES.md（描述行以 / 结尾）
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       const cap = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(cap).toContain('workspace.ts');
       expect(cap).toMatch(/gitRepo\s*\/\s*\|/);
 
       // 第二轮：生成后立即 --check 必须收敛（修复前此处必 false）
-      consoleSpy.mockClear();
-      const check = await syncDocs({ projectPath: testDir, check: true });
-      expect(check).toBe(true);
+      io = captureIO();
+      const check = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(check).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -210,8 +208,8 @@ describe('sync-docs command', () => {
       );
 
       // src/ 目录条目覆盖 mymodule.ts → 无 added，check 通过
-      const result = await syncDocs({ projectPath: testDir, check: true });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -239,9 +237,9 @@ describe('sync-docs command', () => {
 
       // 不创建 CONTEXT.md
 
-      const result = await syncDocs({ projectPath: testDir });
-      expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('缺少 CONTEXT.md'));
+      const result = await syncDocs({ projectPath: testDir }, io);
+      expect(result).toEqual({ kind: 'ok' });
+      expect(io.outText()).toContain('缺少 CONTEXT.md');
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -269,8 +267,8 @@ describe('sync-docs command', () => {
       // 创建 CONTEXT.md
       fs.writeFileSync(path.join(srcDir, 'CONTEXT.md'), '# src\n\nTest context');
 
-      const result = await syncDocs({ projectPath: testDir });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: testDir }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -281,8 +279,8 @@ describe('sync-docs command', () => {
 
       // 无 .harness/config.yml
 
-      const result = await syncDocs({ projectPath: testDir });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: testDir }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -307,7 +305,7 @@ describe('sync-docs command', () => {
         })
       );
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
 
       // 验证 CONTEXT.md 被创建
       const contextPath = path.join(srcDir, 'CONTEXT.md');
@@ -326,7 +324,7 @@ describe('sync-docs command', () => {
       // 创建源文件
       fs.writeFileSync(path.join(srcDir, 'module.ts'), 'export const x = 1;');
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
 
       // 验证 CAPABILITIES.md 被创建
       const capPath = path.join(testDir, 'CAPABILITIES.md');
@@ -346,11 +344,11 @@ describe('sync-docs command', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| old | src/old.ts | old |'
       );
 
-      const result = await syncDocs({ projectPath: testDir, check: true, json: true });
-      expect(result).toBe(false);
+      const result = await syncDocs({ projectPath: testDir, check: true, json: true }, io);
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
 
       // 验证 console.log 被调用了 JSON
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -366,10 +364,10 @@ describe('sync-docs command', () => {
       fs.mkdirSync(testDir, { recursive: true });
       fs.writeFileSync(path.join(testDir, 'CAPABILITIES.md'), '# Capabilities\n\nNo table.');
 
-      const result = await syncDocs({ projectPath: testDir, check: true, json: true });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: testDir, check: true, json: true }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -389,7 +387,7 @@ describe('sync-docs command', () => {
       fs.writeFileSync(path.join(srcDir, 'removed.ts'), 'export const removed = 1;');
 
       // 先让 syncDocs 创建初始 CAPABILITIES.md（包含两个文件）
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       let content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('kept.ts');
       expect(content).toContain('removed.ts');
@@ -398,7 +396,7 @@ describe('sync-docs command', () => {
       fs.unlinkSync(path.join(srcDir, 'removed.ts'));
 
       // 重新运行 syncDocs（写入模式）
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('kept.ts');
       expect(content).not.toContain('removed.ts');
@@ -430,14 +428,14 @@ describe('sync-docs command', () => {
         ].join('\n')
       );
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('DistillProposalCard.tsx');
 
       // 修复前：--check 每跑必报「包含已删除的模块」不收敛
-      consoleSpy.mockClear();
-      const check = await syncDocs({ projectPath: testDir, check: true });
-      expect(check).toBe(true);
+      io = captureIO();
+      const check = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(check).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -454,11 +452,11 @@ describe('sync-docs command', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| util | src/util.ts | util |'
       );
 
-      const check = await syncDocs({ projectPath: testDir, check: true });
-      expect(check).toBe(false);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Card.tsx'));
+      const check = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(check).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+      expect(io.outText()).toContain('Card.tsx');
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('Card.tsx');
 
@@ -484,14 +482,14 @@ describe('sync-docs command', () => {
         ].join('\n')
       );
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('src/helper.js');
       expect(content).toContain('src/Helper.jsx');
 
-      consoleSpy.mockClear();
-      const check = await syncDocs({ projectPath: testDir, check: true });
-      expect(check).toBe(true);
+      io = captureIO();
+      const check = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(check).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -518,7 +516,7 @@ describe('sync-docs command', () => {
         ].join('\n'),
       );
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('src/a/routes.ts');
       expect(content).not.toContain('src/ghost/routes.ts');
@@ -551,9 +549,9 @@ describe('sync-docs command', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |'
       );
 
-      const result = await syncDocs({ projectPath: testDir });
+      const result = await syncDocs({ projectPath: testDir }, io);
       // 有未覆盖目录，仍报不同步
-      expect(result).toBe(false);
+      expect(result).toEqual({ kind: 'ok' });
       // 但不自动给 b.ts 加表格行
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).not.toContain('b.ts');
@@ -575,10 +573,10 @@ describe('sync-docs command', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |'
       );
 
-      const result = await syncDocs({ projectPath: testDir, check: true });
-      expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未登记以下模块（目录）'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('src/newdir/'));
+      const result = await syncDocs({ projectPath: testDir, check: true }, io);
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+      expect(io.outText()).toContain('未登记以下模块（目录）');
+      expect(io.outText()).toContain('src/newdir/');
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -596,10 +594,10 @@ describe('sync-docs command', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| 核心 | src/core/ | 核心模块 |'
       );
 
-      const result = await syncDocs({ projectPath: testDir, check: true, json: true });
-      expect(result).toBe(false);
+      const result = await syncDocs({ projectPath: testDir, check: true, json: true }, io);
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -628,7 +626,7 @@ describe('sync-docs command', () => {
         ].join('\n')
       );
 
-      await syncDocs({ projectPath: testDir });
+      await syncDocs({ projectPath: testDir }, io);
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content).toContain('src/a/kept.ts');
       expect(content).not.toContain('ghost.ts');
@@ -658,8 +656,8 @@ describe('sync-docs command', () => {
         ].join('\n')
       );
 
-      const result = await syncDocs({ projectPath: testDir, compact: true });
-      expect(result).toBe(true);
+      const result = await syncDocs({ projectPath: testDir, compact: true }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
       const content = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       // 折叠为目录条目（说明取组内第一行）
@@ -672,7 +670,7 @@ describe('sync-docs command', () => {
       expect(content).toContain('手工说明');
 
       // 幂等：再跑一遍内容不变
-      await syncDocs({ projectPath: testDir, compact: true });
+      await syncDocs({ projectPath: testDir, compact: true }, io);
       const content2 = fs.readFileSync(path.join(testDir, 'CAPABILITIES.md'), 'utf-8');
       expect(content2).toBe(content);
 
@@ -683,8 +681,8 @@ describe('sync-docs command', () => {
       const testDir = path.join(tempDir, 'compact-missing');
       fs.mkdirSync(testDir, { recursive: true });
 
-      const result = await syncDocs({ projectPath: testDir, compact: true });
-      expect(result).toBe(false);
+      const result = await syncDocs({ projectPath: testDir, compact: true }, io);
+      expect(result).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });

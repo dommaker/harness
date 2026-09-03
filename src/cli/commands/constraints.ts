@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { getAllConstraints } from '../../core/constraints/definitions';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ConstraintsMeta {
   version: string;
@@ -73,14 +74,15 @@ export function getConstraintsMeta(): ConstraintsMeta {
 /**
  * CLI handler: output --json
  */
-export async function constraints(options: { json?: boolean }): Promise<void> {
+export async function constraints(options: { json?: boolean }, io: CommandIO = processIO): Promise<CommandResult> {
   const meta = getConstraintsMeta();
   if (options.json) {
-    console.log(JSON.stringify(meta, null, 2));
+    log(io, JSON.stringify(meta, null, 2));
   } else {
-    console.log(`version: ${meta.version}`);
-    console.log(`hash: ${meta.hash}`);
-    console.log(`ironLaws: ${meta.counts.ironLaws}, guidelines: ${meta.counts.guidelines}, prompts: ${meta.counts.prompts}`);
-    console.log(`textSize: ${meta.textSize.total} chars total, ~${meta.textSize.perConstraint} chars/constraint`);
+    log(io, `version: ${meta.version}`);
+    log(io, `hash: ${meta.hash}`);
+    log(io, `ironLaws: ${meta.counts.ironLaws}, guidelines: ${meta.counts.guidelines}, prompts: ${meta.counts.prompts}`);
+    log(io, `textSize: ${meta.textSize.total} chars total, ~${meta.textSize.perConstraint} chars/constraint`);
   }
+  return { kind: 'ok' };
 }

@@ -5,15 +5,13 @@
  * 证据经 buildCheckEnv 注入（本检查器只用 projectPath，证据走 'none'）。
  * 自 checker-extra.test.ts 迁入并告别 engine facade；三态收紧——
  * facade 下 skip 表现为 satisfied:true，旁测直接钉 'skip'。
- * 临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
+ * 项目根由 src/test-setup/project-fixture 声明式构造（回收仍走 mkdtemp-cleanup）。
  */
 
 import { describe, it, expect } from '@jest/globals';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { contextDocSync } from '../context-doc-sync';
 import { buildCheckEnv } from '../types';
+import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
 function setupDir(
@@ -21,16 +19,11 @@ function setupDir(
   configYml: string | null,
   contextMdDirs: string[] = []
 ): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `ctx-doc-sync-${name}-`));
-  if (configYml !== null) {
-    fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(dir, '.harness', 'config.yml'), configYml);
-  }
-  for (const d of contextMdDirs) {
-    fs.mkdirSync(path.join(dir, d), { recursive: true });
-    fs.writeFileSync(path.join(dir, d, 'CONTEXT.md'), `# ${d}\n`);
-  }
-  return dir;
+  return createProjectFixture({
+    name: `ctx-doc-sync-${name}`,
+    config: configYml ?? undefined,
+    files: Object.fromEntries(contextMdDirs.map(d => [`${d}/CONTEXT.md`, `# ${d}\n`])),
+  });
 }
 
 function evaluate(dir: string) {

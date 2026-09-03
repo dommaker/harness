@@ -4,16 +4,14 @@
  * 测试面 = ConstraintCheck.evaluate(env)：证据经 EvidenceProviders 注入，
  * 不再绕 engine facade（checker.check）与真实 git staging。
  * 自 checker-extra.test.ts 迁入并改写驱动方式；断言语义逐条保持。
- * 临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
+ * 项目根由 src/test-setup/project-fixture 声明式构造（回收仍走 mkdtemp-cleanup）。
  */
 
 import { describe, it, expect, jest } from '@jest/globals';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { capabilitySync } from '../capability-sync';
 import { buildCheckEnv, type CheckEnv } from '../types';
 import { collectSourceFiles } from '../../capabilities-reconcile';
+import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
 const TABLE_HEAD = '| 模块 | 文件 | 说明 |\n|------|------|------|\n';
@@ -24,21 +22,14 @@ function setupDir(
   files: string[] = [],
   mode?: 'file' | 'module'
 ): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `cap-sync-${name}-`));
-  if (mode) {
-    fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, '.harness', 'config.yml'),
-      `governance:\n  capabilities:\n    mode: ${mode}\n`
-    );
-  }
-  fs.writeFileSync(path.join(dir, 'CAPABILITIES.md'), capContent);
-  for (const f of files) {
-    const fp = path.join(dir, f);
-    fs.mkdirSync(path.dirname(fp), { recursive: true });
-    fs.writeFileSync(fp, 'export const x = 1;');
-  }
-  return dir;
+  return createProjectFixture({
+    name: `cap-sync-${name}`,
+    config: mode ? `governance:\n  capabilities:\n    mode: ${mode}\n` : undefined,
+    files: {
+      'CAPABILITIES.md': capContent,
+      ...Object.fromEntries(files.map(f => [f, 'export const x = 1;'])),
+    },
+  });
 }
 
 /** stub staged 清单；srcScan 缺省走真实 fs（与被检文件一致），传 scan 则按根覆写 */
@@ -58,7 +49,7 @@ function makeEnv(
 
 describe('capability_sync — skip 与文档格式门槛', () => {
   it('无 CAPABILITIES.md → skip（ADR-0001 存在性探测，有无变更都一样）', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-sync-none-'));
+    const dir = createProjectFixture({ name: 'cap-sync-none' });
     expect(await capabilitySync.evaluate(makeEnv(dir, []))).toBe('skip');
     expect(await capabilitySync.evaluate(makeEnv(dir, ['src/foo.ts']))).toBe('skip');
   });

@@ -5,15 +5,15 @@
  * 的文件内容，无需 git staging（旧 facade 测用真实 git add 属多余 fixture）。
  * 自 checker-extra.test.ts 迁入并补齐 BYPASS_PATTERNS 全表用例。
  * 违规样例字符串一律拼接构造，避免本文件被该检查器自身命中。
- * 临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
+ * 项目根由 src/test-setup/project-fixture 声明式构造（回收仍走 mkdtemp-cleanup）。
  */
 
 import { describe, it, expect } from '@jest/globals';
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { noBypassCheckpoint } from '../no-bypass-checkpoint';
 import { buildCheckEnv } from '../types';
+import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
 /** 与 BYPASS_PATTERNS 对齐的违规样例（拼接构造，源文本不含完整模式串） */
@@ -26,10 +26,11 @@ const VIOLATIONS: Array<[string, string]> = [
 ];
 
 function writeTemp(name: string, content: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `no-bypass-${name}-`));
-  const file = path.join(dir, 'subject.ts');
-  fs.writeFileSync(file, content);
-  return file;
+  const root = createProjectFixture({
+    name: `no-bypass-${name}`,
+    files: { 'subject.ts': content },
+  });
+  return path.join(root, 'subject.ts');
 }
 
 function evaluate(changedFiles: string[]) {
@@ -63,7 +64,7 @@ describe('no_bypass_checkpoint', () => {
   });
 
   it('文件不可读（目录当文件）→ 忽略不炸', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'no-bypass-dir-'));
+    const dir = createProjectFixture({ name: 'no-bypass-dir' });
     expect(await evaluate([dir])).toBe(true);
   });
 

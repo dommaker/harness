@@ -3,28 +3,25 @@
  *
  * 测试面 = ConstraintCheck.evaluate(env)。幽灵判定走 capabilities-reconcile：
  * 文件与目录条目都查（口径从严）；无约定文件 → skip。
- * 临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
+ * 项目根由 src/test-setup/project-fixture 声明式构造（回收仍走 mkdtemp-cleanup）。
  */
 
 import { describe, it, expect, jest } from '@jest/globals';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { docsFreshness } from '../docs-freshness';
 import { buildCheckEnv } from '../types';
 import { collectSourceFiles } from '../../capabilities-reconcile';
+import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
 const TABLE_HEAD = '| 模块 | 文件 | 说明 |\n|------|------|------|\n';
 
 function setupProject(name: string, files: string[]): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `docs-fresh-${name}-`));
-  for (const f of files) {
-    const fp = path.join(dir, f);
-    fs.mkdirSync(path.dirname(fp), { recursive: true });
-    fs.writeFileSync(fp, 'export const x = 1;');
-  }
-  return dir;
+  return createProjectFixture({
+    name: `docs-fresh-${name}`,
+    files: Object.fromEntries(files.map(f => [f, 'export const x = 1;'])),
+  });
 }
 
 function makeEnv(projectPath: string): ReturnType<typeof buildCheckEnv> {

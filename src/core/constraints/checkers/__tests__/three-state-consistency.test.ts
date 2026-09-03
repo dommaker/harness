@@ -8,17 +8,15 @@
  *
  * 附带 docs_freshness 评估段的行为变更钉子：enabled 但无目标 → skip，
  * 不再静默放行（此前返回 true）。
- * 临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
+ * 项目根由 src/test-setup/project-fixture 声明式构造（回收仍走 mkdtemp-cleanup）。
  */
 
 import { describe, it, expect } from '@jest/globals';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { contextDocSync } from '../context-doc-sync';
 import { docsFreshness } from '../docs-freshness';
 import { buildCheckEnv } from '../types';
 import { collectSourceFiles } from '../../capabilities-reconcile';
+import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
 const TABLE_HEAD = '| 模块 | 文件 | 说明 |\n|------|------|------|\n';
@@ -31,26 +29,17 @@ interface Fixture {
 }
 
 function setupDir(name: string, fixture: Fixture = {}): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `three-state-${name}-`));
-  for (const f of fixture.files ?? []) {
-    fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });
-    fs.writeFileSync(path.join(dir, f), 'export const x = 1;');
-  }
-  if (fixture.configYml !== undefined) {
-    fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(dir, '.harness', 'config.yml'), fixture.configYml);
-  }
-  for (const d of fixture.contextMdDirs ?? []) {
-    fs.mkdirSync(path.join(dir, d), { recursive: true });
-    fs.writeFileSync(path.join(dir, d, 'CONTEXT.md'), `# ${d}\n`);
-  }
-  if (fixture.capabilitiesBody !== undefined) {
-    fs.writeFileSync(
-      path.join(dir, 'CAPABILITIES.md'),
-      `# Capabilities\n\n${fixture.capabilitiesBody}`
-    );
-  }
-  return dir;
+  return createProjectFixture({
+    name: `three-state-${name}`,
+    config: fixture.configYml,
+    files: {
+      ...Object.fromEntries((fixture.files ?? []).map(f => [f, 'export const x = 1;'])),
+      ...Object.fromEntries((fixture.contextMdDirs ?? []).map(d => [`${d}/CONTEXT.md`, `# ${d}\n`])),
+      ...(fixture.capabilitiesBody === undefined
+        ? {}
+        : { 'CAPABILITIES.md': `# Capabilities\n\n${fixture.capabilitiesBody}` }),
+    },
+  });
 }
 
 const CTX_FILES = (enabled: boolean, dirs?: string[]) =>

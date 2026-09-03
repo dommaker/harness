@@ -4,6 +4,8 @@
  * 在场守护：PRESERVE 只保「存在」不保「在场」——治理契约段被删除/掏空后
  * sync-docs 重新生成会静默丢失，本 checker 在 harness check 时校验在场性。
  * 测试面 = evaluate(env)（架构评审候选4，自 src/__tests__/ 就近迁入）。
+ * 根由 src/test-setup/project-fixture 构造；本套件是 cwd 锚定用例，经
+ * parentDir: process.cwd() **显式** opt-out 保持原语义（harness#90 前置约束）。
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
@@ -15,6 +17,7 @@ import {
   hasClaudeGovernance,
 } from '../governance-presence';
 import { detectInjectionDrift } from '../../injection-drift';
+import { createProjectFixture, writeProjectConfig } from '../../../../test-setup/project-fixture';
 import type { CheckEnv } from '../types';
 
 function makeEnv(projectPath: string): CheckEnv {
@@ -41,13 +44,13 @@ describe('governance_presence checker', () => {
   let tempDir: string;
   let errorSpy: jest.SpiedFunction<typeof console.error>;
 
-  const writeConfig = () => {
-    fs.mkdirSync(path.join(tempDir, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(tempDir, '.harness', 'config.yml'), 'preset: standard\n');
-  };
+  const writeConfig = () => writeProjectConfig(tempDir, 'preset: standard\n');
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-gov-presence-'));
+    tempDir = createProjectFixture({
+      name: 'temp-test-gov-presence',
+      parentDir: process.cwd(),
+    });
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -115,7 +118,10 @@ describe('hasGovernancePreserveBlock / hasClaudeGovernance 判定函数', () => 
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-gov-helpers-'));
+    tempDir = createProjectFixture({
+      name: 'temp-test-gov-helpers',
+      parentDir: process.cwd(),
+    });
   });
 
   afterEach(() => {
@@ -148,13 +154,13 @@ describe('hasGovernancePreserveBlock / hasClaudeGovernance 判定函数', () => 
 describe('governance_presence × detectInjectionDrift 同 fixture 一致性（#83）', () => {
   let tempDir: string;
 
-  const writeConfig = () => {
-    fs.mkdirSync(path.join(tempDir, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(tempDir, '.harness', 'config.yml'), 'preset: standard\n');
-  };
+  const writeConfig = () => writeProjectConfig(tempDir, 'preset: standard\n');
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-gov-consistency-'));
+    tempDir = createProjectFixture({
+      name: 'temp-test-gov-consistency',
+      parentDir: process.cwd(),
+    });
   });
 
   afterEach(() => {

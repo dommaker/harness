@@ -3,9 +3,8 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { getEffectiveGates } from '../effective-gates';
+import { createProjectFixture, writeProjectConfig } from '../../test-setup/project-fixture';
 
 const DEFAULT_ORDER = ['acceptance', 'command', 'contract', 'performance', 'review', 'security'];
 
@@ -13,18 +12,14 @@ describe('getEffectiveGates', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-gates-'));
+    dir = createProjectFixture({ name: 'harness-gates' });
   });
 
   afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  function writeConfig(yamlText: string): void {
-    const harnessDir = path.join(dir, '.harness');
-    fs.mkdirSync(harnessDir, { recursive: true });
-    fs.writeFileSync(path.join(harnessDir, 'config.yml'), yamlText);
-  }
+  const writeConfig = (yamlText: string): void => writeProjectConfig(dir, yamlText);
 
   it('无 config.yml → 6 门禁按默认 order', () => {
     expect(getEffectiveGates(dir).map(g => g.id)).toEqual(DEFAULT_ORDER);

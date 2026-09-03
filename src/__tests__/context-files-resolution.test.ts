@@ -9,9 +9,9 @@
 
 import { describe, it, expect, jest } from '@jest/globals';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { resolveContextFiles, loadRawProjectConfig } from '../core/project-config-loader';
+import { createProjectFixture } from '../test-setup/project-fixture';
 
 // ts-jest 的 namespace 导入属性不可重定义（jest.spyOn 会抛），改为只包一层
 // readFileSync 的部分 mock——其余 fs 能力用真实实现，fixture 搭建不受影响。
@@ -23,12 +23,7 @@ jest.mock('fs', () => {
 const readSpy = (fs as unknown as { readFileSync: jest.Mock }).readFileSync;
 
 function setupProject(name: string, configYml: string | null): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `ctx-files-${name}-`));
-  if (configYml !== null) {
-    fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(dir, '.harness', 'config.yml'), configYml);
-  }
-  return dir;
+  return createProjectFixture({ name: `ctx-files-${name}`, config: configYml ?? undefined });
 }
 
 const CTX_FILES = (enabled: boolean, dirs?: string[]) =>

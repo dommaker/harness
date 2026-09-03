@@ -18,6 +18,8 @@
 - `label` 同时作 check 的 DocFreshnessCheck.label 与 write 的替换文本前缀（`Label (N)`，write 方向的单数化归一语义保持原样）。
 - `buildCapabilityChecks()` 与 `updateCapabilityCounts()` 各自从规则表 map 投影生成；两方向对外函数签名与行为逐字不变。
 
+> **2026-09-03 harness#88 补注**：为收掉 core→cli/gates 的上行值导入，规则表从模块级单例 `CAPABILITY_COUNT_RULES` 改为 `capabilityCountRules(source)`——「单份定义」性质不变（两方向仍投影自同一处），只是 CLI Commands / Quality Gates 两项的 `actual` 取自调用方注入的 `CapabilityDefinitionSource`（cli 侧组装 COMMAND_DEFINITIONS/GATE_DEFINITIONS），Iron Laws / Guidelines 两项仍取 core 自身定义表。两方向对外签名各多一个 `source` 形参（`updateCapabilityCounts` 顺势去掉从未使用的 `projectPath`），文档写回结果不变。
+
 ## 理由
 
 - 双写通过 deletion test：收敛后规则只有一份，check/write 分叉这一类 bug 从结构上不可能再发生，而非靠纪律维持同步。

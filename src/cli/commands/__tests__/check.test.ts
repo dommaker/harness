@@ -6,6 +6,9 @@
  * （staged 变更 / traces.log / .harness/config.yml），跑真 context-builder +
  * 真 ConstraintChecker，断言 CLI 输出形状与 CommandResult。
  * 取证次数经 createGitEvidence 的计数 runner 观测——执行仍走真 git，不 mock 子进程。
+ *
+ * trace 记录器由命令侧组合根接线（harness#88）：套件把全局收集器重定向到临时文件，
+ * 既不断言宿主仓写入，也不污染它。
  */
 
 import * as fs from 'fs';
@@ -15,7 +18,7 @@ import { execFileSync } from 'child_process';
 
 import { check, listLaws } from '../check';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { constraintChecker } from '../../../core/constraints/checker';
+import { configureTraceCollector } from '../../../monitoring/traces';
 import {
   createGitEvidence,
   realGitCommandRunner,
@@ -115,11 +118,28 @@ function stagedTestDeletion(): string {
 
 describe('check command（真 git fixture）', () => {
   let io: CapturingIO;
+  let traceDir: string;
+  let traceFile: string;
+  let traceSeq = 0;
+
+  beforeAll(() => {
+    traceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-check-traces-'));
+  });
+
+  afterAll(() => {
+    configureTraceCollector({});
+    try {
+      fs.rmSync(traceDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
 
   beforeEach(() => {
     io = captureIO();
-    // 真 checker 会记录 trace：注入 no-op 记录器，避免写宿主仓 .harness/
-    constraintChecker.setTraceRecorder({ record: () => undefined });
+    // 命令侧接线的是全局收集器（默认 cwd 相对写入）：重定向到套件临时文件，宿主仓 .harness/ 不受影响
+    traceFile = path.join(traceDir, `trace-${++traceSeq}.log`);
+    configureTraceCollector({ traceFile });
   });
 
   describe('判定与输出形状', () => {
@@ -262,6 +282,31 @@ describe('check command（真 git fixture）', () => {
       expect(worktree.requests).toContain('changedFileNames:false');
       expect(worktree.commands).toContain('git diff --name-only');
       expect(worktree.commands).not.toContain('git diff --cached --name-only');
+    });
+  });
+
+  describe('trace 记录器组合根接线（#88 验收）', () => {
+    it('一次 check 落盘每条约束的 trace（core 不上行依赖 monitoring，由命令侧接线）', async () => {
+      const dir = gitRepo();
+      stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
+      passTraces(dir);
+
+      await check(
+        { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
+        io
+      );
+
+      const traces = fs
+        .readFileSync(traceFile, 'utf-8')
+        .split('\n')
+        .filter(Boolean)
+        .map(l => JSON.parse(l) as { constraintId: string; result: string; projectPath: string });
+
+      expect(traces.map(t => t.constraintId)).toEqual(
+        expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+      );
+      expect(traces.every(t => ['pass', 'fail', 'skip'].includes(t.result))).toBe(true);
+      expect(traces.every(t => t.projectPath === dir)).toBe(true);
     });
   });
 

@@ -17,7 +17,6 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { normalizeTriggers } from '../../utils/exec';
@@ -28,15 +27,18 @@ import { getConstraintCheck, buildCheckEnv, type CheckOutcome } from './checkers
 import { createGitEvidence, type GitEvidence } from './git-evidence';
 
 /**
- * trace 记录器最小接口（原工单 15 为消除 core→monitoring 循环；现 monitoring
- * 不反向依赖 core，方向单向、无环，checker 可直接值引用 getTraceCollector）
+ * trace 记录器最小接口（工单 15 decycle 收尾，harness#88）
  *
- * checker 不构造收集器；生产路径首次记录时惰性接线 getTraceCollector()
- * （幂等单点，ADR-0003），测试可经 setTraceRecorder 注入替身。
+ * core 不上行依赖 monitoring：记录器经**构造参数**注入，未注入 = no-op
+ * （默认无副作用）。真实收集器由组合根接线——CLI check/report 与 bootstrap
+ * 各自 `new ConstraintChecker(getTraceCollector())`。
  */
 export interface TraceRecorder {
   record(trace: ExecutionTrace): void;
 }
+
+/** 未注入时的默认记录器：不记录 */
+const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
 
 /**
  * 约束检查器
@@ -47,36 +49,21 @@ export class ConstraintChecker {
   /** 检查结果缓存（S7：src 扫描等重复 I/O，TTL=1s 防跨测试污染） */
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
-  /** trace 记录器（注入式；null = 未显式注入，首次记录时惰性接线全局收集器） */
-  private traceRecorder: TraceRecorder | null = null;
+  /** trace 记录器（构造注入；缺省 no-op） */
+  private readonly traceRecorder: TraceRecorder;
 
-  private constructor() {}
-
-  /**
-   * 取 trace 记录器：未显式注入时惰性接线全局收集器（幂等，ADR-0003 副作用收敛）
-   */
-  private getRecorder(): TraceRecorder {
-    if (!this.traceRecorder) {
-      this.traceRecorder = getTraceCollector();
-    }
-    return this.traceRecorder;
+  constructor(traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER) {
+    this.traceRecorder = traceRecorder;
   }
 
   /**
-   * 获取单例实例
+   * 获取单例实例（未接线记录器的默认实例：不写 trace）
    */
   static getInstance(): ConstraintChecker {
     if (!ConstraintChecker.instance) {
       ConstraintChecker.instance = new ConstraintChecker();
     }
     return ConstraintChecker.instance;
-  }
-
-  /**
-   * 注入 trace 记录器（测试/定制场景；不调用则首次记录时惰性接线全局收集器）
-   */
-  setTraceRecorder(recorder: TraceRecorder): void {
-    this.traceRecorder = recorder;
   }
 
   /**
@@ -185,12 +172,11 @@ export class ConstraintChecker {
    * 记录约束检查的 trace
    */
   private recordTrace(
-    collector: TraceRecorder,
     constraint: Constraint,
     checkResult: ConstraintResult,
     context: ConstraintContext
   ): void {
-    collector.record({
+    this.traceRecorder.record({
       constraintId: constraint.id,
       level: constraint.level,
       timestamp: Date.now(),
@@ -301,7 +287,6 @@ export class ConstraintChecker {
       warningCount: 0,
     };
 
-    const traceCollector = this.getRecorder();
     const constraints = this.getConstraints(customConfig);
 
     // 1. Iron Laws: 必须全部通过
@@ -310,7 +295,7 @@ export class ConstraintChecker {
 
       const checkResult = await this.check(constraint, context, run);
       result.ironLaws.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
+      this.recordTrace(constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
         result.passed = false;
@@ -324,7 +309,7 @@ export class ConstraintChecker {
 
       const checkResult = await this.check(constraint, context, run);
       result.guidelines.push(checkResult);
-      this.recordTrace(traceCollector, constraint, checkResult, context);
+      this.recordTrace(constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
         result.warningCount++;
@@ -439,5 +424,5 @@ export async function checkBeforeExecution(
   return ConstraintChecker.getInstance().beforeExecution(context, customConfig);
 }
 
-// 导出单例
+// 导出单例（未接线记录器：只评估约束，不写 trace；写 trace 由组合根自行 new）
 export const constraintChecker = ConstraintChecker.getInstance();

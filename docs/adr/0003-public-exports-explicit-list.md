@@ -34,7 +34,7 @@ studio 实际消费的 58 个符号全数收录；逐符号判定见 `docs/publi
 - `src/types/performance.ts`、`src/types/monitoring-types.ts`：仅服务上述已删链路的孤儿类型，删除前核验零引用。
 - recordBypass 链整条：`TraceCollector.recordBypass`、`ExecutionTrace.result`/`TraceFilter.result` 的 `'bypassed'`、`TraceSummary.bypassCount/bypassRate`、bypass 两类异常（high_bypass_rate / rising_bypass_rate）、usage-report 的 bypassed 统计、check 命令的 high_bypass 提示分支。「绕过」语义自始无写入方之外的观测闭环。
 - 消费方收口（2026-08-19 补注）：studio 对 safety 三符号（`InputGuardrail`/`OutputGuardrail`/`Sandbox`）的仅存引用——guards REST 路由（/check-input、/check-output、/sandbox）与 checkGuardrail/getSandboxLevel 两个 MCP tool——已在 studio 仓删除（studio@8afdccde），1.2.0 升级无断裂面。
-- 连带修复：`capabilities-parser` 的 CLI Commands / Quality Gates 计数口径从目录文件数（dir_count，递归误数子目录文件，产出与名单矛盾的 26/12）改为定义表计数（`COMMAND_DEFINITIONS.length` + 带 cli 的 `GATE_DEFINITIONS` / `GATE_DEFINITIONS.length`，ADR-0002 单一来源），check 与 update 两个投影共用同一来源。
+- 连带修复：`capabilities-parser` 的 CLI Commands / Quality Gates 计数口径从目录文件数（dir_count，递归误数子目录文件，产出与名单矛盾的 26/12）改为定义表计数（`COMMAND_DEFINITIONS.length` + 带 cli 的 `GATE_DEFINITIONS` / `GATE_DEFINITIONS.length`，ADR-0002 单一来源），check 与 update 两个投影共用同一来源。口径不变；harness#88 起这两张表由 cli 侧注入（core 不值导入上层定义表）。
 
 ### 3. 子路径出口保留并显式化
 
@@ -47,6 +47,8 @@ studio 实际消费的 58 个符号全数收录；逐符号判定见 `docs/publi
 ### 5. 副作用幂等收敛
 
 `constraintChecker.setTraceRecorder(getTraceCollector())` 原散落在包根 import 副作用、bootstrap（×2）、CLI check/report 共 5 处。收敛为 ConstraintChecker 内部幂等单点：首次记录 trace 时惰性接线 `getTraceCollector()`（未显式注入时），全部外部调用点删除；`setTraceRecorder` 保留为测试/定制注入口。CLI check 与 bootstrap 路径 trace 记录行为不变。
+
+> **2026-09-03 harness#88 补注（本节作废）**：惰性接线本身就是最后一条 core→monitoring 上行值导入，`setTraceRecorder` 则退化成只有测试在用的假 seam。现按工单 15 的既定手法收尾——记录器经 **`ConstraintChecker` 构造参数**注入、缺省 no-op，真实收集器由组合根（CLI `check`/`report`、`bootstrapHarness`）接线，`setTraceRecorder` 删除；方向约束同时落成 eslint `no-restricted-imports` error 规则（守卫 `src/__tests__/layering.test.ts`）。**工单 15 的 core↔monitoring decycle 意图至此完成**。CLI check / report / bootstrap 路径 trace 记录行为不变；唯一差异：绕过组合根直接用 `constraintChecker` 单例或 `checkConstraints()` 快捷函数的库消费者不再自动写 trace，需要时传 `options.onTrace` 或自行注入收集器。
 
 ### 6. 快照测试防回归
 

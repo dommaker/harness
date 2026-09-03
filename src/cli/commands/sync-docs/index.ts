@@ -20,7 +20,10 @@ import {
   isCapabilityListingFormat,
   checkCapabilityCounts,
   updateCapabilityCounts,
+  type CapabilityDefinitionSource,
 } from '../../../core/constraints/capabilities-parser';
+import { COMMAND_DEFINITIONS } from '../definitions';
+import { GATE_DEFINITIONS } from '../../../gates/definitions';
 import { reconcileCapabilities } from '../../../core/constraints/capabilities-reconcile';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getCapabilitiesMode } from '../../../core/project-config-loader';
@@ -50,6 +53,17 @@ export interface SyncDocsOptions {
   /** 一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目 */
   compact?: boolean;
 }
+
+/**
+ * 能力清单计数源（harness#88）
+ *
+ * core 的 capabilities-parser 不再值导入定义表（单向分层），命令/门禁计数由
+ * cli 侧在此组装后注入；两张表都是纯数据模块（ADR-0002 命令形状单一来源）。
+ */
+const CAPABILITY_DEFINITIONS: CapabilityDefinitionSource = {
+  commands: COMMAND_DEFINITIONS,
+  gates: GATE_DEFINITIONS,
+};
 
 /**
  * 同步文档
@@ -135,7 +149,7 @@ export async function syncDocs(
 
   if (capsIsCapabilityListing) {
     // 能力清单格式：委托 FreshnessRunner 对比计数
-    const countCheck = checkCapabilityCounts(projectPath);
+    const countCheck = checkCapabilityCounts(projectPath, CAPABILITY_DEFINITIONS);
     capCountMismatches = countCheck.mismatches;
     // 不填充 result.added/removed（文件级对比不适用于此格式）
   } else {
@@ -369,7 +383,7 @@ export async function syncDocs(
 
   // 8. 写入模式：更新文档
   if (capsIsCapabilityListing && hasCapIssues) {
-    capsContent = updateCapabilityCounts(capsContent, projectPath);
+    capsContent = updateCapabilityCounts(capsContent, CAPABILITY_DEFINITIONS);
     await fs.writeFile(capabilitiesPath, capsContent, 'utf-8');
     log(io, chalk.green(`\n✅ 已更新 CAPABILITIES.md 计数`));
   }

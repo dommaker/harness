@@ -10,7 +10,8 @@
 
 ## 依赖关系
 - 依赖 `src/types/trace` ExecutionTrace 类型
-- 被 `src/core/constraints/checker`（惰性接线 getTraceCollector，ADR-0003）与 `src/cli/` 命令消费
+- 消费者：`src/cli/commands/{check,report}` 与 `src/hooks/bootstrap`——组合根经 `getTraceCollector()` 把收集器注入 `ConstraintChecker` 构造参数（harness#88）
+- core 不再依赖本模块（方向由 eslint no-restricted-imports 锁死，`src/__tests__/layering.test.ts` 守卫）
 
 ## 约定
 - Trace 文件存储在 .harness/ 目录（不提交）

@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { executeWithCollect } from '../../failure/constraint-handler';
+import { getTraceCollector } from '../../monitoring/traces';
 import type { ConstraintContext } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -47,7 +48,8 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
   log(io, chalk.blue('📊 生成检查报告...'));
 
   const projectPath = options.projectPath || process.cwd();
-  const checker = ConstraintChecker.getInstance();
+  // trace 记录器经构造参数接线（harness#88）：本命令是组合根
+  const checker = new ConstraintChecker(getTraceCollector());
 
   const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...PROMPTS };
   const totalConstraints = Object.keys(allConstraints).length;

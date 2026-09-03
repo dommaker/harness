@@ -11,6 +11,11 @@
  *   - no-var-requires：仓内刻意使用 CJS 懒加载 require（测试隔离、避免循环依赖），转 import 有行为风险。
  *   - require-yield：src/llm/adapter.ts 的 async generator stub 故意抛错、无 yield 语义。
  * - no-empty：catch {} 吞异常是既有约定，保留（allowEmptyCatch）。
+ *
+ * 第二段是分层方向规则（架构评审 2026-09-02 候选9 / harness#88）：此前
+ * `types → utils → core → 领域层 → cli` 只写在 CLAUDE.md 里。规则只作用于
+ * src/core/**——core 是唯一有历史上行债的层，收完即锁死；其余层的方向约束
+ * 尚无零违规基线，扩大作用域会立刻全红，另开票治理。
  */
 import js from '@eslint/js';
 import tsParser from '@typescript-eslint/parser';
@@ -42,6 +47,40 @@ export default [
       '@typescript-eslint/no-var-requires': 'off',
       'require-yield': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    files: ['src/core/**/*.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: {
+      // 单向分层：core 不得值导入上层（数据/能力由调用方经参数注入，harness#88）
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/cli', '**/cli/**',
+                '**/gates', '**/gates/**',
+                '**/monitoring', '**/monitoring/**',
+              ],
+              message:
+                '分层 types → utils → core → 领域层 → cli：core 不得值导入 cli/gates/monitoring，' +
+                '请由调用方注入所需数据（type-only 导入允许，harness#88）',
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
     },
   },
 ];

@@ -11,15 +11,19 @@ import { captureIO, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { check } from '../check';
-import { constraintChecker } from '../../../core/constraints/checker';
 import { renderConstraintsSection } from '../../../core/constraints/injection-renderer';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 
+// 命令 per-run 构造 checker（harness#88）：构造替身即控制 checkConstraints 返回值
+const mockChecker = { checkConstraints: jest.fn() };
 jest.mock('../../../core/constraints/checker', () => ({
-  constraintChecker: {
-    setTraceRecorder: jest.fn(),
-    checkConstraints: jest.fn(),
-  },
+  ConstraintChecker: jest.fn(function () {
+    return mockChecker;
+  }),
+}));
+
+jest.mock('../../../monitoring/traces', () => ({
+  getTraceCollector: jest.fn(() => ({ record: jest.fn() })),
 }));
 
 jest.mock('../../../utils/exec', () => ({
@@ -30,8 +34,6 @@ jest.mock('child_process', () => ({
   exec: jest.fn(),
   execSync: jest.fn(() => Buffer.from('')),
 }));
-
-const mockChecker = constraintChecker as jest.Mocked<typeof constraintChecker>;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const REAL_VERSION = require('../../../../package.json').version as string;

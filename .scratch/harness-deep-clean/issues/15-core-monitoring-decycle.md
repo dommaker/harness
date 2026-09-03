@@ -10,3 +10,7 @@ checker.ts 对 getTraceCollector 的值导入改为构造/参数注入(默认 no
 ## Answer
 
 完成。checker 新增 TraceRecorder 最小接口 + setTraceRecorder 注入(默认 no-op),check/report/bootstrap/index 四个生产入口接入真实收集器,P0 返回结构不变;evolver 构造器接受 ConstraintLookup(auto-evolve/flow/测试注入 getConstraint),不再值导入 definitions;check.test.ts mock 补 setTraceRecorder。grep 复核 core→monitoring 与 monitoring→core 值导入均归零。constraints/registry→core 反依赖按工单 06 决议保留不动(过渡产物)。与工单 14 改动交织,合并一个提交。
+
+## Follow-up（2026-09-03, harness#88）
+
+本单的「值导入归零」这条被 ADR-0003 的惰性接线回退过一次（checker 内部首次记录时 `getTraceCollector()`）,`setTraceRecorder` 也随之变成只有测试在用的假 seam。harness#88 按本单既定手法收尾：记录器经 **ConstraintChecker 构造参数**注入(缺省 no-op,不变),`setTraceRecorder` 删除,真实收集器由组合根接线（CLI check/report、bootstrapHarness）;`src/core/**` 对 cli/gates/monitoring 值导入归零,并由 eslint `no-restricted-imports`（error 级,allowTypeImports）+ `src/__tests__/layering.test.ts` 锁死。**本单 decycle 意图标记完成。**

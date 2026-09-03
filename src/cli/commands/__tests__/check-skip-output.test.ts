@@ -6,7 +6,6 @@
 
 import { check } from '../check';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { constraintChecker } from '../../../core/constraints/checker';
 
 // Mock fs
 jest.mock('fs', () => ({
@@ -27,12 +26,16 @@ jest.mock('child_process', () => ({
   execSync: jest.fn(() => Buffer.from('')),
 }));
 
-// Mock constraintChecker
+// Mock checker：命令 per-run 构造 checker（harness#88），构造替身即控 checkConstraints 返回值
+const mockChecker = { checkConstraints: jest.fn() };
 jest.mock('../../../core/constraints/checker', () => ({
-  constraintChecker: {
-    setTraceRecorder: jest.fn(),
-    checkConstraints: jest.fn(),
-  },
+  ConstraintChecker: jest.fn(function () {
+    return mockChecker;
+  }),
+}));
+
+jest.mock('../../../monitoring/traces', () => ({
+  getTraceCollector: jest.fn(() => ({ record: jest.fn() })),
 }));
 
 // Mock effective-constraints（ADR-0001：check 经 getMergedConstraintsConfig 走生效集链路）
@@ -55,8 +58,6 @@ jest.mock('chalk', () => ({
   gray: jest.fn((str: string) => str),
   red: jest.fn((str: string) => str),
 }));
-
-const mockChecker = constraintChecker as jest.Mocked<typeof constraintChecker>;
 
 function fakeConstraint(id: string, level: 'iron_law' | 'guideline') {
   return {

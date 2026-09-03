@@ -28,6 +28,7 @@ H5（#44）起：
 - **新增命令 = 命令实现文件 + definitions.ts 一条定义（含 CLI 元数据与实现引用）+ 测试**，不再改 bin/harness.js
 - **definitions.ts 是纯数据模块（ADR-0010 后零闭包）**：禁止 import 任何命令实现/运行时依赖（保 --help/--version 懒加载）；子命令别名是数据（条目 `aliases: string[]`，不复印整块），实参编组（缺参闸门/强转/兜底）归各命令模块的具名导出（如 `knowledgeSearchCommand`/`coverageCheck`）；实现引用可解析性由 `__tests__/registry.test.ts` 构建/测试期断言
 - 命令选项类型命名规范：XxxOptions
+- **本层是上行数据的注入方（harness#88）**：core 对 cli/gates/monitoring 零值导入，故 `check`/`report` 自己 `new ConstraintChecker(getTraceCollector())`（组合根接线 trace 记录器；用 `constraintChecker`/`getInstance()` 拿到的默认实例不写 trace），`sync-docs` 把 `COMMAND_DEFINITIONS` + `GATE_DEFINITIONS` 组装成 `CapabilityDefinitionSource` 注入 `capabilities-parser` 供能力清单计数
 
 ## 注意事项
 - 新增命令需同步更新 CLAUDE.md / CAPABILITIES.md / src/CONTEXT.md

@@ -18,13 +18,13 @@
 - 被所有模块依赖（基础层，无上层依赖）
 - 依赖 `src/types/` 类型定义
 - 依赖 `src/utils/` 工具函数
-- 依赖 `src/monitoring/traces` TraceCollector
+- 对 `cli/`、`gates/`、`monitoring/` **零值导入**（type-only 允许）：方向由 eslint.config.mjs 的 `@typescript-eslint/no-restricted-imports`（error 级）锁死，守卫测试见 `src/__tests__/layering.test.ts`（harness#88）
 
 ## 约定
 - 约束定义在 `constraints/definitions/{iron-laws,guidelines,prompts}.ts`，不在运行时代码中定义
 - check 层必须带真实 checker（注册表闭环，引用未注册 checker 构建报错）
 - Iron Law 违规必须 throw ConstraintViolationError
-- 检查器使用单例模式(ConstraintChecker.getInstance())
+- 上行数据一律注入，不在 core 内 require 上层（harness#88）：trace 记录器经 `ConstraintChecker` 构造参数注入（缺省 no-op，`getInstance()`/`constraintChecker` 即未接线的默认实例，只评估不写 trace），真实收集器由组合根接线（CLI check/report、`bootstrapHarness`）；CAPABILITIES.md 能力清单计数经 `capabilities-parser` 的 `CapabilityDefinitionSource` 由 cli 侧注入定义表
 - git 事实只能经 `constraints/git-evidence.ts` 的 adapter 取（#87）：core/cli 内不得出现 `execSync('git …')`；一次 run 一份实例、沿调用链显式传递（CLI check → buildConstraintContext → checkConstraints），memo 既不做成模块级全局也不做成单例字段
 
 ## 注意事项

@@ -5,19 +5,14 @@
  * 各持一份正则，收敛到此处。H2 起能力清单计数（checkCapabilityCounts /
  * updateCapabilityCounts）也从 sync-docs/capabilities-syncer 收敛到此，
  * 使本模块成为 CAPABILITIES.md 解析 + 计数唯一入口。
+ *
+ * 计数所需的命令/门禁定义由调用方注入（harness#88：core 不值导入上层定义表）。
  */
 
 import * as fs from 'fs';
 import { IRON_LAWS, GUIDELINES } from './definitions';
-import { COMMAND_DEFINITIONS } from '../../cli/commands/definitions';
-import { GATE_DEFINITIONS } from '../../gates/definitions';
 import { FreshnessRunner } from './doc-freshness/runner';
 import type { DocFreshnessCheck } from '../../types/project-config';
-
-/** CLI 命令数 = 非门禁命令定义 + 门禁命令定义（ADR-0002：定义表是命令形状单一来源） */
-function cliCommandCount(): number {
-  return COMMAND_DEFINITIONS.length + GATE_DEFINITIONS.filter(g => g.cli).length;
-}
 
 /** 匹配表格单元格中的源码文件条目（如 `src/foo.ts`、`foo.tsx`） */
 const FILE_CELL_REGEX = /\|\s*([^|]+?\.(?:ts|tsx|js|jsx))\s*\|/g;
@@ -108,6 +103,20 @@ export function aggregateToSourceSubdir(root: string, file: string): string {
 // ── 能力清单计数 ────────────────────────────────────────────
 
 /**
+ * 调用方注入的定义源（harness#88）
+ *
+ * core 只消费计数所需的最小形状，不 require 命令表：
+ * - commands：非门禁 CLI 命令定义（仅取长度）
+ * - gates：门禁定义（仅取长度与「是否带 cli 元数据」）
+ *
+ * ADR-0002「定义表是命令形状单一来源」不变，只是表的引用方从 core 移到 cli。
+ */
+export interface CapabilityDefinitionSource {
+  commands: readonly unknown[];
+  gates: readonly { cli?: unknown }[];
+}
+
+/**
  * 能力清单统计规则单份定义（ADR-0008：check/write 两方向共用，
  * 此前 label+pattern 在 buildCapabilityChecks 与 updateCapabilityCounts 各写一遍）
  *
@@ -115,31 +124,40 @@ export function aggregateToSourceSubdir(root: string, file: string): string {
  *   write 的替换文本前缀，如 `Quality Gates (6)`）
  * - pattern：同时供 check（doc_regex_count 字符串 pattern，捕获组为文档计数）
  *   与 write（编译为替换 regex）
- * - actual：定义表实际计数（ADR-0002 单一来源）
+ * - actual：实际计数——命令/门禁来自注入源，约束来自 core 自身定义表
  */
 interface CapabilityCountRule {
   label: string;
   pattern: string;
-  actual: () => number;
+  actual: number;
 }
 
-const CAPABILITY_COUNT_RULES: CapabilityCountRule[] = [
-  { label: 'CLI Commands', pattern: 'CLI Commands\\s*\\((\\d+)\\)', actual: cliCommandCount },
-  { label: 'Quality Gates', pattern: 'Quality Gates?\\s*\\((\\d+)\\)', actual: () => GATE_DEFINITIONS.length },
-  { label: 'Iron Laws', pattern: 'Iron Laws?\\s*\\((\\d+)\\)', actual: () => Object.keys(IRON_LAWS).length },
-  { label: 'Guidelines', pattern: 'Guidelines?\\s*\\((\\d+)\\)', actual: () => Object.keys(GUIDELINES).length },
-];
+/**
+ * 能力清单统计规则（CLI Commands 计数 = 非门禁命令数 + 带 cli 元数据的门禁数）
+ */
+function capabilityCountRules(source: CapabilityDefinitionSource): CapabilityCountRule[] {
+  return [
+    {
+      label: 'CLI Commands',
+      pattern: 'CLI Commands\\s*\\((\\d+)\\)',
+      actual: source.commands.length + source.gates.filter(g => g.cli).length,
+    },
+    { label: 'Quality Gates', pattern: 'Quality Gates?\\s*\\((\\d+)\\)', actual: source.gates.length },
+    { label: 'Iron Laws', pattern: 'Iron Laws?\\s*\\((\\d+)\\)', actual: Object.keys(IRON_LAWS).length },
+    { label: 'Guidelines', pattern: 'Guidelines?\\s*\\((\\d+)\\)', actual: Object.keys(GUIDELINES).length },
+  ];
+}
 
 /**
  * 构建 CAPABILITIES.md 能力清单格式的检查配置
  */
-function buildCapabilityChecks(): DocFreshnessCheck[] {
-  return CAPABILITY_COUNT_RULES.map(rule => ({
+function buildCapabilityChecks(source: CapabilityDefinitionSource): DocFreshnessCheck[] {
+  return capabilityCountRules(source).map(rule => ({
     type: 'doc_regex_count' as const,
     doc: 'CAPABILITIES.md',
     label: rule.label,
     pattern: rule.pattern,
-    actual: { kind: 'const_count' as const, value: rule.actual() },
+    actual: { kind: 'const_count' as const, value: rule.actual },
   }));
 }
 
@@ -147,10 +165,11 @@ function buildCapabilityChecks(): DocFreshnessCheck[] {
  * 使用 FreshnessRunner 检查能力清单计数是否与代码一致（--check 模式）
  */
 export function checkCapabilityCounts(
-  projectPath: string
+  projectPath: string,
+  source: CapabilityDefinitionSource
 ): { match: boolean; mismatches: string[] } {
   const runner = new FreshnessRunner();
-  const checks = buildCapabilityChecks();
+  const checks = buildCapabilityChecks(source);
   const results = runner.runAll({ checks }, projectPath);
 
   const mismatches: string[] = [];
@@ -166,14 +185,17 @@ export function checkCapabilityCounts(
 /**
  * 更新 CAPABILITIES.md 中的能力清单计数（write 模式）
  *
- * 命令/门禁计数取自定义表（ADR-0002 单一来源），regex 替换文档计数行；
- * 规则与 check 方向共用 CAPABILITY_COUNT_RULES（ADR-0008）。
+ * 命令/门禁计数取自注入的定义源（ADR-0002 单一来源在调用方），regex 替换文档计数行；
+ * 规则与 check 方向共用 capabilityCountRules（ADR-0008）。
  */
-export function updateCapabilityCounts(content: string, _projectPath: string): string {
-  for (const rule of CAPABILITY_COUNT_RULES) {
+export function updateCapabilityCounts(
+  content: string,
+  source: CapabilityDefinitionSource
+): string {
+  for (const rule of capabilityCountRules(source)) {
     const regex = new RegExp(rule.pattern);
     if (regex.test(content)) {
-      content = content.replace(regex, `${rule.label} (${rule.actual()})`);
+      content = content.replace(regex, `${rule.label} (${rule.actual})`);
     }
   }
 

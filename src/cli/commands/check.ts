@@ -4,18 +4,21 @@
  * 检查约束是否满足（check 层：Iron Laws / Guidelines；prompt 层仅注入不检查）
  * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder
  * ADR-0001：约束集统一走 getMergedConstraintsConfig 生效集链路（preset/config 禁用/custom/scenes）
+ * harness#88：本命令是 trace 记录器的组合根——core 不上行依赖 monitoring，
+ * 真实收集器在此经构造参数接线
  */
 
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { constraintChecker } from '../../core/constraints/checker';
+import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
+import { getTraceCollector } from '../../monitoring/traces';
 import { countJsonlLines } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ConstraintTrigger } from '../../types/constraint';
@@ -83,7 +86,9 @@ export async function check(
     log(io, chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
     // 执行三层检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
-    const result = await constraintChecker.checkConstraints(context, merged, evidence);
+    // trace 记录器经构造参数接线（harness#88）：一次命令一个 checker 实例
+    const checker = new ConstraintChecker(getTraceCollector());
+    const result = await checker.checkConstraints(context, merged, evidence);
 
     // 输出结果
     log(io);

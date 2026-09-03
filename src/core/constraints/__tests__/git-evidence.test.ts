@@ -188,8 +188,7 @@ describe('git 证据适配器（#87）', () => {
         disabled: [],
         unknownIds: [],
       };
-      const checker = ConstraintChecker.getInstance();
-      checker.setTraceRecorder({ record: () => undefined });
+      const checker = new ConstraintChecker({ record: () => undefined });
       phase.current = 'checker';
       const runResult = await checker.checkConstraints(context, merged, evidence);
 

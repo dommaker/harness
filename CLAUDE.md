@@ -32,10 +32,13 @@ Every check-layer constraint must reference a registered checker (registry close
 
 Presets (`src/presets/`) are pure data: `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints. Filtering lives in `mergeConstraints`; unknown preset names fall back to `standard` with a stderr warning.
 
-### Core Singletons
+### Layering and Composition
 
-- `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context
-- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`)
+The layering `types → utils → core → 领域层 → cli` is machine-enforced (harness#88): `src/core/**` has **zero value imports** of `cli/`, `gates/`, `monitoring/` (type-only imports are allowed), checked by the error-level `@typescript-eslint/no-restricted-imports` rule in `eslint.config.mjs` and guarded by `src/__tests__/layering.test.ts`. When core needs data or a capability that lives above it, the caller injects it:
+
+- `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context. Its trace recorder is constructor-injected and defaults to no-op; `constraintChecker` / `getInstance()` are therefore the *unwired* instance (they never write traces).
+- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`). Composition roots wire it: CLI `check`, CLI `report`, and `bootstrapHarness` do `new ConstraintChecker(getTraceCollector())`.
+- `capabilities-parser` takes a caller-supplied `CapabilityDefinitionSource` (`sync-docs` assembles `COMMAND_DEFINITIONS` + `GATE_DEFINITIONS`) for capability-listing counts in CAPABILITIES.md.
 
 ### Key Subsystems
 

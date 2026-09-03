@@ -10,11 +10,14 @@
  * const harness = await bootstrapHarness('/path/to/project');
  * // harness.checker, harness.config, harness.hooks, harness.sessions
  * ```
+ *
+ * checker 的 trace 记录器在此接线（harness#88：core 不上行依赖 monitoring）。
  */
 
 import { ConstraintChecker } from '../core/constraints/checker';
 import { SessionManager } from '../context/session-manager';
 import { ProjectConfigLoader } from '../core/project-config-loader';
+import { getTraceCollector } from '../monitoring/traces';
 import { HookRegistry } from './registry';
 import { HookPipeline } from './pipeline';
 import type { MergedConstraintsConfig } from '../types/project-config';
@@ -72,7 +75,7 @@ export async function bootstrapHarness(
   const { mergedConstraints } = await loadConfigAsync(resolvedPath);
 
   // 2. 初始化核心组件
-  const checker = ConstraintChecker.getInstance();
+  const checker = new ConstraintChecker(getTraceCollector());
 
   const sessions = new SessionManager(resolvedPath);
   const hooks = new HookRegistry();
@@ -108,7 +111,7 @@ export function bootstrapHarnessSync(
   loader.load();
   const mergedConstraints = loader.mergeConstraints();
 
-  const checker = ConstraintChecker.getInstance();
+  const checker = new ConstraintChecker(getTraceCollector());
 
   const sessions = new SessionManager(resolvedPath);
   const hooks = new HookRegistry();

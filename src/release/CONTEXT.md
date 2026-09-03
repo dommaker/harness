@@ -4,6 +4,7 @@
 发布物完整性自检：harness 自己声明并校验自己发布了什么。关键发布物清单的单一来源，替代外部（studio publishPackage）与本仓 release 命令各自的 dist 文件硬编码（harness#77，#75 N4 收编）。
 
 ## 核心导出
+下列符号都由 `integrity.ts` 就地导出；`index.ts` barrel 只再导出标「公开 API」的那一组，其余属模块内部 seam——仓内消费方直接 `from './integrity'`，导出面由 `__tests__/barrel.test.ts` 守卫（harness#92）。
 - `deriveCriticalArtifacts(manifest)`（`integrity.ts`）——从包声明面（package.json `main`/`exports`/`bin`）推导脚本入口清单（.js/.cjs/.mjs/.d.ts，去 `./` 前缀、剔除非脚本叶子、去重排序）；纯函数
 - `EXTRA_CRITICAL_ARTIFACTS`——声明面推导之外的运行时关键发布物（bin/harness.js 引导期 require 的命令/门禁定义表、`dist/tools/definitions` 数据目录）；与其描述的文件同仓同评审，删改须同步
 - `resolvePackageRoot(fromDir?)`——从模块位置向上按包名解析本包根（源码仓与 node_modules 安装态均可达）

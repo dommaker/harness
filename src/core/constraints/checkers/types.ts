@@ -29,8 +29,8 @@ export interface CheckEnv {
 /**
  * 证据提供者组：git diff / 源码扫描的 memoized I/O
  *
- * 由调用方绑定后传入 buildCheckEnv（如 ConstraintChecker 绑实例级
- * run 缓存的方法）；工厂本身不做 memoization。
+ * 由调用方绑定后传入 buildCheckEnv（#87：git 两项绑 GitEvidence adapter 实例，
+ * 一次 run 一份，命令级 memo 在 adapter 层）；工厂本身不做 memoization。
  */
 export interface EvidenceProviders {
   /** staged 全量 diff */

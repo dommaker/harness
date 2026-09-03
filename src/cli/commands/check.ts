@@ -13,6 +13,7 @@ import { constraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
+import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { countJsonlLines } from '../../utils/jsonl';
@@ -29,6 +30,13 @@ export interface CheckOptions {
   trigger?: ConstraintTrigger;
   /** 项目路径 */
   projectPath?: string;
+  /**
+   * git 证据 adapter（非 CLI flag；#87）
+   *
+   * 缺省 = 本 run 独占一份真 git 证据。注入则与调用方共用同一证据快照，
+   * 测试据此断言"同一 run 内每条 git 命令至多执行一次"。
+   */
+  evidence?: GitEvidence;
 }
 
 /**
@@ -60,10 +68,13 @@ export async function check(
     }
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
+    // #87：一次 run 一份 git 证据——context-builder 与 checker 层共用同一实例
+    const evidence = options.evidence ?? createGitEvidence(projectPath);
     const context = await buildConstraintContext({
       projectPath: options.projectPath,
       staged: options.staged,
       trigger: options.trigger,
+      evidence,
     });
     const changedFiles = context.changedFiles ?? [];
     if (changedFiles.length > 0) {
@@ -71,8 +82,8 @@ export async function check(
     }
     log(io, chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
-    // 执行三层检查（per-request 传 customConfig，避免单例状态污染）
-    const result = await constraintChecker.checkConstraints(context, merged);
+    // 执行三层检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
+    const result = await constraintChecker.checkConstraints(context, merged, evidence);
 
     // 输出结果
     log(io);

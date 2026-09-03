@@ -4,57 +4,25 @@
  * 从仓库状态（git diff / traces / 文档标记）推断 ConstraintContext：
  * 触发条件 + 各类证据标志。此前散落在 cli/commands/check.ts，
  * 迁入 core 供 CLI 与其他调用方共用。
+ *
+ * 架构评审 #87：本模块只做装配不做取证——git 证据一律经 git-evidence
+ * adapter 取（缺省真 git adapter，调用方可注入与 checker 层同源的那一份），
+ * 因此此处不再有 child_process / raw execSync。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
-import { execAsync } from '../../utils/exec';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ExecutionTrace } from '../../types/trace';
 import type { ConstraintContext, ConstraintTrigger } from '../../types/constraint';
-
-/**
- * 从 git diff 获取变更的文件
- */
-export async function getChangedFiles(staged: boolean, projectPath?: string): Promise<string[]> {
-  try {
-    const command = staged ? 'git diff --cached --name-only' : 'git diff --name-only';
-    const { stdout } = projectPath
-      ? await execAsync(command, { cwd: projectPath })
-      : await execAsync(command);
-    return String(stdout).trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * 一次性列出 HEAD 中存在的所有目录（工单 18：替代逐文件 git ls-tree）
- *
- * 返回 null 表示命令失败（按惯例视所有目录为"新"）。
- */
-export function listHeadDirs(projectPath: string): Set<string> | null {
-  try {
-    const output = execSync('git ls-tree -r --name-only HEAD', { cwd: projectPath, stdio: 'pipe', encoding: 'utf-8' });
-    const dirs = new Set<string>();
-    for (const file of String(output).split('\n')) {
-      if (!file) continue;
-      const parts = file.split('/');
-      for (let i = 1; i < parts.length; i++) {
-        dirs.add(parts.slice(0, i).join('/'));
-      }
-    }
-    return dirs;
-  } catch {
-    return null;
-  }
-}
+import { createGitEvidence, splitFileNames, type GitEvidence } from './git-evidence';
 
 /**
  * 检查文件所在目录是否在 git HEAD 中不存在（即新目录）
+ *
+ * headDirs 由 git-evidence adapter 取证（null = 命令失败，按惯例视所有目录为"新"）。
  */
 export function isNewDirectory(headDirs: Set<string> | null, filePath: string): boolean {
   if (headDirs === null) return true; // 命令失败 = 假定为新
@@ -73,10 +41,17 @@ const CODE_FILE_REGEX = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|rb|php|cs|c
  *
  * ADR-0001：变更包含代码文件时，在主推断之外附加 code_implementation
  * （返回数组 [主推断, 'code_implementation']；主推断逻辑保持不变）。
+ *
+ * 新目录判定所需的 HEAD 目录集经 git 证据 adapter 取（#87）：
+ * 调用方注入即与 checker 层同一份证据，缺省走真 git adapter。
  */
 export function detectTrigger(
   changedFiles: string[],
-  options: { trigger?: ConstraintTrigger; projectPath?: string }
+  options: {
+    trigger?: ConstraintTrigger;
+    projectPath?: string;
+    evidence?: GitEvidence;
+  }
 ): ConstraintTrigger | ConstraintTrigger[] {
   if (options.trigger) return options.trigger;
 
@@ -91,7 +66,10 @@ export function detectTrigger(
   const hasModuleChange = changedFiles.some(f =>
     sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) && !f.includes('__tests__')
   );
-  const headDirs = hasModuleChange ? listHeadDirs(projectPath) : null;
+  // 工单 18 的批量语义保留在 adapter 层：一次 ls-tree，且仅在有模块变更时才取证
+  const headDirs = hasModuleChange
+    ? (options.evidence ?? createGitEvidence(projectPath)).headDirs()
+    : null;
   const hasModuleCreation = changedFiles.some(f =>
     sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) &&
     isNewDirectory(headDirs, f)
@@ -205,15 +183,20 @@ export function detectReuseCheck(projectPath: string): boolean {
 
 /**
  * 构建约束上下文：变更文件 + 触发条件推断 + 证据标志检测
+ *
+ * options.evidence（#87）：git 证据适配器。调用方（CLI check）注入同一实例给
+ * checkConstraints，即可让 context-builder 与 checker 层共用同一证据来源。
  */
 export async function buildConstraintContext(options: {
   projectPath?: string;
   staged: boolean;
   trigger?: ConstraintTrigger;
+  evidence?: GitEvidence;
 }): Promise<ConstraintContext> {
   const projectPath = options.projectPath || process.cwd();
-  const changedFiles = await getChangedFiles(options.staged, options.projectPath);
-  const inferred = detectTrigger(changedFiles, { trigger: options.trigger, projectPath });
+  const evidence = options.evidence ?? createGitEvidence(projectPath);
+  const changedFiles = splitFileNames(evidence.changedFileNames(options.staged));
+  const inferred = detectTrigger(changedFiles, { trigger: options.trigger, projectPath, evidence });
   const triggers = Array.isArray(inferred) ? inferred : [inferred];
 
   return {

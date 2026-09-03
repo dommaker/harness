@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { loadRawProjectConfig } from '../../../core/project-config-loader';
+import { hasGovernanceContract } from '../../../core/constraints/injection-writer';
 import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
 import {
   readPackageJsonLite,
@@ -223,7 +224,8 @@ async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
 
   try {
     const claude = await fs.readFile(path.join(projectPath, 'CLAUDE.md'), 'utf-8');
-    if (/^##\s+Governance Rules/m.test(claude) || claude.includes('HARNESS_CONSTRAINTS_START')) {
+    // 契约在场判定收口 injection-writer.hasGovernanceContract（#83，与 presence/landing 同谓词）
+    if (hasGovernanceContract(claude)) {
       info.hasClaudeGovernance = true;
       info.ironLaws = countConstraintBullets(claude, 'Iron Laws');
       info.guidelines = countConstraintBullets(claude, 'Guidelines');

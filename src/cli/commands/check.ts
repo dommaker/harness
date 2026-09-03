@@ -14,6 +14,7 @@ import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitio
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
+import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { countJsonlLines } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ConstraintTrigger } from '../../types/constraint';
@@ -132,7 +133,7 @@ export async function check(options: CheckOptions): Promise<void> {
           console.log(chalk.yellow(`   内容漂移: 缺失 ${drift.contentDrift.missing.length} 条 / 多余 ${drift.contentDrift.extra.length} 条（条目级差异见 harness constraints report）`));
         }
         if (drift.duplicateHeading) {
-          console.log(chalk.yellow('   检测到重复的 "## Governance Rules" 章节'));
+          console.log(chalk.yellow(`   检测到重复的 "${GOVERNANCE_HEADING}" 章节`));
         }
         console.log(chalk.yellow(`   修复: ${drift.fixHint}`));
       }

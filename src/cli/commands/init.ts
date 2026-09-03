@@ -22,6 +22,7 @@ import {
   replaceEnclosedRange,
   cutMarkerBlock,
   resolveGovernanceLanding,
+  GOVERNANCE_HEADING,
 } from '../../core/constraints/injection-writer';
 
 export interface InitOptions {
@@ -598,7 +599,7 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
 
   const constraints = getEffectiveConstraints(projectPath);
   const bodyOnly = renderConstraintsSection(constraints, version);
-  const block = `${GOVERNANCE_PRESERVE_BEGIN}\n## Governance Rules\n${bodyOnly}${GOVERNANCE_PRESERVE_END}\n`;
+  const block = `${GOVERNANCE_PRESERVE_BEGIN}\n${GOVERNANCE_HEADING}\n${bodyOnly}${GOVERNANCE_PRESERVE_END}\n`;
 
   let existingContent: string | null = null;
   try {
@@ -638,7 +639,7 @@ export async function setupAgentsMdConstraints(projectPath: string): Promise<voi
       inner.kind === 'updated'
         ? inner.content
         : // 纯手写段（无约束标记）：段尾追加注入段，手写内容不动
-          preserve.inner.trimEnd() + '\n\n## Governance Rules\n' + bodyOnly;
+          preserve.inner.trimEnd() + '\n\n' + GOVERNANCE_HEADING + '\n' + bodyOnly;
 
     const write = replaceStandaloneRange(
       existingContent,
@@ -685,7 +686,7 @@ export async function setupClaudeMdConstraints(projectPath: string): Promise<voi
   // 生效约束集 → 渲染期望段（纯函数，与写文件分离）
   const constraints = getEffectiveConstraints(projectPath);
   const bodyOnly = renderConstraintsSection(constraints, version);
-  const fullSection = '## Governance Rules\n' + bodyOnly;
+  const fullSection = GOVERNANCE_HEADING + '\n' + bodyOnly;
 
   // 检查 CLAUDE.md 是否存在
   let existingContent: string;

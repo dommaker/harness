@@ -19,6 +19,11 @@
  *   标记段优先（旧模型仓豁免），否则 AGENTS.md（新模型仓住 PRESERVE 段内）
  * - resolveGovernanceLanding：写侧（init 落点选择）——额外承认 CLAUDE.md
  *   无标记的 `## Governance Rules` 旧块（续写不制造双份正本）
+ *
+ * 探测/判定同住本模块（#83，ADR-0011 补注：收口范围含探测器，不只写器）——
+ * 「这份文档里有没有治理契约 / 有几个正本标题」此前手抄 4 份且正则已漂移，
+ * 见文末 GOVERNANCE_HEADING / hasGovernanceContract / countGovernanceHeadings /
+ * hasPreserveBlock。
  */
 
 import * as fs from 'fs';
@@ -134,11 +139,74 @@ export function resolveGovernanceLanding(
   projectRoot: string
 ): { target: 'claude-md' | 'agents-md'; claudeContent: string | null } {
   const claudeContent = readIfExists(path.join(projectRoot, 'CLAUDE.md'));
-  if (
-    claudeContent !== null &&
-    (claudeContent.includes(CONSTRAINTS_START_MARKER) || /^##\s+Governance Rules/m.test(claudeContent))
-  ) {
+  if (claudeContent !== null && hasGovernanceContract(claudeContent)) {
     return { target: 'claude-md', claudeContent };
   }
   return { target: 'agents-md', claudeContent };
+}
+
+/**
+ * 治理正本标题字面量（单一来源，#83）：init 的标题写点与下列两个判定谓词
+ * 都由它派生，仓内不再本地拼写。字面量无正则元字符，可直接拼入 RegExp。
+ *
+ * 两谓词回答两个问题，**共享字面量而非共享正则**（triage 裁决 2026-09-02）：
+ * 强行合一要么在场守护 fail-open 失效（取严格），要么重复计数引入无行尾
+ * 锚定的误报（取宽松）。
+ */
+export const GOVERNANCE_HEADING = '## Governance Rules';
+
+/** 标题文本（去 `## ` 前缀），宽松谓词按 `##` + 任意空白 + 此文本匹配 */
+const GOVERNANCE_HEADING_TEXT = GOVERNANCE_HEADING.replace(/^##\s+/, '');
+
+/** 宽松标题正则：容忍 `##  Governance Rules` 双空格等排版漂移 */
+const GOVERNANCE_HEADING_LOOSE_RE = new RegExp(`^##\\s+${GOVERNANCE_HEADING_TEXT}`, 'm');
+
+/** 严格标题正则：精确拼写 + 行尾锚定（行尾仅容忍空白） */
+const GOVERNANCE_HEADING_STRICT_RE = new RegExp(`^${GOVERNANCE_HEADING}[ \\t]*$`, 'gm');
+
+/** 约束标记裸文本（去注释壳），宽松谓词按「标记文本在场」判定，容忍壳残缺 */
+const CONSTRAINTS_START_TEXT = CONSTRAINTS_START_MARKER.replace(/^<!--\s*|\s*-->$/g, '');
+
+/**
+ * 宽松谓词：内容里是否有治理契约在场——标题宽松匹配或 HARNESS 约束标记
+ * 文本在场即算。fail-open 偏向：排版漂移宁可信其有，漏报「约束正本静默
+ * 丢失」的代价高于误报。消费方：governance_presence / sync-docs 治理计数 /
+ * init 落点路由（#83）。
+ */
+export function hasGovernanceContract(content: string): boolean {
+  return GOVERNANCE_HEADING_LOOSE_RE.test(content) || content.includes(CONSTRAINTS_START_TEXT);
+}
+
+/**
+ * 严格计数：全文统计治理标题数（精确拼写 + 行尾锚定），drift 重复章节
+ * 检测专用。宽松变体（如双空格）不计入——在场判定与正本计数是两个问题，
+ * 见 GOVERNANCE_HEADING。
+ */
+export function countGovernanceHeadings(content: string): number {
+  return (content.match(GOVERNANCE_HEADING_STRICT_RE) ?? []).length;
+}
+
+/**
+ * PRESERVE 标记块存在性判定：块存在且块体非空（governance_presence 在场
+ * 守护消费，#83 收编其手写切片）。标记契约与 sync-docs/preserve-block 一致：
+ * 首尾标记均须独占一行——开始标记行首锚定（行尾仅空白），结束标记行 trim
+ * 后等于标记文本。结束标记嵌在行中 / 缺失 / 乱序均为畸形块 → false，在场
+ * 守护按契约丢失报警（原 presence「行中结束标记也算在场」显式收紧，#83）。
+ * name 仅允许字母/数字/下划线/连字符（PRESERVE 命名约定，调用方传常量段名）。
+ */
+export function hasPreserveBlock(content: string, name: string): boolean {
+  const beginMarker = `<!-- PRESERVE:${name} -->`;
+  const endMarker = `<!-- /PRESERVE:${name} -->`;
+  const lines = content.split('\n');
+  const begin = lines.findIndex(line => line.trimEnd() === beginMarker);
+  if (begin === -1) return false;
+  let end = -1;
+  for (let j = begin + 1; j < lines.length; j++) {
+    if (lines[j].trim() === endMarker) {
+      end = j;
+      break;
+    }
+  }
+  if (end === -1) return false;
+  return lines.slice(begin + 1, end).join('\n').trim().length > 0;
 }

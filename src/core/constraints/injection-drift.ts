@@ -21,7 +21,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getEffectiveConstraints } from '../effective-constraints';
 import { CONSTRAINTS_END_MARKER, renderConstraintsSection } from './injection-renderer';
-import { resolveInjectionTarget, readIfExists, type InjectionFile } from './injection-writer';
+import {
+  resolveInjectionTarget,
+  readIfExists,
+  countGovernanceHeadings,
+  type InjectionFile,
+} from './injection-writer';
 
 export type { InjectionFile };
 
@@ -52,7 +57,6 @@ export const INJECTION_DRIFT_FIX_HINT = '重跑 `npx @dommaker/harness init` 同
 const VERSION_LINE_RE = /<!-- version: ([^ ]+) -->/;
 const ENTRY_LINE_RE = /^- \*\*.+?\*\*: .+$/;
 const GROUP_HEADING_RE = /^### .+$/;
-const GOVERNANCE_HEADING_RE = /^## Governance Rules[ \t]*$/gm;
 
 /**
  * 读取当前 harness 包版本（与 init 注入时写入的版本同源）
@@ -103,7 +107,7 @@ export function detectInjectionDrift(
       readIfExists(path.join(projectRoot, 'CLAUDE.md')) ??
       readIfExists(path.join(projectRoot, 'AGENTS.md'));
     if (legacy !== null) {
-      result.duplicateHeading = (legacy.match(GOVERNANCE_HEADING_RE) ?? []).length > 1;
+      result.duplicateHeading = countGovernanceHeadings(legacy) > 1;
     }
     result.notInjected = true;
     return result;
@@ -112,8 +116,8 @@ export function detectInjectionDrift(
   result.injectionFile = target.file;
   const { content, startIdx, endIdx } = target;
 
-  // 重复章节：全文统计 `## Governance Rules` 标题数（含标记段所属的合法标题）
-  const headingCount = (content.match(GOVERNANCE_HEADING_RE) ?? []).length;
+  // 重复章节：全文统计治理标题数（严格计数 injection-writer.countGovernanceHeadings，#83）
+  const headingCount = countGovernanceHeadings(content);
   result.duplicateHeading = headingCount > 1;
 
   const actualSection = content.slice(startIdx, endIdx + CONSTRAINTS_END_MARKER.length);

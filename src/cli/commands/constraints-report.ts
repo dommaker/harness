@@ -22,6 +22,7 @@ import {
 } from '../../core/constraints/usage-report';
 import { getConstraintsMeta } from './constraints';
 import { detectInjectionDrift, type InjectionDrift } from '../../core/constraints/injection-drift';
+import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 
 export interface ConstraintsReportOptions {
   projectPath?: string;
@@ -113,7 +114,7 @@ export function renderInjectionDriftLines(drift: InjectionDrift): string[] {
   if (drift.notInjected) {
     lines.push('  CLAUDE.md / AGENTS.md 均无约束注入标记段（未注入，不算漂移）；可运行 npx @dommaker/harness init 注入');
     if (drift.duplicateHeading) {
-      lines.push('  另检测到多个 "## Governance Rules" 标题（历史遗留重复章节），建议手工清理后重跑 npx @dommaker/harness init');
+      lines.push(`  另检测到多个 "${GOVERNANCE_HEADING}" 标题（历史遗留重复章节），建议手工清理后重跑 npx @dommaker/harness init`);
     }
     return lines;
   }
@@ -134,7 +135,7 @@ export function renderInjectionDriftLines(drift: InjectionDrift): string[] {
     }
   }
   if (drift.duplicateHeading) {
-    lines.push('  重复章节: 标记段之外还存在另一个 "## Governance Rules" 标题');
+    lines.push(`  重复章节: 标记段之外还存在另一个 "${GOVERNANCE_HEADING}" 标题`);
   }
   lines.push(`  修复: ${drift.fixHint}`);
   return lines;

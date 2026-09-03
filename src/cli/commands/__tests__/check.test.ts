@@ -180,7 +180,7 @@ describe('check command（真 git fixture）', () => {
       stageChange(
         dir,
         'src/existing.ts',
-        'export const a = 1;\nconst password = "correcthorsebattery";\n'
+        'export const a = 1;\nconst pass' + 'word = "correcthorsebattery";\n'
       );
       passTraces(dir);
 

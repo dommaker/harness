@@ -14,6 +14,7 @@ import type {
   CustomConstraintDefinition,
   MergedConstraintsConfig,
   CapabilitiesConfig,
+  GovernanceConfig,
 } from '../types/project-config';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './constraints/definitions';
 import { PRESETS_BY_NAME, STANDARD_PRESET } from '../presets';
@@ -78,20 +79,59 @@ export function loadRawProjectConfig(projectPath: string): Record<string, unknow
 export type CapabilitiesMode = NonNullable<CapabilitiesConfig['mode']>;
 
 /**
+ * 读取 governance 段（全仓唯一手写钻取点，工单 84）
+ *
+ * 基于 loadRawProjectConfig 的进程级 memoize，不引入第二次 yaml 解析。
+ * 配置缺失 / 解析失败 / 形状不符时返回 undefined，由调用方按未配置处理。
+ */
+export function getGovernanceConfig(projectPath: string): GovernanceConfig | undefined {
+  try {
+    const raw = loadRawProjectConfig(projectPath);
+    const governance = raw?.governance;
+    if (governance === null || typeof governance !== 'object') return undefined;
+    return governance as GovernanceConfig;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * governance.context_files 三态分辨率（工单 84 triage 裁决口径）
+ *
+ * - unconfigured：段缺失 / enabled 为假 / 解析失败——约定未采用
+ * - enabled-empty：enabled 但 required_dirs 缺失、非数组、含非字符串项或空——
+ *   约定已立但无可用目标
+ * - enabled：enabled 且 required_dirs 为非空字符串数组——约定有效
+ */
+export type ContextFilesResolution =
+  | { state: 'unconfigured' }
+  | { state: 'enabled-empty' }
+  | { state: 'enabled'; dirs: string[] };
+
+/**
+ * 分辨 governance.context_files 三态（语义见 ContextFilesResolution）
+ *
+ * 消费方约定：约束 checker 对前两态一律 skip（与 ADR-0001 存在性探测同构）；
+ * init / 扫描类工具流的自动探测回落保留在调用方，不进本访问器。
+ * 元素类型在此收口：脏配置（如 required_dirs: [1]）不得流入调用方 path.join。
+ */
+export function resolveContextFiles(projectPath: string): ContextFilesResolution {
+  const contextFiles = getGovernanceConfig(projectPath)?.context_files;
+  if (!contextFiles?.enabled) return { state: 'unconfigured' };
+  const dirs = contextFiles.required_dirs;
+  if (!Array.isArray(dirs) || dirs.length === 0) return { state: 'enabled-empty' };
+  if (!dirs.every(dir => typeof dir === 'string')) return { state: 'enabled-empty' };
+  return { state: 'enabled', dirs };
+}
+
+/**
  * 读取 governance.capabilities.mode（缺省 'file'，向后兼容）
  *
  * 配置缺失/解析失败/取值非法时一律回落 'file'。
  */
 export function getCapabilitiesMode(projectPath: string): CapabilitiesMode {
-  try {
-    const raw = loadRawProjectConfig(projectPath);
-    const governance = raw?.governance as Record<string, unknown> | undefined;
-    const capabilities = governance?.capabilities as Record<string, unknown> | undefined;
-    const mode = capabilities?.mode;
-    if (mode === 'file' || mode === 'module' || mode === 'listing') return mode;
-  } catch {
-    // 配置缺失或解析失败，按默认 file 处理
-  }
+  const mode = getGovernanceConfig(projectPath)?.capabilities?.mode;
+  if (mode === 'file' || mode === 'module' || mode === 'listing') return mode;
   return 'file';
 }
 

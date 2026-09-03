@@ -5,7 +5,7 @@
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { loadRawProjectConfig } from '../../../core/project-config-loader';
+import { loadRawProjectConfig, resolveContextFiles } from '../../../core/project-config-loader';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';
 
@@ -65,28 +65,27 @@ export function formatScriptCommand(pm: 'pnpm' | 'yarn' | 'npm', name: string): 
 
 /**
  * 获取需要 CONTEXT.md 的目录列表
+ *
+ * context_files 三态语义（工单 84）：enabled 且非空 → 配置目录；
+ * enabled 但无目标 → 工具流兜底回落自动探测（回落保留在调用方，不进访问器）；
+ * 未配置 → 空列表。
  */
 export async function getRequiredContextDirs(projectPath: string): Promise<string[]> {
-  try {
-    const config = loadRawProjectConfig(projectPath) ?? {};
-    const governance = config.governance as Record<string, unknown> | undefined;
-    const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
-    if (contextFiles?.enabled) {
-      if (Array.isArray(contextFiles.required_dirs) && contextFiles.required_dirs.length > 0) {
-        return contextFiles.required_dirs as string[];
-      }
-      // Fallback: auto-discover from source roots
-      return detectSourceRoots(projectPath);
-    }
-  } catch {
-    // 配置不存在或无法解析
+  const resolution = resolveContextFiles(projectPath);
+  if (resolution.state === 'enabled') {
+    return resolution.dirs;
+  }
+  if (resolution.state === 'enabled-empty') {
+    // Fallback: auto-discover from source roots
+    return detectSourceRoots(projectPath);
   }
   return [];
 }
 
 /**
  * 获取源码扫描目录列表
- * 优先从 governance.context_files.required_dirs 读取，默认 ['src']
+ * 优先从 governance.context_files.required_dirs 读取；未配置或配置为空时
+ * 回落自动探测（detectSourceRoots），并非固定 ['src']
  */
 export async function getSourceDirs(projectPath: string): Promise<string[]> {
   const requiredDirs = await getRequiredContextDirs(projectPath);

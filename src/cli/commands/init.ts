@@ -12,6 +12,7 @@ import * as yaml from 'js-yaml';
 import { createExampleCheckpoint, createExampleResolutions } from './validate';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
+import type { GovernanceConfig } from '../../types/project-config';
 import {
   CONSTRAINTS_START_MARKER,
   CONSTRAINTS_END_MARKER,
@@ -74,9 +75,9 @@ const PRESETS = {
 };
 
 /**
- * 治理预设
+ * 治理预设（形状 = 写入 config.yml 的 governance 段，直接用类型正本）
  */
-const GOVERNANCE_PRESETS: Record<string, Record<string, unknown>> = {
+const GOVERNANCE_PRESETS: Record<string, GovernanceConfig> = {
   minimal: {
     level: 'minimal',
     docs: {
@@ -740,7 +741,7 @@ export async function setupGovernanceConstraints(projectPath: string): Promise<v
  * 设置治理相关文件
  */
 async function setupGovernance(projectPath: string, level: string): Promise<void> {
-  const governance = GOVERNANCE_PRESETS[level] as Record<string, unknown>;
+  const governance = GOVERNANCE_PRESETS[level];
   if (!governance) return;
 
   console.log();
@@ -756,10 +757,10 @@ async function setupGovernance(projectPath: string, level: string): Promise<void
   //    旧模型仓 → CLAUDE.md，落点路由见 setupGovernanceConstraints）
   await setupGovernanceConstraints(projectPath);
 
-  // 4. 生成 CONTEXT.md 文件
-  const contextConfig = governance.context_files as Record<string, unknown> | undefined;
+  // 4. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
+  const contextConfig = governance.context_files;
   if (contextConfig?.enabled) {
-    let requiredDirs = (contextConfig.required_dirs as string[]) || [];
+    let requiredDirs = contextConfig.required_dirs ?? [];
     if (requiredDirs.length === 0) {
       requiredDirs = detectSourceRoots(projectPath);
     }
@@ -775,7 +776,7 @@ async function setupGovernance(projectPath: string, level: string): Promise<void
 /**
  * 创建 CHANGELOG.md
  */
-async function createChangelog(projectPath: string, governance: Record<string, unknown>): Promise<void> {
+async function createChangelog(projectPath: string, governance: GovernanceConfig): Promise<void> {
   const changelogPath = path.join(projectPath, 'CHANGELOG.md');
 
   try {
@@ -786,8 +787,7 @@ async function createChangelog(projectPath: string, governance: Record<string, u
     // 文件不存在，创建
   }
 
-  const changelogConfig = governance.changelog as Record<string, unknown> | undefined;
-  const format = (changelogConfig?.format as string) || 'keep-a-changelog';
+  const format = governance.changelog?.format || 'keep-a-changelog';
 
   let content: string;
   if (format === 'keep-a-changelog') {

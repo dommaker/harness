@@ -84,13 +84,15 @@ export type {
   SpecType,
 } from '../types/spec';
 
-// 项目配置加载器
+// 项目配置加载器（governance 段读取一律经访问器，禁止消费方手写钻取）
 export {
   ProjectConfigLoader,
   loadRawProjectConfig,
+  getGovernanceConfig,
+  resolveContextFiles,
   getCapabilitiesMode,
 } from './project-config-loader';
-export type { CapabilitiesMode } from './project-config-loader';
+export type { CapabilitiesMode, ContextFilesResolution } from './project-config-loader';
 
 // 生效约束集（ADR-0001：唯一生效集来源）
 export {

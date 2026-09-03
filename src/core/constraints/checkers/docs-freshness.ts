@@ -9,11 +9,11 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { loadRawProjectConfig } from '../../project-config-loader';
+import { getGovernanceConfig, resolveContextFiles } from '../../project-config-loader';
 import { FreshnessRunner, type FreshnessCheckResult } from '../doc-freshness/runner';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { reconcileCapabilities } from '../capabilities-reconcile';
-import type { DocFreshnessConfig, DocFreshnessCheck } from '../../../types/project-config';
+import type { DocFreshnessCheck } from '../../../types/project-config';
 import type { ConstraintCheck, CheckEnv } from './types';
 
 /**
@@ -64,7 +64,7 @@ function findDeadCapabilityEntries(projectPath: string, env: CheckEnv): string[]
  *
  * 判定信号（任一命中即视为采用了文档新鲜度约定）：
  * - 配置了 governance.doc_freshness.checks
- * - 配置了 governance.context_files（enabled + 非空 required_dirs）
+ * - 配置了 governance.context_files 且约定有效（enabled + 非空 required_dirs）
  * - 项目根存在 CAPABILITIES.md
  * - 项目根存在 CHANGELOG.md / CHANGELOG
  *
@@ -76,26 +76,12 @@ function hasFreshnessTargets(projectPath: string): boolean {
     return true;
   }
 
-  try {
-    const raw = loadRawProjectConfig(projectPath);
-    const governance = raw?.governance as Record<string, unknown> | undefined;
-
-    const freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
-    if (freshnessConfig?.checks && freshnessConfig.checks.length > 0) return true;
-
-    const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
-    if (
-      contextFiles?.enabled &&
-      Array.isArray(contextFiles.required_dirs) &&
-      (contextFiles.required_dirs as string[]).length > 0
-    ) {
-      return true;
-    }
-  } catch {
-    // 配置不可读视为无配置
+  const governance = getGovernanceConfig(projectPath);
+  if (governance?.doc_freshness?.checks && governance.doc_freshness.checks.length > 0) {
+    return true;
   }
 
-  return false;
+  return resolveContextFiles(projectPath).state === 'enabled';
 }
 
 export const docsFreshness: ConstraintCheck = {
@@ -117,21 +103,13 @@ export const docsFreshness: ConstraintCheck = {
 
     // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
     try {
-      let freshnessConfig: DocFreshnessConfig | undefined;
-      let requiredDirs: string[] | undefined;
+      const freshnessConfig = getGovernanceConfig(projectPath)?.doc_freshness;
 
-      try {
-        const raw = loadRawProjectConfig(projectPath);
-        const governance = raw?.governance as Record<string, unknown> | undefined;
-        freshnessConfig = governance?.doc_freshness as DocFreshnessConfig | undefined;
-
-        const contextFiles = governance?.context_files as Record<string, unknown> | undefined;
-        if (contextFiles?.enabled && Array.isArray(contextFiles.required_dirs)) {
-          requiredDirs = contextFiles.required_dirs as string[];
-        }
-      } catch {
-        // 配置解析失败，使用默认
-      }
+      // context_files 三态统一口径（工单 84）：约定已立但无目标（enabled 但
+      // required_dirs 缺失/空）→ skip，与 context_doc_sync 同构；不再静默放行
+      const contextFiles = resolveContextFiles(projectPath);
+      if (contextFiles.state === 'enabled-empty') return 'skip';
+      const requiredDirs = contextFiles.state === 'enabled' ? contextFiles.dirs : undefined;
 
       const runner = new FreshnessRunner();
       let results: FreshnessCheckResult[];

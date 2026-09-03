@@ -15,7 +15,7 @@ AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, Security
 ## Constraint Model (kind 二元, ADR-0001)
 - check (10)：必须带真实 checker，注册表闭环。Iron Laws (5) 违规阻断；Guidelines (5) 违规告警。
 - prompt (16)：纯文本行为约束，带角色路由与适用性标签，不占检查位、不产生 trace 统计。
-- skip 语义：约定未采用（capability_sync/docs_freshness/context_doc_sync/governance_presence 存在性探测）或 flag 未接线 → skipped（satisfied=true，不阻断、不计入通率），trace 记 result:'skip'。
+- skip 语义：约定未采用（capability_sync/docs_freshness/context_doc_sync/governance_presence 存在性探测）、context_files 约定已立但无目标（enabled-empty：required_dirs 缺失/空/含非字符串项，工单 84）或 flag 未接线 → skipped（satisfied=true，不阻断、不计入通率），trace 记 result:'skip'。context_doc_sync 与 docs_freshness 对三态判定同构。
 
 ## Effective Constraints
 getEffectiveConstraints(projectRoot)：全仓唯一生效集来源——内置 → preset 裁剪 → config.yml 禁用（内置与 custom 同效）→ custom 追加（禁用/已退役的不追加）→ scenes 过滤。init 注入、check、外部消费者全部消费它。lintEffectiveConfig 提供 unknownIds/scenes 诊断。

@@ -10,7 +10,7 @@
 - `validators/` — checkpoints、passes-gate、CSO 验证器；`test-output.ts` —「测试产物解读」唯一实现（runner stdout → 过了没 / 失败清单 / 覆盖率三个纯函数），passes-gate 与 `gates/acceptance` 共消费；包内模块，不进 `src/index.ts` 导出面（ADR-0012）
 - `session/` — 会话管理
 - `spec/validator` — SpecValidator
-- `project-config-loader` — 项目配置加载 + 约束合并（mergeConstraints 内含 preset 裁剪：presets/ 纯数据 + 未知名回落 standard，禁用到未知 id 经 effective-set 共享筛选器 collect 模式）
+- `project-config-loader` — 项目配置加载 + 约束合并（mergeConstraints 内含 preset 裁剪：presets/ 纯数据 + 未知名回落 standard，禁用到未知 id 经 effective-set 共享筛选器 collect 模式）；`getGovernanceConfig` 是全仓唯一允许手写钻取 `config.governance` 的点（工单 84），消费方一律经它或经 `resolveContextFiles`（三态：unconfigured / enabled-empty / enabled，dirs 元素类型在此收口）取数据，不得再自己 cast `Record<string, unknown>`；checker 对前两态一律 skip，自动探测回落只属于 init/扫描类工具流调用方
 
 ## 依赖关系
 - 被所有模块依赖（基础层，无上层依赖）
@@ -27,4 +27,4 @@
 ## 注意事项
 - 零 Token 成本：所有分析纯文件操作，无 LLM 调用
 - 约束配置支持 .harness/config.yml 自定义合并（preset 真实生效）
-- 存在性探测约束（capability_sync/docs_freshness/context_doc_sync）在约定文件缺失时 skip，不计 pass/fail
+- 存在性探测约束（capability_sync/docs_freshness/context_doc_sync）在约定文件缺失，或 context_files 约定已立但无目标（enabled-empty）时 skip，不计 pass/fail；context_doc_sync 与 docs_freshness 对三态判定同构（工单 84）

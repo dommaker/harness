@@ -53,9 +53,6 @@ export interface TaskTestResult {
   /** 失败的测试列表 */
   failures?: string[];
   
-  /** 覆盖率 */
-  coverage?: number;
-  
   /** 证据路径 */
   evidence?: string;
 }
@@ -137,7 +134,7 @@ export interface TestResult {
   /** 测试命令（可选，用于记录） */
   command?: string;
 
-  /** 覆盖率（可选） */
+  /** 覆盖率（调用方自备数据，check() 不读它、只随 testResult 原样回显；harness 不取数不执法，ADR-0015） */
   coverage?: number;
 
   /** 证据路径（可选） */

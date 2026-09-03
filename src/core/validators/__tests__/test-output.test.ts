@@ -1,21 +1,25 @@
 /**
- * test-output 表驱动旁测（架构评审候选1 / #80 → ADR-0012；判定口径 #93 → ADR-0014）
+ * test-output 表驱动旁测（架构评审候选1 / #80 → ADR-0012；判定口径 #93 → ADR-0014；
+ * 覆盖率取数路删除 #94）
  *
- * 三个 runner 输出解读口的唯一测试面：真实 stdout 样本进、判定值出。
+ * runner 输出解读口的唯一测试面：真实 stdout 样本进、判定值出。
  * 迁移前 extractCoverage / extractFailures / parseTestOutput 是 PassesGate 与
  * SpecAcceptanceGate 的 private 方法，分支覆盖率 0%——passes-gate.test.ts 里只剩
  * toBeInstanceOf 占位断言，acceptance.test.ts 要写 6 份近重复 exec mock 才碰得到分支。
  *
- * extractCoverage / extractFailures 的期望值钉的是**迁移前的既有行为**（ADR-0012 硬门槛：
- * 行为零变更），标 ⚠ 的行是已知的粗糙解析，原样钉住不代表认可。
+ * extractFailures 的期望值钉的是**迁移前的既有行为**（ADR-0012 硬门槛：行为零变更），
+ * 标 ⚠ 的行是已知的粗糙解析，原样钉住不代表认可。
  *
  * judgeTestRun 是 #93 裁决后的**判定唯一入口**（退出码为主 + 文本交叉否决），取代
  * 原 parseTestOutput（纯文本判定，可被测试名里的 FAIL 反转）；两门禁消费同一函数的
  * 一致性用例在 gates/__tests__/test-verdict-consistency.test.ts。
+ *
+ * extractCoverage 曾在此有 8 条表驱动用例，#94 裁决 B（harness 核心判定不管覆盖率）
+ * 连同函数一起删除，只剩下面那条导出面守卫钉住「不再导出」。
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { extractCoverage, extractFailures, judgeTestRun } from '../test-output';
+import { extractFailures, judgeTestRun } from '../test-output';
 
 // ========================================
 // 真实输出样本（各 runner 家族的原始 stdout）
@@ -33,42 +37,8 @@ Test Suites: 1 passed, 1 total
 Tests:       5 passed, 5 total
 `;
 
-/** nyc / istanbul 文本摘要 */
-const NYC_COV = `=============================== Coverage summary ===============================
-Statements   : 80.5% ( 100/124 )
-Branches     : 70.21% ( 33/47 )
-Functions    : 83.33% ( 15/18 )
-Lines        : 79.59% ( 98/124 )
-================================================================================
-`;
-
-/** 注释声称的 pytest-cov 形状：TOTAL 后紧跟两个数（stmts、cover%） */
-const PYTEST_COV_TWO_COL = `---------- coverage: platform linux, python 3.11.9-final-0 ----------
-Name              Total     Cover
----------------------------------
-src/app.py           34       94%
-TOTAL              1234       80%
-`;
-
-/** pytest-cov 默认四列（Stmts / Miss / Cover / Missing）实测形状 */
-const PYTEST_COV_DEFAULT = `---------- coverage: platform linux, python 3.11.9-final-0 ----------
-Name                 Stmts   Miss  Cover   Missing
---------------------------------------------------
-src/app.py              34      2    94%   12-13
---------------------------------------------------
-TOTAL                  340     68    80%
-
-2 passed in 0.41s
-`;
-
 const MOCHA_PLAIN = `  2 passing (11ms)
   1 failing
-`;
-
-/** 三处关键字都在位、但数值位置不是数字 */
-const MALFORMED_COV = `All files       |    -    |    -    |    -    |    -    |
-Statements   : n/a ( 0/0 )
-TOTAL  abc  %
 `;
 
 /** jest verbose 失败清单 */
@@ -195,32 +165,14 @@ const GENERIC_FAIL_IN_TEST_NAME = `PASS src/a.test.js
 `;
 
 // ========================================
-// extractCoverage
+// 模块导出面（harness#94 裁决 B：extractCoverage 已删除）
 // ========================================
 
-type CoverageCase = { name: string; output: string; expected: number | undefined };
-
-const COVERAGE_CASES: CoverageCase[] = [
-  { name: 'jest 文本表 → 80.5', output: JEST_COV, expected: 80.5 },
-  { name: 'istanbul/nyc 摘要 → 80.5', output: NYC_COV, expected: 80.5 },
-  { name: 'pytest-cov 两列形状 → 80（整数）', output: PYTEST_COV_TWO_COL, expected: 80 },
-  { name: 'jest 与 nyc 同现 → jest 分支优先（分支顺序）', output: `${JEST_COV}\n${NYC_COV}`, expected: 80.5 },
-  { name: '无匹配：mocha 纯输出 → undefined', output: MOCHA_PLAIN, expected: undefined },
-  {
-    name: '⚠ pytest-cov 默认四列表 → undefined（TOTAL 行中间多一个 Miss 列，正则只吃两段数字）',
-    output: PYTEST_COV_DEFAULT,
-    expected: undefined,
-  },
-  { name: '畸形：三处关键字在位但值非数字 → undefined', output: MALFORMED_COV, expected: undefined },
-  { name: '无匹配：空字符串 → undefined', output: '', expected: undefined },
-];
-
-describe('extractCoverage', () => {
-  for (const c of COVERAGE_CASES) {
-    it(c.name, () => {
-      expect(extractCoverage(c.output)).toBe(c.expected);
-    });
-  }
+describe('test-output 导出面', () => {
+  it('运行时只有 extractFailures 与 judgeTestRun，不含 extractCoverage', async () => {
+    const mod = await import('../test-output');
+    expect(Object.keys(mod).sort()).toEqual(['extractFailures', 'judgeTestRun']);
+  });
 });
 
 // ========================================

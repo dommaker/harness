@@ -1,7 +1,7 @@
 /**
- * 测试产物解读——从 runner 的 stdout 读出「过了没 / 哪些失败 / 覆盖率」（ADR-0012，判定口径 ADR-0014）
+ * 测试产物解读——从 runner 的 stdout 读出「过了没 / 哪些失败」（ADR-0012，判定口径 ADR-0014）
  *
- * 纯函数，字符串进、值出，不做 IO、不跑进程。此前三个解析器分别 private 关在
+ * 纯函数，字符串进、值出，不做 IO、不跑进程。此前解析器分别 private 关在
  * core/validators/passes-gate.ts（extractCoverage / extractFailures）与
  * gates/acceptance.ts（parseTestOutput）体内：两处只有 jest 一个家族共同识别，用的信号
  * 还不同（`✕` 行 vs `Test Suites:` 汇总行），同一份输出能在一处看出失败、在另一处看不出。
@@ -12,36 +12,13 @@
  * #93 裁决（ADR-0014）：判定依据统一为「退出码为主 + 文本交叉否决」，收在 judgeTestRun
  * 一处，两个门禁都只从它取结论——原 parseTestOutput（纯文本判定）删除。
  *
- * extractCoverage / extractFailures 两个提取函数的正则、分支顺序、返回形状逐字迁移自
- * ADR-0012；仍保持原样的已知粗糙处：
- * - extractCoverage 无判定消费方，CLI --coverage 另走 json-summary → #94
+ * #94 裁决 B（ADR-0015）：本模块不读覆盖率。extractCoverage 与其唯一产出
+ * （TaskTestResult.coverage）已删除——harness 核心判定不管覆盖率执法，判覆盖率的
+ * 两处（`harness passes-gate --coverage`、performance 门禁）各自读 json-summary。
+ *
+ * extractFailures 的正则、分支顺序、返回形状逐字迁移自 ADR-0012；仍保持原样的已知粗糙处：
  * - 一次跑完收集所有失败（首个失败即定的编排）→ #93 范围外，另票
  */
-
-/**
- * 从输出中提取覆盖率
- */
-export function extractCoverage(output: string): number | undefined {
-  // Jest 格式: All files | 80.5 | 70.2 | ...
-  const jestMatch = output.match(/All files[|\s]+(\d+\.?\d*)/);
-  if (jestMatch?.[1]) {
-    return parseFloat(jestMatch[1]);
-  }
-
-  // Istanbul/nyc 格式: Statements   : 80.5% ( 100/124 )
-  const istanbulMatch = output.match(/Statements\s*:\s*(\d+\.?\d*)%/);
-  if (istanbulMatch?.[1]) {
-    return parseFloat(istanbulMatch[1]);
-  }
-
-  // pytest-cov 格式: TOTAL  1234  80%
-  const pytestMatch = output.match(/TOTAL\s+\d+\s+(\d+)%/);
-  if (pytestMatch?.[1]) {
-    return parseInt(pytestMatch[1], 10);
-  }
-
-  return undefined;
-}
 
 /**
  * 从输出中提取失败信息

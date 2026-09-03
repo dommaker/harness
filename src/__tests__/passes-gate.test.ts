@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { PassesGate, createPassesGate } from '../core/validators/passes-gate';
+import type { TaskTestResult } from '../types/passes-gate';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -209,6 +210,52 @@ describe('PassesGate', () => {
       expect(result.error).toBeDefined();
       
       rmSync(retryDir, { recursive: true, force: true });
+    });
+  });
+
+  /**
+   * #94 裁决 B：harness 核心判定不管覆盖率 —— 从 stdout 抠覆盖率的 regex 路
+   * （extractCoverage → TaskTestResult.coverage）整体删除，结果面不再有 coverage 字段。
+   */
+  describe('覆盖率取数路删除（harness#94）', () => {
+    const covDir = join(process.cwd(), 'temp-test-no-coverage-field');
+
+    beforeAll(() => {
+      mkdirSync(covDir, { recursive: true });
+
+      // 输出里放一份 jest 覆盖率表：删除前 extractCoverage 会从中抠出 80.5 填进结果字段
+      writeFileSync(join(covDir, 'package.json'), JSON.stringify({
+        name: 'coverage-project',
+        scripts: { test: 'echo "All files | 80.50 | 70.21 | 83.33 | 79.59 |"' },
+      }));
+    });
+
+    afterAll(() => {
+      try {
+        rmSync(covDir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    });
+
+    it('setPasses 结果不带 coverage 字段', async () => {
+      const covGate = createPassesGate({ enabled: true, requireEvidence: false });
+
+      const result = await covGate.setPasses('cov-task', true, covDir);
+
+      expect(result.testResult?.passed).toBe(true);
+      expect(result.testResult).not.toHaveProperty('coverage');
+    });
+
+    it('TaskTestResult 公开类型面不再接受 coverage 字段', () => {
+      const testResult: TaskTestResult = {
+        passed: true,
+        command: 'npm test',
+        // @ts-expect-error coverage 随 harness#94 删除，类型面不接受该字段
+        coverage: 85,
+      };
+
+      expect(testResult.passed).toBe(true);
     });
   });
 });

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changes
 - fix(core,gates)!: 两个测试门禁判「过没过」的依据统一为**退出码为主 + 文本交叉否决**（ADR-0014，harness#93）——判定收在 `core/validators/test-output.ts` 新增的 `judgeTestRun({exitCode, output, allowPartialPass})` 一处，两门禁的结论一律从它取：passes-gate 成功分支不再硬编码 `passed = true`（exit 0 而输出含 `✕` 用例 / `FAIL <path>` 套件行 / `N failed` 汇总行 → 判负），acceptance 弃用裸 `includes('PASS') && !includes('FAIL')` 兜底（通过的用例名里带大写 `FAIL`、路径含 `FAIL/` 目录名不再反转结论；jest 零失败汇总行无 "passed" 字样也不再误伤），文本再也救不回非零退出。`allowPartialPass`（CLI `--allow-partial`）的落点从「赦免非零退出」移到「关闭文本否决」这一维。exit 0 的空输出/零测试不再判负（零测试识别另票）。按 minor 发布：`PassesGate.check()` 的 `allowed` 得出条件属行为变更，studio 消费的 `{allowed, violations}` 形状不变
+- refactor(core)!: **harness 核心判定不取数、不执法覆盖率**（裁决 B 删薄，ADR-0015，harness#94）——删 `core/validators/test-output.ts` 的 `extractCoverage`（stdout 文本正则路：jest `All files |`、istanbul `Statements :`、pytest-cov `TOTAL`）与公开类型 `TaskTestResult.coverage`（含 `types/session.ts` 模块内镜像类型的同名字段）：该正则的唯一用途是填这个全仓零读取的展示字段，`PassesGate.check()` 只读 `passed`/`evidence`。保留并逐字不变的两处真执法：CLI `harness passes-gate --coverage`（`coverageCheck`，读 json-summary、阈值默认 80、未达标不改退出码）与 `performance` 门禁的 `collectCoverage`；`check()` 入参类型 `TestResult.coverage` 亦保留（调用方自备数据，只原样回显）。职责边界定名：要「覆盖率不达阈值就拦」用 performance 门禁或 CI，不用 passes-gate。按 minor 发布：`TaskTestResult` / `ExtensionTestResult` 是包根公开类型的字段收缩，唯一外部消费方 studio 对该字段零引用（ADR-0012 核实），不留兼容 shim
 
 ## [1.3.0] - 2026-09-01
 

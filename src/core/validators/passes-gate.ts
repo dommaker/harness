@@ -8,7 +8,7 @@
  */
 
 import { execAsync, delay } from '../../utils/exec';
-import { extractCoverage, judgeTestRun } from './test-output';
+import { judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type {
@@ -289,7 +289,6 @@ export class PassesGate {
     const timestamp = new Date();
 
     let exitCode = 0;
-    let stdout = '';
     let output = '';
 
     try {
@@ -297,13 +296,11 @@ export class PassesGate {
         cwd: workDir,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
-      stdout = result.stdout;
       output = result.stdout + result.stderr;
     } catch (error: any) {
       // 非零退出（超时 / buffer 溢出等执行失败也落这里）：判定依据就是退出码，文本不参与
       exitCode = typeof error.code === 'number' ? error.code : 1;
-      stdout = error.stdout || '';
-      output = stdout + '\n' + (error.stderr || '');
+      output = (error.stdout || '') + '\n' + (error.stderr || '');
     }
 
     const { passed, failures } = judgeTestRun({
@@ -317,7 +314,6 @@ export class PassesGate {
       command: testCommand,
       output,
       failures,
-      coverage: extractCoverage(stdout),
       timestamp,
       evidence: await this.generateEvidence(workDir, output),
     };

@@ -109,7 +109,6 @@ interface TaskTestResult {
   command: string;
   output?: string;
   failures?: string[];
-  coverage?: number;
   timestamp: Date;
   evidence?: string;
 }

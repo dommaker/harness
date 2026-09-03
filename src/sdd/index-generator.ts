@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import { splitFrontmatter } from '../utils/frontmatter';
 
 const INDEX_FILENAME = '_index.md';
 
@@ -54,7 +54,7 @@ export class SDDIndexGenerator {
       if (!fs.existsSync(reqPath)) continue;
 
       const content = fs.readFileSync(reqPath, 'utf-8');
-      const fm = this.parseFrontmatter(content);
+      const fm = this.parseFrontmatter(reqPath, content);
       if (!fm) continue;
 
       // Skip stale SDDs
@@ -73,14 +73,14 @@ export class SDDIndexGenerator {
     return entries;
   }
 
-  private parseFrontmatter(content: string): Record<string, unknown> | null {
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!match) return null;
-    try {
-      return yaml.load(match[1]) as Record<string, unknown> || null;
-    } catch {
-      return null;
+  private parseFrontmatter(filePath: string, content: string): Record<string, unknown> | null {
+    const fm = splitFrontmatter(content);
+    if (fm.state === 'ok') return fm.meta;
+    if (fm.state === 'malformed') {
+      // 统一口径（harness#89）：损坏必须显式上报后跳过，不静默丢条目
+      console.error(`[harness] SDD 索引 frontmatter ${fm.reason}（${fm.detail}），已跳过 ${filePath}`);
     }
+    return null;
   }
 
   private sanitize(s: string): string {

@@ -455,4 +455,69 @@ describe('KnowledgeStore', () => {
       expect(result!.total).toBe(2);
     });
   });
+
+  describe('frontmatter 收口（harness#89）', () => {
+    const entryPath = (id: string): string => path.join(tempDir, `decision-${id}.md`);
+    let errorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    it('load→save 往返字节稳定：已落盘条目不产生无意义 diff', () => {
+      store.save(makeEntry({ id: 'FM-001' }));
+      const before = fs.readFileSync(entryPath('FM-001'), 'utf-8');
+
+      const loaded = store.get('FM-001')!;
+      store.save(loaded);
+
+      expect(fs.readFileSync(entryPath('FM-001'), 'utf-8')).toBe(before);
+    });
+
+    it('正文含 --- 分隔线的条目往返字节稳定，正文完整保留', () => {
+      const body = '第一段\n\n---\n\n## 附录\n末行\n';
+      store.save(makeEntry({ id: 'FM-002', content: body }));
+      const before = fs.readFileSync(entryPath('FM-002'), 'utf-8');
+
+      const loaded = store.get('FM-002')!;
+      expect(loaded.content).toBe(body);
+      store.save(loaded);
+
+      expect(fs.readFileSync(entryPath('FM-002'), 'utf-8')).toBe(before);
+    });
+
+    it('未闭合 frontmatter：跳过条目并显式上报（不再静默丢，口径与 migration 同派）', () => {
+      fs.writeFileSync(entryPath('FM-003'), '---\nid: FM-003\ntype: decision\n', 'utf-8');
+
+      expect(store.get('FM-003')).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toMatch(/\[harness\].*unterminated/);
+    });
+
+    it('YAML 非法 frontmatter：跳过条目并显式上报', () => {
+      fs.writeFileSync(entryPath('FM-004'), '---\nid: [1,\n---\n\nBody\n', 'utf-8');
+
+      expect(store.get('FM-004')).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toMatch(/\[harness\].*invalid-yaml/);
+    });
+
+    it('空 meta：按无 frontmatter 处理（absent）——跳过且不上报', () => {
+      fs.writeFileSync(entryPath('FM-005'), '---\n\n---\n\nBody\n', 'utf-8');
+
+      expect(store.get('FM-005')).toBeUndefined();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('缺 frontmatter：合法的非条目文件——跳过且不上报', () => {
+      fs.writeFileSync(entryPath('FM-006'), '# 只是普通 markdown\n\n正文\n', 'utf-8');
+
+      expect(store.get('FM-006')).toBeUndefined();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+  });
 });

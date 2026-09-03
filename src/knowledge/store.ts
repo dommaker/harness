@@ -8,7 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
 import type { KnowledgeEntry, IndexEntry, QueryFilter } from './types';
 
 const DEFAULT_DIR = '.harness/knowledge';
@@ -78,8 +78,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   save(entry: KnowledgeEntry): void {
     const filePath = this.entryPath(entry);
-    const frontmatter = this.toFrontmatter(entry);
-    const content = `---\n${frontmatter}---\n\n${entry.content}`;
+    const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
     fs.writeFileSync(filePath, content, 'utf-8');
     this.updateIndexEntry(entry);
   }
@@ -179,11 +178,16 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   private parseFile(raw: string, filePath: string): KnowledgeEntry | undefined {
-    const match = raw.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/);
-    if (!match) return undefined;
+    const fm = splitFrontmatter(raw);
+    if (fm.state === 'malformed') {
+      // 统一口径（harness#89）：损坏的 frontmatter 必须显式上报，不再静默丢条目
+      console.error(`[harness] 知识条目 frontmatter ${fm.reason}（${fm.detail}），已跳过 ${filePath}`);
+      return undefined;
+    }
+    if (fm.state === 'absent') return undefined;
 
-    const meta = yaml.load(match[1]) as Record<string, unknown>;
-    const content = match[2];
+    const meta = fm.meta;
+    const content = fm.body;
 
     return {
       id: meta.id as string || path.basename(filePath, '.md'),
@@ -209,7 +213,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
     };
   }
 
-  private toFrontmatter(entry: KnowledgeEntry): string {
+  /** canonical 字段序是 store 的私有策略（harness#89 裁决 3），包裹格式交给 joinFrontmatter */
+  private toFrontmatter(entry: KnowledgeEntry): Record<string, unknown> {
     const meta: Record<string, unknown> = {
       id: entry.id,
       type: entry.type,
@@ -231,7 +236,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     if (entry.decayAt) meta.decayAt = entry.decayAt;
     if (entry.fullContentPath) meta.fullContentPath = entry.fullContentPath;
     if (entry.skillId) meta.skillId = entry.skillId;
-    return yaml.dump(meta, { lineWidth: 120 });
+    return meta;
   }
 
   private toIndexEntry(entry: KnowledgeEntry): IndexEntry {

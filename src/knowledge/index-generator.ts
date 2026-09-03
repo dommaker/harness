@@ -9,7 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import { splitFrontmatter } from '../utils/frontmatter';
 
 const EXCLUDED_DIRS = ['.archive', 'archived', '.snapshots', 'resolutions'];
 const INDEX_FILENAME = '_index.md';
@@ -131,32 +131,37 @@ export class KnowledgeIndexGenerator {
       // 跳过 ghost 文件（文件名为 .md）
       if (path.basename(filename) === '.md') return null;
 
-      // 尝试解析 YAML frontmatter
-      const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-      if (fmMatch) {
-        const meta = yaml.load(fmMatch[1]) as Record<string, unknown>;
-        const body = fmMatch[2];
-        const headings = this.extractHeadings(body);
+      // 尝试解析 YAML frontmatter（语法与失败走法正本：utils/frontmatter）
+      const fm = splitFrontmatter(raw);
+      if (fm.state === 'malformed') {
+        // 统一口径（harness#89）：损坏必须显式上报，恢复动作是 best-effort 索引原文
+        console.error(
+          `[harness] 知识索引 frontmatter ${fm.reason}（${fm.detail}），按无 frontmatter 处理 ${filename}`
+        );
+      }
+      if (fm.state === 'ok') {
+        const meta = fm.meta;
+        const headings = this.extractHeadings(fm.body);
 
         // 检测 skill schema（name/description 而非 id/type）
-        const type = meta?.type
+        const type = meta.type
           ? String(meta.type)
-          : meta?.name
+          : meta.name
             ? 'skill'
             : this.inferType(filename);
 
         return {
           filename,
-          id: String(meta?.id ?? meta?.name ?? path.basename(filePath, '.md')),
+          id: String(meta.id ?? meta.name ?? path.basename(filePath, '.md')),
           type,
-          title: String(meta?.title ?? meta?.description ?? ''),
-          maturity: String(meta?.maturity ?? 'unknown'),
-          tags: Array.isArray(meta?.tags) ? (meta.tags as unknown[]).map(String) : [],
+          title: String(meta.title ?? meta.description ?? ''),
+          maturity: String(meta.maturity ?? 'unknown'),
+          tags: Array.isArray(meta.tags) ? (meta.tags as unknown[]).map(String) : [],
           headings,
         };
       }
 
-      // 无 frontmatter — best effort
+      // absent（含空 meta）或已上报的 malformed — best effort
       const headings = this.extractHeadings(raw);
       const h1Match = raw.match(/^#\s+(.+)$/m);
 

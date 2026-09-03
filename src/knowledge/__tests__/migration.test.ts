@@ -106,4 +106,51 @@ describe('migrateKnowledgeEntries', () => {
     expect(second.migrated).toBe(0);
     expect(second.skipped).toBe(1);
   });
+
+  describe('frontmatter 收口（harness#89）', () => {
+    it('缺 frontmatter：errors 记 no frontmatter（原文案不变），不算损坏', () => {
+      fs.writeFileSync(path.join(tempDir, 'PLAIN.md'), '# 只是普通 markdown\n\n正文\n', 'utf-8');
+
+      const result = migrateKnowledgeEntries(tempDir);
+      expect(result.errors).toEqual(['PLAIN.md: no frontmatter found']);
+      expect(result.migrated).toBe(0);
+    });
+
+    it('空 meta：与缺 frontmatter 同走一支（absent），不静默丢', () => {
+      fs.writeFileSync(path.join(tempDir, 'EMPTY-META.md'), '---\n\n---\n\nBody\n', 'utf-8');
+
+      const result = migrateKnowledgeEntries(tempDir);
+      expect(result.errors).toEqual(['EMPTY-META.md: no frontmatter found']);
+    });
+
+    it('未闭合：errors 显式记 unterminated（收口前是一条 YAML 内部报错）', () => {
+      fs.writeFileSync(path.join(tempDir, 'OPEN.md'), '---\nid: OPEN\ntype: decision\n', 'utf-8');
+
+      const result = migrateKnowledgeEntries(tempDir);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toMatch(/^OPEN\.md: frontmatter unterminated \(.+\)$/);
+    });
+
+    it('YAML 非法：errors 显式记 invalid-yaml 并带上可定位 detail', () => {
+      fs.writeFileSync(path.join(tempDir, 'BAD.md'), '---\nid: [1,\n---\n\nBody\n', 'utf-8');
+
+      const result = migrateKnowledgeEntries(tempDir);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toMatch(/^BAD\.md: frontmatter invalid-yaml \(.+\)$/);
+    });
+
+    it('写回走正本包裹格式：首尾分隔线与空行逐字一致，二次运行字节不变（无 diff 噪声）', () => {
+      writeEntry('DEC-005.md', { id: 'DEC-005', type: 'decision', title: 'T' });
+
+      expect(migrateKnowledgeEntries(tempDir).migrated).toBe(1);
+      const afterFirst = fs.readFileSync(path.join(tempDir, 'DEC-005.md'), 'utf-8');
+
+      expect(afterFirst.startsWith('---\nid: DEC-005\n')).toBe(true);
+      expect(afterFirst).toContain('---\n\nBody content');
+      expect(afterFirst).toMatch(/^---\n[\s\S]*\n---\n\n/);
+
+      expect(migrateKnowledgeEntries(tempDir).migrated).toBe(0);
+      expect(fs.readFileSync(path.join(tempDir, 'DEC-005.md'), 'utf-8')).toBe(afterFirst);
+    });
+  });
 });

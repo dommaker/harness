@@ -33,10 +33,12 @@
 
 ## 依赖关系
 - 依赖 `src/types/` 知识相关类型
+- 依赖 `src/utils/frontmatter` — markdown frontmatter 解析/序列化的唯一正本（harness#89：store、migration、index-generator、ingest 共用同一套语法判定，不再各写正则）
 - 依赖 `src/context/types`（ContextUsageSnapshot 等类型；不依赖 monitoring——知识健康评分由本目录 doctor.ts 的 KnowledgeHealthScorer 承载）
 - 被 `src/cli/commands/knowledge.ts` CLI 消费（含 `migrate` 子命令）
 
 ## 约定
+- 知识条目文件的 frontmatter 语法只由 `src/utils/frontmatter` 定义（harness#89）：缺头/空 meta = `absent`（合法输入，按非条目静默处理）；未闭合/YAML 非法 = `malformed`（必须显式上报后按消费方语义恢复——migration 落 `errors`、store 与 index-generator 打一行 stderr 后跳过或走 best-effort），禁止静默丢条目；canonical 字段序是 `store.toFrontmatter` 的私有策略，`join` 只管包裹格式
 - 知识条目有明确的生命周期状态（按 consumptionMode 分化）
 - 约束退役（`harness constraints retire`，人确认）时写入 KnowledgeStore：规则原文 + 退役原因 + 历史统计
 - Linter 检查完整性/一致性/时效性三个维度

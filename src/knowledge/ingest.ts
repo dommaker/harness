@@ -13,6 +13,7 @@ import type {
 } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeAudit } from './audit';
+import { splitFrontmatter } from '../utils/frontmatter';
 
 const MAX_SOURCE_REFS = 20;
 const MAX_EXTERNAL_CONTENT_LENGTH = 5000;
@@ -242,9 +243,10 @@ export class KnowledgeIngest {
 
   /** Extract first 50 chars of content body (after frontmatter), stripped of whitespace */
   private getContentPrefix(content: string): string {
-    // Strip YAML frontmatter (may be nested if content includes raw markdown)
-    const body = content.replace(/^---[\s\S]*?---\n?/, '').trim();
-    return body.slice(0, 50).replace(/\s+/g, '');
+    // 正本判定（harness#89）：只有合法 frontmatter 块才剥头，正文里的 --- 分隔线不再被误吞
+    const fm = splitFrontmatter(content);
+    const body = fm.state === 'ok' ? fm.body : content;
+    return body.trim().slice(0, 50).replace(/\s+/g, '');
   }
 
   /** Calculate keyword overlap ratio between two normalized titles */

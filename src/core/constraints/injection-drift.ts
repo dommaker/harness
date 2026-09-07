@@ -17,9 +17,9 @@
  * 两处均无标记段 = 未注入，不算漂移（report 一句话提示，check 不警告）。
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { getEffectiveConstraints } from '../effective-constraints';
+import { getHarnessPackageVersion } from '../../utils/package-version';
 import { CONSTRAINTS_END_MARKER, renderConstraintsSection } from './injection-renderer';
 import {
   resolveInjectionTarget,
@@ -59,19 +59,6 @@ const ENTRY_LINE_RE = /^- \*\*.+?\*\*: .+$/;
 const GROUP_HEADING_RE = /^### .+$/;
 
 /**
- * 读取当前 harness 包版本（与 init 注入时写入的版本同源）
- */
-function getPackageVersion(): string {
-  try {
-    const pkgPath = path.join(__dirname, '..', '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
-
-/**
  * 提取参与条目级比对的"有效行"：注入条目（- **id**: text）与分组标题（### ...）。
  * 标记行、版本行、空行不参与——版本单独比对，空行/标记属排版噪音。
  */
@@ -86,11 +73,11 @@ function significantLines(section: string): string[] {
  * 检测约束注入段漂移
  *
  * @param projectRoot 项目根路径
- * @param currentVersion 当前 harness 版本（缺省读 package.json；测试可显式传入）
+ * @param currentVersion 当前 harness 版本（缺省经 getHarnessPackageVersion 正本读取；测试可显式传入）
  */
 export function detectInjectionDrift(
   projectRoot: string,
-  currentVersion: string = getPackageVersion()
+  currentVersion: string = getHarnessPackageVersion()
 ): InjectionDrift {
   const result: InjectionDrift = {
     hasDrift: false,

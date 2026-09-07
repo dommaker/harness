@@ -5,12 +5,12 @@
  */
 
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { createExampleCheckpoint, createExampleResolutions } from './validate';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { getHarnessPackageVersion } from '../../utils/package-version';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
 import type { GovernanceConfig } from '../../types/project-config';
 import {
@@ -172,7 +172,7 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   }
 
   // 写入 harness 版本
-  const pkgVersion = getPackageVersion();
+  const pkgVersion = getHarnessPackageVersion();
   configData.harness = { version: pkgVersion };
 
   // 写入配置文件（harness 管理的配置，始终重新生成）
@@ -218,18 +218,6 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   log(io);
   log(io, chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
   return { kind: 'ok' };
-}
-
-/**
- * 获取 harness 包版本
- */
-function getPackageVersion(): string {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require('../../../package.json').version;
-  } catch {
-    return 'unknown';
-  }
 }
 
 /**
@@ -598,7 +586,7 @@ const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
  */
 export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
   const agentsMdPath = path.join(projectPath, 'AGENTS.md');
-  const version = getPackageVersion();
+  const version = getHarnessPackageVersion();
 
   const constraints = getEffectiveConstraints(projectPath);
   const bodyOnly = renderConstraintsSection(constraints, version);
@@ -676,15 +664,7 @@ export async function setupAgentsMdConstraints(projectPath: string, io: CommandI
 export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
 
-  // 读取 harness 版本
-  let version = 'unknown';
-  try {
-    const pkgPath = path.join(__dirname, '../../../package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    version = pkg.version;
-  } catch {
-    // fallback to 'unknown'
-  }
+  const version = getHarnessPackageVersion();
 
   // 生效约束集 → 渲染期望段（纯函数，与写文件分离）
   const constraints = getEffectiveConstraints(projectPath);

@@ -41,6 +41,7 @@ import { renderConstraintsSection, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MAR
 import { replaceStandaloneRange, resolveInjectionTarget } from '../../core/constraints/injection-writer';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
 import { loadRawProjectConfig, ProjectConfigLoader } from '../../core/project-config-loader';
+import { getHarnessPackageVersion } from '../../utils/package-version';
 import { FileKnowledgeStore } from '../../knowledge/store';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
@@ -128,18 +129,6 @@ function findRetireTarget(projectRoot: string, id: string): RetireTargetInfo | u
   }
 
   return undefined;
-}
-
-/**
- * 读取 harness 版本（与 init.ts 同路径策略）
- */
-function getHarnessVersion(): string {
-  try {
-    const pkgPath = path.join(__dirname, '..', '..', '..', 'package.json');
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
 }
 
 /**
@@ -282,7 +271,7 @@ function syncGovernanceInjection(projectRoot: string): { synced: boolean; file?:
   const target = resolveInjectionTarget(projectRoot);
   if (!target) return { synced: false };
 
-  const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessVersion());
+  const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessPackageVersion());
   const write = replaceStandaloneRange(target.content, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, body);
   if (write.kind === 'updated' && write.content !== target.content) {
     fs.writeFileSync(path.join(projectRoot, target.file), write.content, 'utf-8');

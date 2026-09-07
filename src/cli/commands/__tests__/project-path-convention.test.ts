@@ -73,12 +73,6 @@ const CLI_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: string }> = 
       '且已逐个传给每条 run(cmd, pkgPath) 与 verifyReleaseArtifacts(pkgPath)——不构成 -p 半失效。' +
       '给发布流水线新增 -p 属新能力（可指向任意目录做 push/publish），不在 #95 范围。',
   },
-  'src/cli/commands/constraints.ts': {
-    lines: ["join(process.cwd(), 'package.json'),"],
-    reason:
-      '报告的是 harness 自身包版本（约束集合随包发布），命令无 -p；主锚是 __dirname 推导的包根，' +
-      'cwd 只是 dist 布局变化时的兜底候选，与目标工程无关。',
-  },
 };
 
 // ========================================

@@ -5,10 +5,9 @@
  * 供 Studio 等消费者获取约束的 hash、计数、文本大小等元数据。
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import { createHash } from 'crypto';
 import { getAllConstraints } from '../../core/constraints/definitions';
+import { getHarnessPackageVersion } from '../../utils/package-version';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ConstraintsMeta {
@@ -16,24 +15,6 @@ export interface ConstraintsMeta {
   hash: string;
   counts: { ironLaws: number; guidelines: number; prompts: number };
   textSize: { total: number; perConstraint: number };
-}
-
-function getPackageVersion(): string {
-  // Try several common locations
-  const candidates = [
-    join(__dirname, '..', '..', '..', 'package.json'),
-    join(process.cwd(), 'package.json'),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      try {
-        return JSON.parse(readFileSync(p, 'utf-8')).version;
-      } catch {
-        // continue to next candidate
-      }
-    }
-  }
-  return 'unknown';
 }
 
 export function getConstraintsMeta(): ConstraintsMeta {
@@ -57,7 +38,7 @@ export function getConstraintsMeta(): ConstraintsMeta {
   const hash = createHash('sha256').update(hashInput).digest('hex');
 
   return {
-    version: getPackageVersion(),
+    version: getHarnessPackageVersion(),
     hash,
     counts: {
       ironLaws: ironLaws.length,

@@ -110,6 +110,49 @@ export function countJsonlLines(filePath: string): number {
   return readNonEmptyLines(filePath).length;
 }
 
+export interface JsonlEndsResult<T> {
+  /** 原始非空行数（合法 + 坏行），与 records.length + skippedLines 同口径 */
+  totalLines: number;
+  /** 自首向尾第一条合法记录；无合法记录为 undefined */
+  first?: T;
+  /** 自尾向首第一条合法记录；无合法记录为 undefined */
+  last?: T;
+}
+
+/**
+ * 只取首尾：首/末条合法记录 + 原始行数，parse 停在两端首个合法行
+ *
+ * 供只要「总数 + 首末记录」的调用点（如 TraceCollector.getStats）避免全量
+ * parse；行文本仍整读（10MB 级文本读廉价，JSON.parse 才是成本）。坏行策略
+ * 同 readJsonl：'skip' 跳过继续找，'throw' 遇坏行上抛。缺文件返回
+ * { totalLines: 0 }。
+ */
+export function readJsonlEnds<T>(filePath: string, policy: JsonlBadLinePolicy): JsonlEndsResult<T> {
+  const lines = readNonEmptyLines(filePath);
+
+  let first: T | undefined;
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      first = JSON.parse(lines[i]) as T;
+      break;
+    } catch (error) {
+      if (policy === 'throw') throw error;
+    }
+  }
+
+  let last: T | undefined;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      last = JSON.parse(lines[i]) as T;
+      break;
+    } catch (error) {
+      if (policy === 'throw') throw error;
+    }
+  }
+
+  return { totalLines: lines.length, first, last };
+}
+
 /**
  * 追加一条 JSONL 记录：ensureDir + append（正本写链）
  *

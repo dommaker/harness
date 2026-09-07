@@ -16,6 +16,8 @@
  * `throw` 策略不产计数，故不要求去向声明；但新增 throw 调用点必须在下文那条断言里逐个点名
  * 裁决——否则「改成 throw 就免掉告知」成了原则的绕行通道。`src/utils/jsonl.ts` 本身是策略
  * 定义处，排除。
+ * `readJsonlEnds`（首尾读取）同样是 skip 读点，纳入同一识别正则——否则它成为本契约的
+ * 绕行通道（harness#114）。
  * `countJsonlLines` 的纯行数站点（如 `check` 的提示计数）不 parse、不产坏行计数，也不在本表内
  * ——它把损坏行算进条数的问题属口径变更，#100 明确不做。
  */
@@ -88,7 +90,7 @@ function callSites(file: string): CallSite[] {
 
   for (let i = 0; i < raw.length; i++) {
     const trimmed = raw[i].trim();
-    if (!/readJsonl\s*[<(]/.test(trimmed)) continue;
+    if (!/readJsonl(?:Ends)?\s*[<(]/.test(trimmed)) continue;
     // 注释行里的示例不是站点（策略定义处 src/utils/jsonl.ts 已整体排除）
     if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
 

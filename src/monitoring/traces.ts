@@ -11,7 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { readJsonl, appendJsonl } from '../utils/jsonl';
+import { readJsonl, readJsonlEnds, appendJsonl } from '../utils/jsonl';
 import {
   DEFAULT_TRACE_FILE,
   type ExecutionTrace,
@@ -290,22 +290,15 @@ export class TraceCollector {
     // totalLines 保持原始非空行数口径（合法 + 坏行）
     // 计数去向：并进 totalLines 的原始行数口径（裁决 4 冻结，改口径属行为变更）；
     // 本方法只出统计不出告警，要单列坏行数的消费方走 readReport()
-    const { records, skippedLines } = readJsonl<ExecutionTrace>(this.traceFile, 'skip');
-
-    let oldestTrace: number | undefined;
-    let newestTrace: number | undefined;
-
-    if (records.length > 0) {
-      oldestTrace = records[0].timestamp;
-      newestTrace = records[records.length - 1].timestamp;
-    }
+    // 实现经 readJsonlEnds 只 parse 两端（harness#114）：签名与口径逐字节不变
+    const { totalLines, first, last } = readJsonlEnds<ExecutionTrace>(this.traceFile, 'skip');
 
     return {
       fileExists: true,
       fileSize: stats.size,
-      totalLines: records.length + skippedLines,
-      oldestTrace,
-      newestTrace,
+      totalLines,
+      oldestTrace: first?.timestamp,
+      newestTrace: last?.timestamp,
     };
   }
 }

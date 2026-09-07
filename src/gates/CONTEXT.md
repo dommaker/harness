@@ -21,6 +21,7 @@
 ## 约定
 - 新门禁必须：① 在 `definitions.ts` 补 GateDefinition（含 CLI 元数据）② 在 `registry.ts` IMPLEMENTATIONS 注册实现（缺一 → 加载期抛错）③ 实现统一 Gate 接口（evaluate 产三态决策，报告由 `types.ts` 的 `pass`/`fail`/`fromError`/`gateResult` 构造，不手写字面量）④ 配 CLI 命令（命令实现文件 + CLI 元数据的 module+export 引用，bin 由定义表驱动生成，不再手写块）+ 测试文件
 - deny 单调是接口契约：决策浅冻结，下游不得改写上游决策
+- `runGates` 是 Gate 链语义的**参考实现**（deny 单调 / ask fail-closed / 全决策浅冻结）：仓内暂无生产调用方（harness CLI 文件驱动逐命令执行，studio `runCompletionGuards` 经 checker-gate 复用语义但不 import），消费方只有测试。「deny 后短路跳过剩余门禁」类优化在出现真实消费者前不做——它与「按执行顺序的全部决策」报告契约直接冲突，短路等于改 GateResult 语义（harness#115 裁决，防后续评审重复提议）
 - ask 枚举预留：暂无实现，runGates fail-closed 按 deny 计
 - **收到的根要传到自己每个 IO/执行点（harness#95）**：门禁只认 `context.projectPath`，内部相对子路径一律锚到它（`SpecAcceptanceGate` 的 tasksPath、`ContractGate` 的 contractPath、e2e/scan/benchmark 的 `cwd`），禁止「根已传入却又取 cwd」、禁止 `xxxPath: './…'` 相对默认值——否则 `-p` 半失效且表现为假绿（acceptance 的「无 tasks.yml 即跳过」= passed:true）。本层唯一保留的 cwd 站点是 `checker-gate` 对 `ctx.projectPath` 的缺省兜底（豁免理由见守护表）。约定正本与两道机器可检的闸见 `src/cli/commands/CONTEXT.md`
 

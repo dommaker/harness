@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readJsonl, countJsonlLines, appendJsonl } from '../jsonl';
+import { readJsonl, countJsonlLines, readJsonlEnds, appendJsonl } from '../jsonl';
 
 interface Row {
   n: number;
@@ -106,6 +106,53 @@ describe('countJsonlLines', () => {
     fs.writeFileSync(filePath, ['{"n":1}', CORRUPT, '', '  '].join('\n') + '\n', 'utf-8');
     expect(countJsonlLines(filePath)).toBe(2);
     expect(countJsonlLines(path.join(dir, 'missing.jsonl'))).toBe(0);
+  });
+});
+
+describe('readJsonlEnds', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-jsonl-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function write(name: string, lines: string[]): string {
+    const filePath = path.join(dir, name);
+    fs.writeFileSync(filePath, lines.join('\n') + '\n', 'utf-8');
+    return filePath;
+  }
+
+  it('取首/末条合法记录 + 原始行数（含坏行）', () => {
+    const filePath = write('ends.jsonl', ['{"n":1}', CORRUPT, '{"n":3}']);
+    expect(readJsonlEnds<Row>(filePath, 'skip')).toEqual({
+      totalLines: 3,
+      first: { n: 1 },
+      last: { n: 3 },
+    });
+  });
+
+  it('首/末行坏时跳过坏行取最近的合法记录', () => {
+    const filePath = write('dirty-ends.jsonl', [CORRUPT, '{"n":2}', '{"n":3}', CORRUPT]);
+    const result = readJsonlEnds<Row>(filePath, 'skip');
+    expect(result.first).toEqual({ n: 2 });
+    expect(result.last).toEqual({ n: 3 });
+    expect(result.totalLines).toBe(4);
+  });
+
+  it("policy 'throw'：首端遇坏行上抛", () => {
+    const filePath = write('throw.jsonl', [CORRUPT, '{"n":2}']);
+    expect(() => readJsonlEnds<Row>(filePath, 'throw')).toThrow();
+  });
+
+  it('缺文件 / 全坏行返回无首末记录', () => {
+    expect(readJsonlEnds<Row>(path.join(dir, 'missing.jsonl'), 'skip')).toEqual({ totalLines: 0 });
+
+    const filePath = write('all-bad.jsonl', [CORRUPT, CORRUPT]);
+    expect(readJsonlEnds<Row>(filePath, 'skip')).toEqual({ totalLines: 2 });
   });
 });
 

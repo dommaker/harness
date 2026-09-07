@@ -42,8 +42,18 @@ function extractText(content: unknown): string {
  *
  * 不可读/损坏的行静默跳过（与原实现一致）。
  */
-export function readTranscriptSessions(dir: string): MinedSession[] {
+export interface TranscriptFilter {
+  /** 只读 mtimeMs >= since 的文件（stat 级过滤，命中即不 parse）；缺省不过滤 */
+  since?: number;
+  /** 按会话 ID（文件名去 .jsonl、截断 40 字符）排除（文件名级过滤，不 stat 不 parse）；缺省不排除 */
+  excludeIds?: string[];
+}
+
+export function readTranscriptSessions(dir: string, filter: TranscriptFilter = {}): MinedSession[] {
   const sessions: MinedSession[] = [];
+  const exclude = filter.excludeIds && filter.excludeIds.length > 0
+    ? new Set(filter.excludeIds)
+    : undefined;
 
   let files: string[];
   try {
@@ -54,6 +64,8 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
 
   for (const file of files) {
     if (!file.endsWith('.jsonl')) continue;
+    const id = file.replace('.jsonl', '').slice(0, 40);
+    if (exclude?.has(id)) continue;
     const filePath = path.join(dir, file);
 
     let stat: fs.Stats;
@@ -62,6 +74,7 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
     } catch {
       continue;
     }
+    if (filter.since !== undefined && stat.mtimeMs < filter.since) continue;
 
     const turns: MinedTurn[] = [];
     const toolCalls: string[] = [];
@@ -99,7 +112,7 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
 
     if (turns.length > 0) {
       sessions.push({
-        id: file.replace('.jsonl', '').slice(0, 40),
+        id,
         date: stat.mtime.toISOString().slice(0, 10),
         mtimeMs: stat.mtimeMs,
         turns,

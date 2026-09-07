@@ -64,10 +64,9 @@ export async function analyzeSessions(options: AnalyzeSessionsOptions, io: Comma
     return { kind: 'skip', reason: `会话记录目录不存在: ${transcriptDir}` };
   }
 
-  // 1. Scan transcripts（按修改时间过滤 + 倒序）
+  // 1. Scan transcripts（since 下推 seam（harness#112）：stat 级过滤，窗口外不 parse；倒序）
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const sessions = readTranscriptSessions(transcriptDir)
-    .filter(s => s.mtimeMs >= cutoff)
+  const sessions = readTranscriptSessions(transcriptDir, { since: cutoff })
     .sort((a, b) => b.date.localeCompare(a.date));
 
   if (sessions.length === 0) {

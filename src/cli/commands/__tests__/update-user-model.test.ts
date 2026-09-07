@@ -139,23 +139,18 @@ describe('update-user-model command', () => {
     expect(state.sessionsProcessed).toContain('session-a');
   });
 
-  test('--days 1：只处理最近 1 天的会话', async () => {
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'today' }),
-      mkSession({
-        id: 'three-days-ago',
-        date: todayStr(3),
-        turns: [
-          { role: 'user', content: '旧会话概念内容测试' },
-          { role: 'assistant', content: '' },
-        ],
-      }),
-    ]);
+  test('--days 1：since 过滤下推到 seam（自然日窗口，含今天）', async () => {
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'today' })]);
 
     await updateUserModel({ json: true, dryRun: true, days: 1 }, io);
 
     const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(1);
+    // date >= 今日 ⟺ mtimeMs >= 今日 UTC 零点，过滤在 seam 内 stat 级完成
+    expect(mockReadTranscriptSessions).toHaveBeenCalledWith(
+      process.env.CLAUDE_TRANSCRIPTS_DIR,
+      { excludeIds: [], since: Date.parse(todayStr()) },
+    );
   });
 
   test('缺省 --days：处理全部未处理会话（向后兼容）', async () => {
@@ -175,9 +170,14 @@ describe('update-user-model command', () => {
 
     const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(2);
+    // 缺省 days：不下推 since（向后兼容全量）
+    expect(mockReadTranscriptSessions).toHaveBeenCalledWith(
+      process.env.CLAUDE_TRANSCRIPTS_DIR,
+      { excludeIds: [] },
+    );
   });
 
-  test('sessionsProcessed 去重：已处理会话不重复计入（与 --days 正交）', async () => {
+  test('sessionsProcessed 去重：已处理会话经 excludeIds 下推排除', async () => {
     fs.writeFileSync(
       STATE_FILE,
       JSON.stringify({
@@ -190,14 +190,15 @@ describe('update-user-model command', () => {
       }),
       'utf-8',
     );
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'session-a' }),
-      mkSession({ id: 'session-b' }),
-    ]);
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-b' })]);
 
     await updateUserModel({ json: true, dryRun: true, days: 7 }, io);
 
     const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(1);
+    expect(mockReadTranscriptSessions).toHaveBeenCalledWith(
+      process.env.CLAUDE_TRANSCRIPTS_DIR,
+      { excludeIds: ['session-a'], since: expect.any(Number) },
+    );
   });
 });

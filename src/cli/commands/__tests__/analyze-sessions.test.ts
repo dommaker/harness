@@ -100,25 +100,31 @@ describe('analyze-sessions command', () => {
   });
 
   test('窗口内无会话：提示 No sessions found（默认最近 7 天）', async () => {
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'old', mtimeMs: Date.now() - 30 * 86_400_000 }),
-    ]);
+    const before = Date.now() - 7 * 86_400_000;
+    mockReadTranscriptSessions.mockReturnValue([]);
 
     const result = await analyzeSessions({}, io);
+    const after = Date.now() - 7 * 86_400_000;
 
     expect(io.outText()).toContain('No sessions found in the last 7 days');
     expect(result).toEqual({ kind: 'skip', reason: '最近 7 天没有会话' });
+    // since 过滤下推到 seam：默认窗口 7 天
+    const filter = mockReadTranscriptSessions.mock.calls[0][1] as { since?: number };
+    expect(filter.since).toBeGreaterThanOrEqual(before);
+    expect(filter.since).toBeLessThanOrEqual(after);
   });
 
-  test('--days 1：只统计最近 1 天（mtimeMs 窗口过滤）', async () => {
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'today' }),
-      mkSession({ id: 'two-days-ago', mtimeMs: Date.now() - 2 * 86_400_000 }),
-    ]);
+  test('--days 1：since 过滤下推到 seam（mtimeMs 窗口）', async () => {
+    const before = Date.now() - 86_400_000;
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'today' })]);
 
     await analyzeSessions({ days: 1 }, io);
+    const after = Date.now() - 86_400_000;
 
     expect(io.outText()).toContain('Analyzing 1 sessions (last 1 days)');
+    const filter = mockReadTranscriptSessions.mock.calls[0][1] as { since?: number };
+    expect(filter.since).toBeGreaterThanOrEqual(before);
+    expect(filter.since).toBeLessThanOrEqual(after);
   });
 
   test('缺省 --days：窗口为 7 天，两天前会话仍计入', async () => {

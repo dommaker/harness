@@ -22,6 +22,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   readTranscriptSessions,
+  type TranscriptFilter,
   extractCorrectionMatches,
   cleanCorrectionConcept,
   jaccardChinese,
@@ -141,16 +142,19 @@ interface SimpleSession {
 }
 
 function findNewSessions(dir: string, processed: string[], days?: number): SimpleSession[] {
-  let sessions = readTranscriptSessions(dir)
-    .filter(s => !processed.includes(s.id));
+  // 过滤下推 seam（harness#112）：excludeIds 走文件名、since 走 stat，未命中不 parse
+  const filter: TranscriptFilter = { excludeIds: processed };
 
   // 「最近 N 天」：自然日窗口（含今天）。days<=0 视为不过滤，与缺省一致。
+  // date 是 mtime 的 UTC 日，date >= cutoff ⟺ mtimeMs >= cutoff 日 UTC 零点
   if (days !== undefined && days > 0) {
     const cutoff = new Date(Date.now() - (days - 1) * 86_400_000)
       .toISOString()
       .slice(0, 10);
-    sessions = sessions.filter(s => s.date >= cutoff);
+    filter.since = Date.parse(cutoff);
   }
+
+  const sessions = readTranscriptSessions(dir, filter);
 
   sessions.sort((a, b) => a.date.localeCompare(b.date));
 

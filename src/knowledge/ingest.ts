@@ -179,7 +179,10 @@ export class KnowledgeIngest {
 
   private generateId(type: KnowledgeSubsystem): string {
     const prefix = type.toUpperCase().slice(0, 3);
-    const existing = this.store.list({ types: [type] });
+    // 序号取自索引计数（harness#107）：不再走 list() 逐条读条目文件；
+    // 与 list() 默认过滤口径一致，archived/deprecated 不计入序号
+    const existing = this.store.readIndex()
+      .filter(e => e.type === type && e.maturity !== 'archived' && e.maturity !== 'deprecated');
     const seq = String(existing.length + 1).padStart(3, '0');
     return `${prefix}-${seq}`;
   }

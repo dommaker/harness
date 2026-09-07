@@ -373,4 +373,31 @@ describe('ColdStartImporter', () => {
       expect(importer.getState().totalImported).toBe(0);
     });
   });
+
+  describe('批量写入收口（harness#107）', () => {
+    it('多条目导入经 saveAll 一次落索引，不再逐条 save', async () => {
+      const importer = new ColdStartImporter({
+        projectRoot: tmpDir,
+        store,
+        sources: ['manual'],
+        manualEntries: [
+          { title: 'Entry A', content: 'Content A', type: 'guideline' },
+          { title: 'Entry B', content: 'Content B', type: 'guideline' },
+        ],
+      });
+
+      const saveAllSpy = jest.spyOn(store, 'saveAll');
+      const saveSpy = jest.spyOn(store, 'save');
+      try {
+        const results = await importer.importAll();
+        expect(results[0].entries).toHaveLength(2);
+        expect(saveAllSpy).toHaveBeenCalledTimes(1);
+        expect(saveSpy).not.toHaveBeenCalled();
+      } finally {
+        saveAllSpy.mockRestore();
+        saveSpy.mockRestore();
+      }
+      expect(store.list()).toHaveLength(2);
+    });
+  });
 });

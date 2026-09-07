@@ -30,6 +30,11 @@ export interface KnowledgeStore {
   get(id: string): KnowledgeEntry | undefined;
   list(filter?: QueryFilter): KnowledgeEntry[];
   save(entry: KnowledgeEntry): void;
+  /**
+   * 批量保存（harness#107）：循环内只更新内存索引，结束一次 writeIndex，
+   * 消除逐条 save 的 O(K·N) 全量索引重写。空批为零读写 no-op。
+   */
+  saveAll(entries: KnowledgeEntry[]): void;
   delete(id: string): boolean;
   update(id: string, partial: Partial<KnowledgeEntry>): KnowledgeEntry | undefined;
   rebuildIndex(): void;
@@ -89,6 +94,26 @@ export class FileKnowledgeStore implements KnowledgeStore {
     const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
     fs.writeFileSync(filePath, content, 'utf-8');
     this.updateIndexEntry(entry);
+  }
+
+  saveAll(entries: KnowledgeEntry[]): void {
+    if (entries.length === 0) return;
+    const index = this.readIndex();
+    const position = new Map(index.map((e, i) => [e.id, i]));
+    for (const entry of entries) {
+      const filePath = this.entryPath(entry);
+      const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
+      fs.writeFileSync(filePath, content, 'utf-8');
+      const indexEntry = this.toIndexEntry(entry);
+      const idx = position.get(entry.id);
+      if (idx !== undefined) {
+        index[idx] = indexEntry;
+      } else {
+        position.set(entry.id, index.length);
+        index.push(indexEntry);
+      }
+    }
+    this.writeIndex(index);
   }
 
   delete(id: string): boolean {

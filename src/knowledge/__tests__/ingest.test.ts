@@ -127,6 +127,62 @@ describe('KnowledgeIngest', () => {
       expect(entries).toHaveLength(2);
       expect(store.list()).toHaveLength(2);
     });
+
+    it('同类型条目 id 序号批内递增（harness#107）', () => {
+      const entries = ingest.ingestBatch(
+        [
+          { title: 'First', type: 'decision' },
+          { title: 'Second', type: 'decision' },
+          { title: 'Third', type: 'decision' },
+        ],
+        { source: 'test', layer: 'project' },
+      );
+      expect(entries.map(e => e.id)).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+    });
+  });
+
+  describe('generateId 走索引计数（harness#107）', () => {
+    it('不再经 store.list() 逐条读条目文件', () => {
+      const listSpy = jest.spyOn(store, 'list');
+      try {
+        ingest.ingestEntry(
+          { title: 'Test', content: 'Content', type: 'decision' },
+          { source: 'test', layer: 'project' },
+        );
+        expect(listSpy).not.toHaveBeenCalled();
+      } finally {
+        listSpy.mockRestore();
+      }
+    });
+
+    it('archived/deprecated 条目不计入序号（与 list 默认过滤口径一致）', () => {
+      store.save({
+        id: 'DEC-001',
+        type: 'decision',
+        title: 'Archived One',
+        content: 'Original',
+        maturity: 'draft',
+        layer: 'project',
+        created: '2026-05-01T00:00:00.000Z',
+        lastReferenced: '',
+        contributors: [],
+        projects: [],
+        tags: [],
+        applicablePhases: [],
+        sourceReferences: [],
+        referencedBy: [],
+        executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
+      });
+      store.update('DEC-001', { maturity: 'archived' });
+
+      const entry = ingest.ingestEntry(
+        { title: 'Fresh', content: 'Content', type: 'decision' },
+        { source: 'test', layer: 'project' },
+      );
+      expect(entry.id).toBe('DEC-001');
+    });
   });
 
   describe('findDuplicate reads from disk (A1)', () => {

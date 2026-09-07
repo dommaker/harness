@@ -508,6 +508,83 @@ describe('KnowledgeStore', () => {
     });
   });
 
+  describe('saveAll 批量写入（harness#107）', () => {
+    // writeIndex 是 store 内 JSON.stringify 的唯一调用方，用其调用次数度量 index.json 重写次数
+    it('K 条批量保存只重写一次 index.json', () => {
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        store.saveAll([
+          makeEntry({ id: 'DEC-001' }),
+          makeEntry({ id: 'DEC-002', title: 'Second' }),
+          makeEntry({ id: 'DEC-003', title: 'Third' }),
+        ]);
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(store.readIndex()).toHaveLength(3);
+      expect(store.get('DEC-002')!.title).toBe('Second');
+    });
+
+    it('批量保存只读一次 index.json', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+
+      const parseSpy = jest.spyOn(JSON, 'parse');
+      try {
+        store.saveAll([
+          makeEntry({ id: 'DEC-002', title: 'Second' }),
+          makeEntry({ id: 'DEC-003', title: 'Third' }),
+        ]);
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
+      expect(store.readIndex()).toHaveLength(3);
+    });
+
+    it('覆盖已存在同 id 条目，索引不产生重复', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'Old' }));
+
+      store.saveAll([
+        makeEntry({ id: 'DEC-001', title: 'New' }),
+        makeEntry({ id: 'DEC-002' }),
+      ]);
+
+      expect(store.readIndex()).toHaveLength(2);
+      expect(store.get('DEC-001')!.title).toBe('New');
+    });
+
+    it('批内同 id 后者覆盖前者', () => {
+      store.saveAll([
+        makeEntry({ id: 'DEC-001', title: 'First' }),
+        makeEntry({ id: 'DEC-001', title: 'Last' }),
+      ]);
+
+      expect(store.readIndex()).toHaveLength(1);
+      expect(store.get('DEC-001')!.title).toBe('Last');
+    });
+
+    it('空批零读写，不创建 index.json', () => {
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        store.saveAll([]);
+        expect(stringifySpy).not.toHaveBeenCalled();
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(fs.existsSync(path.join(tempDir, 'index.json'))).toBe(false);
+    });
+
+    it('saveAll 后 list() 立即可见（缓存指纹失效）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      expect(store.list()).toHaveLength(1); // 预热缓存
+
+      store.saveAll([makeEntry({ id: 'DEC-002' }), makeEntry({ id: 'DEC-003' })]);
+
+      expect(store.list().map(e => e.id)).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+    });
+  });
+
   describe('frontmatter 收口（harness#89）', () => {
     const entryPath = (id: string): string => path.join(tempDir, `decision-${id}.md`);
     let errorSpy: jest.SpyInstance;

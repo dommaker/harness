@@ -183,9 +183,7 @@ export class ColdStartImporter {
     }
 
     // 写入知识库
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }
@@ -247,9 +245,7 @@ export class ColdStartImporter {
       });
     }
 
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }
@@ -317,9 +313,7 @@ export class ColdStartImporter {
       }
     }
 
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }
@@ -354,9 +348,7 @@ export class ColdStartImporter {
       }
     }
 
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }

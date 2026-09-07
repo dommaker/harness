@@ -335,6 +335,8 @@ function applySignals(state: ModelState, signals: SessionSignals[], mergedConcep
   const now = new Date().toISOString().slice(0, 10);
 
   // Update patterns from merged concept clusters
+  // occurrences 唯一来源：mergedConcepts 聚合值（含 correction phrase 的 ×3 加权，
+  // 见 buildMergedConcepts）。不再叠加 per-session 原始 count —— 那是 #113 裁决的双计 bug。
   for (const [concept, agg] of Object.entries(mergedConcepts)) {
     if (!state.patterns[concept]) {
       state.patterns[concept] = {
@@ -348,26 +350,6 @@ function applySignals(state: ModelState, signals: SessionSignals[], mergedConcep
     }
     p.lastSeen = now;
     p.trend = p.occurrences >= 5 ? 'stable' : 'rising';
-  }
-
-  // Also track per-session concepts
-  for (const sig of signals) {
-    for (const [concept, count] of Object.entries(sig.concepts)) {
-      if (!state.patterns[concept]) {
-        state.patterns[concept] = {
-          firstSeen: now,
-          occurrences: 0,
-          sessions: [],
-          trend: 'new',
-          lastSeen: now,
-        };
-      }
-      const p = state.patterns[concept];
-      p.occurrences += count;
-      if (!p.sessions.includes(sig.sessionId)) p.sessions.push(sig.sessionId);
-      p.lastSeen = now;
-      p.trend = p.occurrences >= 5 ? 'stable' : 'rising';
-    }
   }
 
   // Update lens weights from correction signals

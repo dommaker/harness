@@ -177,6 +177,36 @@ describe('update-user-model command', () => {
     );
   });
 
+  test('同一 concept 只计一次：occurrences 等于 merged 聚合值（#113 双计 bug）', async () => {
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
+
+    await updateUserModel({}, io);
+
+    const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    // userText 整条中文序列恰为一个 concept（count=1）；聚合后只应出现一次，
+    // 双计 bug 下会被 merged 循环 + per-session 循环各加一次变成 2
+    expect(state.patterns['数据库迁移方案需要执行'].occurrences).toBe(1);
+    expect(state.patterns['数据库迁移方案需要执行'].sessions).toEqual(['session-a']);
+  });
+
+  test('correction phrase 的 ×3 加权不受影响（buildMergedConcepts 内）', async () => {
+    mockReadTranscriptSessions.mockReturnValue([
+      mkSession({
+        id: 'session-a',
+        turns: [
+          { role: 'user', content: '这种问题反复出现' },
+          { role: 'assistant', content: '' },
+        ],
+      }),
+    ]);
+
+    await updateUserModel({}, io);
+
+    const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    // 纠正语句提取的 concept 按 ×3 计入（裁决：权重在 buildMergedConcepts，删循环不影响）
+    expect(state.patterns['这种问题'].occurrences).toBe(3);
+  });
+
   test('sessionsProcessed 去重：已处理会话经 excludeIds 下推排除', async () => {
     fs.writeFileSync(
       STATE_FILE,

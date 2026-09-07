@@ -12,14 +12,13 @@ import {
   ConstraintContext,
   ConstraintResult,
   ConstraintCheckResult,
-  ConstraintTrigger,
   ConstraintLevel,
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
-import { normalizeTriggers } from '../../utils/exec';
+import { matchesTrigger } from '../../utils/exec';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
@@ -157,18 +156,6 @@ export class ConstraintChecker {
   }
 
   /**
-   * 判断约束是否匹配当前触发条件
-   *
-   * context.operation 为主触发条件，context.extraTriggers 为次级推断
-   * （ADR-0001：pre-commit 代码变更附加 code_implementation），任一命中即匹配。
-   */
-  private matchesTrigger(constraint: Constraint, context: ConstraintContext): boolean {
-    const triggers = normalizeTriggers<ConstraintTrigger>(constraint.trigger);
-    const operations = [context.operation, ...(context.extraTriggers ?? [])];
-    return operations.some(op => triggers.includes(op));
-  }
-
-  /**
    * 记录约束检查的 trace
    */
   private recordTrace(
@@ -244,12 +231,9 @@ export class ConstraintChecker {
     const constraints = this.getConstraints(customConfig);
 
     const filterByTrigger = (constraintSet: Record<string, Constraint>): Constraint[] => {
-      return Object.values(constraintSet).filter(constraint => {
-        const triggers = Array.isArray(constraint.trigger)
-          ? constraint.trigger
-          : [constraint.trigger];
-        return operations.some(op => triggers.includes(op));
-      });
+      return Object.values(constraintSet).filter(constraint =>
+        matchesTrigger(constraint, operations)
+      );
     };
 
     return {
@@ -288,10 +272,12 @@ export class ConstraintChecker {
     };
 
     const constraints = this.getConstraints(customConfig);
+    // context.operation 为主触发条件，extraTriggers 为次级推断（ADR-0001），任一命中即匹配
+    const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
     // 1. Iron Laws: 必须全部通过
     for (const constraint of Object.values(constraints.ironLaws)) {
-      if (!this.matchesTrigger(constraint, context)) continue;
+      if (!matchesTrigger(constraint, operations)) continue;
 
       const checkResult = await this.check(constraint, context, run);
       result.ironLaws.push(checkResult);
@@ -305,7 +291,7 @@ export class ConstraintChecker {
 
     // 2. Guidelines: 记录警告
     for (const constraint of Object.values(constraints.guidelines)) {
-      if (!this.matchesTrigger(constraint, context)) continue;
+      if (!matchesTrigger(constraint, operations)) continue;
 
       const checkResult = await this.check(constraint, context, run);
       result.guidelines.push(checkResult);
@@ -337,7 +323,7 @@ export class ConstraintChecker {
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
     for (const constraint of Object.values(constraints.ironLaws)) {
-      if (!normalizeTriggers(constraint.trigger).some((t) => operations.includes(t))) continue;
+      if (!matchesTrigger(constraint, operations)) continue;
 
       const result = await this.check(constraint, context, run);
       if (!result.satisfied) {

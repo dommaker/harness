@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { runCommand, isCommandAvailable, normalizeTriggers, delay } from '../utils/exec';
+import { runCommand, isCommandAvailable, normalizeTriggers, matchesTrigger, delay } from '../utils/exec';
 
 describe('exec utils', () => {
   describe('runCommand', () => {
@@ -70,6 +70,40 @@ describe('exec utils', () => {
     it('应该使用空数组作为默认 fallback', () => {
       const result = normalizeTriggers(undefined);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('matchesTrigger', () => {
+    it('单值 trigger 命中操作返回 true', () => {
+      expect(matchesTrigger({ trigger: 'a' }, ['a'])).toBe(true);
+    });
+
+    it('单值 trigger 未命中返回 false', () => {
+      expect(matchesTrigger({ trigger: 'a' }, ['b'])).toBe(false);
+    });
+
+    it('数组 trigger 任一命中即返回 true', () => {
+      expect(matchesTrigger({ trigger: ['a', 'b'] }, ['b'])).toBe(true);
+    });
+
+    it('数组 trigger 全部未命中返回 false', () => {
+      expect(matchesTrigger({ trigger: ['a', 'b'] }, ['c', 'd'])).toBe(false);
+    });
+
+    it('operations 中任一命中即返回 true', () => {
+      expect(matchesTrigger({ trigger: 'a' }, ['x', 'a'])).toBe(true);
+    });
+
+    it('trigger 为 undefined 时不匹配任何操作', () => {
+      expect(matchesTrigger({ trigger: undefined }, ['a'])).toBe(false);
+    });
+
+    it('trigger 为空数组时不匹配任何操作', () => {
+      expect(matchesTrigger({ trigger: [] }, ['a'])).toBe(false);
+    });
+
+    it('operations 为空数组时返回 false', () => {
+      expect(matchesTrigger({ trigger: 'a' }, [])).toBe(false);
     });
   });
 

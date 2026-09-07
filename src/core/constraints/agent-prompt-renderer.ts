@@ -11,8 +11,8 @@
  * （如 docs_freshness）不渲染。
  */
 
-import type { Constraint, ConstraintLevel, ConstraintTrigger } from '../../types/constraint';
-import { normalizeTriggers } from '../../utils/exec';
+import type { ConstraintLevel, ConstraintTrigger } from '../../types/constraint';
+import { matchesTrigger } from '../../utils/exec';
 import { getEffectiveConstraints } from '../effective-constraints';
 
 /**
@@ -64,8 +64,4 @@ export function renderConstraintsByTrigger(
     lines.push('');
   }
   return lines.join('\n');
-}
-
-function matchesTrigger(constraint: Constraint, requested: ConstraintTrigger[]): boolean {
-  return normalizeTriggers<ConstraintTrigger>(constraint.trigger).some(t => requested.includes(t));
 }

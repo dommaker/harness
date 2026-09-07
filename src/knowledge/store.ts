@@ -47,6 +47,14 @@ export interface KnowledgeStore {
  */
 export class FileKnowledgeStore implements KnowledgeStore {
   private baseDir: string;
+  /**
+   * index.json 解析结果的实例级缓存（harness#106）
+   *
+   * mtimeMs+size 指纹（先例：project-config-loader.ts rawConfigCache）：
+   * 文件未变则复用解析结果，消除 list() 一次调用内 N+1 次全量重读；
+   * 文件变更（含外部进程改写、删除）自动失效。
+   */
+  private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;
 
   constructor(config?: Partial<StoreConfig>) {
     this.baseDir = config?.baseDir || DEFAULT_CONFIG.baseDir;
@@ -353,10 +361,25 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   readIndex(): IndexEntry[] {
     const indexPath = path.join(this.baseDir, INDEX_FILE);
-    if (!fs.existsSync(indexPath)) return [];
+    let stat: fs.Stats | undefined;
+    try {
+      stat = fs.statSync(indexPath);
+    } catch {
+      stat = undefined;
+    }
+    if (!stat) {
+      this.indexCache = undefined;
+      return [];
+    }
+    const cached = this.indexCache;
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.entries;
+    }
     try {
       const raw = fs.readFileSync(indexPath, 'utf-8');
-      return JSON.parse(raw) as IndexEntry[];
+      const entries = JSON.parse(raw) as IndexEntry[];
+      this.indexCache = { mtimeMs: stat.mtimeMs, size: stat.size, entries };
+      return entries;
     } catch {
       return [];
     }

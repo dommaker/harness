@@ -456,6 +456,58 @@ describe('KnowledgeStore', () => {
     });
   });
 
+  describe('readIndex memoize（harness#106）', () => {
+    // fs.readFileSync 不可 spy（Node 21+ 不可 redefine）；list/readIndex 路径上
+    // JSON.parse 仅用于解析 index.json，用其调用次数度量 index 重读次数
+    it('list() 单次调用内 index.json 只解析一次（消除 N+1 重读）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'Second' }));
+
+      const parseSpy = jest.spyOn(JSON, 'parse');
+      try {
+        store.list();
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('readIndex() 重复调用命中缓存，不重复解析', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+
+      const parseSpy = jest.spyOn(JSON, 'parse');
+      try {
+        store.readIndex();
+        store.readIndex();
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('index.json 变更后缓存自动失效（mtime+size 指纹）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      const first = store.readIndex();
+      expect(first).toHaveLength(1);
+
+      // 模拟外部进程直接改写 index.json
+      const indexPath = path.join(tempDir, 'index.json');
+      const external = [...first, { ...first[0], id: 'DEC-EXT' }];
+      fs.writeFileSync(indexPath, JSON.stringify(external, null, 2), 'utf-8');
+
+      const second = store.readIndex();
+      expect(second.map(e => e.id)).toContain('DEC-EXT');
+    });
+
+    it('index.json 被删除后缓存失效，readIndex 返回空', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      expect(store.readIndex()).toHaveLength(1);
+
+      fs.unlinkSync(path.join(tempDir, 'index.json'));
+      expect(store.readIndex()).toHaveLength(0);
+    });
+  });
+
   describe('frontmatter 收口（harness#89）', () => {
     const entryPath = (id: string): string => path.join(tempDir, `decision-${id}.md`);
     let errorSpy: jest.SpyInstance;

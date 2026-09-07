@@ -1,7 +1,7 @@
 /**
  * Tests for passes-gate.ts
  *
- * Priority: test pure logic methods (check, extension management)
+ * Priority: test pure logic methods (check)
  * Skip methods that do real file I/O / exec (setPasses, runTests, runTest, detectTestCommand, etc.)
  * 测试产物解析判定不在此面：见 test-output.test.ts（ADR-0012）
  */
@@ -65,45 +65,6 @@ describe('PassesGate', () => {
       const testResult = { passed: true, command: 'npm test', coverage: 85 };
       const result = gate.check(testResult);
       expect(result.testResult).toEqual(testResult);
-    });
-  });
-
-  describe('extension management', () => {
-    it('registerExtension adds an extension', () => {
-      const gate = createPassesGate();
-      const ext = { name: 'e2e', run: async () => ({ passed: true, command: 'e2e' }) };
-      gate.registerExtension('e2e', ext);
-      expect(gate.getExtensionNames()).toContain('e2e');
-    });
-
-    it('unregisterExtension removes an extension', () => {
-      const gate = createPassesGate();
-      const ext = { name: 'e2e', run: async () => ({ passed: true, command: 'e2e' }) };
-      gate.registerExtension('e2e', ext);
-      const removed = gate.unregisterExtension('e2e');
-      expect(removed).toBe(true);
-      expect(gate.getExtensionNames()).not.toContain('e2e');
-    });
-
-    it('unregisterExtension returns false for non-existent extension', () => {
-      const gate = createPassesGate();
-      const removed = gate.unregisterExtension('nonexistent');
-      expect(removed).toBe(false);
-    });
-
-    it('getExtensionNames returns empty array when no extensions', () => {
-      const gate = createPassesGate();
-      expect(gate.getExtensionNames()).toEqual([]);
-    });
-
-    it('getExtensionNames returns multiple extension names', () => {
-      const gate = createPassesGate();
-      gate.registerExtension('a', { name: 'a', run: async () => ({ passed: true, command: 'a' }) });
-      gate.registerExtension('b', { name: 'b', run: async () => ({ passed: true, command: 'b' }) });
-      const names = gate.getExtensionNames();
-      expect(names).toContain('a');
-      expect(names).toContain('b');
-      expect(names).toHaveLength(2);
     });
   });
 

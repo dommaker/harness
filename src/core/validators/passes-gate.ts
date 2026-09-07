@@ -16,8 +16,6 @@ import type {
   PassesGateResult,
   TaskTestResult,
   DynamicTask,
-  PassesGateExtension,
-  ExtensionTestResult,
   TestResult,
   PassesGateCheckResult,
   PassesGateViolation,
@@ -441,110 +439,6 @@ export class PassesGate {
    */
   getTestResult(taskId: string): TaskTestResult | undefined {
     return this.testResults.get(taskId);
-  }
-
-  // ========================================
-  // 扩展点支持（Long-Running Agents）
-  // ========================================
-
-  /**
-   * 注册的扩展列表
-   */
-  private extensions: Map<string, PassesGateExtension> = new Map();
-
-  /**
-   * 注册扩展
-   * 
-   * 用于注册额外的测试类型（如 Puppeteer E2E）
-   * 
-   * @param name 扩展名称
-   * @param extension 扩展实现
-   * 
-   * @example
-   * ```typescript
-   * const puppeteerExtension = {
-   *   name: 'puppeteer',
-   *   run: async (workDir, task) => {
-   *     // 运行 Puppeteer 测试
-   *     return { passed: true, command: 'puppeteer', ... };
-   *   }
-   * };
-   * 
-   * passesGate.registerExtension('puppeteer', puppeteerExtension);
-   * ```
-   */
-  registerExtension(name: string, extension: PassesGateExtension): void {
-    this.extensions.set(name, extension);
-  }
-
-  /**
-   * 注销扩展
-   */
-  unregisterExtension(name: string): boolean {
-    return this.extensions.delete(name);
-  }
-
-  /**
-   * 获取所有已注册的扩展名称
-   */
-  getExtensionNames(): string[] {
-    return Array.from(this.extensions.keys());
-  }
-
-  /**
-   * 运行所有测试（包括扩展测试）
-   * 
-   * @param workDir 工作目录
-   * @param task 可选的任务信息
-   * @returns 所有测试结果
-   */
-  async runAllTests(workDir: string, task?: DynamicTask): Promise<ExtensionTestResult[]> {
-    const results: ExtensionTestResult[] = [];
-
-    // 1. 运行单元测试（原有逻辑）
-    const unitTestResult = await this.runTest(workDir, task);
-    results.push(unitTestResult);
-
-    // 2. 运行所有扩展测试
-    for (const [name, extension] of this.extensions) {
-      try {
-        const extensionResult = await extension.run(workDir, task);
-        results.push({
-          ...extensionResult,
-          type: name,
-        });
-      } catch (error: any) {
-        results.push({
-          passed: false,
-          command: `${name}-extension`,
-          error: error.message,
-          type: name,
-          timestamp: new Date(),
-        });
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * 检查所有测试是否通过
-   */
-  async checkAllPasses(workDir: string, task?: DynamicTask): Promise<{
-    passed: boolean;
-    results: ExtensionTestResult[];
-    failedTypes: string[];
-  }> {
-    const results = await this.runAllTests(workDir, task);
-    const failedTypes = results
-      .filter(r => !r.passed)
-      .map(r => r.type || 'unit');
-
-    return {
-      passed: failedTypes.length === 0,
-      results,
-      failedTypes,
-    };
   }
 
 }

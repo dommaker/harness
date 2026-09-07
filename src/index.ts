@@ -103,11 +103,9 @@ export type {
   PassesGateResult,
   PassesGateCheckResult,
   PassesGateViolation,
-  PassesGateExtension,
   TestResult,
   DynamicTask,
   TaskTestResult,
-  ExtensionTestResult,
 } from './types/passes-gate';
 export type {
   StepMeta,

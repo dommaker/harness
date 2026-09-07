@@ -200,12 +200,6 @@ export class ColdStartImporter {
       const { execSync } = require('child_process');
       const cwd = this.config.projectRoot;
 
-      // 分析大型重构提交
-      execSync(
-        'git log --oneline --diff-filter=M --numstat --since="6 months ago" | head -100',
-        { cwd, encoding: 'utf-8', timeout: 10000 },
-      );
-
       // 查找 fix/hotfix 相关提交
       const fixCommits = execSync(
         'git log --oneline --grep="fix\\|hotfix\\|bug" --since="6 months ago" | head -20',

@@ -308,6 +308,23 @@ describe('ColdStartImporter', () => {
       // 非 git 目录应该有错误但不崩溃
       expect(results.length).toBe(1);
     });
+
+    it('不应执行结果被丢弃的大型重构扫描命令（harness#111 死代码）', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const execSpy = jest.spyOn(require('child_process'), 'execSync').mockReturnValue('');
+      try {
+        const importer = new ColdStartImporter({
+          projectRoot: tmpDir,
+          store,
+          sources: ['git'],
+        });
+        await importer.importAll();
+        const commands = execSpy.mock.calls.map(call => String(call[0]));
+        expect(commands.some(cmd => cmd.includes('diff-filter=M'))).toBe(false);
+      } finally {
+        execSpy.mockRestore();
+      }
+    });
   });
 
   describe('importFromDocs - 目录', () => {

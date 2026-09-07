@@ -404,21 +404,7 @@ export class KnowledgeAudit {
       staleDays: this.staleDays,
       promotionBlockDays: this.promotionBlockDays,
     };
-    const issues: AuditIssue[] = [];
-    for (const rule of perEntryRules) {
-      const detail = ruleDetail(rule, entry, ctx);
-      if (detail) {
-        issues.push({
-          rule: rule.name,
-          entryId: entry.id,
-          title: entry.title,
-          severity: rule.severity,
-          action: rule.action,
-          detail,
-        });
-      }
-    }
-    return issues;
+    return this.scanEntries([entry], ctx);
   }
 
   /**
@@ -434,22 +420,7 @@ export class KnowledgeAudit {
     };
 
     // Per-entry issues
-    const allIssues: AuditIssue[] = [];
-    for (const entry of entries) {
-      for (const rule of perEntryRules) {
-        const detail = ruleDetail(rule, entry, ctx);
-        if (detail) {
-          allIssues.push({
-            rule: rule.name,
-            entryId: entry.id,
-            title: entry.title,
-            severity: rule.severity,
-            action: rule.action,
-            detail,
-          });
-        }
-      }
-    }
+    const allIssues = this.scanEntries(entries, ctx);
 
     // Summary
     const summary = {} as Record<AuditRuleName, number>;
@@ -470,7 +441,7 @@ export class KnowledgeAudit {
 
     // Health score (after)
     const entriesAfter = options?.autoFix ? this.store.list({ excludeArchived: false }) : entries;
-    const issuesAfter = options?.autoFix ? this.runScan(entriesAfter, ctx) : allIssues;
+    const issuesAfter = options?.autoFix ? this.scanEntries(entriesAfter, ctx) : allIssues;
     const healthAfter = this.calculateHealthScore(entriesAfter, issuesAfter);
 
     return {
@@ -630,7 +601,10 @@ export class KnowledgeAudit {
 
   // ── Internal ────────────────────────────────────────────
 
-  private runScan(entries: KnowledgeEntry[], ctx: AuditContext): AuditIssue[] {
+  /**
+   * 逐条目跑 perEntryRules（#111 收口）：validate（单条目）、run（全量）与 autoFix 重扫共用
+   */
+  private scanEntries(entries: KnowledgeEntry[], ctx: AuditContext): AuditIssue[] {
     const issues: AuditIssue[] = [];
     for (const entry of entries) {
       for (const rule of perEntryRules) {

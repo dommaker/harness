@@ -23,7 +23,7 @@
 - `KnowledgeIngest` — 知识摄取引擎（含 ingest gate 质量门）+ `ingestExternal()` 外部内容摄入
 - `sanitizeExternalContent` — 外部内容安全清洗（过滤注入模式 + 长度限制）
 - `migrateKnowledgeEntries` — AS-021 迁移工具（为现有条目添加 consumptionMode/origin）
-- `KnowledgeAudit` — 6 维度质量审计引擎。per-entry 规则记录带 `scope: 'active' | 'all'`（active = 不判定 archived 条目）；人口过滤由 `ruleDetail()` 统一执行，规则内禁止再写 `entry.maturity === 'archived'` 早返回
+- `KnowledgeAudit` — 7 维度质量审计引擎。per-entry 规则记录带 `scope: 'active' | 'all'`（active = 不判定 archived 条目）；人口过滤由 `ruleDetail()` 统一执行，规则内禁止再写 `entry.maturity === 'archived'` 早返回。规则中文 label 正本在规则定义的 `label` 字段（harness#109，ADR-0002 定义即注册），`AUDIT_RULE_LABELS` 派生导出、与 `AuditRuleName` 编译期闭环，CLI 展示层直接消费、禁止另建 label 表
 - `flywheel-metrics`（包内，不进导出面）— 知识飞轮指标唯一实现：`evaluateFlywheel(env)` 出 canonical 比例、`genuineRefs()` 出 synthetic 过滤口径，audit D6 / `knowledge stats` / `knowledge health` 三处共消费（ADR-0013）
 - `ReferenceTracker` — 知识引用关系图谱
 - `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)
@@ -42,7 +42,7 @@
 - 知识条目有明确的生命周期状态（按 consumptionMode 分化）
 - 约束退役（`harness constraints retire`，人确认）时写入 KnowledgeStore：规则原文 + 退役原因 + 历史统计
 - Linter 检查完整性/一致性/时效性三个维度
-- Audit 6 维度评分：D1结构 D2内容 D3去重 D4成熟度 D5新鲜度 D6飞轮
+- Audit 7 维度评分：D1结构 D2内容 D3去重 D4成熟度 D5新鲜度 D6飞轮 D7增量存活
 - Ingest gate: ingestEntry() 先经 audit.validate() 检查，reject 不入库
 - 外部内容三层防御：ingest sanitization + retrieval marking + prompt constraint
 - 消费饱和度替代固定 TTL 用于 signal 过期判断

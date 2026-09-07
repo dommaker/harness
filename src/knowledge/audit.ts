@@ -2,7 +2,7 @@
  * 知识库质量审计引擎
  *
  * 纯代码检测，零 token 成本。
- * 6 维度覆盖：结构完整性 / 内容质量 / 去重有效性 / 成熟度健康 / 新鲜度 / 飞轮验证
+ * 7 维度覆盖：结构完整性 / 内容质量 / 去重有效性 / 成熟度健康 / 新鲜度 / 飞轮验证 / 增量存活
  *
  * 两种模式：
  * - validate(entry): 单条入库检查（ingest gate）
@@ -105,6 +105,8 @@ const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'];
 
 interface AuditRule {
   name: AuditRuleName;
+  /** 中文展示文案正本（#109）：定义即注册，CLI 经 AUDIT_RULE_LABELS 消费，无 label 即编译期失败 */
+  label: string;
   severity: AuditIssue['severity'];
   action: AuditAction;
   /** 规则适用人口：active = 跳过 archived 条目；all = 全人口（含已归档） */
@@ -125,6 +127,7 @@ const perEntryRules: AuditRule[] = [
   // D1: 结构完整性
   {
     name: 'frontmatter-missing',
+    label: 'frontmatter 缺失',
     severity: 'high',
     action: 'reject',
     scope: 'all',
@@ -143,6 +146,7 @@ const perEntryRules: AuditRule[] = [
   // D2: 内容质量
   {
     name: 'test-data-pollution',
+    label: '测试数据污染',
     severity: 'critical',
     action: 'archive',
     scope: 'active',
@@ -163,6 +167,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'daily-audit-noise',
+    label: '每日审计噪音',
     severity: 'high',
     action: 'archive',
     scope: 'active',
@@ -175,6 +180,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'event-noise',
+    label: '运维事件噪音',
     severity: 'critical',
     action: 'archive',
     scope: 'active',
@@ -189,6 +195,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'zero-content-proven',
+    label: '零内容 proven',
     severity: 'critical',
     action: 'demote',
     scope: 'all',
@@ -201,6 +208,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'maturity-inflation',
+    label: '成熟度虚高',
     severity: 'high',
     action: 'demote',
     scope: 'all',
@@ -213,6 +221,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'short-content',
+    label: '短内容',
     severity: 'medium',
     action: 'flag',
     scope: 'active',
@@ -228,6 +237,7 @@ const perEntryRules: AuditRule[] = [
   // D3: 去重有效性
   {
     name: 'title-duplicate',
+    label: '标题重复',
     severity: 'medium',
     action: 'flag',
     scope: 'active',
@@ -248,6 +258,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'source-refs-bloat',
+    label: 'sourceReferences 膨胀',
     severity: 'low',
     action: 'trim',
     scope: 'all',
@@ -260,6 +271,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'fragment-cluster',
+    label: '碎片集群',
     severity: 'medium',
     action: 'flag',
     scope: 'active',
@@ -287,6 +299,7 @@ const perEntryRules: AuditRule[] = [
   // D4: 成熟度健康
   {
     name: 'promotion-blocked',
+    label: 'promotion 受阻',
     severity: 'medium',
     action: 'flag',
     scope: 'all',
@@ -302,6 +315,7 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'orphan-draft',
+    label: '孤儿 draft',
     severity: 'low',
     action: 'flag',
     scope: 'all',
@@ -317,6 +331,7 @@ const perEntryRules: AuditRule[] = [
   // D5: 新鲜度
   {
     name: 'stale-entry',
+    label: '过期条目',
     severity: 'medium',
     action: 'flag',
     scope: 'active',
@@ -334,6 +349,7 @@ const perEntryRules: AuditRule[] = [
   // D2b: 领域相关性 — 检测已废弃领域的残留条目
   {
     name: 'deprecated-domain',
+    label: '废弃领域残留',
     severity: 'high',
     action: 'archive',
     scope: 'active',
@@ -352,6 +368,11 @@ const perEntryRules: AuditRule[] = [
     },
   },
 ];
+
+/** 规则 label 正本表（#109，ADR-0002 定义即注册）：派生自 perEntryRules，与规则键集编译期闭环，CLI 展示层直接消费 */
+export const AUDIT_RULE_LABELS: Record<AuditRuleName, string> = Object.fromEntries(
+  perEntryRules.map(r => [r.name, r.label])
+) as Record<AuditRuleName, string>;
 
 // ── Audit Engine ──────────────────────────────────────────
 

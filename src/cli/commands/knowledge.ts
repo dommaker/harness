@@ -12,7 +12,8 @@ import { FileKnowledgeStore as KnowledgeStore } from '../../knowledge/store';
 import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
-import { KnowledgeAudit } from '../../knowledge/audit';
+import { KnowledgeAudit, AUDIT_RULE_LABELS } from '../../knowledge/audit';
+import type { AuditReport, AuditRuleName } from '../../knowledge/audit';
 import { evaluateFlywheel } from '../../knowledge/flywheel-metrics';
 import { migrateKnowledgeEntries } from '../../knowledge/migration';
 import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
@@ -597,42 +598,28 @@ export async function knowledgeAudit(options: KnowledgeOptions & {
   }
   log(io);
 
-  // Dimension scores
-  const dimLabels: Record<string, string> = {
+  // Dimension scores（Record 全键标注 → 编译期闭环，#109）
+  const dimLabels: Record<keyof AuditReport['dimensions'], string> = {
     structure: 'D1 结构完整性',
     content: 'D2 内容质量',
     dedup: 'D3 去重有效性',
     maturity: 'D4 成熟度健康',
     freshness: 'D5 新鲜度',
     flywheel: 'D6 飞轮验证',
+    incremental: 'D7 增量存活',
   };
   log(io, chalk.bold('  维度评分:'));
   for (const [key, dim] of Object.entries(report.dimensions)) {
-    const label = dimLabels[key] || key;
+    const label = dimLabels[key as keyof AuditReport['dimensions']];
     const scoreColor = dim.score >= 80 ? chalk.green : dim.score >= 60 ? chalk.yellow : chalk.red;
     log(io, `    ${label}: ${scoreColor(`${dim.score}/100`)} (${dim.issues} 问题)`);
   }
   log(io);
 
-  // Issues by rule
-  const ruleLabels: Record<string, string> = {
-    'frontmatter-missing': 'frontmatter 缺失',
-    'test-data-pollution': '测试数据污染',
-    'daily-audit-noise': '每日审计噪音',
-    'zero-content-proven': '零内容 proven',
-    'short-content': '短内容',
-    'maturity-inflation': '成熟度虚高',
-    'title-duplicate': '标题重复',
-    'source-refs-bloat': 'sourceReferences 膨胀',
-    'fragment-cluster': '碎片集群',
-    'promotion-blocked': 'promotion 受阻',
-    'orphan-draft': '孤儿 draft',
-    'stale-entry': '过期条目',
-  };
-
+  // Issues by rule（label 正本在 audit.ts 规则定义，AUDIT_RULE_LABELS 编译期闭环，#109）
   for (const [rule, count] of Object.entries(report.summary)) {
     if (count === 0) continue;
-    const label = ruleLabels[rule] || rule;
+    const label = AUDIT_RULE_LABELS[rule as AuditRuleName];
     log(io, `  ${chalk.red(`${label}: ${count}`)}`);
   }
 

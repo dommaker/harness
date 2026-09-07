@@ -21,6 +21,8 @@ jest.mock('../../../knowledge/audit', () => ({
   KnowledgeAudit: jest.fn().mockImplementation(() => ({
     run: mockRun,
   })),
+  // label 正本在 audit.ts 规则定义上，CLI 直接消费（#109）
+  AUDIT_RULE_LABELS: jest.requireActual('../../../knowledge/audit').AUDIT_RULE_LABELS,
 }));
 
 // Mock KnowledgeIndexGenerator (avoids real fs writes in CLI tests)
@@ -200,6 +202,38 @@ describe('knowledgeAudit CLI', () => {
     expect(KnowledgeAudit).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: '/custom/path',
     }));
+  });
+
+  it('规则 label 闭环：event-noise / deprecated-domain 显示中文 label，不回落英文键名（#109）', async () => {
+    mockRun.mockReturnValue({
+      ...MOCK_REPORT,
+      issues: [],
+      summary: {
+        ...MOCK_REPORT.summary,
+        'event-noise': 2,
+        'deprecated-domain': 1,
+      },
+    });
+    await knowledgeAudit({}, io);
+    const output = io.outText();
+    expect(output).toContain('运维事件噪音: 2');
+    expect(output).toContain('废弃领域残留: 1');
+    expect(output).not.toContain('event-noise');
+    expect(output).not.toContain('deprecated-domain');
+  });
+
+  it('维度 label 闭环：incremental 维度显示中文 label，不回落英文键名（#109）', async () => {
+    mockRun.mockReturnValue({
+      ...MOCK_REPORT,
+      dimensions: {
+        ...MOCK_REPORT.dimensions,
+        incremental: { score: 80, issues: 0, details: {} },
+      },
+    });
+    await knowledgeAudit({}, io);
+    const output = io.outText();
+    expect(output).toContain('D7 增量存活');
+    expect(output).not.toContain('incremental');
   });
 });
 

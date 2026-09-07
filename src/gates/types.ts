@@ -204,15 +204,21 @@ export interface ContractGateConfig {
 }
 
 /**
- * 验收标准门禁配置
+ * 验收标准门禁配置（单一正本，harness#101：并入原 acceptance.ts 宽版的 e2e 字段）
  */
 export interface SpecAcceptanceGateConfig {
-  /** tasks.yml 路径 */
+  /** tasks.yml 路径；相对值按 check 上下文的 projectPath 解析，缺省 `<projectPath>/tasks.yml` */
   tasksPath?: string;
   /** 是否检查所有任务 */
   checkAllTasks?: boolean;
   /** 自定义验收条件 */
   customAcceptanceCriteria?: Record<string, (task: any) => Promise<boolean>>;
+  /** E2E 测试命令模板 */
+  e2eTestCommand?: string;
+  /** E2E 测试超时时间（毫秒） */
+  e2eTestTimeout?: number;
+  /** 项目路径 */
+  projectPath?: string;
 }
 
 /**
@@ -223,12 +229,12 @@ export interface AcceptanceGateContext {
   projectPath: string;
   /** 任务 ID */
   taskId?: string;
-  /** tasks.yml 路径 */
+  /** tasks.yml 路径；相对值按 projectPath 解析 */
   tasksPath?: string;
 }
 
 /**
- * 验收标准
+ * 验收标准（旧格式，向后兼容）
  */
 export interface AcceptanceCriteria {
   id: string;

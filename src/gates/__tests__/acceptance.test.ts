@@ -2,7 +2,9 @@
  * SpecAcceptanceGate 测试
  */
 
-import { SpecAcceptanceGate, createSpecAcceptanceGate } from '../acceptance';
+import { SpecAcceptanceGate } from '../acceptance';
+// 工厂与公共面同一 seam：gates/index 是唯一出口（harness#101）
+import { createSpecAcceptanceGate } from '../index';
 import * as fs from 'fs/promises';
 import { exec } from 'child_process';
 

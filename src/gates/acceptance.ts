@@ -22,53 +22,20 @@ import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import type { Gate, GateContext, GateDecision } from './types';
+import type {
+  Gate,
+  GateContext,
+  GateDecision,
+  SpecAcceptanceGateConfig,
+  AcceptanceGateContext,
+  AcceptanceCriteria,
+} from './types';
 import { decisionFromResult } from './decision';
 
 
 // ==================== 类型定义 ====================
-
-/**
- * 验收标准门禁配置
- */
-export interface SpecAcceptanceGateConfig {
-  /** tasks.yml 路径；相对值按 check 上下文的 projectPath 解析，缺省 `<projectPath>/tasks.yml` */
-  tasksPath?: string;
-  /** 是否检查所有任务 */
-  checkAllTasks?: boolean;
-  /** 自定义验收条件 */
-  customAcceptanceCriteria?: Record<string, (task: any) => Promise<boolean>>;
-  /** E2E 测试命令模板 */
-  e2eTestCommand?: string;
-  /** E2E 测试超时时间（毫秒） */
-  e2eTestTimeout?: number;
-  /** 项目路径 */
-  projectPath?: string;
-}
-
-/**
- * 验收标准门禁上下文
- */
-export interface AcceptanceGateContext {
-  /** 项目路径 */
-  projectPath: string;
-  /** 任务 ID */
-  taskId?: string;
-  /** tasks.yml 路径；相对值按 projectPath 解析 */
-  tasksPath?: string;
-}
-
-/**
- * 验收标准（旧格式，向后兼容）
- */
-export interface AcceptanceCriteria {
-  id: string;
-  description: string;
-  type: 'manual' | 'automated' | 'test';
-  required: boolean;
-  checked?: boolean;
-  notes?: string;
-}
+// SpecAcceptanceGateConfig / AcceptanceGateContext / AcceptanceCriteria 正本在 ./types
+// （harness#101：本文件不再持有双份定义与工厂，测试与公共面同走 gates/index seam）
 
 /**
  * 验收条件（新格式，支持 E2E 测试关联）
@@ -481,11 +448,4 @@ export class SpecAcceptanceGate implements Gate {
       };
     }
   }
-}
-
-/**
- * 创建验收标准门禁（便捷函数）
- */
-export function createSpecAcceptanceGate(config?: Partial<SpecAcceptanceGateConfig>): SpecAcceptanceGate {
-  return new SpecAcceptanceGate(config);
 }

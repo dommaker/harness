@@ -3,7 +3,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { SpecAcceptanceGate, createSpecAcceptanceGate } from '../gates/acceptance';
+import { SpecAcceptanceGate } from '../gates/acceptance';
+// 工厂与公共面同一 seam：gates/index 是唯一出口（harness#101）
+import { createSpecAcceptanceGate } from '../gates/index';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';

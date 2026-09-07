@@ -92,6 +92,8 @@ export async function detectFailingTest(projectPath: string): Promise<boolean> {
   try {
     const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
     // 坏行策略：skip（原逐行 catch→false 语义不变）；只 parse 最近 20 行
+    // 计数去向：豁免（harness#100）——布尔证据探测，坏行只会让证据变少（判定方向保守），
+    // 消费面是 check 的 pass/fail 判定，没有可挂计数的输出位
     const { records } = readJsonl<ExecutionTrace>(traceFile, 'skip', { tail: 20 });
     return records.some(trace => trace.result === 'fail');
   } catch {
@@ -129,6 +131,9 @@ export async function detectVerificationEvidence(projectPath: string): Promise<b
   try {
     const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
     // 坏行策略：skip（原逐行 catch→false 语义不变）；只 parse 最近 10 行
+    // tail 在 parse 之前截断 → 坏行会占用尾部槽位（#82 裁决范围外的既有口径，本票不改）
+    // 计数去向：豁免（harness#100）——同 detectFailingTest：布尔证据探测无计数输出位，
+    // 坏行只会让证据变少
     const { records } = readJsonl<ExecutionTrace>(traceFile, 'skip', { tail: 10 });
     return records.some(trace => trace.result === 'pass');
   } catch {

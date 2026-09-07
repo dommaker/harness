@@ -15,6 +15,12 @@
  * 供「只看最近 K 条」的调用点避免全量 parse（check 等热路径）。
  * countJsonlLines 供纯计数消费方（完全不 parse）。
  *
+ * 计数去向（harness#100）：本模块是坏行计数的唯一正本，但正本≠终点——凡以 'skip'
+ * 策略读，调用点必须把 skippedLines 带到该消费面的用户可见输出（CLI 走 stderr，
+ * 结构化输出与 API 走字段），或显式记名豁免并写明理由。机器可检面：
+ * `src/utils/__tests__/jsonl-skip-disposition.test.ts`（冻结站点集合 + 要求每个读点
+ * 上方声明 `计数去向：`）。
+ *
  * 豁免清单与机械核查（期望命中数）：
  *   grep -rnE "JSON\.parse\((line|trimmed|l)\b" src --include='*.ts' | grep -v __tests__
  *     → 期望 1 处：本文件 readJsonl（读链正本本体）
@@ -39,7 +45,11 @@ export type JsonlBadLinePolicy = 'skip' | 'throw';
 
 export interface JsonlReadResult<T> {
   records: T[];
-  /** 被跳过的坏行数（'throw' 策略下恒为 0） */
+  /**
+   * 被跳过的坏行数（'throw' 策略下恒为 0）
+   *
+   * 拿到它不等于告知：skip 读点必须把它带到消费面的用户可见输出或记名豁免（harness#100）
+   */
   skippedLines: number;
 }
 

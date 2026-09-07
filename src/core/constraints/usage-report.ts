@@ -108,18 +108,36 @@ export interface ConstraintsUsageReport {
   lint: EffectiveConfigLint;
   /** trace 文件是否存在 */
   traceFileExists: boolean;
+  /**
+   * trace 文件被跳过的坏行数（harness#100，与 `traceFileExists` 同一降级维度）
+   *
+   * 恒有值，0 = 无损坏。文件级口径：坏行没有 timestamp，归不进任何统计窗口。
+   */
+  skippedLines: number;
+}
+
+/**
+ * 读取项目 traces.log 并带出坏行计数（只读，harness#100 报告入口）
+ *
+ * 坏行策略：skip（原语义不变——report 只读，不因单行损坏失败）；
+ * 计数去向：透传——`skippedLines` 随本方法返回，进 `ConstraintsUsageReport.skippedLines`，
+ * 消费面为 `constraints report` 的文本行 / `--json` 字段 / `--export` 摘要。
+ */
+export function readProjectTracesReport(projectRoot: string): { traces: ExecutionTrace[]; skippedLines: number } {
+  const { records, skippedLines } = readJsonl<ExecutionTrace>(
+    path.join(projectRoot, DEFAULT_TRACE_FILE),
+    'skip'
+  );
+  return { traces: records, skippedLines };
 }
 
 /**
  * 读取项目 traces.log（只读）
  *
- * 坏行策略：skip（原语义不变——report 只读，不因单行损坏失败）
+ * 兼容签名：只返回记录数组、丢坏行计数，需要计数的消费方走 `readProjectTracesReport()`。
  */
 export function readProjectTraces(projectRoot: string): ExecutionTrace[] {
-  return readJsonl<ExecutionTrace>(
-    path.join(projectRoot, DEFAULT_TRACE_FILE),
-    'skip'
-  ).records;
+  return readProjectTracesReport(projectRoot).traces;
 }
 
 /**
@@ -234,7 +252,7 @@ export function buildConstraintsUsageReport(
   const activePromptIds = effective.filter(c => c.kind === 'prompt').map(c => c.id);
 
   const tracePath = path.join(projectRoot, DEFAULT_TRACE_FILE);
-  const traces = readProjectTraces(projectRoot);
+  const { traces, skippedLines } = readProjectTracesReport(projectRoot);
   const usage = collectUsageByConstraint(traces);
 
   const stats = checkConstraints.map(c => toStats(c.id, c.level, usage.get(c.id)));
@@ -247,5 +265,6 @@ export function buildConstraintsUsageReport(
     activePromptIds,
     lint,
     traceFileExists: fs.existsSync(tracePath),
+    skippedLines,
   };
 }

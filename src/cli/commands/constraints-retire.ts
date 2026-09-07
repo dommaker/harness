@@ -49,6 +49,7 @@ import {
   CANDIDATE_KIND_LABEL,
   collectUsageByConstraint,
   readProjectTraces,
+  readProjectTracesReport,
 } from '../../core/constraints/usage-report';
 
 export interface RetireExecuteOptions {
@@ -326,6 +327,9 @@ export function retireConstraint(
   }
 
   // 历史统计（来自 traces.log）
+  // 计数去向：兼容包装 readProjectTraces() 丢计数（harness#100）——落盘的 retire stats 只计
+  // 合法记录，把坏行数写进 RetireResult.stats 属形状变更不在本票；本函数按契约「纯执行无交互」
+  // 不打印，告知由两条命令入口各自负责（runRetireInteractive 顶部 / constraintsRetire 的 --yes 分支）
   const usage = collectUsageByConstraint(readProjectTraces(projectRoot)).get(id);
   const evaluated = usage ? usage.total - usage.skip : 0;
   const stats = {
@@ -418,6 +422,11 @@ export async function runRetireInteractive(
   io: RetireIO = { input: process.stdin, output: process.stdout }
 ): Promise<CommandResult> {
   const report = buildConstraintsUsageReport(projectRoot);
+  // 候选诊断是退役决策的依据：数据不完整必须先说（harness#100，与 report 同一降级维度）；
+  // 告知行走 stderr，与 status / failure list / 直达分支同一去向（交互正文仍走 console.log）
+  if (report.skippedLines > 0) {
+    console.error(chalk.yellow(`⚠️  trace 文件有 ${report.skippedLines} 行损坏已跳过，候选只基于其余合法记录`));
+  }
   const { ask, close } = createAsk(io);
   // 退役结果打印走注入流（与 readline 提示同一去向）
   const out = { stdout: io.output, stderr: io.output } as unknown as CommandIO;
@@ -532,6 +541,13 @@ export async function constraintsRetire(
           `   或去掉 id 走交互确认：harness constraints retire`
       );
       return { kind: 'usage-error', reason: `直达退役 ${id} 缺少显式 --yes 人确认，未做任何变更` };
+    }
+
+    // 落盘的 retire stats 只含合法记录：依据不完整要在执行前告知（harness#100，
+    // 直达路径不经过 runRetireInteractive，故两处各自告知）
+    const { skippedLines } = readProjectTracesReport(projectRoot);
+    if (skippedLines > 0) {
+      logError(io, chalk.yellow(`⚠️  trace 文件有 ${skippedLines} 行损坏已跳过，落盘的退役统计只基于其余合法记录`));
     }
 
     const result = retireConstraint(projectRoot, id, { reason: options.reason });

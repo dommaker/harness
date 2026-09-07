@@ -68,6 +68,8 @@ export class SessionManager {
     try {
       // 坏行策略：skip（原逐行 catch 跳过语义不变，harness#82）；
       // 空文件判定保持原始非空行数口径（合法 + 坏行 = 0 才算空）
+      // 计数去向：并进空事件判定的原始行数口径（harness#100 记名豁免：会话恢复面只区分
+      // "有没有事件"，单列坏行数不改变任何输出；会话事件写链在本地，损坏=半写入截断）
       const { records: events, skippedLines } = readJsonl<SessionEvent>(eventsPath, 'skip');
       if (events.length + skippedLines === 0) return undefined;
 
@@ -172,6 +174,9 @@ export class SessionManager {
             // 坏行策略：skip（原逐行 null-filter 语义不变，harness#82）；
             // 只恢复 checkpoint 之前的原始行（head 截断在 parse 之前）；
             // !== null 沿用原过滤口径
+            // 计数去向：豁免（harness#100）——恢复路径没有用户可见输出面（失败即整体抛
+            // `Checkpoint ${id} 不存在`），坏行只会让恢复出的事件少于 checkpoint 声明数；
+            // 告知需要改 loadCheckpoint 的抛错形状，属行为变更不在本票
             const { records } = readJsonl<SessionEvent>(eventsPath, 'skip', {
               head: checkpointData.eventCount,
             });

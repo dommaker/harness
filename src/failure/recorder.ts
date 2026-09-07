@@ -78,6 +78,8 @@ export class FailureRecorder {
    * 坏行策略：显式 skip（harness#96 定稿：跳过 + stderr 一次性计数警告，
    * stdout 含 --json 逐字节不变、退出码 0——#82 只把本调用点改走 jsonl
    * 读链正本并吸收 #96 的局部跳过实现，对外行为不变）。
+   * 计数去向：透传（harness#100 四消费点之一）——skippedLines 进下面那句 console.error，
+   * #96 定稿的文案与退出码本票逐字不动。
    */
   async getHistory(limit?: number): Promise<FailureRecord[]> {
     const { records, skippedLines } = readJsonl<FailureRecord>(this.logFile, 'skip');

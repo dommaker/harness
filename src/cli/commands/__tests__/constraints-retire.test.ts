@@ -446,6 +446,69 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     expect(config.constraints.no_hardcoded_credentials.retired.reason).toBe('误报太多');
   });
 
+  it('坏行 fixture：候选列表前告知损坏行数（决策依据不完整不静默，harness#100）', async () => {
+    const root = makeTmpProject();
+    const dir = path.join(root, '.harness', 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'traces.log'),
+      '{"constraintId":"a","level":"iron_law","timestamp":1700000000000,"result":"pass"}\n{bad json\n{also bad\n',
+      'utf-8'
+    );
+
+    const streams = makeIo(['']); // 直接取消，只验证告知行
+    const printed = captureLog();
+    const notices: string[] = [];
+    const errSpy = jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      notices.push(String(args[0] ?? ''));
+    });
+    await runRetireInteractive(root, streams);
+    streams.done();
+    errSpy.mockRestore();
+    printed.restore();
+
+    expect(notices.join('\n')).toContain('2 行损坏');
+    expect(printed.text()).toContain('退役候选');
+  });
+
+  it('trace 无损坏时不出现坏行提示（零噪声）', async () => {
+    const root = makeTmpProject();
+    writeTraces(root, [{ constraintId: 'a', result: 'pass' }]);
+
+    const streams = makeIo(['']);
+    const printed = captureLog();
+    const notices: string[] = [];
+    const errSpy = jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      notices.push(String(args[0] ?? ''));
+    });
+    await runRetireInteractive(root, streams);
+    streams.done();
+    errSpy.mockRestore();
+    printed.restore();
+
+    expect(notices.join('\n')).not.toContain('损坏');
+    expect(printed.text()).toContain('退役候选');
+  });
+
+  it('直达 --yes 路径也在落盘前告知损坏行数（harness#100：不经过交互也有告知）', async () => {
+    const root = makeTmpProject();
+    const dir = path.join(root, '.harness', 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'traces.log'),
+      '{"constraintId":"a","level":"iron_law","timestamp":1700000000000,"result":"pass"}\n{bad json\n',
+      'utf-8'
+    );
+
+    const directIo = captureIO();
+    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, yes: true }, directIo);
+
+    expect(directIo.errText()).toContain('1 行损坏');
+    // 告知不挤动结果正文：退役结论仍在 stdout
+    expect(directIo.outText()).toContain('已退役');
+    expect(readConfig(root).constraints.no_hardcoded_credentials.enabled).toBe(false);
+  });
+
   it('无候选 → 手动输入 custom id → 确认执行 → 落 custom-constraints.yml', async () => {
     const root = makeTmpProject();
     writeCustom(root, CUSTOM_YML);

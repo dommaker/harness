@@ -110,15 +110,34 @@ export class TraceAnalyzer {
   }
 
   /**
+   * 分析最近 N 小时的 traces，并带出坏行计数（harness#100 报告入口）
+   *
+   * `skippedLines` 是**文件级口径**：坏行没有 timestamp 归不进时间窗，
+   * 既不能按窗丢弃、也无法由消费方从 summaries 反推（客户端分不开
+   * 「被窗过滤掉的合法行」与「损坏行」）。
+   */
+  analyzeRecentReport(hours: number): { summaries: TraceSummary[]; skippedLines: number } {
+    const start = Date.now() - hours * 3600 * 1000;
+    const { traces, skippedLines } = this.collector.readReport({
+      timeRange: { start, end: Date.now() },
+    });
+
+    return { summaries: this.summarize(traces), skippedLines };
+  }
+
+  /**
    * 分析最近 N 小时的 traces
+   *
+   * 兼容签名（#82 裁决 4 冻结）：丢坏行计数，要计数用 `analyzeRecentReport()`。
    */
   analyzeRecent(hours: number): TraceSummary[] {
-    const traces = this.collector.readRecent(hours);
-    return this.summarize(traces);
+    return this.analyzeRecentReport(hours).summaries;
   }
 
   /**
    * 分析特定约束
+   *
+   * 兼容签名同上：坏行计数由 `collector.readReport({ constraintId })` 承载。
    */
   analyzeConstraint(constraintId: string): TraceSummary[] {
     const traces = this.collector.readByConstraint(constraintId);

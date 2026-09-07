@@ -69,6 +69,10 @@ export function renderExportMarkdown(
   lines.push('');
   lines.push(`- harness 版本: ${version}`);
   lines.push(`- 日期: ${now.toISOString().slice(0, 10)}`);
+  if (report.skippedLines > 0) {
+    // 脱敏：只报条数，不报路径、不报坏行内容
+    lines.push(`- ⚠️ trace 文件有 ${report.skippedLines} 行损坏已跳过，下表统计只含其余合法记录`);
+  }
   lines.push('');
 
   lines.push('## 统计表（check 层）');
@@ -162,6 +166,9 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
   log(io, chalk.blue('📊 约束使用报告'));
   if (!report.traceFileExists) {
     log(io, chalk.gray('   （trace 文件不存在，全部按零触发统计）'));
+  }
+  if (report.skippedLines > 0) {
+    log(io, chalk.yellow(`   ⚠️  trace 文件有 ${report.skippedLines} 行损坏已跳过，统计只含其余合法记录（数据不完整）`));
   }
   log(io);
 

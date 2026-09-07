@@ -52,6 +52,9 @@ export class ContextTracker {
     try {
       // 坏行策略：skip（原逐行 null-filter 语义不变）；只 parse 最近 n 行；
       // !== null 沿用原过滤口径：parse 成功但为 null 的记录不返回
+      // 计数去向：豁免（harness#100）——尾部快照读取（tail 在 parse 前截断，坏行占尾部槽位），
+      // 坏行只让返回条数少于 n；消费方是同模块 getAverages()/generateReport()（无 CLI 接线），
+      // 给它们加计数行属新能力，不在本票
       return readJsonl<ContextUsageSnapshot>(this.logPath, 'skip', { tail: n })
         .records
         .filter((s): s is ContextUsageSnapshot => s !== null);

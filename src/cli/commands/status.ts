@@ -13,7 +13,7 @@ import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ExecutionTrace } from '../../types/trace';
 import type { TraceSummary, TraceAnomaly } from '../../types/trace';
-import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface StatusOptions {
   /** 项目路径 */
@@ -53,8 +53,11 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
   }
 
   // 读取 trace 文件：坏行策略 skip（原 null + filter(Boolean) 语义不变，harness#82）
-  // traceCount 保持原始非空行数口径（合法 + 跳过），与改前显示一致；
+  // traceCount 保持原始非空行数口径（合法 + 跳过），与改前显示逐字节一致；
   // filter(Boolean) 沿用原语义：parse 成功但值为 falsy 的行（如 "null"）不进分析
+  // 计数去向：harness#100——skippedLines 另起一行走 stderr 告知（口径不改，只补告知）。
+  // 不经 TraceCollector.readReport()：本命令按 -p 的 projectPath 直读读链正本，且要的是
+  // records + skippedLines 的原始行数口径；下面另建的 collector/analyzer 只用于 summarize/detectAnomalies
   const { records, skippedLines } = readJsonl<ExecutionTrace>(tracesPath, 'skip');
   const traces = records.filter(Boolean);
   const traceCount = records.length + skippedLines;
@@ -70,6 +73,12 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
   // 基本统计
   log(io, chalk.gray(`记录数: ${traceCount} 条`));
   log(io);
+
+  // 数据不完整必须让看报告的人知道（harness#100）：诊断信息走 stderr，
+  // stdout 报告体口径与字节不变；无损坏零噪声
+  if (skippedLines > 0) {
+    logError(io, `⚠️  trace 文件有 ${skippedLines} 行损坏已跳过，上述记录数含坏行，统计只基于其余合法记录`);
+  }
 
   if (options.anomalies) {
     // 只显示异常

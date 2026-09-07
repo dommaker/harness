@@ -32,6 +32,11 @@ H5（#44）起：
 - **projectPath 只在入口兜底一次，并传到每个 IO/执行点（harness#95）**：`-p/--project-path` 的 cwd 兜底唯一落点是命令模块入口（`const projectPath = options.projectPath || process.cwd()`）；往下每层只能收参数，**禁止再取一次 `process.cwd()`、也禁止用相对路径默认值**——两者都让 `-p` 半失效：执行/读写位置悄悄回到调用方 cwd，而 acceptance 的「无 tasks.yml 即跳过」本身就是 `passed:true`，于是失效表现为假绿。落地形状：执行/IO 根用**必传形参**表达（`PassesGate.runTests(workDir)`），门禁内的相对子路径锚到 projectPath：`ContractGate` 一直是 `path.join(context.projectPath, contractPath)`，`SpecAcceptanceGate` 的 tasksPath 随 #95 对齐成 `path.resolve(projectPath, 相对值)`（绝对值原样，缺省 `<projectPath>/tasks.yml`）
   - 机器可检：`__tests__/project-path-convention.test.ts` 三道闸——CLI 层 cwd 必须是 `xxx || process.cwd()` 兜底形状、下游层（core/gates/context/monitoring/hooks）cwd 站点集合冻结、`xxxPath: '相对值'` 默认值冻结；豁免逐条带理由，站点消失却不删条目同样失败
   - 行为可检：`__tests__/project-path-anchoring.test.ts` 前提统一 **cwd ≠ projectPath**、不 mock 任何 IO，断言测试真在 B 执行、证据落 `B/.harness/evidence/`、acceptance 读 `B/tasks.yml`。「根已传入却又取 cwd」这类静态看不出的漂移由它守，冻结表守的是不再新增站点
+- **读到部分结果必须告知（harness#100）**：命令面以 `skip` 策略读 JSONL（traces.log / failures.log）时，坏行计数要到用户可见输出，**不允许默默丢弃**。共同约束：无损坏零噪声（计数为 0 不出行）、不改任何既有计数口径（`status` 的 `记录数` 仍是原始非空行数，逐字节不变）、计数一律取自 `src/utils/jsonl` 读链返回的 `skippedLines`（经报告入口透传或在读点就地取用），**禁止**用「原始行数 − 统计条数」反推（窗过滤掉的合法行与坏行分不开）。三处落点各自对得上一行代码：
+  - `status`：告知**走 stderr**（`logError(io, …)`），因为 stdout 是报告体、其字节已被 `记录数` 那一行定死，挤进去等于改输出
+  - `constraints report`：提示属于**报告体内的降级位**，与既有的 `traceFileExists` 说明同在 stdout；结构化面另两份——`--json` 的 `skippedLines` 字段、`--export` markdown 的警示行（只报条数，不报路径与坏行内容）
+  - `constraints retire`：两条路径都**走 stderr**——交互模式在候选列表前一行（沿用本函数既有的 console 例外，`console.error`），`--yes` 直达分支在落盘前 `logError(io, …)`（`retireConstraint` 本身按契约「纯执行无交互」不打印）
+  - 原则正本与逐点去向见 `src/monitoring/CONTEXT.md`「约定」段；机器可检面是 `src/utils/__tests__/jsonl-skip-disposition.test.ts`（冻结全仓 skip 读点集合 + 要求每个读点记名声明 `计数去向：`）
 
 ## 注意事项
 - 新增命令需同步更新 CLAUDE.md / CAPABILITIES.md / src/CONTEXT.md

@@ -261,6 +261,59 @@ describe('constraintsReport CLI', () => {
   });
 });
 
+describe('constraintsReport 坏行数透传（harness#100）', () => {
+  /** 直接落原始行（含坏行）——writeTraces 只写合法记录，构造不出损坏 fixture */
+  function writeRawTraces(root: string, lines: string[]): void {
+    const dir = path.join(root, '.harness', 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'traces.log'), lines.join('\n') + '\n', 'utf-8');
+  }
+
+  const healthyTrace = (id: string) =>
+    JSON.stringify({ constraintId: id, level: 'iron_law', timestamp: 1700000000000, result: 'pass' });
+  const BAD = '{"constraintId":"ghost","broken';
+
+  it('坏行 fixture：文本输出出现坏行数提示，--json 报告体带 skippedLines', async () => {
+    const root = makeTmpProject();
+    writeRawTraces(root, [healthyTrace('no_hardcoded_credentials'), BAD, BAD]);
+
+    await constraintsReport({ projectPath: root }, io);
+    expect(io.outText()).toContain('2 行损坏');
+
+    const jsonIo = captureIO();
+    await constraintsReport({ projectPath: root, json: true }, jsonIo);
+    expect(JSON.parse(jsonIo.outText()).skippedLines).toBe(2);
+  });
+
+  it('traceFileExists=true 且无损坏：零噪声（无坏行提示，既有文案不变）', async () => {
+    const root = makeTmpProject();
+    writeRawTraces(root, [healthyTrace('no_hardcoded_credentials')]);
+
+    await constraintsReport({ projectPath: root }, io);
+
+    const output = io.outText();
+    expect(output).toContain('约束使用报告');
+    expect(output).not.toContain('损坏');
+    expect(output).not.toContain('trace 文件不存在');
+  });
+
+  it('--export 摘要同样带坏行数（脱敏：只报条数，不报路径与坏行内容）', async () => {
+    const dirty = makeTmpProject();
+    writeRawTraces(dirty, [healthyTrace('no_hardcoded_credentials'), BAD]);
+    await constraintsReport({ projectPath: dirty, export: 'report.md' }, captureIO());
+
+    const dirtyMd = fs.readFileSync(path.join(dirty, 'report.md'), 'utf-8');
+    expect(dirtyMd).toContain('1 行损坏');
+    expect(dirtyMd).not.toContain(BAD);
+    expect(dirtyMd).not.toContain(dirty);
+
+    const clean = makeTmpProject();
+    writeRawTraces(clean, [healthyTrace('no_hardcoded_credentials')]);
+    await constraintsReport({ projectPath: clean, export: 'report.md' }, captureIO());
+    expect(fs.readFileSync(path.join(clean, 'report.md'), 'utf-8')).not.toContain('损坏');
+  });
+});
+
 describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const realVersion = require('../../../../package.json').version as string;

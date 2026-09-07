@@ -90,6 +90,11 @@ export class ReferenceTracker {
       // 坏行策略：skip（harness#82：原「逐行 map 会抛 + 外层 catch 吞成整文件 []」
       // ——坏一行丢全部记录——不可接受，改为单行损坏只丢该行）；
       // 外层 catch 仅兜 IO 读取错误，沿用原吞掉语义
+      // 计数去向：豁免（harness#100）——三个消费点 getReferencesForEntry /
+      // getReferencesForDecision / updateReferencedBy 只按合法记录取引用关系。
+      // 代价如实记录：checkOrphans（knowledge/lint.ts）以 refs.length>0 判孤儿，
+      // 坏行会让它给出假孤儿判定，不只是少报；透传需要给 LintIssue / `knowledge health`
+      // 报告加计数位，属 knowledge 域输出形状变更，另票收口
       return readJsonl<ReferenceRecord>(this.filePath, 'skip').records;
     } catch {
       return [];

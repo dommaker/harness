@@ -70,6 +70,10 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
     try {
       // 损坏行静默跳过（坏行策略 skip，与原实现一致，harness#82 走 jsonl 正本）；
       // 外层 catch 兜文件不可读，沿用原「跳过该文件」语义
+      // 计数去向：豁免（harness#100）——读的是外部 Claude Code transcript（非 harness 写入面）。
+      // 影响方向如实：坏行使该会话少几条 turn，而 analyze-sessions 的候选按次数阈值筛
+      // （frequency>=4 / 跨会话>=2 / confidence=len/10）→ 只会少出候选，不会造出候选，且候选须人审；
+      // 告知需改 MinedSession 形状并波及 analyze-sessions/update-user-model 两个调用方，另票收口
       records = readJsonl<Record<string, any>>(filePath, 'skip').records;
     } catch {
       continue;

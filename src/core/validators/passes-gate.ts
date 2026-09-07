@@ -51,6 +51,51 @@ const PROTECTED_TEST_PATTERNS = [
 ];
 
 /**
+ * 检测项目的测试命令（唯一正本，CLI 与库调用共消费，架构评审 A2）
+ *
+ * 探测顺序：test:ci → test（排除 npm 默认 echo 占位脚本）→ test:e2e → test:coverage
+ * → Python（pyproject.toml 或 pytest.ini 任一）→ go.mod。
+ * 探不到返回 undefined，兜底策略归调用方（CLI 映射为 skip；PassesGate 内部 fail-closed）。
+ */
+export async function detectTestCommand(projectPath: string): Promise<string | undefined> {
+  try {
+    const content = await fs.readFile(path.join(projectPath, 'package.json'), 'utf-8');
+    const pkg = JSON.parse(content);
+
+    if (pkg.scripts?.['test:ci']) {
+      return 'npm run test:ci';
+    }
+    if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified"') {
+      return 'npm test';
+    }
+    if (pkg.scripts?.['test:e2e']) {
+      return 'npm run test:e2e';
+    }
+    if (pkg.scripts?.['test:coverage']) {
+      return 'npm run test:coverage';
+    }
+  } catch {
+    // 没有 package.json，继续探测其他项目类型
+  }
+
+  // Python 项目：pyproject.toml 或 pytest.ini 任一命中
+  for (const marker of ['pyproject.toml', 'pytest.ini']) {
+    try {
+      await fs.access(path.join(projectPath, marker));
+      return 'pytest';
+    } catch {}
+  }
+
+  // Go 项目
+  try {
+    await fs.access(path.join(projectPath, 'go.mod'));
+    return 'go test ./...';
+  } catch {}
+
+  return undefined;
+}
+
+/**
  * PassesGate 类
  */
 export class PassesGate {
@@ -238,7 +283,7 @@ export class PassesGate {
     const startTime = Date.now();
 
     try {
-      const testCommand = this.config.testCommand || await this.detectTestCommand(workDir);
+      const testCommand = this.config.testCommand || await detectTestCommand(workDir);
       
       if (!testCommand) {
         return {
@@ -251,7 +296,7 @@ export class PassesGate {
         };
       }
 
-      const result = await this.runTest(workDir);
+      const result = await this.runTest(workDir, undefined, testCommand);
       const duration = Date.now() - startTime;
 
       // 解析测试数量
@@ -286,9 +331,19 @@ export class PassesGate {
   /**
    * 运行测试
    */
-  private async runTest(workDir: string, _task?: DynamicTask): Promise<TaskTestResult> {
-    const testCommand = await this.detectTestCommand(workDir);
+  private async runTest(workDir: string, _task?: DynamicTask, command?: string): Promise<TaskTestResult> {
+    const testCommand = command || this.config.testCommand || await detectTestCommand(workDir);
     const timestamp = new Date();
+
+    // 探测失败 fail-closed：与 runTests 的「未检测到测试命令」分支同形状
+    if (!testCommand) {
+      return {
+        passed: false,
+        command: '',
+        output: '未检测到测试命令',
+        timestamp,
+      };
+    }
 
     let exitCode = 0;
     let output = '';
@@ -319,56 +374,6 @@ export class PassesGate {
       timestamp,
       evidence: await this.generateEvidence(workDir, output),
     };
-  }
-
-  /**
-   * 检测测试命令
-   */
-  private async detectTestCommand(workDir: string): Promise<string> {
-    if (this.config.testCommand) {
-      return this.config.testCommand;
-    }
-
-    // 尝试读取 package.json
-    try {
-      const packageJsonPath = path.join(workDir, 'package.json');
-      const content = await fs.readFile(packageJsonPath, 'utf-8');
-      const packageJson = JSON.parse(content);
-
-      // 优先使用 e2e 测试
-      if (packageJson.scripts?.['test:e2e']) {
-        return 'npm run test:e2e';
-      }
-      if (packageJson.scripts?.['test:coverage']) {
-        return 'npm run test:coverage';
-      }
-      if (packageJson.scripts?.test) {
-        return 'npm test';
-      }
-    } catch {
-      // package.json 不存在，尝试其他检测
-    }
-
-    // 尝试 Python 项目
-    try {
-      const pyprojectPath = path.join(workDir, 'pyproject.toml');
-      await fs.access(pyprojectPath);
-      return 'pytest';
-    } catch {
-      // 不是 Python 项目
-    }
-
-    // 尝试 Go 项目
-    try {
-      const goModPath = path.join(workDir, 'go.mod');
-      await fs.access(goModPath);
-      return 'go test ./...';
-    } catch {
-      // 不是 Go 项目
-    }
-
-    // 默认命令
-    return 'npm test';
   }
 
   /**

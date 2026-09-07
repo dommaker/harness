@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execAsync } from '../../utils/exec';
-import { PassesGate } from '../../core/validators/passes-gate';
+import { PassesGate, detectTestCommand } from '../../core/validators/passes-gate';
 import type { PassesGateConfig } from '../../types/passes-gate';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -21,40 +21,6 @@ export interface PassesGateOptions {
   allowPartial?: boolean;
   /** 最大重试次数 */
   maxRetries?: number;
-}
-
-/**
- * 检测项目的测试命令
- */
-async function detectTestCommand(projectPath: string): Promise<string | undefined> {
-  const packageJsonPath = path.join(projectPath, 'package.json');
-
-  try {
-    const content = await fs.readFile(packageJsonPath, 'utf-8');
-    const pkg = JSON.parse(content);
-
-    if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified"') {
-      return 'npm test';
-    }
-    if (pkg.scripts?.['test:ci']) {
-      return 'npm run test:ci';
-    }
-  } catch {
-    // 没有 package.json
-  }
-
-  // 检查其他项目类型
-  try {
-    await fs.access(path.join(projectPath, 'pytest.ini'));
-    return 'pytest';
-  } catch {}
-
-  try {
-    await fs.access(path.join(projectPath, 'go.mod'));
-    return 'go test ./...';
-  } catch {}
-
-  return undefined;
 }
 
 /**

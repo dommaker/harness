@@ -9,7 +9,11 @@ export interface PassesGateConfig {
   /** 是否启用 */
   enabled?: boolean;
   
-  /** 测试命令 */
+  /**
+   * 测试命令。缺省时走 core/validators/passes-gate.ts 的 detectTestCommand 探测：
+   * test:ci → test（排除 echo 占位脚本）→ test:e2e → test:coverage → Python 标记 → go.mod；
+   * 探不到则 fail-closed（不再兜底 'npm test'）
+   */
   testCommand?: string;
   
   /** 是否需要证据 */

@@ -19,9 +19,10 @@ jest.mock('../../../utils/exec', () => ({
   execAsync: jest.fn(),
 }));
 
-// Mock PassesGate
+// Mock PassesGate（detectTestCommand 用真实实现——它就是收口后的正本，fs 已被 mock 喂料）
 jest.mock('../../../core/validators/passes-gate', () => ({
   PassesGate: jest.fn(),
+  detectTestCommand: jest.requireActual('../../../core/validators/passes-gate').detectTestCommand,
 }));
 
 // Mock chalk
@@ -194,10 +195,8 @@ describe('passes-gate command', () => {
     it('应该检测 pytest 项目', async () => {
       // package.json 不存在
       mockFs.readFile.mockRejectedValue(new Error('no file'));
-      // pytest.ini 存在
-      mockFs.access
-        .mockResolvedValueOnce(undefined) // pytest.ini
-        .mockRejectedValueOnce(new Error('no file')); // go.mod
+      // pyproject.toml 存在（Python 标记任一命中即 pytest）
+      mockFs.access.mockResolvedValueOnce(undefined); // pyproject.toml
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -213,6 +212,7 @@ describe('passes-gate command', () => {
       // Reset access mock to avoid leaking from previous tests
       mockFs.access.mockReset();
       mockFs.access
+        .mockRejectedValueOnce(new Error('no file')) // pyproject.toml
         .mockRejectedValueOnce(new Error('no file')) // pytest.ini
         .mockResolvedValueOnce(undefined); // go.mod
 

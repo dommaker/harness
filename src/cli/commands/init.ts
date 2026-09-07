@@ -241,9 +241,14 @@ function printSnippets(io: CommandIO): void {
 }
 
 /**
- * Git pre-commit 代码片段
+ * Git pre-commit 代码片段（#103：打印片段与落盘 hook 的唯一正本；
+ * 落盘 hook = `#!/bin/sh` 头 + 本常量，改钩子只改这里）
  */
 const PRE_COMMIT_SNIPPET = `
+echo "🔍 Running harness checks..."
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+
 # Harness 约束检查
 npx @dommaker/harness check --staged
 if [ $? -ne 0 ]; then
@@ -252,7 +257,6 @@ if [ $? -ne 0 ]; then
 fi
 
 # Plan coverage check (via PostEval)
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 if command -v npx > /dev/null 2>&1; then
   PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
   if [ -n "$PLAN_FILES" ]; then
@@ -265,6 +269,8 @@ if command -v npx > /dev/null 2>&1; then
     done
   fi
 fi
+
+echo "✅ All checks passed"
 `;
 
 /**
@@ -309,37 +315,10 @@ async function setupGitHooks(projectPath: string, io: CommandIO): Promise<void> 
     log(io);
     log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
   } catch {
-    // 不存在，创建文件
+    // 不存在，创建文件：shebang 头 + 共享片段（#103 同源，无第二份文本）
     const preCommitContent = `#!/bin/sh
 # Harness pre-commit hook
-
-echo "🔍 Running harness checks..."
-
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
-
-# 铁律检查
-npx @dommaker/harness check --staged
-if [ $? -ne 0 ]; then
-  echo "❌ Iron law check failed"
-  exit 1
-fi
-
-# Plan coverage check (via PostEval)
-if command -v npx > /dev/null 2>&1; then
-  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
-  if [ -n "$PLAN_FILES" ]; then
-    echo "📋 Checking plan coverage..."
-    for plan in $PLAN_FILES; do
-      npx @dommaker/harness posteval-plan "$plan" || {
-        echo "🛑 Plan coverage incomplete. See above for missed items."
-        exit 1
-      }
-    done
-  fi
-fi
-
-echo "✅ All checks passed"
-`;
+${PRE_COMMIT_SNIPPET}`;
     await fs.writeFile(preCommitPath, preCommitContent, 'utf-8');
     await fs.chmod(preCommitPath, 0o755);
     log(io, chalk.green(`✅ 已创建 .git/hooks/pre-commit`));

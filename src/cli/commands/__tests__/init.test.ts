@@ -111,7 +111,7 @@ describe('init command', () => {
     it('应该输出代码片段模式', async () => {
       await init({ preset: 'standard', printSnippets: true }, io);
       expect(io.outText()).not.toBe('');
-      // 打印版与落盘版 plan 匹配模式须一致（#35：模板字面量 \. 运行期退化为 .，防两副本 drift）
+      // 打印版与落盘版 plan 匹配模式须一致（#35：模板字面量 \. 运行期退化为 .）
       expect(io.outText()).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
     });
   });
@@ -161,8 +161,37 @@ describe('init command', () => {
       expect(hookCall![1]).toContain('npx @dommaker/harness check --staged');
       expect(hookCall![1]).toContain('npx @dommaker/harness posteval-plan');
       expect(hookCall![1]).not.toMatch(/npx harness /);
-      // plan 匹配模式须为转义点（#35：模板字面量 \. 运行期退化为 .，与打印版防 drift）
+      // plan 匹配模式须为转义点（#35：模板字面量 \. 运行期退化为 .）
       expect(hookCall![1]).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
+    });
+
+    it('pre-commit 片段与落盘 hook 同源（#103：差异行并入共享片段，无第二份文本）', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+
+      await init({ preset: 'standard', projectPath: PROJECT }, io);
+      const hookCall = mockFs.writeFile.mock.calls.find((c: any[]) => String(c[0]).includes('pre-commit'));
+      const hookContent = String(hookCall![1]);
+      expect(hookContent.startsWith('#!/bin/sh')).toBe(true);
+
+      const io2 = captureIO();
+      await init({ preset: 'standard', printSnippets: true }, io2);
+
+      // 落盘 hook = shebang 头 + 共享片段：去头后必须逐字出现在打印片段输出里
+      const body = hookContent.replace(/^#!\/bin\/sh\n# Harness pre-commit hook\n/, '');
+      expect(body.length).toBeGreaterThan(0);
+      expect(io2.outText()).toContain(body);
+
+      // 原 heredoc 独有的差异行已并入共享片段，打印片段同样可见
+      for (const line of [
+        'echo "🔍 Running harness checks..."',
+        'echo "✅ All checks passed"',
+      ]) {
+        expect(hookContent).toContain(line);
+        expect(io2.outText()).toContain(line);
+      }
     });
   });
 

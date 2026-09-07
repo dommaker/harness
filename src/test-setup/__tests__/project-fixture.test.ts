@@ -12,8 +12,9 @@ import { describe, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createProjectFixture, writeProjectConfig } from '../project-fixture';
+import { createProjectFixture, writeProjectConfig, writeProjectTraces } from '../project-fixture';
 import { isRegisteredTmpDir } from '../mkdtemp-cleanup';
+import { DEFAULT_TRACE_FILE } from '../../types/trace';
 
 /** mkdtemp-cleanup.ts 的超龄清扫签名（name 不合规的夹具目录漏网后永不被扫） */
 const SWEEP_SIGNATURE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[A-Za-z0-9]{6}$/;
@@ -127,5 +128,51 @@ describe('writeProjectConfig — config 落盘唯一正本', () => {
     writeProjectConfig(root, 'preset: relaxed\n');
 
     expect(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8')).toBe('preset: relaxed\n');
+  });
+});
+
+describe('traces 槽位 / writeProjectTraces — trace 落盘正本（harness#108）', () => {
+  it('traces 槽位逐条落 DEFAULT_TRACE_FILE，缺省字段补齐（level/timestamp/result）', () => {
+    const root = createProjectFixture({
+      name: 'pfx-traces',
+      traces: [{ constraintId: 'c1', result: 'fail' }],
+    });
+
+    const lines = fs.readFileSync(path.join(root, DEFAULT_TRACE_FILE), 'utf-8').trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toEqual({
+      level: 'guideline',
+      timestamp: 1700000000000,
+      result: 'fail',
+      constraintId: 'c1',
+    });
+  });
+
+  it('traces 槽位缺省 → 不写 trace 文件（traceFileExists=false 用例依赖此语义）', () => {
+    const root = createProjectFixture({ name: 'pfx-no-traces' });
+
+    expect(fs.existsSync(path.join(root, DEFAULT_TRACE_FILE))).toBe(false);
+  });
+
+  it('writeProjectTraces 空数组仍落空文件（traceFileExists=true、零记录语义）', () => {
+    const root = createProjectFixture({ name: 'pfx-empty-traces' });
+
+    writeProjectTraces(root, []);
+
+    expect(fs.existsSync(path.join(root, DEFAULT_TRACE_FILE))).toBe(true);
+    expect(fs.readFileSync(path.join(root, DEFAULT_TRACE_FILE), 'utf-8')).toBe('');
+  });
+
+  it('writeProjectTraces 覆盖写：用例内重写不叠加旧记录', () => {
+    const root = createProjectFixture({
+      name: 'pfx-rewrite-traces',
+      traces: [{ constraintId: 'old' }],
+    });
+
+    writeProjectTraces(root, [{ constraintId: 'new' }]);
+
+    const lines = fs.readFileSync(path.join(root, DEFAULT_TRACE_FILE), 'utf-8').trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]).constraintId).toBe('new');
   });
 });

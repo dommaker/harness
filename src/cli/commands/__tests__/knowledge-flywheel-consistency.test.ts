@@ -12,7 +12,7 @@
  */
 
 import * as fs from 'fs';
-import { captureIO, type CapturingIO } from '../../command-contract';
+import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { FileKnowledgeStore } from '../../../knowledge/store';
@@ -67,10 +67,6 @@ function setupKnowledgeBase(): string {
   return projectRoot;
 }
 
-function lastJsonOutput(io: CapturingIO): any {
-  return JSON.parse(io.outText());
-}
-
 let io: CapturingIO;
 beforeEach(() => {
   io = captureIO();
@@ -84,11 +80,11 @@ describe('飞轮指标三处同源', () => {
     const report = new KnowledgeAudit({ baseDir }).run();
     const auditDetails = report.dimensions.flywheel.details;
     await knowledgeStats({ projectPath: projectRoot, json: true }, io);
-    const statsFlywheel = lastJsonOutput(io).flywheel;
+    const statsFlywheel = lastJsonOutput<any>(io).flywheel;
 
     io = captureIO();
     await knowledgeHealth({ dir: baseDir, json: true }, io);
-    const healthSummary = lastJsonOutput(io).summary;
+    const healthSummary = lastJsonOutput<any>(io).summary;
 
     // 逐字段一致（avgRefs 在 audit 报告层的呈现名是 avgRefCount）
     expect(statsFlywheel.refCoverage).toBe(auditDetails.refCoverage);

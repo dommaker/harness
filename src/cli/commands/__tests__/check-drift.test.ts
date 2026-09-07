@@ -8,11 +8,11 @@
 
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import * as os from 'os';
 import * as path from 'path';
 import { check } from '../check';
 import { renderConstraintsSection } from '../../../core/constraints/injection-renderer';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
+import { createProjectFixture } from '../../../test-setup/project-fixture';
 
 // 命令 per-run 构造 checker（harness#88）：构造替身即控制 checkConstraints 返回值
 const mockChecker = { checkConstraints: jest.fn() };
@@ -38,10 +38,6 @@ jest.mock('child_process', () => ({
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const REAL_VERSION = require('../../../../package.json').version as string;
 
-function makeTmpProject(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'harness-check-drift-test-'));
-}
-
 function writeClaudeMd(root: string, version: string): void {
   const section =
     '## Governance Rules\n' + renderConstraintsSection(getEffectiveConstraints(root), version);
@@ -66,7 +62,7 @@ describe('check 命令注入漂移警告', () => {
   const outputText = () => io.outText();
 
   it('版本漂移：黄色警告块 + ⚠️⚠️ 版本行，但不阻断（exit 未调用，仍判通过）', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-check-drift-test' });
     writeClaudeMd(root, '0.0.1-old');
 
     const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
@@ -83,7 +79,7 @@ describe('check 命令注入漂移警告', () => {
   });
 
   it('内容漂移：手改一条 → 警告块含缺失/多余计数，exit 未调用', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-check-drift-test' });
     writeClaudeMd(root, REAL_VERSION);
     const claudeMdPath = path.join(root, 'CLAUDE.md');
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
@@ -99,7 +95,7 @@ describe('check 命令注入漂移警告', () => {
   });
 
   it('无漂移：零警告输出（不增加噪音）', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-check-drift-test' });
     writeClaudeMd(root, REAL_VERSION);
 
     const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
@@ -111,7 +107,7 @@ describe('check 命令注入漂移警告', () => {
   });
 
   it('未注入（无 CLAUDE.md）：不警告', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-check-drift-test' });
 
     const result = await check({ preset: 'standard', staged: false, projectPath: root }, io);
 

@@ -95,3 +95,14 @@ export function captureIO(): CapturingIO {
     errRecords: () => [...errChunks],
   };
 }
+
+/**
+ * 解析 --json 命令的捕获输出（测试断言面，harness#108）
+ *
+ * 与 captureIO 同住一处：它是 captureIO 的消费端正本，此前散在各命令测试里
+ * 逐字复制（JSON.parse(outText())）。缺省返回 Record 形状；消费方已知字段
+ * 形状时传泛型（如 lastJsonOutput<any>(io) 做任意字段穿透）。
+ */
+export function lastJsonOutput<T = Record<string, unknown>>(capture: CapturingIO): T {
+  return JSON.parse(capture.outText());
+}

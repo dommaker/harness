@@ -8,7 +8,7 @@
  */
 
 import * as fs from 'fs';
-import { captureIO, type CapturingIO } from '../../command-contract';
+import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { updateUserModel } from '../update-user-model';
 import { readTranscriptSessions, type MinedSession } from '../../session-mining';
@@ -71,10 +71,6 @@ function mkSession(partial: Partial<MinedSession> = {}): MinedSession {
     toolCalls: ['Read'],
     ...partial,
   };
-}
-
-function lastJsonOutput(capture: CapturingIO): Record<string, unknown> {
-  return JSON.parse(capture.outText());
 }
 
 let io: CapturingIO;

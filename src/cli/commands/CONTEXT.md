@@ -9,7 +9,7 @@ H5（#44）起：
 
 ## 核心导出
 - `COMMAND_DEFINITIONS`（definitions.ts）— 全部非门禁命令定义（纯数据模块、零闭包，禁止 import 命令实现；ADR-0010）
-- 命令契约（`src/cli/command-contract.ts`，上层目录）— `CommandResult` / `CommandKind` / `CommandIO` / `processIO` / `captureIO` / `log` / `logError`
+- 命令契约（`src/cli/command-contract.ts`，上层目录）— `CommandResult` / `CommandKind` / `CommandIO` / `processIO` / `captureIO` / `lastJsonOutput` / `log` / `logError`
 - 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / spec-baseline-check
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）
 
@@ -48,5 +48,5 @@ H5（#44）起：
 - 特殊路由（选项条件、子命令兜底、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction 字段，bin 是纯通用引擎、不含单命令知识
 - **命令 interface = `CommandResult` + 注入 io（架构评审候选7）**：命令实现一律声明 `Promise<CommandResult>`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位的 `reason`，多闸门命令 reason 含 `gate <id>`），末位可选形参 `io: CommandIO = processIO`；类型与写入面在 `src/cli/command-contract.ts`
 - **本目录零 `process.exit` / `process.exitCode`**：kind → 退出码的唯一映射在 `bin/harness.js`（`ok`/`skip` → 0，`fail`/`usage-error` → 1，未知 kind fail-closed）。历史上两处条件式（`command --level` 按严重级、门禁按 passed）已由命令侧译成 kind；`sync-docs --check` 的漂移改由实现返回 `fail`（定义表的 `afterRun` 逃生门随之废除）
-- **输出不得直接用 console**：流式打印走 `log(io, …)` / `logError(io, …)`（`util.format` + 换行，与 console 逐字节等价，见 `src/cli/__tests__/command-contract.test.ts`）；测试断言输出用 `captureIO()`，不再 `spyOn(process, 'exit')`。例外：`constraints retire` 交互正文仍走 console（其 `RetireIO` 只注入 readline 流），退役结果打印已接注入流
+- **输出不得直接用 console**：流式打印走 `log(io, …)` / `logError(io, …)`（`util.format` + 换行，与 console 逐字节等价，见 `src/cli/__tests__/command-contract.test.ts`）；测试断言输出用 `captureIO()`，不再 `spyOn(process, 'exit')`；`--json` 输出断言用 `lastJsonOutput(io)`（JSON.parse 正本，harness#108）。例外：`constraints retire` 交互正文仍走 console（其 `RetireIO` 只注入 readline 流），退役结果打印已接注入流
 - **#95 同型扫荡结论**：两门禁站点已修（`passes-gate` 执行/证据落 projectPath、`acceptance` 去掉 `tasksPath: './tasks.yml'` 相对默认值）。逐点判定后的豁免三处，理由与站点原文一起冻结在 `__tests__/project-path-convention.test.ts` 的豁免表：`release` 的 `pkgPath`（定义表本无 `-p`，pkgPath 就是该命令唯一的根且已逐个传给每条 `run(cmd, pkgPath)`，不构成半失效；给发布流水线新增 `-p` 属新能力）、`constraints` 的 `join(process.cwd(), 'package.json')`（报的是 harness 自身包版本，主锚 `__dirname`，cwd 仅兜底）、`core/spec/validator.ts` 的 `schemaPath: './specs/schemas'`（**确是同型病灶**：`validateAll(projectPath)` 用 projectPath 找 spec 文件、却用 cwd 找 schema；但 `validateFile`/`loadSchema` 签名里没有根，补齐要穿透整个 spec 域，留待 spec 单票收口）

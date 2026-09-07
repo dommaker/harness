@@ -9,6 +9,7 @@
 import { Writable } from 'stream';
 import {
   captureIO,
+  lastJsonOutput,
   log,
   logError,
   processIO,
@@ -123,6 +124,32 @@ describe('captureIO（测试注入面）', () => {
     log(io, 'c');
     expect(io.outLines()).toEqual(['a', 'c']);
     expect(io.errLines()).toEqual(['b']);
+  });
+});
+
+describe('lastJsonOutput（--json 命令输出解析正本，harness#108）', () => {
+  it('解析 captureIO 累计的 stdout 为 JSON（缺省 Record 形状）', () => {
+    const io = captureIO();
+    log(io, JSON.stringify({ sessions: 3, corrections: 3 }));
+    expect(lastJsonOutput(io)).toEqual({ sessions: 3, corrections: 3 });
+  });
+
+  it('多行 pretty JSON 整体解析（一次 log 写入）', () => {
+    const io = captureIO();
+    log(io, JSON.stringify({ a: 1, nested: { b: [2] } }, null, 2));
+    expect(lastJsonOutput(io)).toEqual({ a: 1, nested: { b: [2] } });
+  });
+
+  it('泛型参数解锁消费方已知形状（任意字段穿透）', () => {
+    const io = captureIO();
+    log(io, JSON.stringify({ flywheel: { refCoverage: 0.5 } }));
+    expect(lastJsonOutput<any>(io).flywheel.refCoverage).toBe(0.5);
+  });
+
+  it('stdout 非 JSON 时抛错（解析失败不静默吞掉）', () => {
+    const io = captureIO();
+    log(io, 'not json');
+    expect(() => lastJsonOutput(io)).toThrow();
   });
 });
 

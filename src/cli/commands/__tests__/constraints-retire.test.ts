@@ -11,31 +11,17 @@
 
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import * as os from 'os';
 import * as path from 'path';
 import { PassThrough, Writable } from 'stream';
 import * as yaml from 'js-yaml';
-import type { ExecutionTrace } from '../../../types/trace';
 import { getConstraint } from '../../../core/constraints/definitions';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 import { renderConstraintsSection } from '../../../core/constraints/injection-renderer';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import { retireConstraint, constraintsRetire, runRetireInteractive, printRetireResult } from '../constraints-retire';
+import { createProjectFixture, writeProjectTraces } from '../../../test-setup/project-fixture';
 
 const FIXED_NOW = new Date('2026-08-08T12:00:00.000Z');
-
-function makeTmpProject(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'harness-retire-test-'));
-}
-
-function writeTraces(root: string, traces: Partial<ExecutionTrace>[]): void {
-  const dir = path.join(root, '.harness', 'logs');
-  fs.mkdirSync(dir, { recursive: true });
-  const lines = traces.map(t =>
-    JSON.stringify({ level: 'guideline', timestamp: 1700000000000, result: 'pass', ...t })
-  );
-  fs.writeFileSync(path.join(dir, 'traces.log'), lines.join('\n') + '\n', 'utf-8');
-}
 
 function readConfig(root: string): any {
   return yaml.load(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8'));
@@ -69,8 +55,8 @@ beforeEach(() => {
 
 describe('retireConstraint 执行逻辑', () => {
   it('config.yml 写入形态：enabled:false + retired 元数据（at/reason/stats）', () => {
-    const root = makeTmpProject();
-    writeTraces(root, [
+    const root = createProjectFixture({ name: 'harness-retire-test' });
+    writeProjectTraces(root, [
       { constraintId: 'no_hardcoded_credentials', result: 'pass' },
       { constraintId: 'no_hardcoded_credentials', result: 'pass', timestamp: 1700000001000 },
       { constraintId: 'no_hardcoded_credentials', result: 'fail', timestamp: 1700000002000 },
@@ -96,7 +82,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('config.yml 不存在时创建；已有其他配置时保留', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
     fs.writeFileSync(path.join(root, '.harness', 'config.yml'), 'preset: strict\nscenes:\n  - llm-app\n', 'utf-8');
 
@@ -111,8 +97,10 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('KnowledgeStore 写入退役记录：规则原文 + 原因 + 统计 + signal 模式', () => {
-    const root = makeTmpProject();
-    writeTraces(root, [{ constraintId: 'no_bypass_checkpoint', result: 'fail' }]);
+    const root = createProjectFixture({
+      name: 'harness-retire-test',
+      traces: [{ constraintId: 'no_bypass_checkpoint', result: 'fail' }],
+    });
 
     const result = retireConstraint(root, 'no_bypass_checkpoint', { reason: '流程已内置门禁', now: FIXED_NOW });
     expect(result.status).toBe('retired');
@@ -136,7 +124,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('CLAUDE.md 含标记段时同步重渲染（退役条目消失、标记保留）', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     // 先用当前生效集渲染一个合法注入段
     const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
     expect(before).toContain('no_bypass_checkpoint');
@@ -159,7 +147,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('CLAUDE.md 无标记段或不存在时不创建、不同步', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# 用户自写\n', 'utf-8');
     const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
@@ -168,7 +156,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('新模型仓：AGENTS.md PRESERVE:governance 内含标记段时同步重渲染（无 CLAUDE.md）', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
     expect(before).toContain('no_bypass_checkpoint');
     fs.writeFileSync(
@@ -193,7 +181,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('两文件均有标记段时旧模型仓豁免：只同步 CLAUDE.md，AGENTS.md 不动', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}`, 'utf-8');
     const agentsMd = `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n`;
@@ -209,7 +197,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('重复 retire：already_retired，不覆盖原 retired 元数据', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const first = retireConstraint(root, 'capability_sync', { reason: '第一次', now: FIXED_NOW });
     expect(first.status).toBe('retired');
 
@@ -223,28 +211,28 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('未知 id：unknown_id，不落盘任何文件', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const result = retireConstraint(root, 'not_a_constraint', { now: FIXED_NOW });
     expect(result.status).toBe('unknown_id');
     expect(fs.existsSync(path.join(root, '.harness'))).toBe(false);
   });
 
   it('check 层 iron：isIronLaw 标记为 true（供交互模式二次确认）', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const result = retireConstraint(root, 'docs_freshness', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.isIronLaw).toBe(true);
   });
 
   it('退役后生效集不再包含该约束', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     expect(getEffectiveConstraints(root).some(c => c.id === 'capability_sync')).toBe(true);
     retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(getEffectiveConstraints(root).some(c => c.id === 'capability_sync')).toBe(false);
   });
 
   it('custom 约束退役：落 custom-constraints.yml retired 段（不写 config.yml），生效集与注入段移除', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     writeCustom(root, CUSTOM_YML);
     const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
     expect(before).toContain('**my_custom_rule**');
@@ -276,7 +264,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('custom 重复退役：yml 已带 retired → already_retired，不覆盖原元数据', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     writeCustom(root, CUSTOM_YML);
     const first = retireConstraint(root, 'my_custom_rule', { reason: '第一次', now: FIXED_NOW });
     expect(first.status).toBe('retired');
@@ -291,7 +279,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('custom 历史落点（config.yml enabled:false）仍判定 already_retired', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     writeCustom(root, CUSTOM_YML);
     fs.writeFileSync(path.join(root, '.harness', 'config.yml'), 'constraints:\n  my_custom_rule:\n    enabled: false\n', 'utf-8');
     const result = retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
@@ -299,7 +287,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('custom 退役 KnowledgeStore 记录包含 promptInjection（规则原文完整）', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     writeCustom(root, CUSTOM_YML);
     const result = retireConstraint(root, 'my_custom_rule', { reason: '由新机制覆盖', now: FIXED_NOW });
     expect(result.status).toBe('retired');
@@ -312,7 +300,7 @@ describe('retireConstraint 执行逻辑', () => {
   });
 
   it('custom 恢复：删除 yml retired 段后回到生效集', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     writeCustom(root, CUSTOM_YML);
     retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
     expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(false);
@@ -327,7 +315,7 @@ describe('retireConstraint 执行逻辑', () => {
 
 describe('constraintsRetire 非交互直达', () => {
   it('无 --yes 直达：报错 + 非零退出码 + 不落盘任何文件（#24 人确认闸门）', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     {
       const result = await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役' }, io);
 
@@ -341,7 +329,7 @@ describe('constraintsRetire 非交互直达', () => {
   });
 
   it('--yes 直达 iron 退役：打印额外警示并落盘', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
@@ -353,7 +341,7 @@ describe('constraintsRetire 非交互直达', () => {
   });
 
   it('--yes 直达非 iron（guideline）退役：不打印 iron 警示并落盘', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
@@ -365,7 +353,7 @@ describe('constraintsRetire 非交互直达', () => {
   });
 
   it('--yes 直达未知 id：明确提示', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     await constraintsRetire('ghost', { projectPath: root, yes: true }, io);
     const output = io.outText();
     expect(output).toContain('约束不存在');
@@ -403,7 +391,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   }
 
   it('候选编号选择 + iron 二次确认拒绝 → 不落盘', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     // 无 trace → 候选全部为零触发，1 号候选是第一条 iron（no_completion_without_verification）
     const streams = makeIo(['1', 'n']); // 选 1 号 → iron 确认拒绝
     const printed = captureLog();
@@ -420,7 +408,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   });
 
   it('无候选 → 手动输入 id → 确认执行 → 落盘', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     // 所有 check 约束给少量健康数据（低于一切候选阈值）
     const healthy = getEffectiveConstraints(root)
       .filter(c => c.kind === 'check')
@@ -429,7 +417,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
         { constraintId: c.id, result: 'pass' as const, timestamp: 1700000001000 },
         { constraintId: c.id, result: 'fail' as const, timestamp: 1700000002000 },
       ]);
-    writeTraces(root, healthy);
+    writeProjectTraces(root, healthy);
 
     const streams = makeIo(['no_hardcoded_credentials', '误报太多', 'y']);
     const printed = captureLog();
@@ -447,7 +435,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   });
 
   it('坏行 fixture：候选列表前告知损坏行数（决策依据不完整不静默，harness#100）', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const dir = path.join(root, '.harness', 'logs');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
@@ -472,8 +460,10 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   });
 
   it('trace 无损坏时不出现坏行提示（零噪声）', async () => {
-    const root = makeTmpProject();
-    writeTraces(root, [{ constraintId: 'a', result: 'pass' }]);
+    const root = createProjectFixture({
+      name: 'harness-retire-test',
+      traces: [{ constraintId: 'a', result: 'pass' }],
+    });
 
     const streams = makeIo(['']);
     const printed = captureLog();
@@ -491,7 +481,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   });
 
   it('直达 --yes 路径也在落盘前告知损坏行数（harness#100：不经过交互也有告知）', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const dir = path.join(root, '.harness', 'logs');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
@@ -510,7 +500,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   });
 
   it('无候选 → 手动输入 custom id → 确认执行 → 落 custom-constraints.yml', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     writeCustom(root, CUSTOM_YML);
     // 所有 check 约束给少量健康数据（低于一切候选阈值）
     const healthy = getEffectiveConstraints(root)
@@ -520,7 +510,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
         { constraintId: c.id, result: 'pass' as const, timestamp: 1700000001000 },
         { constraintId: c.id, result: 'fail' as const, timestamp: 1700000002000 },
       ]);
-    writeTraces(root, healthy);
+    writeProjectTraces(root, healthy);
 
     const streams = makeIo(['my_custom_rule', '作用对象消失', 'y']);
     await runRetireInteractive(root, streams);
@@ -532,11 +522,11 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
   });
 
   it('无候选 → 手动输入未知 id → 提示不存在并取消', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-retire-test' });
     const healthy = getEffectiveConstraints(root)
       .filter(c => c.kind === 'check')
       .flatMap(c => [{ constraintId: c.id, result: 'pass' as const }]);
-    writeTraces(root, healthy);
+    writeProjectTraces(root, healthy);
 
     const streams = makeIo(['ghost_id']);
     const printed = captureLog();

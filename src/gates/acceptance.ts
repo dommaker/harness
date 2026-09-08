@@ -18,56 +18,24 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import type { Gate, GateContext, GateDecision } from './types';
+import type {
+  Gate,
+  GateContext,
+  GateDecision,
+  SpecAcceptanceGateConfig,
+  AcceptanceGateContext,
+  AcceptanceCriteria,
+} from './types';
 import { decisionFromResult } from './decision';
 
 
 // ==================== 类型定义 ====================
-
-/**
- * 验收标准门禁配置
- */
-export interface SpecAcceptanceGateConfig {
-  /** tasks.yml 路径 */
-  tasksPath?: string;
-  /** 是否检查所有任务 */
-  checkAllTasks?: boolean;
-  /** 自定义验收条件 */
-  customAcceptanceCriteria?: Record<string, (task: any) => Promise<boolean>>;
-  /** E2E 测试命令模板 */
-  e2eTestCommand?: string;
-  /** E2E 测试超时时间（毫秒） */
-  e2eTestTimeout?: number;
-  /** 项目路径 */
-  projectPath?: string;
-}
-
-/**
- * 验收标准门禁上下文
- */
-export interface AcceptanceGateContext {
-  /** 项目路径 */
-  projectPath: string;
-  /** 任务 ID */
-  taskId?: string;
-  /** tasks.yml 路径 */
-  tasksPath?: string;
-}
-
-/**
- * 验收标准（旧格式，向后兼容）
- */
-export interface AcceptanceCriteria {
-  id: string;
-  description: string;
-  type: 'manual' | 'automated' | 'test';
-  required: boolean;
-  checked?: boolean;
-  notes?: string;
-}
+// SpecAcceptanceGateConfig / AcceptanceGateContext / AcceptanceCriteria 正本在 ./types
+// （harness#101：本文件不再持有双份定义与工厂，测试与公共面同走 gates/index seam）
 
 /**
  * 验收条件（新格式，支持 E2E 测试关联）
@@ -144,7 +112,6 @@ export class SpecAcceptanceGate implements Gate {
 
   constructor(config?: Partial<SpecAcceptanceGateConfig>) {
     this.config = {
-      tasksPath: './tasks.yml',
       checkAllTasks: false,
       e2eTestCommand: 'npx playwright test',
       e2eTestTimeout: 120000,
@@ -176,10 +143,11 @@ export class SpecAcceptanceGate implements Gate {
    */
   async check(context: AcceptanceGateContext): Promise<AcceptanceGateResult> {
     try {
-      // 确定 tasks.yml 路径
-      const tasksPath = context.tasksPath ?? 
-        this.config.tasksPath ?? 
-        path.join(context.projectPath, 'tasks.yml');
+      // 确定 tasks.yml 路径：相对值一律锚在 projectPath（此处不取 cwd）
+      const tasksPath = path.resolve(
+        context.projectPath,
+        context.tasksPath ?? this.config.tasksPath ?? 'tasks.yml',
+      );
 
       // 加载 tasks 文件
       const tasks = await this.loadTasks(tasksPath);
@@ -458,7 +426,8 @@ export class SpecAcceptanceGate implements Gate {
       });
 
       const output = stdout + stderr;
-      const passed = this.parseTestOutput(output);
+      // 退出码为 0 的分支：文本只能否决，不能反向加分（与 passes-gate 同一判定入口，ADR-0014）
+      const { passed } = judgeTestRun({ exitCode: 0, output });
 
       return {
         criteria: testFile,
@@ -468,7 +437,7 @@ export class SpecAcceptanceGate implements Gate {
         output: output.substring(0, 2000),
       };
     } catch (error: any) {
-      // 超时或执行失败
+      // 超时或非零退出的分支：判负，文本不参与（文本救不回非零退出，ADR-0014）
       return {
         criteria: testFile,
         testFile,
@@ -479,38 +448,4 @@ export class SpecAcceptanceGate implements Gate {
       };
     }
   }
-
-  /**
-   * 解析测试输出判断是否通过
-   */
-  private parseTestOutput(output: string): boolean {
-    // Playwright 格式
-    if (output.includes('passed')) {
-      // 检查是否有失败
-      const failedMatch = output.match(/(\d+)\s+failed/);
-      if (failedMatch && parseInt(failedMatch[1]) > 0) {
-        return false;
-      }
-      return true;
-    }
-    
-    // Jest 格式
-    if (output.includes('Test Suites:')) {
-      const match = output.match(/Test Suites:\s+(\d+)\s+failed/);
-      if (match && parseInt(match[1]) > 0) {
-        return false;
-      }
-      return output.includes('passed');
-    }
-    
-    // 通用格式
-    return output.includes('PASS') && !output.includes('FAIL');
-  }
-}
-
-/**
- * 创建验收标准门禁（便捷函数）
- */
-export function createSpecAcceptanceGate(config?: Partial<SpecAcceptanceGateConfig>): SpecAcceptanceGate {
-  return new SpecAcceptanceGate(config);
 }

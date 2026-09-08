@@ -103,11 +103,9 @@ export type {
   PassesGateResult,
   PassesGateCheckResult,
   PassesGateViolation,
-  PassesGateExtension,
   TestResult,
   DynamicTask,
   TaskTestResult,
-  ExtensionTestResult,
 } from './types/passes-gate';
 export type {
   StepMeta,
@@ -137,8 +135,6 @@ export type {
   TaskStepStatus,
   SessionInfo,
 } from './types/session';
-// 与 passes-gate 同名类型的 session 版（沿用既有别名）
-export { DynamicTask as ExtendedDynamicTask, TaskTestResult as ExtendedTaskTestResult } from './types/session';
 
 // ========================================
 // Spec 验证（已接线的 spec 故事：validator + SpecAcceptanceGate）

@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { updateUserModel } from '../update-user-model';
 import { readTranscriptSessions, type MinedSession } from '../../session-mining';
@@ -72,33 +73,30 @@ function mkSession(partial: Partial<MinedSession> = {}): MinedSession {
   };
 }
 
-function lastJsonOutput(consoleSpy: jest.SpyInstance): Record<string, unknown> {
-  const jsonLine = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-  return JSON.parse(jsonLine);
-}
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
 
 describe('update-user-model command', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     fs.rmSync(TEST_HOME, { recursive: true, force: true });
     fs.mkdirSync(path.join(TEST_HOME, '.claude', 'projects', '-root-projects', 'memory'), { recursive: true });
     process.env.CLAUDE_TRANSCRIPTS_DIR = path.join(TEST_HOME, 'transcripts');
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
     delete process.env.CLAUDE_TRANSCRIPTS_DIR;
   });
 
   test('无新会话：提示 No new sessions to process', async () => {
     mockReadTranscriptSessions.mockReturnValue([]);
 
-    await updateUserModel({});
+    await updateUserModel({}, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No new sessions to process'));
+    expect(io.outText()).toContain('No new sessions to process');
     expect(fs.existsSync(STATE_FILE)).toBe(false);
   });
 
@@ -108,9 +106,9 @@ describe('update-user-model command', () => {
       mkSession({ id: 'session-b' }),
     ]);
 
-    await updateUserModel({ json: true, dryRun: true });
+    await updateUserModel({ json: true, dryRun: true }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(2);
     expect(output.changes).toEqual(
       expect.arrayContaining([
@@ -125,39 +123,34 @@ describe('update-user-model command', () => {
   test('--dry-run：只展示变化，不写 state 文件', async () => {
     mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
 
-    await updateUserModel({ dryRun: true });
+    await updateUserModel({ dryRun: true }, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Processed 1 new sessions'));
+    expect(io.outText()).toContain('Processed 1 new sessions');
     expect(fs.existsSync(STATE_FILE)).toBe(false);
   });
 
   test('默认（非 dry-run）：落盘 state 并记录已处理会话', async () => {
     mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
 
-    await updateUserModel({});
+    await updateUserModel({}, io);
 
     expect(fs.existsSync(STATE_FILE)).toBe(true);
     const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
     expect(state.sessionsProcessed).toContain('session-a');
   });
 
-  test('--days 1：只处理最近 1 天的会话', async () => {
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'today' }),
-      mkSession({
-        id: 'three-days-ago',
-        date: todayStr(3),
-        turns: [
-          { role: 'user', content: '旧会话概念内容测试' },
-          { role: 'assistant', content: '' },
-        ],
-      }),
-    ]);
+  test('--days 1：since 过滤下推到 seam（自然日窗口，含今天）', async () => {
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'today' })]);
 
-    await updateUserModel({ json: true, dryRun: true, days: 1 });
+    await updateUserModel({ json: true, dryRun: true, days: 1 }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(1);
+    // date >= 今日 ⟺ mtimeMs >= 今日 UTC 零点，过滤在 seam 内 stat 级完成
+    expect(mockReadTranscriptSessions).toHaveBeenCalledWith(
+      process.env.CLAUDE_TRANSCRIPTS_DIR,
+      { excludeIds: [], since: Date.parse(todayStr()) },
+    );
   });
 
   test('缺省 --days：处理全部未处理会话（向后兼容）', async () => {
@@ -173,13 +166,48 @@ describe('update-user-model command', () => {
       }),
     ]);
 
-    await updateUserModel({ json: true, dryRun: true });
+    await updateUserModel({ json: true, dryRun: true }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(2);
+    // 缺省 days：不下推 since（向后兼容全量）
+    expect(mockReadTranscriptSessions).toHaveBeenCalledWith(
+      process.env.CLAUDE_TRANSCRIPTS_DIR,
+      { excludeIds: [] },
+    );
   });
 
-  test('sessionsProcessed 去重：已处理会话不重复计入（与 --days 正交）', async () => {
+  test('同一 concept 只计一次：occurrences 等于 merged 聚合值（#113 双计 bug）', async () => {
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
+
+    await updateUserModel({}, io);
+
+    const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    // userText 整条中文序列恰为一个 concept（count=1）；聚合后只应出现一次，
+    // 双计 bug 下会被 merged 循环 + per-session 循环各加一次变成 2
+    expect(state.patterns['数据库迁移方案需要执行'].occurrences).toBe(1);
+    expect(state.patterns['数据库迁移方案需要执行'].sessions).toEqual(['session-a']);
+  });
+
+  test('correction phrase 的 ×3 加权不受影响（buildMergedConcepts 内）', async () => {
+    mockReadTranscriptSessions.mockReturnValue([
+      mkSession({
+        id: 'session-a',
+        turns: [
+          { role: 'user', content: '这种问题反复出现' },
+          { role: 'assistant', content: '' },
+        ],
+      }),
+    ]);
+
+    await updateUserModel({}, io);
+
+    const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    // 纠正语句提取的 concept 按 ×3 计入（裁决：权重在 buildMergedConcepts，删循环不影响）
+    expect(state.patterns['这种问题'].occurrences).toBe(3);
+  });
+
+  test('sessionsProcessed 去重：已处理会话经 excludeIds 下推排除', async () => {
     fs.writeFileSync(
       STATE_FILE,
       JSON.stringify({
@@ -192,14 +220,15 @@ describe('update-user-model command', () => {
       }),
       'utf-8',
     );
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'session-a' }),
-      mkSession({ id: 'session-b' }),
-    ]);
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-b' })]);
 
-    await updateUserModel({ json: true, dryRun: true, days: 7 });
+    await updateUserModel({ json: true, dryRun: true, days: 7 }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.newSessions).toBe(1);
+    expect(mockReadTranscriptSessions).toHaveBeenCalledWith(
+      process.env.CLAUDE_TRANSCRIPTS_DIR,
+      { excludeIds: ['session-a'], since: expect.any(Number) },
+    );
   });
 });

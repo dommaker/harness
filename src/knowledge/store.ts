@@ -8,7 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
 import type { KnowledgeEntry, IndexEntry, QueryFilter } from './types';
 
 const DEFAULT_DIR = '.harness/knowledge';
@@ -30,6 +30,11 @@ export interface KnowledgeStore {
   get(id: string): KnowledgeEntry | undefined;
   list(filter?: QueryFilter): KnowledgeEntry[];
   save(entry: KnowledgeEntry): void;
+  /**
+   * 批量保存（harness#107）：循环内只更新内存索引，结束一次 writeIndex，
+   * 消除逐条 save 的 O(K·N) 全量索引重写。空批为零读写 no-op。
+   */
+  saveAll(entries: KnowledgeEntry[]): void;
   delete(id: string): boolean;
   update(id: string, partial: Partial<KnowledgeEntry>): KnowledgeEntry | undefined;
   rebuildIndex(): void;
@@ -47,6 +52,14 @@ export interface KnowledgeStore {
  */
 export class FileKnowledgeStore implements KnowledgeStore {
   private baseDir: string;
+  /**
+   * index.json 解析结果的实例级缓存（harness#106）
+   *
+   * mtimeMs+size 指纹（先例：project-config-loader.ts rawConfigCache）：
+   * 文件未变则复用解析结果，消除 list() 一次调用内 N+1 次全量重读；
+   * 文件变更（含外部进程改写、删除）自动失效。
+   */
+  private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;
 
   constructor(config?: Partial<StoreConfig>) {
     this.baseDir = config?.baseDir || DEFAULT_CONFIG.baseDir;
@@ -78,10 +91,29 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   save(entry: KnowledgeEntry): void {
     const filePath = this.entryPath(entry);
-    const frontmatter = this.toFrontmatter(entry);
-    const content = `---\n${frontmatter}---\n\n${entry.content}`;
+    const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
     fs.writeFileSync(filePath, content, 'utf-8');
     this.updateIndexEntry(entry);
+  }
+
+  saveAll(entries: KnowledgeEntry[]): void {
+    if (entries.length === 0) return;
+    const index = this.readIndex();
+    const position = new Map(index.map((e, i) => [e.id, i]));
+    for (const entry of entries) {
+      const filePath = this.entryPath(entry);
+      const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
+      fs.writeFileSync(filePath, content, 'utf-8');
+      const indexEntry = this.toIndexEntry(entry);
+      const idx = position.get(entry.id);
+      if (idx !== undefined) {
+        index[idx] = indexEntry;
+      } else {
+        position.set(entry.id, index.length);
+        index.push(indexEntry);
+      }
+    }
+    this.writeIndex(index);
   }
 
   delete(id: string): boolean {
@@ -179,11 +211,16 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   private parseFile(raw: string, filePath: string): KnowledgeEntry | undefined {
-    const match = raw.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/);
-    if (!match) return undefined;
+    const fm = splitFrontmatter(raw);
+    if (fm.state === 'malformed') {
+      // 统一口径（harness#89）：损坏的 frontmatter 必须显式上报，不再静默丢条目
+      console.error(`[harness] 知识条目 frontmatter ${fm.reason}（${fm.detail}），已跳过 ${filePath}`);
+      return undefined;
+    }
+    if (fm.state === 'absent') return undefined;
 
-    const meta = yaml.load(match[1]) as Record<string, unknown>;
-    const content = match[2];
+    const meta = fm.meta;
+    const content = fm.body;
 
     return {
       id: meta.id as string || path.basename(filePath, '.md'),
@@ -209,7 +246,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
     };
   }
 
-  private toFrontmatter(entry: KnowledgeEntry): string {
+  /** canonical 字段序是 store 的私有策略（harness#89 裁决 3），包裹格式交给 joinFrontmatter */
+  private toFrontmatter(entry: KnowledgeEntry): Record<string, unknown> {
     const meta: Record<string, unknown> = {
       id: entry.id,
       type: entry.type,
@@ -231,7 +269,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     if (entry.decayAt) meta.decayAt = entry.decayAt;
     if (entry.fullContentPath) meta.fullContentPath = entry.fullContentPath;
     if (entry.skillId) meta.skillId = entry.skillId;
-    return yaml.dump(meta, { lineWidth: 120 });
+    return meta;
   }
 
   private toIndexEntry(entry: KnowledgeEntry): IndexEntry {
@@ -348,10 +386,25 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   readIndex(): IndexEntry[] {
     const indexPath = path.join(this.baseDir, INDEX_FILE);
-    if (!fs.existsSync(indexPath)) return [];
+    let stat: fs.Stats | undefined;
+    try {
+      stat = fs.statSync(indexPath);
+    } catch {
+      stat = undefined;
+    }
+    if (!stat) {
+      this.indexCache = undefined;
+      return [];
+    }
+    const cached = this.indexCache;
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.entries;
+    }
     try {
       const raw = fs.readFileSync(indexPath, 'utf-8');
-      return JSON.parse(raw) as IndexEntry[];
+      const entries = JSON.parse(raw) as IndexEntry[];
+      this.indexCache = { mtimeMs: stat.mtimeMs, size: stat.size, entries };
+      return entries;
     } catch {
       return [];
     }

@@ -2,7 +2,9 @@
  * SpecAcceptanceGate 测试
  */
 
-import { SpecAcceptanceGate, createSpecAcceptanceGate } from '../acceptance';
+import { SpecAcceptanceGate } from '../acceptance';
+// 工厂与公共面同一 seam：gates/index 是唯一出口（harness#101）
+import { createSpecAcceptanceGate } from '../index';
 import * as fs from 'fs/promises';
 import { exec } from 'child_process';
 
@@ -377,7 +379,7 @@ tasks:
     });
   });
 
-  describe('parseTestOutput()', () => {
+  describe('runE2ETest 判定接线（解析分支矩阵见 core/validators/__tests__/test-output.test.ts）', () => {
     it('should detect passed Playwright test', async () => {
       mockFs.readFile.mockResolvedValueOnce(`
 tasks:
@@ -410,90 +412,6 @@ tasks:
 
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(null, { stdout: '1 failed, 2 passed', stderr: '' });
-      });
-
-      const result = await gate.check({
-        projectPath: '/test/project',
-        taskId: 'TASK-001',
-      });
-
-      expect(result.passed).toBe(false);
-    });
-
-    it('should detect passed Jest test', async () => {
-      mockFs.readFile.mockResolvedValueOnce(`
-tasks:
-  - id: TASK-001
-    acceptance:
-      - description: Test
-        e2e_test: test.spec.ts
-`);
-
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(null, { stdout: 'Test Suites: 0 failed, 5 passed', stderr: '' });
-      });
-
-      const result = await gate.check({
-        projectPath: '/test/project',
-        taskId: 'TASK-001',
-      });
-
-      expect(result.passed).toBe(true);
-    });
-
-    it('should detect failed Jest test', async () => {
-      mockFs.readFile.mockResolvedValueOnce(`
-tasks:
-  - id: TASK-001
-    acceptance:
-      - description: Test
-        e2e_test: test.spec.ts
-`);
-
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(null, { stdout: 'Test Suites: 2 failed, 3 passed', stderr: '' });
-      });
-
-      const result = await gate.check({
-        projectPath: '/test/project',
-        taskId: 'TASK-001',
-      });
-
-      expect(result.passed).toBe(false);
-    });
-
-    it('should detect PASS in generic output', async () => {
-      mockFs.readFile.mockResolvedValueOnce(`
-tasks:
-  - id: TASK-001
-    acceptance:
-      - description: Test
-        e2e_test: test.spec.ts
-`);
-
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(null, { stdout: 'PASS test.js', stderr: '' });
-      });
-
-      const result = await gate.check({
-        projectPath: '/test/project',
-        taskId: 'TASK-001',
-      });
-
-      expect(result.passed).toBe(true);
-    });
-
-    it('should detect FAIL in generic output', async () => {
-      mockFs.readFile.mockResolvedValueOnce(`
-tasks:
-  - id: TASK-001
-    acceptance:
-      - description: Test
-        e2e_test: test.spec.ts
-`);
-
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(null, { stdout: 'PASS test1.js\nFAIL test2.js', stderr: '' });
       });
 
       const result = await gate.check({

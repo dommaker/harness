@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
 
 interface MigrationResult {
   total: number;
@@ -40,14 +40,19 @@ export function migrateKnowledgeEntries(baseDir: string): MigrationResult {
     const filePath = path.join(baseDir, file);
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
-      const match = raw.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/);
-      if (!match) {
+      const fm = splitFrontmatter(raw);
+      if (fm.state === 'absent') {
         result.errors.push(`${file}: no frontmatter found`);
         continue;
       }
+      if (fm.state === 'malformed') {
+        // 统一口径（harness#89）：损坏的 frontmatter 落 errors，不静默丢
+        result.errors.push(`${file}: frontmatter ${fm.reason} (${fm.detail})`);
+        continue;
+      }
 
-      const meta = yaml.load(match[1]) as Record<string, unknown>;
-      const content = match[2];
+      const meta = fm.meta;
+      const content = fm.body;
 
       // Check if migration needed
       if (meta.consumptionMode && meta.origin) {
@@ -60,9 +65,7 @@ export function migrateKnowledgeEntries(baseDir: string): MigrationResult {
       if (!meta.origin) meta.origin = 'agent';
 
       // Write back
-      const newFrontmatter = yaml.dump(meta, { lineWidth: 120 });
-      const newContent = `---\n${newFrontmatter}---\n\n${content}`;
-      fs.writeFileSync(filePath, newContent, 'utf-8');
+      fs.writeFileSync(filePath, joinFrontmatter(meta, content), 'utf-8');
       result.migrated++;
     } catch (err) {
       result.errors.push(`${file}: ${err instanceof Error ? err.message : String(err)}`);

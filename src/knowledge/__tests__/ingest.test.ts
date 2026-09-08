@@ -127,6 +127,62 @@ describe('KnowledgeIngest', () => {
       expect(entries).toHaveLength(2);
       expect(store.list()).toHaveLength(2);
     });
+
+    it('同类型条目 id 序号批内递增（harness#107）', () => {
+      const entries = ingest.ingestBatch(
+        [
+          { title: 'First', type: 'decision' },
+          { title: 'Second', type: 'decision' },
+          { title: 'Third', type: 'decision' },
+        ],
+        { source: 'test', layer: 'project' },
+      );
+      expect(entries.map(e => e.id)).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+    });
+  });
+
+  describe('generateId 走索引计数（harness#107）', () => {
+    it('不再经 store.list() 逐条读条目文件', () => {
+      const listSpy = jest.spyOn(store, 'list');
+      try {
+        ingest.ingestEntry(
+          { title: 'Test', content: 'Content', type: 'decision' },
+          { source: 'test', layer: 'project' },
+        );
+        expect(listSpy).not.toHaveBeenCalled();
+      } finally {
+        listSpy.mockRestore();
+      }
+    });
+
+    it('archived/deprecated 条目不计入序号（与 list 默认过滤口径一致）', () => {
+      store.save({
+        id: 'DEC-001',
+        type: 'decision',
+        title: 'Archived One',
+        content: 'Original',
+        maturity: 'draft',
+        layer: 'project',
+        created: '2026-05-01T00:00:00.000Z',
+        lastReferenced: '',
+        contributors: [],
+        projects: [],
+        tags: [],
+        applicablePhases: [],
+        sourceReferences: [],
+        referencedBy: [],
+        executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
+      });
+      store.update('DEC-001', { maturity: 'archived' });
+
+      const entry = ingest.ingestEntry(
+        { title: 'Fresh', content: 'Content', type: 'decision' },
+        { source: 'test', layer: 'project' },
+      );
+      expect(entry.id).toBe('DEC-001');
+    });
   });
 
   describe('findDuplicate reads from disk (A1)', () => {
@@ -270,6 +326,35 @@ describe('KnowledgeIngest', () => {
         { title: '数据库连接池耗尽', content: '根因：连接池大小为 10，高并发时全部占满。', type: 'pitfall' },
         { source: 'test', layer: 'system' },
       );
+      expect(store.list({ types: ['pitfall'] })).toHaveLength(2);
+    });
+
+    it('正文首行以 --- 开头但不是 frontmatter 时不误吞分隔线（harness#89 回归）', () => {
+      // 两条正文首行是 `--- 说明…`（不是整行 ---，故 absent），中间各有一条 --- 分隔线。
+      // 收口前的手写 strip 把正文里那条 --- 当成闭合，吞掉前面的说明行，
+      // 于是两条的 dedup 前缀都变成同一段尾巴 → 误判重复。
+      const tail = '端口 3001 与 13101 不一致导致 session:archive 事件无法送达，责任归属是启动配置未校验端口。';
+      store.save({
+        id: 'PIT-091', type: 'pitfall', title: '甲乙丙丁子网掩码配置漂移一',
+        content: `--- 说明：这一段以三个连字符开头，但它不是 frontmatter\n\n---\n\n${tail}\n`,
+        maturity: 'draft', layer: 'system',
+        created: '2026-05-28T00:00:00.000Z', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [],
+        executionResults: [],
+        consumptionMode: 'reference',
+        origin: 'agent',
+      });
+
+      ingest.ingestEntry(
+        {
+          title: '戊己庚辛存储配额阈值设定二',
+          content: `--- 另一段同样以三个连字符开头的说明文字，形态与上面完全对称\n\n---\n\n${tail}\n`,
+          type: 'pitfall',
+        },
+        { source: 'test', layer: 'system' },
+      );
+
       expect(store.list({ types: ['pitfall'] })).toHaveLength(2);
     });
 

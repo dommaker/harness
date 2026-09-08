@@ -177,39 +177,14 @@ export interface ConstraintContext {
   /** 是否已进行复用检查 */
   hasReuseCheck?: boolean;
   
-  /** 复用检查结果 */
-  reuseCheckResult?: {
-    existingCapabilities: string[];
-    canReuse: boolean;
-    reuseRecommendation: string;
-  };
-  
   /** 是否只处理单个任务（用于 incremental_progress） */
   hasSingleTask?: boolean;
   
-  /** 是否已验证外部能力（对应约束已降级为 prompt，字段保留兼容） */
-  hasExternalCapabilityVerification?: boolean;
-
-  /** 是否已对比需求验证（review 变体已并入主约束，字段保留兼容） */
-  hasRequirementReview?: boolean;
-
   /** 是否有需求文档（用于 no_implementation_without_requirement） */
   hasRequirement?: boolean;
 
-  /** 是否在 worktree 中执行（对应约束已移出内置，字段保留兼容） */
-  hasWorktree?: boolean;
-
   /** worktree 路径（用于 worktree 相关检查） */
   worktreePath?: string;
-
-  /** 完成声明文本（对应检查已并入 prompt 层，字段保留兼容） */
-  completionClaimText?: string;
-
-  /** 是否完成两阶段审查（对应约束已移出内置，字段保留兼容） */
-  hasTwoStageReview?: boolean;
-
-  /** 执行上下文 */
-  executionContext?: any;
 }
 
 /**

@@ -3,9 +3,12 @@
  * 
  * 确保 task.passes 字段只能通过测试结果修改
  * 禁止 Agent 自评通过
+ *
+ * 「过了没」的判定依据不在本文件：唯一入口是 test-output.ts 的 judgeTestRun（ADR-0014）
  */
 
 import { execAsync, delay } from '../../utils/exec';
+import { judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type {
@@ -13,8 +16,6 @@ import type {
   PassesGateResult,
   TaskTestResult,
   DynamicTask,
-  PassesGateExtension,
-  ExtensionTestResult,
   TestResult,
   PassesGateCheckResult,
   PassesGateViolation,
@@ -46,6 +47,51 @@ const PROTECTED_TEST_PATTERNS = [
   '**/tests/**',
   '**/__tests__/**',
 ];
+
+/**
+ * 检测项目的测试命令（唯一正本，CLI 与库调用共消费，架构评审 A2）
+ *
+ * 探测顺序：test:ci → test（排除 npm 默认 echo 占位脚本）→ test:e2e → test:coverage
+ * → Python（pyproject.toml 或 pytest.ini 任一）→ go.mod。
+ * 探不到返回 undefined，兜底策略归调用方（CLI 映射为 skip；PassesGate 内部 fail-closed）。
+ */
+export async function detectTestCommand(projectPath: string): Promise<string | undefined> {
+  try {
+    const content = await fs.readFile(path.join(projectPath, 'package.json'), 'utf-8');
+    const pkg = JSON.parse(content);
+
+    if (pkg.scripts?.['test:ci']) {
+      return 'npm run test:ci';
+    }
+    if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified"') {
+      return 'npm test';
+    }
+    if (pkg.scripts?.['test:e2e']) {
+      return 'npm run test:e2e';
+    }
+    if (pkg.scripts?.['test:coverage']) {
+      return 'npm run test:coverage';
+    }
+  } catch {
+    // 没有 package.json，继续探测其他项目类型
+  }
+
+  // Python 项目：pyproject.toml 或 pytest.ini 任一命中
+  for (const marker of ['pyproject.toml', 'pytest.ini']) {
+    try {
+      await fs.access(path.join(projectPath, marker));
+      return 'pytest';
+    } catch {}
+  }
+
+  // Go 项目
+  try {
+    await fs.access(path.join(projectPath, 'go.mod'));
+    return 'go test ./...';
+  } catch {}
+
+  return undefined;
+}
 
 /**
  * PassesGate 类
@@ -219,8 +265,11 @@ export class PassesGate {
 
   /**
    * 运行测试（CLI 使用）
+   *
+   * `workDir` 必传：执行位置与证据落盘根都从这里来，不在本层取 cwd
+   * （projectPath 只在 CLI 入口兜底一次，见 src/cli/commands/CONTEXT.md）
    */
-  async runTests(): Promise<{
+  async runTests(workDir: string): Promise<{
     passed: boolean;
     passedTests: number;
     failedTests: number;
@@ -230,10 +279,9 @@ export class PassesGate {
     message?: string;
   }> {
     const startTime = Date.now();
-    const workDir = process.cwd();
-    
+
     try {
-      const testCommand = this.config.testCommand || await this.detectTestCommand(workDir);
+      const testCommand = this.config.testCommand || await detectTestCommand(workDir);
       
       if (!testCommand) {
         return {
@@ -246,7 +294,7 @@ export class PassesGate {
         };
       }
 
-      const result = await this.runTest(workDir);
+      const result = await this.runTest(workDir, undefined, testCommand);
       const duration = Date.now() - startTime;
 
       // 解析测试数量
@@ -281,155 +329,49 @@ export class PassesGate {
   /**
    * 运行测试
    */
-  private async runTest(workDir: string, _task?: DynamicTask): Promise<TaskTestResult> {
-    const testCommand = await this.detectTestCommand(workDir);
+  private async runTest(workDir: string, _task?: DynamicTask, command?: string): Promise<TaskTestResult> {
+    const testCommand = command || this.config.testCommand || await detectTestCommand(workDir);
     const timestamp = new Date();
 
+    // 探测失败 fail-closed：与 runTests 的「未检测到测试命令」分支同形状
+    if (!testCommand) {
+      return {
+        passed: false,
+        command: '',
+        output: '未检测到测试命令',
+        timestamp,
+      };
+    }
+
+    let exitCode = 0;
+    let output = '';
+
     try {
-      const { stdout } = await execAsync(testCommand, {
+      const result = await execAsync(testCommand, {
         cwd: workDir,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
-
-      const passed = true;
-      const coverage = this.extractCoverage(stdout);
-      const failures: string[] = [];
-
-      return {
-        passed,
-        command: testCommand,
-        output: stdout,
-        failures,
-        coverage,
-        timestamp,
-        evidence: await this.generateEvidence(workDir, stdout),
-      };
+      output = result.stdout + result.stderr;
     } catch (error: any) {
-      const output = error.stdout || '';
-      const stderrOutput = error.stderr || '';
-      const combinedOutput = output + '\n' + stderrOutput;
-
-      const failures = this.extractFailures(combinedOutput);
-      const passed = this.config.allowPartialPass && failures.length === 0;
-
-      return {
-        passed,
-        command: testCommand,
-        output: combinedOutput,
-        failures,
-        coverage: this.extractCoverage(output),
-        timestamp,
-        evidence: await this.generateEvidence(workDir, combinedOutput),
-      };
-    }
-  }
-
-  /**
-   * 检测测试命令
-   */
-  private async detectTestCommand(workDir: string): Promise<string> {
-    if (this.config.testCommand) {
-      return this.config.testCommand;
+      // 非零退出（超时 / buffer 溢出等执行失败也落这里）：判定依据就是退出码，文本不参与
+      exitCode = typeof error.code === 'number' ? error.code : 1;
+      output = (error.stdout || '') + '\n' + (error.stderr || '');
     }
 
-    // 尝试读取 package.json
-    try {
-      const packageJsonPath = path.join(workDir, 'package.json');
-      const content = await fs.readFile(packageJsonPath, 'utf-8');
-      const packageJson = JSON.parse(content);
+    const { passed, failures } = judgeTestRun({
+      exitCode,
+      output,
+      allowPartialPass: this.config.allowPartialPass,
+    });
 
-      // 优先使用 e2e 测试
-      if (packageJson.scripts?.['test:e2e']) {
-        return 'npm run test:e2e';
-      }
-      if (packageJson.scripts?.['test:coverage']) {
-        return 'npm run test:coverage';
-      }
-      if (packageJson.scripts?.test) {
-        return 'npm test';
-      }
-    } catch {
-      // package.json 不存在，尝试其他检测
-    }
-
-    // 尝试 Python 项目
-    try {
-      const pyprojectPath = path.join(workDir, 'pyproject.toml');
-      await fs.access(pyprojectPath);
-      return 'pytest';
-    } catch {
-      // 不是 Python 项目
-    }
-
-    // 尝试 Go 项目
-    try {
-      const goModPath = path.join(workDir, 'go.mod');
-      await fs.access(goModPath);
-      return 'go test ./...';
-    } catch {
-      // 不是 Go 项目
-    }
-
-    // 默认命令
-    return 'npm test';
-  }
-
-  /**
-   * 从输出中提取覆盖率
-   */
-  private extractCoverage(output: string): number | undefined {
-    // Jest 格式: All files | 80.5 | 70.2 | ...
-    const jestMatch = output.match(/All files[|\s]+(\d+\.?\d*)/);
-    if (jestMatch?.[1]) {
-      return parseFloat(jestMatch[1]);
-    }
-
-    // Istanbul/nyc 格式: Statements   : 80.5% ( 100/124 )
-    const istanbulMatch = output.match(/Statements\s*:\s*(\d+\.?\d*)%/);
-    if (istanbulMatch?.[1]) {
-      return parseFloat(istanbulMatch[1]);
-    }
-
-    // pytest-cov 格式: TOTAL  1234  80%
-    const pytestMatch = output.match(/TOTAL\s+\d+\s+(\d+)%/);
-    if (pytestMatch?.[1]) {
-      return parseInt(pytestMatch[1], 10);
-    }
-
-    return undefined;
-  }
-
-  /**
-   * 从输出中提取失败信息
-   */
-  private extractFailures(output: string): string[] {
-    const failures: string[] = [];
-
-    // Jest 格式
-    const jestMatches = output.matchAll(/✕\s+(.+?)\s+\(/g);
-    for (const match of jestMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    // Mocha 格式
-    const mochaMatches = output.matchAll(/\d+\)\s+(.+?):/g);
-    for (const match of mochaMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    // pytest 格式
-    const pytestMatches = output.matchAll(/FAILED\s+(.+?)::/g);
-    for (const match of pytestMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    // Go test 格式
-    const goMatches = output.matchAll(/--- FAIL:\s+(.+?)\s+\(/g);
-    for (const match of goMatches) {
-      if (match[1]) failures.push(match[1]);
-    }
-
-    return failures;
+    return {
+      passed,
+      command: testCommand,
+      output,
+      failures,
+      timestamp,
+      evidence: await this.generateEvidence(workDir, output),
+    };
   }
 
   /**
@@ -497,110 +439,6 @@ export class PassesGate {
    */
   getTestResult(taskId: string): TaskTestResult | undefined {
     return this.testResults.get(taskId);
-  }
-
-  // ========================================
-  // 扩展点支持（Long-Running Agents）
-  // ========================================
-
-  /**
-   * 注册的扩展列表
-   */
-  private extensions: Map<string, PassesGateExtension> = new Map();
-
-  /**
-   * 注册扩展
-   * 
-   * 用于注册额外的测试类型（如 Puppeteer E2E）
-   * 
-   * @param name 扩展名称
-   * @param extension 扩展实现
-   * 
-   * @example
-   * ```typescript
-   * const puppeteerExtension = {
-   *   name: 'puppeteer',
-   *   run: async (workDir, task) => {
-   *     // 运行 Puppeteer 测试
-   *     return { passed: true, command: 'puppeteer', ... };
-   *   }
-   * };
-   * 
-   * passesGate.registerExtension('puppeteer', puppeteerExtension);
-   * ```
-   */
-  registerExtension(name: string, extension: PassesGateExtension): void {
-    this.extensions.set(name, extension);
-  }
-
-  /**
-   * 注销扩展
-   */
-  unregisterExtension(name: string): boolean {
-    return this.extensions.delete(name);
-  }
-
-  /**
-   * 获取所有已注册的扩展名称
-   */
-  getExtensionNames(): string[] {
-    return Array.from(this.extensions.keys());
-  }
-
-  /**
-   * 运行所有测试（包括扩展测试）
-   * 
-   * @param workDir 工作目录
-   * @param task 可选的任务信息
-   * @returns 所有测试结果
-   */
-  async runAllTests(workDir: string, task?: DynamicTask): Promise<ExtensionTestResult[]> {
-    const results: ExtensionTestResult[] = [];
-
-    // 1. 运行单元测试（原有逻辑）
-    const unitTestResult = await this.runTest(workDir, task);
-    results.push(unitTestResult);
-
-    // 2. 运行所有扩展测试
-    for (const [name, extension] of this.extensions) {
-      try {
-        const extensionResult = await extension.run(workDir, task);
-        results.push({
-          ...extensionResult,
-          type: name,
-        });
-      } catch (error: any) {
-        results.push({
-          passed: false,
-          command: `${name}-extension`,
-          error: error.message,
-          type: name,
-          timestamp: new Date(),
-        });
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * 检查所有测试是否通过
-   */
-  async checkAllPasses(workDir: string, task?: DynamicTask): Promise<{
-    passed: boolean;
-    results: ExtensionTestResult[];
-    failedTypes: string[];
-  }> {
-    const results = await this.runAllTests(workDir, task);
-    const failedTypes = results
-      .filter(r => !r.passed)
-      .map(r => r.type || 'unit');
-
-    return {
-      passed: failedTypes.length === 0,
-      results,
-      failedTypes,
-    };
   }
 
 }

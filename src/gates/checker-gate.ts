@@ -10,6 +10,7 @@
 import type { ConstraintCheck } from '../core/constraints/checkers';
 import { buildCheckEnv } from '../core/constraints/checkers';
 import type { Gate, GateContext, GateDecision } from './types';
+import { gateResult } from './types';
 import { decisionFromResult } from './decision';
 
 /**
@@ -29,18 +30,18 @@ export function createCheckerGate(check: ConstraintCheck, order = 0): Gate {
       const projectPath = ctx.projectPath || process.cwd();
       const env = buildCheckEnv({ operation: 'manual', projectPath }, 'none');
       const outcome = await check.evaluate(env);
-      return decisionFromResult({
-        gate: check.id,
-        passed: outcome !== false,
-        message:
+      return decisionFromResult(
+        gateResult(
+          check.id,
+          outcome !== false,
           outcome === false
             ? `checker "${check.id}" 判定违规`
             : outcome === 'skip'
               ? `checker "${check.id}" 跳过（证据未接线）`
               : `checker "${check.id}" 通过`,
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      });
+          startTime
+        )
+      );
     },
   };
 }

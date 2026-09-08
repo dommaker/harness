@@ -7,9 +7,10 @@
  * - 每个实现引用（CommandImplRef）标注实现文件与导出名；bin 按需
  *   per-command 懒加载（O2）：只在 action 执行时 require 对应命令模块，
  *   不再经单一 barrel 加载全部命令实现。
- * - 本模块是纯数据模块：禁止 import 任何命令实现（含运行时依赖），
- *   保证 --help/--version 懒加载不被破坏；注册表完整性断言（引用实现
- *   可解析）在 __tests__/registry.test.ts 构建/测试期校验。
+ * - 本模块是纯数据模块（候选7 后零闭包）：禁止 import 任何命令实现，
+ *   子命令别名是数据（aliases），实参编组归各命令模块的具名导出
+ *   （那才是它的 interface/测试面）；保证 --help/--version 懒加载不被破坏；
+ *   注册表完整性断言（引用实现可解析）在 __tests__/registry.test.ts 构建/测试期校验。
  */
 
 /**
@@ -35,18 +36,21 @@ export interface CommandImplRef {
 }
 
 /**
- * 子命令条目：别名 → 实现 + 实参构造
+ * 子命令条目：主名 → 实现（别名经 aliases 一名多注册，架构评审候选7）
  */
 export interface CommandSubcommand {
   /** 实现引用 */
   impl: CommandImplRef;
-  /** 实参构造：positionals = 子命令名之后的位置参数（无则 []） */
-  args?: (positionals: (string | undefined)[], options: Record<string, unknown>) => unknown[];
+  /** 别名：与主名解析到同一实现（不再整块复印 args 闭包） */
+  aliases?: string[];
+  /** true = 实现签名 (positionals, options)（需要位置参数的命令，如 knowledge search）；缺省 (options) */
+  withPositionals?: boolean;
 }
 
 /**
  * 选项条件路由（如 check --list）：选项值匹配时以路由替代默认 action；
- * 同一选项可挂多条路由（按声明顺序执行，如 passes-gate --coverage）
+ * 同一选项可挂多条路由（按序执行，如 passes-gate --coverage）。
+ * 实现一律以 (options) 调用；需编组/取值的指向命令模块内的具名包装导出。
  */
 export interface CommandOptionRoute {
   /** 触发选项键（commander options 对象键名，如 'list'） */
@@ -55,8 +59,6 @@ export interface CommandOptionRoute {
   when: unknown;
   /** 实现引用 */
   impl: CommandImplRef;
-  /** 实参构造（缺省为 [options]） */
-  args?: (positionals: (string | undefined)[], options: Record<string, unknown>) => unknown[];
 }
 
 /**
@@ -87,8 +89,6 @@ export interface CommandDefinition {
   optionRoutes?: CommandOptionRoute[];
   /** 默认 action 实参构造（缺省为 [options]） */
   mapActionArgs?: (positionals: (string | undefined)[], options: Record<string, unknown>) => unknown[];
-  /** action 完成后处理（接收返回值，如 sync-docs --check 失败 exit(1)） */
-  afterRun?: (result: unknown, options: Record<string, unknown>) => void;
 }
 
 /**
@@ -107,7 +107,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     ],
     action: { module: 'check', export: 'check' },
     optionRoutes: [
-      { flag: 'list', when: true, impl: { module: 'check', export: 'listLaws' }, args: () => [] },
+      { flag: 'list', when: true, impl: { module: 'check', export: 'listLaws' } },
     ],
   },
   {
@@ -135,15 +135,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     action: { module: 'passes-gate', export: 'runPassesGate' },
     optionRoutes: [
       { flag: 'coverage', when: true, impl: { module: 'passes-gate', export: 'runPassesGate' } },
-      {
-        flag: 'coverage',
-        when: true,
-        impl: { module: 'passes-gate', export: 'checkCoverage' },
-        args: (_pos, options) => [
-          options.projectPath || process.cwd(),
-          parseInt(String(options.coverageThreshold), 10),
-        ],
-      },
+      { flag: 'coverage', when: true, impl: { module: 'passes-gate', export: 'coverageCheck' } },
     ],
   },
   {
@@ -202,7 +194,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     ],
     action: { module: 'spec', export: 'specValidate' },
     subcommands: {
-      list: { impl: { module: 'spec', export: 'listSpecTypes' }, args: () => [] },
+      list: { impl: { module: 'spec', export: 'listSpecTypes' } },
     },
     // 未知位置参数按文件路径落回默认 action（spec foo.yaml 合法用法）
     subcommandStrict: false,
@@ -227,12 +219,8 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--agents', description: '同步 AGENTS.md（agent 导读；PRESERVE 标记段重新生成时保留）', defaultValue: false },
       { flags: '--compact', description: '一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目', defaultValue: false },
     ],
+    // --check 下的漂移由实现返回 fail（候选7：退出码映射只在 bin 一处），故无需 afterRun
     action: { module: 'sync-docs', export: 'syncDocs' },
-    afterRun: (ok, options) => {
-      if (!ok && options.check) {
-        process.exit(1);
-      }
-    },
   },
   {
     command: 'knowledge',
@@ -259,150 +247,24 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--json', description: 'JSON 格式输出', defaultValue: false },
     ],
     subcommands: {
-      list: {
-        impl: { module: 'knowledge', export: 'knowledgeList' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          type: options.type, maturity: options.maturity, tag: options.tag,
-        }],
-      },
-      ls: {
-        impl: { module: 'knowledge', export: 'knowledgeList' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          type: options.type, maturity: options.maturity, tag: options.tag,
-        }],
-      },
+      // 纯投影条目：commander options 与处理器参数同名，原样传入（编组归命令模块）
+      list: { impl: { module: 'knowledge', export: 'knowledgeList' }, aliases: ['ls'] },
       search: {
-        impl: { module: 'knowledge', export: 'knowledgeSearch' },
-        args: (positionals, options) => {
-          if (!positionals[0]) {
-            console.error('请提供搜索关键词');
-            process.exit(1);
-          }
-          return [positionals[0], {
-            projectPath: options.projectPath, json: options.json,
-            limit: parseInt(String(options.limit), 10),
-          }];
-        },
+        impl: { module: 'knowledge', export: 'knowledgeSearchCommand' },
+        aliases: ['s'],
+        withPositionals: true,
       },
-      s: {
-        impl: { module: 'knowledge', export: 'knowledgeSearch' },
-        args: (positionals, options) => {
-          if (!positionals[0]) {
-            console.error('请提供搜索关键词');
-            process.exit(1);
-          }
-          return [positionals[0], {
-            projectPath: options.projectPath, json: options.json,
-            limit: parseInt(String(options.limit), 10),
-          }];
-        },
-      },
-      import: {
-        impl: { module: 'knowledge', export: 'knowledgeImport' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          sources: options.sources, reset: options.reset,
-        }],
-      },
-      i: {
-        impl: { module: 'knowledge', export: 'knowledgeImport' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          sources: options.sources, reset: options.reset,
-        }],
-      },
-      decay: {
-        impl: { module: 'knowledge', export: 'knowledgeDecay' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      d: {
-        impl: { module: 'knowledge', export: 'knowledgeDecay' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      stats: {
-        impl: { module: 'knowledge', export: 'knowledgeStats' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      st: {
-        impl: { module: 'knowledge', export: 'knowledgeStats' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      'sync-rag': {
-        impl: { module: 'knowledge', export: 'knowledgeSyncRag' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      'sync-status': {
-        impl: { module: 'knowledge', export: 'knowledgeSyncStatus' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      sync: {
-        impl: { module: 'knowledge', export: 'knowledgeSyncStatus' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      upsert: {
-        impl: { module: 'knowledge', export: 'knowledgeUpsert' },
-        args: (_pos, options) => [{
-          scope: options.scope || '',
-          title: options.title || '',
-          content: options.content || '',
-          file: options.file || '',
-          type: options.type || 'architecture',
-          source: options.source || 'cli',
-        }],
-      },
-      up: {
-        impl: { module: 'knowledge', export: 'knowledgeUpsert' },
-        args: (_pos, options) => [{
-          scope: options.scope || '',
-          title: options.title || '',
-          content: options.content || '',
-          file: options.file || '',
-          type: options.type || 'architecture',
-          source: options.source || 'cli',
-        }],
-      },
-      audit: {
-        impl: { module: 'knowledge', export: 'knowledgeAudit' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          fix: options.fix, dryRun: options.dryRun,
-          threshold: options.threshold, dir: options.dir,
-        }],
-      },
-      a: {
-        impl: { module: 'knowledge', export: 'knowledgeAudit' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          fix: options.fix, dryRun: options.dryRun,
-          threshold: options.threshold, dir: options.dir,
-        }],
-      },
-      snapshot: {
-        impl: { module: 'knowledge', export: 'knowledgeSnapshot' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
-      migrate: {
-        impl: { module: 'knowledge', export: 'knowledgeMigrate' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
-      index: {
-        impl: { module: 'knowledge', export: 'knowledgeIndex' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
-      idx: {
-        impl: { module: 'knowledge', export: 'knowledgeIndex' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
-      health: {
-        impl: { module: 'knowledge', export: 'knowledgeHealth' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
-      h: {
-        impl: { module: 'knowledge', export: 'knowledgeHealth' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
+      import: { impl: { module: 'knowledge', export: 'knowledgeImport' }, aliases: ['i'] },
+      decay: { impl: { module: 'knowledge', export: 'knowledgeDecay' }, aliases: ['d'] },
+      stats: { impl: { module: 'knowledge', export: 'knowledgeStats' }, aliases: ['st'] },
+      'sync-rag': { impl: { module: 'knowledge', export: 'knowledgeSyncRag' } },
+      'sync-status': { impl: { module: 'knowledge', export: 'knowledgeSyncStatus' }, aliases: ['sync'] },
+      upsert: { impl: { module: 'knowledge', export: 'knowledgeUpsert' }, aliases: ['up'] },
+      audit: { impl: { module: 'knowledge', export: 'knowledgeAudit' }, aliases: ['a'] },
+      snapshot: { impl: { module: 'knowledge', export: 'knowledgeSnapshot' } },
+      migrate: { impl: { module: 'knowledge', export: 'knowledgeMigrate' } },
+      index: { impl: { module: 'knowledge', export: 'knowledgeIndex' }, aliases: ['idx'] },
+      health: { impl: { module: 'knowledge', export: 'knowledgeHealth' }, aliases: ['h'] },
     },
   },
   {
@@ -415,14 +277,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--json', description: 'JSON 输出' },
     ],
     subcommands: {
-      index: {
-        impl: { module: 'sdd', export: 'sddIndex' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
-      idx: {
-        impl: { module: 'sdd', export: 'sddIndex' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json, dir: options.dir }],
-      },
+      index: { impl: { module: 'sdd', export: 'sddIndex' }, aliases: ['idx'] },
     },
   },
   {
@@ -437,34 +292,9 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--json', description: 'JSON 格式输出', defaultValue: false },
     ],
     subcommands: {
-      list: {
-        impl: { module: 'failure', export: 'failureList' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          limit: parseInt(String(options.limit), 10),
-          type: options.type, level: options.level,
-        }],
-      },
-      ls: {
-        impl: { module: 'failure', export: 'failureList' },
-        args: (_pos, options) => [{
-          projectPath: options.projectPath, json: options.json,
-          limit: parseInt(String(options.limit), 10),
-          type: options.type, level: options.level,
-        }],
-      },
-      stats: {
-        impl: { module: 'failure', export: 'failureStats' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      st: {
-        impl: { module: 'failure', export: 'failureStats' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
-      clear: {
-        impl: { module: 'failure', export: 'failureClear' },
-        args: (_pos, options) => [{ projectPath: options.projectPath, json: options.json }],
-      },
+      list: { impl: { module: 'failure', export: 'failureList' }, aliases: ['ls'] },
+      stats: { impl: { module: 'failure', export: 'failureStats' }, aliases: ['st'] },
+      clear: { impl: { module: 'failure', export: 'failureClear' } },
     },
   },
   {
@@ -561,22 +391,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         }],
       },
     ],
-  },
-  {
-    command: 'doc-freshness-check',
-    argument: '<docPath>',
-    description: '检查文档声明的新鲜度：提取可验证声明，与代码对照',
-    options: [
-      { flags: '--changed-files <list>', description: '变更文件列表（逗号分隔）' },
-      { flags: '--format <format>', description: '输出格式 (table/json)', defaultValue: 'table' },
-      { flags: '-p, --project-path <path>', description: '项目路径' },
-    ],
-    action: { module: 'doc-freshness-check', export: 'docFreshnessCheck' },
-    mapActionArgs: (positionals, options) => [positionals[0], {
-      changedFiles: options.changedFiles,
-      format: options.format,
-      projectPath: options.projectPath,
-    }],
   },
   {
     command: 'spec-baseline-check',

@@ -3,6 +3,7 @@
  */
 
 import { acceptance, listAcceptanceCriteria } from '../acceptance';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs/promises';
 import { SpecAcceptanceGate } from '../../../gates/acceptance';
 
@@ -35,20 +36,12 @@ const MockGate = SpecAcceptanceGate as jest.MockedClass<typeof SpecAcceptanceGat
 const yaml = require('js-yaml');
 
 describe('acceptance command', () => {
-  let consoleSpy: jest.SpyInstance;
-  let exitSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    process.exitCode = 0;
-  });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-    process.exitCode = 0;
+    io = captureIO();
+    jest.clearAllMocks();
   });
 
   describe('acceptance', () => {
@@ -60,10 +53,10 @@ describe('acceptance command', () => {
       });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({});
+      const result = await acceptance({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('验收标准检查通过'));
-      expect(exitSpy).not.toHaveBeenCalled();
+      expect(io.outText()).toContain('验收标准检查通过');
+      expect(result.kind).toBe('ok');
     });
 
     it('should print failure and exit 1 when check fails', async () => {
@@ -74,27 +67,33 @@ describe('acceptance command', () => {
       });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({});
+      const result = await acceptance({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('验收标准检查失败'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('验收标准检查失败');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'acceptance gate denied: criteria not met',
+      });
     });
 
     it('should handle errors and exit 1', async () => {
       const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({});
+      const result = await acceptance({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('验收标准检查出错'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('验收标准检查出错');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'acceptance gate error: gate error',
+      });
     });
 
     it('should use cwd as default projectPath', async () => {
       const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({});
+      await acceptance({}, io);
 
       expect(mockCheck).toHaveBeenCalledWith(
         expect.objectContaining({ projectPath: process.cwd() }),
@@ -105,7 +104,7 @@ describe('acceptance command', () => {
       const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({ taskId: 'TASK-001' });
+      await acceptance({ taskId: 'TASK-001' }, io);
 
       expect(mockCheck).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'TASK-001' }),
@@ -116,7 +115,7 @@ describe('acceptance command', () => {
       const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({ runE2e: true });
+      await acceptance({ runE2e: true }, io);
 
       expect(MockGate).toHaveBeenCalledWith(
         expect.objectContaining({ e2eTestCommand: 'npx playwright test' }),
@@ -127,7 +126,7 @@ describe('acceptance command', () => {
       const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
-      await acceptance({});
+      await acceptance({}, io);
 
       expect(MockGate).toHaveBeenCalledWith(
         expect.objectContaining({ e2eTestCommand: undefined }),
@@ -143,10 +142,10 @@ describe('acceptance command', () => {
         'task-2': { acceptanceCriteria: ['Criteria A'] },
       });
 
-      await listAcceptanceCriteria({});
+      await listAcceptanceCriteria({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('task-1'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Criteria 1'));
+      expect(io.outText()).toContain('task-1');
+      expect(io.outText()).toContain('Criteria 1');
     });
 
     it('should handle task with no criteria', async () => {
@@ -155,26 +154,34 @@ describe('acceptance command', () => {
         'task-1': {},
       });
 
-      await listAcceptanceCriteria({});
+      await listAcceptanceCriteria({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('无验收标准'));
+      expect(io.outText()).toContain('无验收标准');
     });
 
     it('should handle empty tasks object', async () => {
       mockFs.readFile.mockResolvedValue('yaml-content');
       yaml.load.mockReturnValue(null);
 
-      await listAcceptanceCriteria({});
+      const result = await listAcceptanceCriteria({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未找到任务定义'));
+      expect(io.outText()).toContain('未找到任务定义');
+      expect(result).toEqual({
+        kind: 'skip',
+        reason: expect.stringContaining('未找到任务定义'),
+      });
     });
 
     it('should handle file read error', async () => {
       mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
 
-      await listAcceptanceCriteria({});
+      const result = await listAcceptanceCriteria({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('读取 tasks.yml 失败'));
+      expect(io.outText()).toContain('读取 tasks.yml 失败');
+      expect(result).toEqual({
+        kind: 'skip',
+        reason: expect.stringContaining('读取 tasks.yml 失败'),
+      });
     });
   });
 });

@@ -2,7 +2,7 @@
  * harness constraints retire —— 约束退役（ADR-0001 决策 2/5）
  *
  * 建议层全自动（候选诊断复用 report 数据层），执行层保留一次人确认。
- * 落盘形态（#82 D6 一处真相）：
+ * 落盘形态（studio#82 D6 一处真相）：
  *
  * - 内置约束 → config.yml `enabled: false` + `retired` 元数据：
  *
@@ -33,21 +33,24 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
-import { renderConstraintsSection, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
-import { resolveInjectionTarget } from '../../core/constraints/injection-drift';
+import { renderConstraintsSection, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
+import { replaceStandaloneRange, resolveInjectionTarget } from '../../core/constraints/injection-writer';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
 import { loadRawProjectConfig, ProjectConfigLoader } from '../../core/project-config-loader';
+import { getHarnessPackageVersion } from '../../utils/package-version';
 import { FileKnowledgeStore } from '../../knowledge/store';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
 import {
   buildConstraintsUsageReport,
+  CANDIDATE_KIND_LABEL,
   collectUsageByConstraint,
   readProjectTraces,
-  type RetireCandidate,
+  readProjectTracesReport,
 } from '../../core/constraints/usage-report';
 
 export interface RetireExecuteOptions {
@@ -64,7 +67,7 @@ export interface RetireResult {
   status: RetireStatus;
   /** 是否 check 层 iron（交互模式据此追加确认） */
   isIronLaw: boolean;
-  /** 退役落点：custom 约束落 custom-constraints.yml（#82 D6），内置落 config.yml */
+  /** 退役落点：custom 约束落 custom-constraints.yml（studio#82 D6），内置落 config.yml */
   landing: 'config.yml' | 'custom-constraints.yml';
   stats: { total: number; fail: number; failRate: number };
   /** 治理注入段（CLAUDE.md / AGENTS.md）是否已同步 */
@@ -129,18 +132,6 @@ function findRetireTarget(projectRoot: string, id: string): RetireTargetInfo | u
 }
 
 /**
- * 读取 harness 版本（与 init.ts 同路径策略）
- */
-function getHarnessVersion(): string {
-  try {
-    const pkgPath = path.join(__dirname, '..', '..', '..', 'package.json');
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
-
-/**
  * 写 config.yml 退役段（ADR-0001 决策 5）
  *
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明。
@@ -174,7 +165,7 @@ function writeRetireConfig(
 }
 
 /**
- * 写 custom-constraints.yml 退役段（#82 D6 统一落点）
+ * 写 custom-constraints.yml 退役段（studio#82 D6 统一落点）
  *
  * 在 custom_constraints.<id> 条目内追加 retired 元数据，保留规则原文。
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明。
@@ -280,12 +271,10 @@ function syncGovernanceInjection(projectRoot: string): { synced: boolean; file?:
   const target = resolveInjectionTarget(projectRoot);
   if (!target) return { synced: false };
 
-  const filePath = path.join(projectRoot, target.file);
-  const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessVersion());
-  const after = target.content.slice(target.endIdx + CONSTRAINTS_END_MARKER.length).replace(/^\n+/, '');
-  const newContent = target.content.slice(0, target.startIdx) + body + (after ? '\n' + after : '');
-  if (newContent !== target.content) {
-    fs.writeFileSync(filePath, newContent, 'utf-8');
+  const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessPackageVersion());
+  const write = replaceStandaloneRange(target.content, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, body);
+  if (write.kind === 'updated' && write.content !== target.content) {
+    fs.writeFileSync(path.join(projectRoot, target.file), write.content, 'utf-8');
   }
   return { synced: true, file: target.file };
 }
@@ -327,6 +316,9 @@ export function retireConstraint(
   }
 
   // 历史统计（来自 traces.log）
+  // 计数去向：兼容包装 readProjectTraces() 丢计数（harness#100）——落盘的 retire stats 只计
+  // 合法记录，把坏行数写进 RetireResult.stats 属形状变更不在本票；本函数按契约「纯执行无交互」
+  // 不打印，告知由两条命令入口各自负责（runRetireInteractive 顶部 / constraintsRetire 的 --yes 分支）
   const usage = collectUsageByConstraint(readProjectTraces(projectRoot)).get(id);
   const evaluated = usage ? usage.total - usage.skip : 0;
   const stats = {
@@ -366,29 +358,30 @@ export function retireConstraint(
 /**
  * 打印单条退役结果（含回滚语义提示）
  */
-export function printRetireResult(result: RetireResult): void {
+export function printRetireResult(result: RetireResult, io: CommandIO = processIO): CommandResult {
   switch (result.status) {
     case 'unknown_id':
-      console.log(chalk.red(`❌ ${result.id}: 约束不存在（既非内置也非 custom-constraints），未做任何变更`));
-      return;
+      log(io, chalk.red(`❌ ${result.id}: 约束不存在（既非内置也非 custom-constraints），未做任何变更`));
+      return { kind: 'skip', reason: `${result.id}: 约束不存在，未做任何变更` };
     case 'already_retired':
-      console.log(chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 中 enabled: false），跳过`));
-      return;
+      log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 中 enabled: false），跳过`));
+      return { kind: 'skip', reason: `${result.id}: 已处于退役状态，跳过` };
     case 'retired': {
-      console.log(chalk.green(`✅ ${result.id}: 已退役`));
-      console.log(`   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
-      console.log(`   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
+      log(io, chalk.green(`✅ ${result.id}: 已退役`));
+      log(io, `   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
+      log(io, `   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
       if (result.injectionSynced) {
-        console.log(`   已同步 ${result.injectionFile ?? '治理文档'} 注入段`);
+        log(io, `   已同步 ${result.injectionFile ?? '治理文档'} 注入段`);
       }
       const recovery =
         result.landing === 'custom-constraints.yml'
           ? `删除 custom-constraints.yml 中 custom_constraints.${result.id}.retired 段`
           : `删除 config.yml 中 constraints.${result.id} 段`;
-      console.log(chalk.gray(`   retire 不是删除——恢复方法：${recovery}`));
+      log(io, chalk.gray(`   retire 不是删除——恢复方法：${recovery}`));
       break;
     }
   }
+  return { kind: 'ok' };
 }
 
 // ========================================
@@ -408,13 +401,6 @@ function createAsk(io: RetireIO): { ask: (q: string) => Promise<string>; close: 
   };
 }
 
-const CANDIDATE_KIND_LABEL: Record<RetireCandidate['kind'], string> = {
-  zero_trigger: '零触发',
-  unevaluable: '不可评估',
-  high_noise: '高噪',
-  zero_intercept: '零拦截',
-};
-
 /**
  * 交互式退役（候选列表 → 编号多选 → 摘要 → 确认 → 执行）
  *
@@ -423,9 +409,16 @@ const CANDIDATE_KIND_LABEL: Record<RetireCandidate['kind'], string> = {
 export async function runRetireInteractive(
   projectRoot: string,
   io: RetireIO = { input: process.stdin, output: process.stdout }
-): Promise<void> {
+): Promise<CommandResult> {
   const report = buildConstraintsUsageReport(projectRoot);
+  // 候选诊断是退役决策的依据：数据不完整必须先说（harness#100，与 report 同一降级维度）；
+  // 告知行走 stderr，与 status / failure list / 直达分支同一去向（交互正文仍走 console.log）
+  if (report.skippedLines > 0) {
+    console.error(chalk.yellow(`⚠️  trace 文件有 ${report.skippedLines} 行损坏已跳过，候选只基于其余合法记录`));
+  }
   const { ask, close } = createAsk(io);
+  // 退役结果打印走注入流（与 readline 提示同一去向）
+  const out = { stdout: io.output, stderr: io.output } as unknown as CommandIO;
 
   try {
     let selectedIds: string[] = [];
@@ -435,7 +428,7 @@ export async function runRetireInteractive(
       const manual = await ask('可手动输入要退役的约束 id（留空取消）: ');
       if (!manual) {
         console.log('已取消');
-        return;
+        return { kind: 'skip', reason: '交互未确认，未做任何变更' };
       }
       selectedIds = [manual];
     } else {
@@ -447,7 +440,7 @@ export async function runRetireInteractive(
       const answer = await ask('输入编号（逗号分隔多选）或约束 id，留空取消: ');
       if (!answer) {
         console.log('已取消');
-        return;
+        return { kind: 'skip', reason: '交互未确认，未做任何变更' };
       }
 
       for (const token of answer.split(',').map(s => s.trim()).filter(Boolean)) {
@@ -482,7 +475,7 @@ export async function runRetireInteractive(
 
     if (plan.length === 0) {
       console.log('无可执行项，已取消');
-      return;
+      return { kind: 'skip', reason: '交互未确认，未做任何变更' };
     }
 
     // 变更摘要 → 最终确认
@@ -500,17 +493,18 @@ export async function runRetireInteractive(
     const finalConfirm = await ask('确认执行？(y/N) ');
     if (finalConfirm.toLowerCase() !== 'y' && finalConfirm.toLowerCase() !== 'yes') {
       console.log('已取消');
-      return;
+      return { kind: 'skip', reason: '交互未确认，未做任何变更' };
     }
 
     console.log();
     for (const p of plan) {
       const result = retireConstraint(projectRoot, p.id, { reason: p.reason });
-      printRetireResult(result);
+      printRetireResult(result, out);
     }
   } finally {
     close();
   }
+  return { kind: 'ok' };
 }
 
 /**
@@ -519,29 +513,38 @@ export async function runRetireInteractive(
  * 人确认闸门（#24，ADR-0001 决策 2）：带 id 的直达路径必须显式 `--yes`，
  * 无 `--yes` 报错 + 非零退出码，提示改用 `--yes` 或交互模式；不落盘任何文件。
  */
-export async function constraintsRetire(id?: string, options: ConstraintsRetireOptions = {}): Promise<void> {
+export async function constraintsRetire(
+  id?: string,
+  options: ConstraintsRetireOptions = {},
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
   const projectRoot = options.projectPath || process.cwd();
 
   if (id) {
     // 非交互直达：执行层人确认对所有入口成立（含程序化调用方）
     if (!options.yes) {
-      console.error(
+      logError(io,
         chalk.red(`❌ 直达退役需要显式人确认（ADR-0001 决策 2：执行层保留一次人确认），未做任何变更\n`) +
           `   带 --yes 显式确认直达：harness constraints retire ${id} --yes` +
           `${options.reason ? ` --reason "${options.reason}"` : ''}\n` +
           `   或去掉 id 走交互确认：harness constraints retire`
       );
-      process.exitCode = 1;
-      return;
+      return { kind: 'usage-error', reason: `直达退役 ${id} 缺少显式 --yes 人确认，未做任何变更` };
+    }
+
+    // 落盘的 retire stats 只含合法记录：依据不完整要在执行前告知（harness#100，
+    // 直达路径不经过 runRetireInteractive，故两处各自告知）
+    const { skippedLines } = readProjectTracesReport(projectRoot);
+    if (skippedLines > 0) {
+      logError(io, chalk.yellow(`⚠️  trace 文件有 ${skippedLines} 行损坏已跳过，落盘的退役统计只基于其余合法记录`));
     }
 
     const result = retireConstraint(projectRoot, id, { reason: options.reason });
     if (result.status === 'retired' && result.isIronLaw) {
-      console.log(chalk.yellow(`⚠️  ${id} 是一条 Iron Law，已通过 --yes 直达退役（交互模式会要求二次确认）`));
+      log(io, chalk.yellow(`⚠️  ${id} 是一条 Iron Law，已通过 --yes 直达退役（交互模式会要求二次确认）`));
     }
-    printRetireResult(result);
-    return;
+    return printRetireResult(result, io);
   }
 
-  await runRetireInteractive(projectRoot);
+  return runRetireInteractive(projectRoot);
 }

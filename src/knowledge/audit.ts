@@ -2,7 +2,7 @@
  * 知识库质量审计引擎
  *
  * 纯代码检测，零 token 成本。
- * 6 维度覆盖：结构完整性 / 内容质量 / 去重有效性 / 成熟度健康 / 新鲜度 / 飞轮验证
+ * 7 维度覆盖：结构完整性 / 内容质量 / 去重有效性 / 成熟度健康 / 新鲜度 / 飞轮验证 / 增量存活
  *
  * 两种模式：
  * - validate(entry): 单条入库检查（ingest gate）
@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FileKnowledgeStore } from './store';
 import type { KnowledgeStore } from './store';
+import { evaluateFlywheel, genuineRefs } from './flywheel-metrics';
 import type { KnowledgeEntry } from './types';
 
 // ── Types ─────────────────────────────────────────────────
@@ -99,21 +100,21 @@ const EVENT_NOISE_PATTERNS = [
   /^\[Session Feature\]\s/,
 ];
 const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'];
-const SYNTHETIC_REF_PATTERN = /^(search|test-agent|prompt-inject|monitor|analyst|auditor|triage|executor|session|trend|incident):\d{4}-\d{2}-\d{2}/;
-
-/** Filter out synthetic references (automated search/ops records, not genuine consumption) */
-function genuineRefs(refs: string[]): string[] {
-  return refs.filter(r => !SYNTHETIC_REF_PATTERN.test(r));
-}
 
 // ── Per-Entry Rules ───────────────────────────────────────
 
 interface AuditRule {
   name: AuditRuleName;
+  /** 中文展示文案正本（#109）：定义即注册，CLI 经 AUDIT_RULE_LABELS 消费，无 label 即编译期失败 */
+  label: string;
   severity: AuditIssue['severity'];
   action: AuditAction;
+  /** 规则适用人口：active = 跳过 archived 条目；all = 全人口（含已归档） */
+  scope: AuditRuleScope;
   detect: (entry: KnowledgeEntry, ctx: AuditContext) => string | null;
 }
+
+type AuditRuleScope = 'active' | 'all';
 
 interface AuditContext {
   shortContentThreshold: number;
@@ -126,8 +127,10 @@ const perEntryRules: AuditRule[] = [
   // D1: 结构完整性
   {
     name: 'frontmatter-missing',
+    label: 'frontmatter 缺失',
     severity: 'high',
     action: 'reject',
+    scope: 'all',
     detect: (entry) => {
       const missing = REQUIRED_FRONTMATTER.filter(f => {
         const val = (entry as any)[f];
@@ -143,10 +146,11 @@ const perEntryRules: AuditRule[] = [
   // D2: 内容质量
   {
     name: 'test-data-pollution',
+    label: '测试数据污染',
     severity: 'critical',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       // Match test ID patterns
       if (/^(test-|inj-test)/.test(entry.id)) {
         return `测试 ID: "${entry.id}"`;
@@ -163,10 +167,11 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'daily-audit-noise',
+    label: '每日审计噪音',
     severity: 'high',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       if (DAILY_AUDIT_PATTERN.test(entry.title)) {
         return `每日审计摘要: "${entry.title}"`;
       }
@@ -175,10 +180,11 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'event-noise',
+    label: '运维事件噪音',
     severity: 'critical',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       for (const pattern of EVENT_NOISE_PATTERNS) {
         if (pattern.test(entry.title)) {
           return `运维事件标题: "${entry.title}"`;
@@ -189,8 +195,10 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'zero-content-proven',
+    label: '零内容 proven',
     severity: 'critical',
     action: 'demote',
+    scope: 'all',
     detect: (entry) => {
       if (entry.maturity === 'proven' && entry.content.trim().length < ZERO_CONTENT_THRESHOLD) {
         return `proven 条目内容仅 ${entry.content.trim().length} 字符`;
@@ -200,8 +208,10 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'maturity-inflation',
+    label: '成熟度虚高',
     severity: 'high',
     action: 'demote',
+    scope: 'all',
     detect: (entry) => {
       if (entry.maturity === 'verified' && entry.content.trim().length < ZERO_CONTENT_THRESHOLD) {
         return `verified 条目内容仅 ${entry.content.trim().length} 字符`;
@@ -211,10 +221,11 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'short-content',
+    label: '短内容',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       const len = entry.content.trim().length;
       if (len < ctx.shortContentThreshold && len >= ZERO_CONTENT_THRESHOLD) {
         return `内容 ${len} 字符 (阈值 ${ctx.shortContentThreshold})`;
@@ -226,10 +237,11 @@ const perEntryRules: AuditRule[] = [
   // D3: 去重有效性
   {
     name: 'title-duplicate',
+    label: '标题重复',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       if (!ctx.allEntries) return null;
       if (!entry.title) return null;
       const dupes = ctx.allEntries.filter(e =>
@@ -246,8 +258,10 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'source-refs-bloat',
+    label: 'sourceReferences 膨胀',
     severity: 'low',
     action: 'trim',
+    scope: 'all',
     detect: (entry) => {
       if ((entry.sourceReferences?.length || 0) > MAX_SOURCE_REFS) {
         return `sourceReferences ${entry.sourceReferences!.length} 条 (上限 ${MAX_SOURCE_REFS})`;
@@ -257,10 +271,11 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'fragment-cluster',
+    label: '碎片集群',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       if (!ctx.allEntries || entry.content.trim().length >= 100) return null;
       if (!entry.tags?.length) return null;
 
@@ -284,8 +299,10 @@ const perEntryRules: AuditRule[] = [
   // D4: 成熟度健康
   {
     name: 'promotion-blocked',
+    label: 'promotion 受阻',
     severity: 'medium',
     action: 'flag',
+    scope: 'all',
     detect: (entry, ctx) => {
       if (entry.maturity !== 'draft') return null;
       const created = new Date(entry.created);
@@ -298,8 +315,10 @@ const perEntryRules: AuditRule[] = [
   },
   {
     name: 'orphan-draft',
+    label: '孤儿 draft',
     severity: 'low',
     action: 'flag',
+    scope: 'all',
     detect: (entry) => {
       if (entry.maturity !== 'draft') return null;
       if (entry.contributors.length === 0 && entry.projects.length === 0 && genuineRefs(entry.referencedBy).length === 0) {
@@ -312,10 +331,11 @@ const perEntryRules: AuditRule[] = [
   // D5: 新鲜度
   {
     name: 'stale-entry',
+    label: '过期条目',
     severity: 'medium',
     action: 'flag',
+    scope: 'active',
     detect: (entry, ctx) => {
-      if (entry.maturity === 'archived') return null;
       const lastRef = entry.lastReferenced || entry.created;
       if (!lastRef) return null;
       const daysSinceRef = (Date.now() - new Date(lastRef).getTime()) / (1000 * 60 * 60 * 24);
@@ -329,10 +349,11 @@ const perEntryRules: AuditRule[] = [
   // D2b: 领域相关性 — 检测已废弃领域的残留条目
   {
     name: 'deprecated-domain',
+    label: '废弃领域残留',
     severity: 'high',
     action: 'archive',
+    scope: 'active',
     detect: (entry) => {
-      if (entry.maturity === 'archived') return null;
       const tags = (entry.tags ?? []).map(t => t.toLowerCase());
       // Tag-level: "pipeline" tag is deprecated (Studio Pipeline superseded by Agent Network)
       if (tags.includes('pipeline')) {
@@ -348,7 +369,18 @@ const perEntryRules: AuditRule[] = [
   },
 ];
 
+/** 规则 label 正本表（#109，ADR-0002 定义即注册）：派生自 perEntryRules，与规则键集编译期闭环，CLI 展示层直接消费 */
+export const AUDIT_RULE_LABELS: Record<AuditRuleName, string> = Object.fromEntries(
+  perEntryRules.map(r => [r.name, r.label])
+) as Record<AuditRuleName, string>;
+
 // ── Audit Engine ──────────────────────────────────────────
+
+/** 按 scope 决定是否评估：active 规则对 archived 条目不判定（人口过滤唯一落点） */
+function ruleDetail(rule: AuditRule, entry: KnowledgeEntry, ctx: AuditContext): string | null {
+  if (rule.scope === 'active' && entry.maturity === 'archived') return null;
+  return rule.detect(entry, ctx);
+}
 
 export class KnowledgeAudit {
   private store: KnowledgeStore;
@@ -372,21 +404,7 @@ export class KnowledgeAudit {
       staleDays: this.staleDays,
       promotionBlockDays: this.promotionBlockDays,
     };
-    const issues: AuditIssue[] = [];
-    for (const rule of perEntryRules) {
-      const detail = rule.detect(entry, ctx);
-      if (detail) {
-        issues.push({
-          rule: rule.name,
-          entryId: entry.id,
-          title: entry.title,
-          severity: rule.severity,
-          action: rule.action,
-          detail,
-        });
-      }
-    }
-    return issues;
+    return this.scanEntries([entry], ctx);
   }
 
   /**
@@ -402,22 +420,7 @@ export class KnowledgeAudit {
     };
 
     // Per-entry issues
-    const allIssues: AuditIssue[] = [];
-    for (const entry of entries) {
-      for (const rule of perEntryRules) {
-        const detail = rule.detect(entry, ctx);
-        if (detail) {
-          allIssues.push({
-            rule: rule.name,
-            entryId: entry.id,
-            title: entry.title,
-            severity: rule.severity,
-            action: rule.action,
-            detail,
-          });
-        }
-      }
-    }
+    const allIssues = this.scanEntries(entries, ctx);
 
     // Summary
     const summary = {} as Record<AuditRuleName, number>;
@@ -438,7 +441,7 @@ export class KnowledgeAudit {
 
     // Health score (after)
     const entriesAfter = options?.autoFix ? this.store.list({ excludeArchived: false }) : entries;
-    const issuesAfter = options?.autoFix ? this.runScan(entriesAfter, ctx) : allIssues;
+    const issuesAfter = options?.autoFix ? this.scanEntries(entriesAfter, ctx) : allIssues;
     const healthAfter = this.calculateHealthScore(entriesAfter, issuesAfter);
 
     return {
@@ -496,33 +499,23 @@ export class KnowledgeAudit {
     const staleRatio = active.length > 0 ? d5Issues.length / active.length : 0;
     const d5Score = active.length === 0 ? 100 : Math.max(0, 100 - (staleRatio * 100));
 
-    // D6: 飞轮验证
-    const withRefs = active.filter(e => genuineRefs(e.referencedBy).length > 0).length;
-    const refCoverage = active.length > 0 ? withRefs / active.length : 0;
-    const avgRefs = active.length > 0
-      ? active.reduce((sum, e) => sum + genuineRefs(e.referencedBy).length, 0) / active.length
-      : 0;
-
-    // Consumption hit rate from aggregated stats file (written by MonitorAgent)
-    let consumptionHitRate = 0;
+    // D6: 飞轮验证 —— 指标计算唯一实现在 flywheel-metrics，此处只做 fs 读取与报告层映射
     let dailyConsumptionEvents = 0;
     try {
       const statsPath = path.join(this.store.getBaseDir(), '.consumption-stats.json');
       if (fs.existsSync(statsPath)) {
         const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
         dailyConsumptionEvents = stats.dailyEvents || 0;
-        // hitRate: daily events / active entries, capped at 1
-        consumptionHitRate = active.length > 0
-          ? Math.min(dailyConsumptionEvents / active.length, 1)
-          : 0;
       }
     } catch { /* best-effort */ }
 
+    const metrics = evaluateFlywheel({ entries: active, dailyConsumptionEvents });
+
     // Score: refCoverage * 50 + avgRefs * 20 + consumptionHitRate * 30
     const d6Score = Math.min(100, Math.round(
-      refCoverage * 50 +
-      Math.min(avgRefs / 5, 1) * 20 +
-      consumptionHitRate * 30
+      metrics.refCoverage * 50 +
+      Math.min(metrics.avgRefs / 5, 1) * 20 +
+      metrics.consumptionHitRate * 30
     ));
 
     return {
@@ -576,12 +569,12 @@ export class KnowledgeAudit {
         score: d6Score,
         issues: 0,
         details: {
-          activeEntries: active.length,
-          entriesWithRefs: withRefs,
-          refCoverage: Math.round(refCoverage * 100),
-          avgRefCount: Math.round(avgRefs * 10) / 10,
-          dailyConsumptionEvents,
-          consumptionHitRate: Math.round(consumptionHitRate * 100),
+          activeEntries: metrics.activeEntries,
+          entriesWithRefs: metrics.entriesWithRefs,
+          refCoverage: Math.round(metrics.refCoverage * 100),
+          avgRefCount: Math.round(metrics.avgRefs * 10) / 10,
+          dailyConsumptionEvents: metrics.dailyConsumptionEvents,
+          consumptionHitRate: Math.round(metrics.consumptionHitRate * 100),
         },
       },
       incremental: this.computeIncremental(),
@@ -608,11 +601,14 @@ export class KnowledgeAudit {
 
   // ── Internal ────────────────────────────────────────────
 
-  private runScan(entries: KnowledgeEntry[], ctx: AuditContext): AuditIssue[] {
+  /**
+   * 逐条目跑 perEntryRules（#111 收口）：validate（单条目）、run（全量）与 autoFix 重扫共用
+   */
+  private scanEntries(entries: KnowledgeEntry[], ctx: AuditContext): AuditIssue[] {
     const issues: AuditIssue[] = [];
     for (const entry of entries) {
       for (const rule of perEntryRules) {
-        const detail = rule.detect(entry, ctx);
+        const detail = ruleDetail(rule, entry, ctx);
         if (detail) {
           issues.push({
             rule: rule.name,

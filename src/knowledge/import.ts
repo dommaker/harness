@@ -183,9 +183,7 @@ export class ColdStartImporter {
     }
 
     // 写入知识库
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }
@@ -201,12 +199,6 @@ export class ColdStartImporter {
     try {
       const { execSync } = require('child_process');
       const cwd = this.config.projectRoot;
-
-      // 分析大型重构提交
-      execSync(
-        'git log --oneline --diff-filter=M --numstat --since="6 months ago" | head -100',
-        { cwd, encoding: 'utf-8', timeout: 10000 },
-      );
 
       // 查找 fix/hotfix 相关提交
       const fixCommits = execSync(
@@ -247,9 +239,7 @@ export class ColdStartImporter {
       });
     }
 
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }
@@ -317,9 +307,7 @@ export class ColdStartImporter {
       }
     }
 
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }
@@ -354,9 +342,7 @@ export class ColdStartImporter {
       }
     }
 
-    for (const entry of entries) {
-      this.config.store.save(entry);
-    }
+    this.config.store.saveAll(entries);
 
     return { source, entries, errors };
   }

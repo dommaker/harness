@@ -6,11 +6,11 @@
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
-import * as path from 'path';
 import {
   getEffectiveConstraints,
   lintEffectiveConfig,
 } from '../core/effective-constraints';
+import { createProjectFixture } from '../test-setup/project-fixture';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../core/constraints/definitions';
 
 const BUILTIN_TOTAL =
@@ -24,20 +24,17 @@ describe('getEffectiveConstraints / lintEffectiveConfig', () => {
   let tempDir: string;
   let counter = 0;
 
-  const setupProject = (configYaml?: string, customYaml?: string): string => {
-    const dir = path.join(tempDir, `p${counter++}`);
-    fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
-    if (configYaml !== undefined) {
-      fs.writeFileSync(path.join(dir, '.harness', 'config.yml'), configYaml);
-    }
-    if (customYaml !== undefined) {
-      fs.writeFileSync(path.join(dir, '.harness', 'custom-constraints.yml'), customYaml);
-    }
-    return dir;
-  };
+  const setupProject = (configYaml?: string, customYaml?: string): string =>
+    createProjectFixture({
+      parentDir: tempDir,
+      name: `p${counter++}`,
+      config: configYaml,
+      files: customYaml === undefined ? undefined : { '.harness/custom-constraints.yml': customYaml },
+    });
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-effective-'));
+    // cwd 锚定套件：parentDir 显式 opt-out，缺省 tmpdir 会改变路径锚定结论（harness#90）
+    tempDir = createProjectFixture({ name: 'temp-test-effective', parentDir: process.cwd() });
   });
 
   afterEach(() => {

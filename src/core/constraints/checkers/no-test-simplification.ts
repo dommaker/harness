@@ -4,10 +4,11 @@
 
 import type { ConstraintCheck } from './types';
 
+// m 标志必需：真实 diff 首行恒为 `diff --git`，缺 m 则 ^ 永不命中删除行（铁律静默失效）
 const DELETED_TEST_PATTERNS = [
-  /^-\s*(test|it|describe)\s*\(/, // 删除 test/it/describe
-  /^-\s*expect\s*\(/,              // 删除 expect
-  /^-\s*\/\/\s*test/,              // 删除注释的 test
+  /^-\s*(test|it|describe)\s*\(/m, // 删除 test/it/describe
+  /^-\s*expect\s*\(/m,              // 删除 expect
+  /^-\s*\/\/\s*test/m,              // 删除注释的 test
 ];
 
 export const noTestSimplification: ConstraintCheck = {

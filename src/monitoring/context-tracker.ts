@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl, appendJsonl } from '../utils/jsonl';
 import type { ContextUsageSnapshot } from '../context/types';
 
 export interface ContextAverages {
@@ -28,13 +29,7 @@ export class ContextTracker {
    * 记录上下文使用快照
    */
   record(snapshot: ContextUsageSnapshot): void {
-    const dir = path.dirname(this.logPath);
-
     try {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
       // 检查文件大小，超过限制时轮转
       if (fs.existsSync(this.logPath)) {
         const stat = fs.statSync(this.logPath);
@@ -43,8 +38,8 @@ export class ContextTracker {
         }
       }
 
-      const line = JSON.stringify(snapshot) + '\n';
-      fs.appendFileSync(this.logPath, line, 'utf-8');
+      // 写链收口：ensureDir + append（harness#82）
+      appendJsonl(this.logPath, snapshot);
     } catch {
       // 静默失败，不影响主流程
     }
@@ -55,21 +50,14 @@ export class ContextTracker {
    */
   getRecent(n: number): ContextUsageSnapshot[] {
     try {
-      if (!fs.existsSync(this.logPath)) {
-        return [];
-      }
-
-      const content = fs.readFileSync(this.logPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(Boolean);
-      const recent = lines.slice(-n);
-
-      return recent.map(line => {
-        try {
-          return JSON.parse(line) as ContextUsageSnapshot;
-        } catch {
-          return null;
-        }
-      }).filter((s): s is ContextUsageSnapshot => s !== null);
+      // 坏行策略：skip（原逐行 null-filter 语义不变）；只 parse 最近 n 行；
+      // !== null 沿用原过滤口径：parse 成功但为 null 的记录不返回
+      // 计数去向：豁免（harness#100）——尾部快照读取（tail 在 parse 前截断，坏行占尾部槽位），
+      // 坏行只让返回条数少于 n；消费方是同模块 getAverages()/generateReport()（无 CLI 接线），
+      // 给它们加计数行属新能力，不在本票
+      return readJsonl<ContextUsageSnapshot>(this.logPath, 'skip', { tail: n })
+        .records
+        .filter((s): s is ContextUsageSnapshot => s !== null);
     } catch {
       return [];
     }

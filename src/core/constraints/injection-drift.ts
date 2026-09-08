@@ -17,18 +17,18 @@
  * 两处均无标记段 = 未注入，不算漂移（report 一句话提示，check 不警告）。
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { getEffectiveConstraints } from '../effective-constraints';
+import { getHarnessPackageVersion } from '../../utils/package-version';
+import { CONSTRAINTS_END_MARKER, renderConstraintsSection } from './injection-renderer';
 import {
-  CONSTRAINTS_START_MARKER,
-  CONSTRAINTS_END_MARKER,
-  renderConstraintsSection,
-} from './injection-renderer';
+  resolveInjectionTarget,
+  readIfExists,
+  countGovernanceHeadings,
+  type InjectionFile,
+} from './injection-writer';
 
-/** 注入段落点文件名（检测顺序即路由优先级：旧模型仓 CLAUDE.md 豁免优先） */
-const INJECTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
-export type InjectionFile = (typeof INJECTION_FILES)[number];
+export type { InjectionFile };
 
 /** 注入漂移检测结果 */
 export interface InjectionDrift {
@@ -57,20 +57,6 @@ export const INJECTION_DRIFT_FIX_HINT = '重跑 `npx @dommaker/harness init` 同
 const VERSION_LINE_RE = /<!-- version: ([^ ]+) -->/;
 const ENTRY_LINE_RE = /^- \*\*.+?\*\*: .+$/;
 const GROUP_HEADING_RE = /^### .+$/;
-const GOVERNANCE_HEADING_RE = /^## Governance Rules[ \t]*$/gm;
-
-/**
- * 读取当前 harness 包版本（与 init 注入时写入的版本同源）
- */
-function getPackageVersion(): string {
-  try {
-    const pkgPath = path.join(__dirname, '..', '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
 
 /**
  * 提取参与条目级比对的"有效行"：注入条目（- **id**: text）与分组标题（### ...）。
@@ -83,48 +69,15 @@ function significantLines(section: string): string[] {
     .filter(l => ENTRY_LINE_RE.test(l) || GROUP_HEADING_RE.test(l));
 }
 
-function readIfExists(filePath: string): string | null {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return typeof content === 'string' ? content : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 解析治理约束注入段落点（studio #307，ADR 2026-08-21 落点模型）
- *
- * 与 init 的 setupGovernanceConstraints 路由一致：CLAUDE.md 含标记段优先
- * （旧模型仓豁免），否则看 AGENTS.md（新模型仓注入段在 PRESERVE:governance 内）；
- * 两处均无完整标记段 → null（未注入）。
- *
- * detectInjectionDrift 与 constraints retire 的注入段同步共用本路由。
- */
-export function resolveInjectionTarget(
-  projectRoot: string
-): { file: InjectionFile; content: string; startIdx: number; endIdx: number } | null {
-  for (const file of INJECTION_FILES) {
-    const content = readIfExists(path.join(projectRoot, file));
-    if (content === null) continue;
-    const startIdx = content.indexOf(CONSTRAINTS_START_MARKER);
-    const endIdx = content.indexOf(CONSTRAINTS_END_MARKER);
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      return { file, content, startIdx, endIdx };
-    }
-  }
-  return null;
-}
-
 /**
  * 检测约束注入段漂移
  *
  * @param projectRoot 项目根路径
- * @param currentVersion 当前 harness 版本（缺省读 package.json；测试可显式传入）
+ * @param currentVersion 当前 harness 版本（缺省经 getHarnessPackageVersion 正本读取；测试可显式传入）
  */
 export function detectInjectionDrift(
   projectRoot: string,
-  currentVersion: string = getPackageVersion()
+  currentVersion: string = getHarnessPackageVersion()
 ): InjectionDrift {
   const result: InjectionDrift = {
     hasDrift: false,
@@ -141,7 +94,7 @@ export function detectInjectionDrift(
       readIfExists(path.join(projectRoot, 'CLAUDE.md')) ??
       readIfExists(path.join(projectRoot, 'AGENTS.md'));
     if (legacy !== null) {
-      result.duplicateHeading = (legacy.match(GOVERNANCE_HEADING_RE) ?? []).length > 1;
+      result.duplicateHeading = countGovernanceHeadings(legacy) > 1;
     }
     result.notInjected = true;
     return result;
@@ -150,8 +103,8 @@ export function detectInjectionDrift(
   result.injectionFile = target.file;
   const { content, startIdx, endIdx } = target;
 
-  // 重复章节：全文统计 `## Governance Rules` 标题数（含标记段所属的合法标题）
-  const headingCount = (content.match(GOVERNANCE_HEADING_RE) ?? []).length;
+  // 重复章节：全文统计治理标题数（严格计数 injection-writer.countGovernanceHeadings，#83）
+  const headingCount = countGovernanceHeadings(content);
   result.duplicateHeading = headingCount > 1;
 
   const actualSection = content.slice(startIdx, endIdx + CONSTRAINTS_END_MARKER.length);

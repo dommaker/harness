@@ -28,6 +28,7 @@ import {
   hasSemanticContent,
   STOP_WORDS,
 } from '../session-mining';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface AnalyzeSessionsOptions {
   days?: number;
@@ -52,26 +53,25 @@ interface PatternCandidate {
 
 // ── Main ──
 
-export async function analyzeSessions(options: AnalyzeSessionsOptions): Promise<void> {
+export async function analyzeSessions(options: AnalyzeSessionsOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const transcriptDir = process.env.CLAUDE_TRANSCRIPTS_DIR
     || path.join(os.homedir(), '.claude', 'projects', '-root--claude');
   const memoryDir = path.join(os.homedir(), '.claude', 'projects', '-root-projects', 'memory');
   const days = options.days || 7;
 
   if (!fs.existsSync(transcriptDir)) {
-    console.log(chalk.yellow('No transcripts directory found'));
-    return;
+    log(io, chalk.yellow('No transcripts directory found'));
+    return { kind: 'skip', reason: `会话记录目录不存在: ${transcriptDir}` };
   }
 
-  // 1. Scan transcripts（按修改时间过滤 + 倒序）
+  // 1. Scan transcripts（since 下推 seam（harness#112）：stat 级过滤，窗口外不 parse；倒序）
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const sessions = readTranscriptSessions(transcriptDir)
-    .filter(s => s.mtimeMs >= cutoff)
+  const sessions = readTranscriptSessions(transcriptDir, { since: cutoff })
     .sort((a, b) => b.date.localeCompare(a.date));
 
   if (sessions.length === 0) {
-    console.log(chalk.yellow(`No sessions found in the last ${days} days`));
-    return;
+    log(io, chalk.yellow(`No sessions found in the last ${days} days`));
+    return { kind: 'skip', reason: `最近 ${days} 天没有会话` };
   }
 
   // 2. Extract corrections + N-grams
@@ -86,14 +86,15 @@ export async function analyzeSessions(options: AnalyzeSessionsOptions): Promise<
 
   // 5. Output
   if (options.json) {
-    console.log(JSON.stringify({ sessions: sessions.length, corrections: corrections.length, candidates }, null, 2));
-    return;
+    log(io, JSON.stringify({ sessions: sessions.length, corrections: corrections.length, candidates }, null, 2));
+    return { kind: 'ok' };
   }
 
-  console.log(chalk.blue(`🔍 Analyzing ${sessions.length} sessions (last ${days} days)...\n`));
+  log(io, chalk.blue(`🔍 Analyzing ${sessions.length} sessions (last ${days} days)...\n`));
 
-  printCorrectionSummary(corrections);
-  printCandidates(candidates);
+  printCorrectionSummary(corrections, io);
+  printCandidates(candidates, io);
+  return { kind: 'ok' };
 }
 
 // ── Correction Extraction ──
@@ -301,34 +302,34 @@ function extractConcept(sentences: string[]): string {
 
 // ── Output ──
 
-function printCorrectionSummary(corrections: Correction[]): void {
+function printCorrectionSummary(corrections: Correction[], io: CommandIO): void {
   if (corrections.length === 0) {
-    console.log(chalk.green('No correction patterns found'));
+    log(io, chalk.green('No correction patterns found'));
     return;
   }
 
-  console.log(chalk.yellow(`📢 ${corrections.length} correction signals detected\n`));
+  log(io, chalk.yellow(`📢 ${corrections.length} correction signals detected\n`));
 }
 
-function printCandidates(candidates: PatternCandidate[]): void {
+function printCandidates(candidates: PatternCandidate[], io: CommandIO): void {
   if (candidates.length === 0) {
-    console.log(chalk.green('✅ No new pattern candidates — all recurring concepts already have rules\n'));
+    log(io, chalk.green('✅ No new pattern candidates — all recurring concepts already have rules\n'));
     return;
   }
 
-  console.log(chalk.bold('🔔 Pattern Candidates (suggested rules)\n'));
+  log(io, chalk.bold('🔔 Pattern Candidates (suggested rules)\n'));
 
   const topK = candidates.slice(0, 10);
   for (const c of topK) {
     const icon = c.source === 'correction' ? '🔴' : '🟡';
     const confBar = '█'.repeat(Math.round(c.confidence * 10)) + '░'.repeat(10 - Math.round(c.confidence * 10));
-    console.log(chalk.bold(`${icon} ${c.pattern}`));
-    console.log(chalk.gray(`   Source: ${c.source} | Freq: ${c.frequency} | Sessions: ${c.sessions.length} | Confidence: ${confBar}`));
-    console.log(chalk.cyan(`   → Rule: ${c.suggestedRule}`));
-    console.log();
+    log(io, chalk.bold(`${icon} ${c.pattern}`));
+    log(io, chalk.gray(`   Source: ${c.source} | Freq: ${c.frequency} | Sessions: ${c.sessions.length} | Confidence: ${confBar}`));
+    log(io, chalk.cyan(`   → Rule: ${c.suggestedRule}`));
+    log(io);
   }
 
   if (candidates.length > 10) {
-    console.log(chalk.gray(`... and ${candidates.length - 10} more candidates. Run with --json for full list.`));
+    log(io, chalk.gray(`... and ${candidates.length - 10} more candidates. Run with --json for full list.`));
   }
 }

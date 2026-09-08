@@ -3,6 +3,7 @@
  */
 
 import { knowledgeAudit, knowledgeStats, knowledgeHealth, knowledgeSearch } from '../knowledge';
+import { captureIO, type CapturingIO } from '../../command-contract';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -20,6 +21,8 @@ jest.mock('../../../knowledge/audit', () => ({
   KnowledgeAudit: jest.fn().mockImplementation(() => ({
     run: mockRun,
   })),
+  // label 正本在 audit.ts 规则定义上，CLI 直接消费（#109）
+  AUDIT_RULE_LABELS: jest.requireActual('../../../knowledge/audit').AUDIT_RULE_LABELS,
 }));
 
 // Mock KnowledgeIndexGenerator (avoids real fs writes in CLI tests)
@@ -67,6 +70,11 @@ const MOCK_REPORT = {
   healthScore: { before: 95, after: 95 },
 };
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('getKnowledgeDir', () => {
   const fs = require('fs');
   const os = require('os');
@@ -74,14 +82,12 @@ describe('getKnowledgeDir', () => {
   const storeModule = require('../../../knowledge/store');
   let storeCtorSpy: jest.SpyInstance;
   let homedirSpy: jest.SpyInstance;
-  let errorSpy: jest.SpyInstance;
   let tmpHome: string;
 
   beforeEach(() => {
     delete process.env.KNOWLEDGE_BASE_DIR;
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-kdir-'));
     homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(tmpHome);
-    errorSpy = jest.spyOn(console, 'error').mockImplementation();
     storeCtorSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([]),
     }));
@@ -90,21 +96,20 @@ describe('getKnowledgeDir', () => {
   afterEach(() => {
     storeCtorSpy.mockRestore();
     homedirSpy.mockRestore();
-    errorSpy.mockRestore();
     delete process.env.KNOWLEDGE_BASE_DIR;
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   it('should use KNOWLEDGE_BASE_DIR env var when set', async () => {
     process.env.KNOWLEDGE_BASE_DIR = '/custom/knowledge';
-    await knowledgeStats({ json: true });
+    await knowledgeStats({ json: true }, io);
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: '/custom/knowledge',
     }));
   });
 
   it('should default to ~/.harness/knowledge when no env var and no legacy data', async () => {
-    await knowledgeStats({ json: true });
+    await knowledgeStats({ json: true }, io);
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: path.join(tmpHome, '.harness', 'knowledge'),
     }));
@@ -114,27 +119,27 @@ describe('getKnowledgeDir', () => {
     const legacyDir = path.join(tmpHome, '.studio', 'knowledge');
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, 'guideline-x.md'), 'data');
-    await knowledgeStats({ json: true });
+    await knowledgeStats({ json: true }, io);
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: legacyDir,
     }));
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('旧目录'));
+    expect(io.errText()).toContain('旧目录');
     // 闩锁：同进程重复解析只提示一次
-    await knowledgeStats({ json: true });
-    const notices = errorSpy.mock.calls.filter((c: any[]) => typeof c[0] === 'string' && c[0].includes('旧目录'));
+    await knowledgeStats({ json: true }, io);
+    const notices = io.errLines().filter(line => line.includes('旧目录'));
     expect(notices).toHaveLength(1);
   });
 
   it('should ignore legacy dir when it exists but is empty', async () => {
     fs.mkdirSync(path.join(tmpHome, '.studio', 'knowledge'), { recursive: true });
-    await knowledgeStats({ json: true });
+    await knowledgeStats({ json: true }, io);
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: path.join(tmpHome, '.harness', 'knowledge'),
     }));
   });
 
   it('should use projectPath when provided', async () => {
-    await knowledgeStats({ projectPath: '/my/project', json: true });
+    await knowledgeStats({ projectPath: '/my/project', json: true }, io);
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: '/my/project/.harness/knowledge',
     }));
@@ -142,81 +147,105 @@ describe('getKnowledgeDir', () => {
 });
 
 describe('knowledgeAudit CLI', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     mockRun.mockReturnValue(MOCK_REPORT);
   });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   it('should output JSON when --json is set', async () => {
-    await knowledgeAudit({ json: true });
-    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(MOCK_REPORT, null, 2));
+    await knowledgeAudit({ json: true }, io);
+
+    expect(io.outText()).toBe(JSON.stringify(MOCK_REPORT, null, 2) + '\n');
   });
 
   it('should call audit.run with autoFix=true when --fix is set', async () => {
-    await knowledgeAudit({ fix: true });
+    await knowledgeAudit({ fix: true }, io);
     expect(mockRun).toHaveBeenCalledWith({ autoFix: true });
   });
 
   it('should call audit.run with autoFix falsy when --dry-run is set', async () => {
-    await knowledgeAudit({ dryRun: true });
+    await knowledgeAudit({ dryRun: true }, io);
     expect(mockRun).toHaveBeenCalledWith({ autoFix: undefined });
   });
 
   it('should call audit.run with autoFix falsy by default', async () => {
-    await knowledgeAudit({});
+    await knowledgeAudit({}, io);
     expect(mockRun).toHaveBeenCalledWith({ autoFix: undefined });
   });
 
   it('should display total entries and health score', async () => {
-    await knowledgeAudit({});
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeAudit({}, io);
+    const output = io.outText();
     expect(output).toContain('总条目: 100');
     expect(output).toContain('95/100');
   });
 
   it('should display dimension scores', async () => {
-    await knowledgeAudit({});
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeAudit({}, io);
+    const output = io.outText();
     expect(output).toContain('D1 结构完整性');
     expect(output).toContain('D6 飞轮验证');
   });
 
   it('should display autoFixed count when > 0', async () => {
     mockRun.mockReturnValue({ ...MOCK_REPORT, autoFixed: 5, healthScore: { before: 90, after: 95 } });
-    await knowledgeAudit({ fix: true });
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeAudit({ fix: true }, io);
+    const output = io.outText();
     expect(output).toContain('自动修复: 5');
     expect(output).toContain('修复后: 95/100');
   });
 
   it('should pass custom dir to KnowledgeAudit', async () => {
     const { KnowledgeAudit } = require('../../../knowledge/audit');
-    await knowledgeAudit({ dir: '/custom/path' });
+    await knowledgeAudit({ dir: '/custom/path' }, io);
     expect(KnowledgeAudit).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: '/custom/path',
     }));
+  });
+
+  it('规则 label 闭环：event-noise / deprecated-domain 显示中文 label，不回落英文键名（#109）', async () => {
+    mockRun.mockReturnValue({
+      ...MOCK_REPORT,
+      issues: [],
+      summary: {
+        ...MOCK_REPORT.summary,
+        'event-noise': 2,
+        'deprecated-domain': 1,
+      },
+    });
+    await knowledgeAudit({}, io);
+    const output = io.outText();
+    expect(output).toContain('运维事件噪音: 2');
+    expect(output).toContain('废弃领域残留: 1');
+    expect(output).not.toContain('event-noise');
+    expect(output).not.toContain('deprecated-domain');
+  });
+
+  it('维度 label 闭环：incremental 维度显示中文 label，不回落英文键名（#109）', async () => {
+    mockRun.mockReturnValue({
+      ...MOCK_REPORT,
+      dimensions: {
+        ...MOCK_REPORT.dimensions,
+        incremental: { score: 80, issues: 0, details: {} },
+      },
+    });
+    await knowledgeAudit({}, io);
+    const output = io.outText();
+    expect(output).toContain('D7 增量存活');
+    expect(output).not.toContain('incremental');
   });
 });
 
 describe('knowledgeHealth CLI', () => {
   const storeModule = require('../../../knowledge/store');
-  let consoleSpy: jest.SpyInstance;
   let storeSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
     if (storeSpy) storeSpy.mockRestore();
   });
 
@@ -229,8 +258,8 @@ describe('knowledgeHealth CLI', () => {
       getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
     }));
 
-    await knowledgeHealth({ json: true });
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeHealth({ json: true }, io);
+    const output = io.outText();
     const parsed = JSON.parse(output);
     expect(parsed).toHaveProperty('healthScore');
     expect(parsed.summary).toHaveProperty('total', 2);
@@ -244,8 +273,8 @@ describe('knowledgeHealth CLI', () => {
       getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
     }));
 
-    await knowledgeHealth({ json: true });
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeHealth({ json: true }, io);
+    const output = io.outText();
     const parsed = JSON.parse(output);
     expect(parsed.summary.lowRefEntries).toBe(1);
   });
@@ -259,8 +288,8 @@ describe('knowledgeHealth CLI', () => {
       getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
     }));
 
-    await knowledgeHealth({ json: true });
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeHealth({ json: true }, io);
+    const output = io.outText();
     const parsed = JSON.parse(output);
     expect(parsed.summary.staleEntries).toBe(1);
   });
@@ -279,7 +308,6 @@ describe('knowledgeSearch CLI (harness#63)', () => {
 
   let tmpProject: string;
   let knowledgeDir: string;
-  let consoleSpy: jest.SpyInstance;
 
   const FILLER_COUNT = 25; // 25 × ~800 tokens ≈ 20000 > maxTokens 10000
   const TARGET_ID = 'PIT-020';
@@ -311,7 +339,6 @@ describe('knowledgeSearch CLI (harness#63)', () => {
     tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-k63-'));
     knowledgeDir = path.join(tmpProject, '.harness', 'knowledge');
     fs.mkdirSync(knowledgeDir, { recursive: true });
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
     const store = new FileKnowledgeStore({ baseDir: knowledgeDir });
     // 高成熟度 + 有 lastReferenced 的填充条目排在前面，吃满 token budget
@@ -333,13 +360,12 @@ describe('knowledgeSearch CLI (harness#63)', () => {
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
     fs.rmSync(tmpProject, { recursive: true, force: true });
   });
 
   async function searchJson(query: string, limit: number): Promise<any> {
-    await knowledgeSearch(query, { projectPath: tmpProject, json: true, limit });
-    const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
+    await knowledgeSearch(query, { projectPath: tmpProject, json: true, limit }, io);
+    const output = io.outText();
     return JSON.parse(output);
   }
 

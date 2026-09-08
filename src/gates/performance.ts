@@ -16,6 +16,7 @@
 import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { pass, gateResult, fromError } from './types';
 import type { GateResult, GateContext, PerformanceGateConfig, PerformanceThresholds, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -70,13 +71,7 @@ export class PerformanceGate implements Gate {
     const startTime = Date.now();
 
     if (!this.config.enabled) {
-      return {
-        gate: 'performance',
-        passed: true,
-        message: '性能门禁已禁用',
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return pass('performance', '性能门禁已禁用', startTime);
     }
 
     try {
@@ -122,11 +117,12 @@ export class PerformanceGate implements Gate {
         ? `性能检查通过: ${this.formatMetrics(metrics)}`
         : failures.join('; ');
 
-      return {
-        gate: 'performance',
+      return gateResult(
+        'performance',
         passed,
-        message: warnings.length > 0 ? `${message} (警告: ${warnings.join('; ')})` : message,
-        details: {
+        warnings.length > 0 ? `${message} (警告: ${warnings.join('; ')})` : message,
+        startTime,
+        {
           metrics: {
             responseTime: metrics.responseTime,
             memoryUsage: metrics.memoryUsage,
@@ -136,18 +132,10 @@ export class PerformanceGate implements Gate {
           thresholds,
           failures,
           warnings,
-        },
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+        }
+      );
     } catch (error: any) {
-      return {
-        gate: 'performance',
-        passed: false,
-        message: `性能检查失败: ${error.message}`,
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return fromError('performance', '性能检查失败', error, startTime);
     }
   }
 

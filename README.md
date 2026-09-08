@@ -36,7 +36,6 @@ await checkBeforeExecution({
   operation: 'code_implementation',
   taskDescription: '重构用户认证模块',
   projectPath: '/path/to/project',
-  hasWorktree: true,
 });
 
 // 获取约束元数据
@@ -111,7 +110,6 @@ harness update-user-model # 增量更新用户思维模型
 
 # 文档与 Spec
 harness sync-docs      # 同步 CAPABILITIES.md + CONTEXT.md + AGENTS.md
-harness doc-freshness-check  # 文档声明新鲜度检查
 harness spec           # Spec 验证
 harness spec-baseline-check  # Spec 前置条件验证
 harness sdd            # SDD 索引管理

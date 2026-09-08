@@ -50,12 +50,21 @@ export function walkFiles(root: string, options: FileWalkOptions = {}): string[]
   return results;
 }
 
+/**
+ * 目录遍历默认跳过名单：依赖 / 旁测目录 / 构建产物。
+ *
+ * 遍历跳过口径的正本——chain 式判断（sync-docs 的 readdir 循环）与
+ * findTsSourceFiles 的 skipDirs 默认值同源，禁止再各处手抄三段 `===`。
+ * 各调用方自有的更广名单（如 AGENTS.md 目录表跳过 build/out/coverage）不并入。
+ */
+export const DEFAULT_SKIP_DIRS = ['node_modules', '__tests__', 'dist'];
+
 export interface TsSourceWalkOptions {
   /** 是否跳过 barrel 文件 index.ts，默认 false */
   skipIndex?: boolean;
   /** 是否同时收集 .tsx 文件，默认 false（只收集 .ts） */
   includeTsx?: boolean;
-  /** 跳过的目录名，默认 node_modules/__tests__/dist */
+  /** 跳过的目录名，默认 DEFAULT_SKIP_DIRS */
   skipDirs?: string[];
   /** 是否跳过 `.` 开头的条目，默认 false */
   skipHidden?: boolean;
@@ -86,7 +95,7 @@ export function findTsSourceFiles(root: string, options: TsSourceWalkOptions = {
   const {
     skipIndex = false,
     includeTsx = false,
-    skipDirs = ['node_modules', '__tests__', 'dist'],
+    skipDirs = DEFAULT_SKIP_DIRS,
     skipHidden = false,
   } = options;
 

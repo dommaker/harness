@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -36,6 +37,11 @@ const makeConstraint = (overrides: Partial<Constraint>): Constraint => ({
   trigger: 'manual',
   enforcement: 'none',
   ...overrides,
+});
+
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
 });
 
 describe('renderConstraintsSection（纯函数）', () => {
@@ -101,7 +107,7 @@ describe('setupClaudeMdConstraints（消费生效集）', () => {
   });
 
   it('CLAUDE.md 不存在时创建并写入约束段', async () => {
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(content).toContain('## Governance Rules');
@@ -112,24 +118,32 @@ describe('setupClaudeMdConstraints（消费生效集）', () => {
   });
 
   it('连跑两次输出一致（幂等）', async () => {
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
     const first = fs.readFileSync(claudeMdPath, 'utf-8');
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
     const second = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(second).toBe(first);
   });
 
   it('标记区间外内容保持不动', async () => {
     fs.writeFileSync(claudeMdPath, '# My Project\n\n用户自定义内容\n');
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(content).toContain('# My Project');
     expect(content).toContain('用户自定义内容');
   });
 
+  it('标记残缺（只有单边）：拒写不追加并告警（writer 半标记守护，候选1）', async () => {
+    const broken = `# My Project\n\n${CONSTRAINTS_START_MARKER}\n半残段\n`;
+    fs.writeFileSync(claudeMdPath, broken);
+    await setupClaudeMdConstraints(tempDir, io);
+    expect(fs.readFileSync(claudeMdPath, 'utf-8')).toBe(broken);
+    expect(io.outText()).toContain('残缺');
+  });
+
   it('尊重 config.yml 禁用：注入段不含被禁条目', async () => {
     writeConfig('constraints:\n  no_fuzzy_completion_claim:\n    enabled: false\n');
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(content).not.toContain('no_fuzzy_completion_claim');
@@ -138,12 +152,12 @@ describe('setupClaudeMdConstraints（消费生效集）', () => {
 
   it('scenes 缺省不注入场景专属 prompt；配置 scenes 后注入', async () => {
     writeConfig('preset: standard\n');
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
     let content = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(content).not.toContain('no_skill_without_test');
 
     writeConfig('preset: standard\nscenes:\n  - agent-skill\n');
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
     content = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(content).toContain('- **no_skill_without_test**');
     expect(content).not.toContain('no_model_for_deterministic');
@@ -151,7 +165,7 @@ describe('setupClaudeMdConstraints（消费生效集）', () => {
 
   it('注入段文本与 renderConstraintsSection(getEffectiveConstraints()) 一致', async () => {
     writeConfig('constraints:\n  no_bypass_checkpoint:\n    enabled: false\n');
-    await setupClaudeMdConstraints(tempDir);
+    await setupClaudeMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
     const start = content.indexOf(CONSTRAINTS_START_MARKER);
@@ -179,13 +193,13 @@ describe('setupClaudeMdOutputStyle（标记化）', () => {
   });
 
   it('CLAUDE.md 不存在时不创建（由 constraints 注入负责创建）', async () => {
-    await setupClaudeMdOutputStyle(tempDir);
+    await setupClaudeMdOutputStyle(tempDir, io);
     expect(fs.existsSync(claudeMdPath)).toBe(false);
   });
 
   it('无 Output Style 段：插入带标记段到文件顶部，二次运行幂等', async () => {
     fs.writeFileSync(claudeMdPath, '# My Project\n\n正文\n');
-    await setupClaudeMdOutputStyle(tempDir);
+    await setupClaudeMdOutputStyle(tempDir, io);
 
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
     expect(content.startsWith(OUTPUT_STYLE_START)).toBe(true);
@@ -193,7 +207,7 @@ describe('setupClaudeMdOutputStyle（标记化）', () => {
     expect(content).toContain(OUTPUT_STYLE_END);
     expect(content).toContain('# My Project');
 
-    await setupClaudeMdOutputStyle(tempDir);
+    await setupClaudeMdOutputStyle(tempDir, io);
     expect(fs.readFileSync(claudeMdPath, 'utf-8')).toBe(content);
   });
 
@@ -209,7 +223,7 @@ describe('setupClaudeMdOutputStyle（标记化）', () => {
     ].join('\n');
     fs.writeFileSync(claudeMdPath, legacy);
 
-    await setupClaudeMdOutputStyle(tempDir);
+    await setupClaudeMdOutputStyle(tempDir, io);
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
 
     expect(content).toContain(OUTPUT_STYLE_START);
@@ -219,19 +233,18 @@ describe('setupClaudeMdOutputStyle（标记化）', () => {
     // 迁移后只剩一个 Output Style 标题
     expect(content.match(/^## Output Style$/gm)).toHaveLength(1);
     // 幂等
-    await setupClaudeMdOutputStyle(tempDir);
+    await setupClaudeMdOutputStyle(tempDir, io);
     expect(fs.readFileSync(claudeMdPath, 'utf-8')).toBe(content);
   });
 
   it('用户自写 Output Style 段（特征串不匹配）：不动、不追加、console 提示', async () => {
     const userContent = '# My Project\n\n## Output Style\n\n用户自己的输出风格要求。\n';
     fs.writeFileSync(claudeMdPath, userContent);
-    const logSpy = jest.spyOn(console, 'log');
 
-    await setupClaudeMdOutputStyle(tempDir);
+    await setupClaudeMdOutputStyle(tempDir, io);
 
     expect(fs.readFileSync(claudeMdPath, 'utf-8')).toBe(userContent);
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('跳过'));
+    expect(io.outText()).toContain('跳过');
   });
 });
 
@@ -254,7 +267,7 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
   });
 
   it('AGENTS.md 不存在时创建骨架并写入 PRESERVE:governance 段', async () => {
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(agentsMdPath, 'utf-8');
     expect(content).toContain('# AGENTS.md');
@@ -270,9 +283,9 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
   });
 
   it('连跑两次输出一致（幂等）', async () => {
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
     const first = fs.readFileSync(agentsMdPath, 'utf-8');
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(first);
   });
 
@@ -301,7 +314,7 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
       '',
     ].join('\n'));
 
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(agentsMdPath, 'utf-8');
     expect(content).toContain('机器生成导读（保持不变）');
@@ -314,7 +327,7 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
     expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf('治理契约引言（手写，保留）'));
     expect(content.indexOf('### 治理变更流程（手写，保留）')).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
     // 幂等
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(content);
   });
 
@@ -330,7 +343,7 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
       '',
     ].join('\n'));
 
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(agentsMdPath, 'utf-8');
     expect(content).toContain('治理契约引言（手写，保留）');
@@ -340,14 +353,14 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
     expect(content.indexOf('### 发布纪律（手写，保留）')).toBeLessThan(content.indexOf(CONSTRAINTS_START_MARKER));
     expect(content.indexOf(CONSTRAINTS_END_MARKER)).toBeLessThan(content.indexOf(GOVERNANCE_PRESERVE_END));
     // 幂等
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(content);
   });
 
   it('AGENTS.md 存在但无 PRESERVE:governance 段：末尾追加，既有内容不动', async () => {
     fs.writeFileSync(agentsMdPath, '# AGENTS.md\n\n既有导读内容\n');
 
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(agentsMdPath, 'utf-8');
     expect(content).toContain('既有导读内容');
@@ -358,16 +371,33 @@ describe('setupAgentsMdConstraints（新落点模型：治理契约 → AGENTS.m
   it('PRESERVE:governance 标记残缺（只有单边）：不写入并告警', async () => {
     const original = `# AGENTS.md\n\n${GOVERNANCE_PRESERVE_BEGIN}\n残缺的段\n`;
     fs.writeFileSync(agentsMdPath, original);
-    const logSpy = jest.spyOn(console, 'log');
 
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
 
     expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(original);
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('残缺'));
+    expect(io.outText()).toContain('残缺');
+  });
+
+  it('PRESERVE 段内 HARNESS 标记残缺（单边）：拒写并告警（候选1 守护，旧行为会再追加一份注入段）', async () => {
+    const broken = [
+      '# AGENTS.md',
+      '',
+      GOVERNANCE_PRESERVE_BEGIN,
+      '手写契约',
+      '',
+      CONSTRAINTS_START_MARKER,
+      '半残注入',
+      GOVERNANCE_PRESERVE_END,
+      '',
+    ].join('\n');
+    fs.writeFileSync(agentsMdPath, broken);
+    await setupAgentsMdConstraints(tempDir, io);
+    expect(fs.readFileSync(agentsMdPath, 'utf-8')).toBe(broken);
+    expect(io.outText()).toContain('残缺');
   });
 
   it('段内注入文本与 renderConstraintsSection(getEffectiveConstraints()) 一致', async () => {
-    await setupAgentsMdConstraints(tempDir);
+    await setupAgentsMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(agentsMdPath, 'utf-8');
     const start = content.indexOf(CONSTRAINTS_START_MARKER);

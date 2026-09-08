@@ -10,8 +10,8 @@
 - 执行器：`runGates`（`runner.ts`）——按 order 升序；deny 单调（下游 abstain 不得改回 allow）+ ask 枚举预留 fail-closed = deny；决策浅冻结
 - 生效集：`getEffectiveGates(projectRoot)`（`effective-gates.ts`）——对齐 getEffectiveConstraints 裁剪模式：config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除；enabled 段未注册校验与裁剪走 core/effective-set 共享筛选器（throw 模式），order 重排与重复 id 检测留本侧
 - checker-as-guard 接线点：`createCheckerGate(check)`（`checker-gate.ts`）——ConstraintCheck → Gate（studio #129 随动）；false→deny，true/'skip'→abstain；env 经 `buildCheckEnv(..., 'none')` 构造（显式不接证据，语义见 core/constraints/checkers/types.ts 工厂 doc）
-- 门禁类：`ReviewGate` / `SecurityGate` / `PerformanceGate` / `ContractGate` / `SpecAcceptanceGate` / `CommandGate`（各自执行细节私有，保留 `check()`/`scan()` 报告方法）
-- `types.ts` — GateResult（报告结构，保留）/ GateContext / GateDecision 等公共类型
+- 门禁类：`ReviewGate` / `SecurityGate` / `PerformanceGate` / `ContractGate` / `SpecAcceptanceGate` / `CommandGate`（各自执行细节私有，保留 `check()`/`scan()` 报告方法）；SpecAcceptanceGate 的 runner 输出解读与 e2e 判负都从 `core/validators/test-output.ts` 的 `judgeTestRun` 取（解析收口 ADR-0012、判定依据 ADR-0014，本层既不自带正则也不自写判定 `if`）
+- `types.ts` — GateResult（报告结构，保留）/ GateContext / GateDecision 等公共类型 + 报告构造器 `pass` / `fail` / `fromError`（动态 passed 走 `gateResult`）：timestamp 与 duration 口径唯一落点，门禁实现禁止手写 GateResult 字面量（duration 是可选字段，漏写无编译期报错）
 - 便捷工厂函数：createReviewGate / createSecurityGate / createPerformanceGate / createContractGate / createSpecAcceptanceGate / createCommandGate
 
 ## 依赖关系
@@ -19,12 +19,15 @@
 - 依赖 `src/types/` 公共类型
 
 ## 约定
-- 新门禁必须：① 在 `definitions.ts` 补 GateDefinition（含 CLI 元数据）② 在 `registry.ts` IMPLEMENTATIONS 注册实现（缺一 → 加载期抛错）③ 实现统一 Gate 接口（evaluate 产三态决策，报告走 GateResult）④ 配 CLI 命令（命令实现文件 + CLI 元数据的 module+export 引用，bin 由定义表驱动生成，不再手写块）+ 测试文件
+- 新门禁必须：① 在 `definitions.ts` 补 GateDefinition（含 CLI 元数据）② 在 `registry.ts` IMPLEMENTATIONS 注册实现（缺一 → 加载期抛错）③ 实现统一 Gate 接口（evaluate 产三态决策，报告由 `types.ts` 的 `pass`/`fail`/`fromError`/`gateResult` 构造，不手写字面量）④ 配 CLI 命令（命令实现文件 + CLI 元数据的 module+export 引用，bin 由定义表驱动生成，不再手写块）+ 测试文件
 - deny 单调是接口契约：决策浅冻结，下游不得改写上游决策
+- `runGates` 是 Gate 链语义的**参考实现**（deny 单调 / ask fail-closed / 全决策浅冻结）：仓内暂无生产调用方（harness CLI 文件驱动逐命令执行，studio `runCompletionGuards` 经 checker-gate 复用语义但不 import），消费方只有测试。「deny 后短路跳过剩余门禁」类优化在出现真实消费者前不做——它与「按执行顺序的全部决策」报告契约直接冲突，短路等于改 GateResult 语义（harness#115 裁决，防后续评审重复提议）
 - ask 枚举预留：暂无实现，runGates fail-closed 按 deny 计
+- **收到的根要传到自己每个 IO/执行点（harness#95）**：门禁只认 `context.projectPath`，内部相对子路径一律锚到它（`SpecAcceptanceGate` 的 tasksPath、`ContractGate` 的 contractPath、e2e/scan/benchmark 的 `cwd`），禁止「根已传入却又取 cwd」、禁止 `xxxPath: './…'` 相对默认值——否则 `-p` 半失效且表现为假绿（acceptance 的「无 tasks.yml 即跳过」= passed:true）。本层唯一保留的 cwd 站点是 `checker-gate` 对 `ctx.projectPath` 的缺省兜底（豁免理由见守护表）。约定正本与两道机器可检的闸见 `src/cli/commands/CONTEXT.md`
 
 ## 注意事项
 - 门禁系统不包含业务逻辑，只提供检查能力
+- `acceptance.ts` 的 13 处 return 是 `AcceptanceGateResult`（无 gate/duration 字段，`evaluate()` 归一化为 GateResult 报告——设计如此，见该方法注释），不是 GateResult 字面量，故不套 `pass`/`fail` 构造器；改成 GateResult 会动公共类型形状
 - 统一的是决策协议（id/order/三态），执行细节（gh pr view/正则黑名单/OpenAPI diff/benchmark）私有——不要把执行细节塞进 Gate 接口
 - config.yml gates 段为新增面：引用未注册 id 直接抛错（无历史残留配置需兼容）
 - CommandGate 为命令黑名单检查(SEC-006)

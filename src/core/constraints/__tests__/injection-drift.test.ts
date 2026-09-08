@@ -11,7 +11,6 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { detectInjectionDrift, INJECTION_DRIFT_FIX_HINT } from '../injection-drift';
 import {
@@ -19,12 +18,11 @@ import {
   CONSTRAINTS_START_MARKER,
 } from '../injection-renderer';
 import { getEffectiveConstraints } from '../../effective-constraints';
+import { createProjectFixture, writeProjectConfig } from '../../../test-setup/project-fixture';
 
 const TEST_VERSION = '9.9.9-test';
 
-function makeTmpProject(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'harness-drift-test-'));
-}
+const makeTmpProject = (): string => createProjectFixture({ name: 'harness-drift-test' });
 
 /** 写入与当前生效集完全一致的注入段（版本 TEST_VERSION） */
 function writeSyncedClaudeMd(root: string, extra = ''): string {
@@ -102,12 +100,7 @@ describe('detectInjectionDrift', () => {
     const root = makeTmpProject();
     writeSyncedClaudeMd(root);
     // 注入后禁用一条 prompt，但不重跑 init
-    fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, '.harness', 'config.yml'),
-      'constraints:\n  no_fuzzy_completion_claim:\n    enabled: false\n',
-      'utf-8'
-    );
+    writeProjectConfig(root, 'constraints:\n  no_fuzzy_completion_claim:\n    enabled: false\n');
 
     const drift = detectInjectionDrift(root, TEST_VERSION);
 

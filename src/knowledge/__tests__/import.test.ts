@@ -308,6 +308,23 @@ describe('ColdStartImporter', () => {
       // 非 git 目录应该有错误但不崩溃
       expect(results.length).toBe(1);
     });
+
+    it('不应执行结果被丢弃的大型重构扫描命令（harness#111 死代码）', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const execSpy = jest.spyOn(require('child_process'), 'execSync').mockReturnValue('');
+      try {
+        const importer = new ColdStartImporter({
+          projectRoot: tmpDir,
+          store,
+          sources: ['git'],
+        });
+        await importer.importAll();
+        const commands = execSpy.mock.calls.map(call => String(call[0]));
+        expect(commands.some(cmd => cmd.includes('diff-filter=M'))).toBe(false);
+      } finally {
+        execSpy.mockRestore();
+      }
+    });
   });
 
   describe('importFromDocs - 目录', () => {
@@ -371,6 +388,33 @@ describe('ColdStartImporter', () => {
       // 副本修改不影响原状态
       state.totalImported = 999;
       expect(importer.getState().totalImported).toBe(0);
+    });
+  });
+
+  describe('批量写入收口（harness#107）', () => {
+    it('多条目导入经 saveAll 一次落索引，不再逐条 save', async () => {
+      const importer = new ColdStartImporter({
+        projectRoot: tmpDir,
+        store,
+        sources: ['manual'],
+        manualEntries: [
+          { title: 'Entry A', content: 'Content A', type: 'guideline' },
+          { title: 'Entry B', content: 'Content B', type: 'guideline' },
+        ],
+      });
+
+      const saveAllSpy = jest.spyOn(store, 'saveAll');
+      const saveSpy = jest.spyOn(store, 'save');
+      try {
+        const results = await importer.importAll();
+        expect(results[0].entries).toHaveLength(2);
+        expect(saveAllSpy).toHaveBeenCalledTimes(1);
+        expect(saveSpy).not.toHaveBeenCalled();
+      } finally {
+        saveAllSpy.mockRestore();
+        saveSpy.mockRestore();
+      }
+      expect(store.list()).toHaveLength(2);
     });
   });
 });

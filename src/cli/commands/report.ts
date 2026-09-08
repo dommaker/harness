@@ -9,7 +9,9 @@ import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
 import { executeWithCollect } from '../../failure/constraint-handler';
+import { getTraceCollector } from '../../monitoring/traces';
 import type { ConstraintContext } from '../../types/constraint';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ReportOptions {
   /** 输出文件路径 */
@@ -42,11 +44,12 @@ interface ReportData {
 /**
  * 生成检查报告
  */
-export async function report(options: ReportOptions): Promise<void> {
-  console.log(chalk.blue('📊 生成检查报告...'));
+export async function report(options: ReportOptions, io: CommandIO = processIO): Promise<CommandResult> {
+  log(io, chalk.blue('📊 生成检查报告...'));
 
   const projectPath = options.projectPath || process.cwd();
-  const checker = ConstraintChecker.getInstance();
+  // trace 记录器经构造参数接线（harness#88）：本命令是组合根
+  const checker = new ConstraintChecker(getTraceCollector());
 
   const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...PROMPTS };
   const totalConstraints = Object.keys(allConstraints).length;
@@ -105,10 +108,11 @@ export async function report(options: ReportOptions): Promise<void> {
 
   if (options.output) {
     await fs.writeFile(options.output, content, 'utf-8');
-    console.log(chalk.green(`✅ 报告已保存到: ${options.output}`));
+    log(io, chalk.green(`✅ 报告已保存到: ${options.output}`));
   } else {
-    console.log(content);
+    log(io, content);
   }
+  return { kind: 'ok' };
 }
 
 function generateMarkdownReport(data: ReportData): string {

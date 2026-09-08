@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
+import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
 import type {
   DocFreshnessCheck,
   DocFreshnessConfig,
@@ -238,7 +239,7 @@ export class FreshnessRunner {
       if (!check.skip_reverse_check) {
         // 从文档目录中推断要扫描的根目录集
         const rootDirs = this.inferRootDirs(docDirs, ctx.projectPath);
-        const excludeSet = new Set(check.exclude || ['__tests__', 'node_modules', 'dist']);
+        const excludeSet = new Set(check.exclude || DEFAULT_SKIP_DIRS);
 
         for (const rootDir of rootDirs) {
           const absRoot = join(ctx.projectPath, rootDir);

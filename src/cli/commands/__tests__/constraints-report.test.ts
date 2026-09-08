@@ -8,7 +8,7 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import type { ExecutionTrace } from '../../../types/trace';
 import {
@@ -17,43 +17,24 @@ import {
   readProjectTraces,
 } from '../../../core/constraints/usage-report';
 import { constraintsReport, renderExportMarkdown } from '../constraints-report';
-
-function makeTmpProject(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'harness-report-test-'));
-}
-
-function writeTraces(root: string, traces: Partial<ExecutionTrace>[]): void {
-  const dir = path.join(root, '.harness', 'logs');
-  fs.mkdirSync(dir, { recursive: true });
-  const lines = traces.map(t =>
-    JSON.stringify({
-      level: 'guideline',
-      timestamp: 1700000000000,
-      result: 'pass',
-      ...t,
-    })
-  );
-  fs.writeFileSync(path.join(dir, 'traces.log'), lines.join('\n') + '\n', 'utf-8');
-}
+import { createProjectFixture, writeProjectTraces } from '../../../test-setup/project-fixture';
 
 /** 生成 N 条同结果 trace */
 function tracesOf(id: string, result: ExecutionTrace['result'], n: number, startTs = 1700000000000): Partial<ExecutionTrace>[] {
   return Array.from({ length: n }, (_, i) => ({ constraintId: id, result, timestamp: startTs + i * 1000 }));
 }
 
-let logSpy: jest.SpyInstance;
-
 beforeEach(() => {
-  logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
-afterEach(() => {
-  logSpy.mockRestore();
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
 });
 
 describe('buildConstraintsUsageReport', () => {
   it('无 trace 文件：生效集 check 约束全部列出且 total=0，全部判为零触发候选', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-report-test' });
     const report = buildConstraintsUsageReport(root);
 
     expect(report.traceFileExists).toBe(false);
@@ -72,8 +53,7 @@ describe('buildConstraintsUsageReport', () => {
   });
 
   it('空 trace 文件：与无文件一致，但 traceFileExists=true', () => {
-    const root = makeTmpProject();
-    writeTraces(root, []);
+    const root = createProjectFixture({ name: 'harness-report-test', traces: [] });
     const report = buildConstraintsUsageReport(root);
 
     expect(report.traceFileExists).toBe(true);
@@ -82,8 +62,8 @@ describe('buildConstraintsUsageReport', () => {
   });
 
   it('含 skip 的统计：skip 不计入 fail 率分母，首次/最近时间正确', () => {
-    const root = makeTmpProject();
-    writeTraces(root, [
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    writeProjectTraces(root, [
       ...tracesOf('no_hardcoded_credentials', 'pass', 3, 1700000000000),
       ...tracesOf('no_hardcoded_credentials', 'fail', 1, 1700000100000),
       ...tracesOf('no_hardcoded_credentials', 'skip', 2, 1700000200000),
@@ -104,7 +84,7 @@ describe('buildConstraintsUsageReport', () => {
   });
 
   it('坏行容错：单行 JSON 损坏不影响其他行统计', () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-report-test' });
     const dir = path.join(root, '.harness', 'logs');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
@@ -116,8 +96,8 @@ describe('buildConstraintsUsageReport', () => {
   });
 
   it('四类候选诊断：零触发/不可评估(flag)/不可评估(探测)/高噪/零拦截', () => {
-    const root = makeTmpProject();
-    writeTraces(root, [
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    writeProjectTraces(root, [
       // 不可评估（flag 未接线）：全部 skip
       ...tracesOf('no_completion_without_verification', 'skip', 3),
       // 不可评估（存在性探测未命中）：全部 skip
@@ -156,8 +136,10 @@ describe('buildConstraintsUsageReport', () => {
   });
 
   it('阈值可配：放宽零拦截样本阈值后 10 次全 pass 也成为候选', () => {
-    const root = makeTmpProject();
-    writeTraces(root, tracesOf('no_hardcoded_credentials', 'pass', 10));
+    const root = createProjectFixture({
+      name: 'harness-report-test',
+      traces: tracesOf('no_hardcoded_credentials', 'pass', 10),
+    });
 
     const strict = buildConstraintsUsageReport(root);
     expect(strict.candidates.find(c => c.id === 'no_hardcoded_credentials')).toBeUndefined();
@@ -179,13 +161,10 @@ describe('buildConstraintsUsageReport', () => {
   });
 
   it('配置健康：config.yml 中未知 id 进入 unknownIds', () => {
-    const root = makeTmpProject();
-    fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, '.harness', 'config.yml'),
-      'constraints:\n  ghost_constraint:\n    enabled: false\n',
-      'utf-8'
-    );
+    const root = createProjectFixture({
+      name: 'harness-report-test',
+      config: 'constraints:\n  ghost_constraint:\n    enabled: false\n',
+    });
     const report = buildConstraintsUsageReport(root);
     expect(report.lint.unknownIds).toContain('ghost_constraint');
   });
@@ -193,18 +172,15 @@ describe('buildConstraintsUsageReport', () => {
 
 describe('constraintsReport CLI', () => {
   it('console 输出包含统计表、候选、注入清单、unknownIds 提示', async () => {
-    const root = makeTmpProject();
-    fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, '.harness', 'config.yml'),
-      'constraints:\n  ghost_constraint:\n    enabled: false\n',
-      'utf-8'
-    );
-    writeTraces(root, tracesOf('no_hardcoded_credentials', 'pass', 3));
+    const root = createProjectFixture({
+      name: 'harness-report-test',
+      config: 'constraints:\n  ghost_constraint:\n    enabled: false\n',
+      traces: tracesOf('no_hardcoded_credentials', 'pass', 3),
+    });
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('约束使用报告');
     expect(output).toContain('no_hardcoded_credentials');
     expect(output).toContain('total=3');
@@ -214,14 +190,14 @@ describe('constraintsReport CLI', () => {
   });
 
   it('--export 缺省路径：写入 .harness/reports/constraints-<YYYYMMDD>.md 且内容脱敏', async () => {
-    const root = makeTmpProject();
-    writeTraces(root, [
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    writeProjectTraces(root, [
       ...tracesOf('no_bypass_checkpoint', 'fail', 20),
       // projectPath 字段进 trace，但不得进 export
       { constraintId: 'no_bypass_checkpoint', result: 'fail', projectPath: root, timestamp: 1700001000000 },
     ]);
 
-    await constraintsReport({ projectPath: root, export: true });
+    await constraintsReport({ projectPath: root, export: true }, io);
 
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const exportPath = path.join(root, '.harness', 'reports', `constraints-${date}.md`);
@@ -237,19 +213,19 @@ describe('constraintsReport CLI', () => {
     expect(content).not.toContain('projectPath');
 
     // 打印了导出路径
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain(exportPath);
   });
 
   it('--export 指定文件：写到给定路径', async () => {
-    const root = makeTmpProject();
-    await constraintsReport({ projectPath: root, export: 'my-report.md' });
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    await constraintsReport({ projectPath: root, export: 'my-report.md' }, io);
     expect(fs.existsSync(path.join(root, 'my-report.md'))).toBe(true);
   });
 
   it('renderExportMarkdown：无候选时显式标注', () => {
-    const root = makeTmpProject();
-    writeTraces(root, [
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    writeProjectTraces(root, [
       // 所有 check 约束给少量健康数据（低于一切阈值）
       ...buildConstraintsUsageReport(root).stats.flatMap(s => tracesOf(s.id, 'pass', 5)),
     ]);
@@ -259,6 +235,59 @@ describe('constraintsReport CLI', () => {
     expect(md).toContain('（无候选）');
     expect(md).toContain('0.0.0-test');
     expect(md).toContain('2023-11-14');
+  });
+});
+
+describe('constraintsReport 坏行数透传（harness#100）', () => {
+  /** 直接落原始行（含坏行）——writeProjectTraces 只写合法记录，构造不出损坏 fixture */
+  function writeRawTraces(root: string, lines: string[]): void {
+    const dir = path.join(root, '.harness', 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'traces.log'), lines.join('\n') + '\n', 'utf-8');
+  }
+
+  const healthyTrace = (id: string) =>
+    JSON.stringify({ constraintId: id, level: 'iron_law', timestamp: 1700000000000, result: 'pass' });
+  const BAD = '{"constraintId":"ghost","broken';
+
+  it('坏行 fixture：文本输出出现坏行数提示，--json 报告体带 skippedLines', async () => {
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    writeRawTraces(root, [healthyTrace('no_hardcoded_credentials'), BAD, BAD]);
+
+    await constraintsReport({ projectPath: root }, io);
+    expect(io.outText()).toContain('2 行损坏');
+
+    const jsonIo = captureIO();
+    await constraintsReport({ projectPath: root, json: true }, jsonIo);
+    expect(JSON.parse(jsonIo.outText()).skippedLines).toBe(2);
+  });
+
+  it('traceFileExists=true 且无损坏：零噪声（无坏行提示，既有文案不变）', async () => {
+    const root = createProjectFixture({ name: 'harness-report-test' });
+    writeRawTraces(root, [healthyTrace('no_hardcoded_credentials')]);
+
+    await constraintsReport({ projectPath: root }, io);
+
+    const output = io.outText();
+    expect(output).toContain('约束使用报告');
+    expect(output).not.toContain('损坏');
+    expect(output).not.toContain('trace 文件不存在');
+  });
+
+  it('--export 摘要同样带坏行数（脱敏：只报条数，不报路径与坏行内容）', async () => {
+    const dirty = createProjectFixture({ name: 'harness-report-test' });
+    writeRawTraces(dirty, [healthyTrace('no_hardcoded_credentials'), BAD]);
+    await constraintsReport({ projectPath: dirty, export: 'report.md' }, captureIO());
+
+    const dirtyMd = fs.readFileSync(path.join(dirty, 'report.md'), 'utf-8');
+    expect(dirtyMd).toContain('1 行损坏');
+    expect(dirtyMd).not.toContain(BAD);
+    expect(dirtyMd).not.toContain(dirty);
+
+    const clean = createProjectFixture({ name: 'harness-report-test' });
+    writeRawTraces(clean, [healthyTrace('no_hardcoded_credentials')]);
+    await constraintsReport({ projectPath: clean, export: 'report.md' }, captureIO());
+    expect(fs.readFileSync(path.join(clean, 'report.md'), 'utf-8')).not.toContain('损坏');
   });
 });
 
@@ -274,7 +303,7 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
   };
 
   it('有漂移：输出条目级差异（缺失/多余）与修复指引', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-report-test' });
     writeSyncedClaudeMd(root, '0.0.1-old');
     const claudeMdPath = path.join(root, 'CLAUDE.md');
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
@@ -282,9 +311,9 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
     const editedLine = originalLine.replace(/: .+$/, ': 手工篡改');
     fs.writeFileSync(claudeMdPath, content.replace(originalLine, editedLine), 'utf-8');
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('注入漂移');
     expect(output).toContain('版本漂移');
     expect(output).toContain('0.0.1-old');
@@ -294,34 +323,34 @@ describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
   });
 
   it('重复章节：输出重复章节提示', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-report-test' });
     writeSyncedClaudeMd(root);
     fs.appendFileSync(path.join(root, 'CLAUDE.md'), '\n## Governance Rules\n\n旧版遗留\n', 'utf-8');
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('重复章节');
   });
 
   it('无漂移：小节显示无漂移', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-report-test' });
     writeSyncedClaudeMd(root);
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('注入漂移');
     expect(output).toContain('无漂移');
   });
 
   it('未注入（无标记段）：一句话提示，不算漂移', async () => {
-    const root = makeTmpProject();
+    const root = createProjectFixture({ name: 'harness-report-test' });
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Test Project\n', 'utf-8');
 
-    await constraintsReport({ projectPath: root });
+    await constraintsReport({ projectPath: root }, io);
 
-    const output = logSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = io.outText();
     expect(output).toContain('未注入');
   });
 });

@@ -16,7 +16,6 @@
 | `bin/` | 可执行入口/脚本 |
 | `docs/` | 项目文档 |
 | `src/` | 源码目录 |
-| `temp-nonexistent-perf/` | — |
 | `templates/` | 项目模板 |
 
 ## 常用命令
@@ -34,4 +33,5 @@ npm run lint  # 代码检查
 
 ## 知识入口
 
+- `.harness/knowledge/`：项目知识库，用 `harness knowledge` 查询
 - 各源码目录的 `CONTEXT.md` 是权威模块文档（现有 13 个），改动代码时同步更新

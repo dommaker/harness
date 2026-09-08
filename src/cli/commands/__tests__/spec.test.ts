@@ -3,6 +3,7 @@
  */
 
 import { specValidate, listSpecTypes } from '../spec';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import { SpecValidator, validateAllSpecs } from '../../../core/spec/validator';
 import type { BatchSpecValidationResult, SpecValidationResult } from '../../../types/spec';
 
@@ -27,8 +28,12 @@ jest.mock('chalk', () => ({
 const MockSpecValidator = SpecValidator as jest.Mocked<typeof SpecValidator>;
 const mockValidateAllSpecs = validateAllSpecs as jest.MockedFunction<typeof validateAllSpecs>;
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('spec command', () => {
-  let consoleSpy: jest.SpyInstance;
   let mockValidator: {
     setConfig: jest.Mock;
     validateFile: jest.Mock;
@@ -36,19 +41,12 @@ describe('spec command', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    process.exitCode = 0;
 
     mockValidator = {
       setConfig: jest.fn(),
       validateFile: jest.fn(),
     };
     (MockSpecValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    process.exitCode = 0;
   });
 
   describe('specValidate', () => {
@@ -63,8 +61,8 @@ describe('spec command', () => {
         };
         mockValidator.validateFile.mockResolvedValue(mockResult);
 
-        await specValidate({ file: 'test.yml' });
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('验证通过'));
+        await specValidate({ file: 'test.yml' }, io);
+        expect(io.outText()).toContain('验证通过');
       });
 
       it('应该显示验证错误', async () => {
@@ -77,9 +75,9 @@ describe('spec command', () => {
         };
         mockValidator.validateFile.mockResolvedValue(mockResult);
 
-        await specValidate({ file: 'test.yml' });
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('验证失败'));
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('错误'));
+        await specValidate({ file: 'test.yml' }, io);
+        expect(io.outText()).toContain('验证失败');
+        expect(io.outText()).toContain('错误');
       });
 
       it('应该显示警告', async () => {
@@ -92,8 +90,8 @@ describe('spec command', () => {
         };
         mockValidator.validateFile.mockResolvedValue(mockResult);
 
-        await specValidate({ file: 'test.yml' });
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('警告'));
+        await specValidate({ file: 'test.yml' }, io);
+        expect(io.outText()).toContain('警告');
       });
 
       it('应该显示详细指标', async () => {
@@ -107,8 +105,8 @@ describe('spec command', () => {
         };
         mockValidator.validateFile.mockResolvedValue(mockResult);
 
-        await specValidate({ file: 'test.yml', verbose: true });
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('指标'));
+        await specValidate({ file: 'test.yml', verbose: true }, io);
+        expect(io.outText()).toContain('指标');
       });
     });
 
@@ -123,8 +121,8 @@ describe('spec command', () => {
         };
         mockValidateAllSpecs.mockResolvedValue(mockResult);
 
-        await specValidate({});
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('所有 Spec 文件验证通过'));
+        await specValidate({}, io);
+        expect(io.outText()).toContain('所有 Spec 文件验证通过');
       });
 
       it('应该显示失败统计', async () => {
@@ -139,8 +137,8 @@ describe('spec command', () => {
         };
         mockValidateAllSpecs.mockResolvedValue(mockResult);
 
-        await specValidate({});
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('失败: 2'));
+        await specValidate({}, io);
+        expect(io.outText()).toContain('失败: 2');
       });
 
       it('应该处理无 Spec 文件情况', async () => {
@@ -153,11 +151,11 @@ describe('spec command', () => {
         };
         mockValidateAllSpecs.mockResolvedValue(mockResult);
 
-        await specValidate({});
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('没有找到 Spec 文件'));
+        await specValidate({}, io);
+        expect(io.outText()).toContain('没有找到 Spec 文件');
       });
 
-      it('应该设置退出码当有失败', async () => {
+      it('批量验证有失败：fail + 失败数原因', async () => {
         const mockResult: BatchSpecValidationResult = {
           total: 2,
           passed: 1,
@@ -167,8 +165,22 @@ describe('spec command', () => {
         };
         mockValidateAllSpecs.mockResolvedValue(mockResult);
 
-        await specValidate({});
-        expect(process.exitCode).toBe(1);
+        const result = await specValidate({}, io);
+        expect(result).toEqual({ kind: 'fail', reason: '1 个 Spec 文件验证失败' });
+      });
+
+      it('--staged 有失败：ok（历史退出码面 0，冻结不变）', async () => {
+        const mockResult: BatchSpecValidationResult = {
+          total: 2,
+          passed: 1,
+          failed: 1,
+          warnings: 0,
+          results: [],
+        };
+        mockValidateAllSpecs.mockResolvedValue(mockResult);
+
+        const result = await specValidate({ staged: true }, io);
+        expect(result).toEqual({ kind: 'ok' });
       });
     });
 
@@ -178,7 +190,7 @@ describe('spec command', () => {
           total: 0, passed: 0, failed: 0, warnings: 0, results: [],
         });
 
-        await specValidate({ schema: 'custom-schema.ts' });
+        await specValidate({ schema: 'custom-schema.ts' }, io);
         expect(mockValidator.setConfig).toHaveBeenCalled();
       });
     });
@@ -186,8 +198,8 @@ describe('spec command', () => {
 
   describe('listSpecTypes', () => {
     it('应该列出支持的 Spec 类型', () => {
-      listSpecTypes();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('支持的 Spec 类型'));
+      listSpecTypes({}, io);
+      expect(io.outText()).toContain('支持的 Spec 类型');
     });
   });
 });

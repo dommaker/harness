@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl, appendJsonl } from '../utils/jsonl';
 import type { FailureRecord } from './types';
 
 /**
@@ -58,9 +59,8 @@ export class FailureRecorder {
     // 检查文件大小，必要时滚动
     await this.rotateIfNeeded();
 
-    // 追加写入（单行 JSON）
-    const line = JSON.stringify(record) + '\n';
-    fs.appendFileSync(this.logFile, line, 'utf-8');
+    // 追加写入单行 JSON（写链收口：ensureDir + append，harness#82）
+    appendJsonl(this.logFile, record);
   }
 
   /**
@@ -74,16 +74,18 @@ export class FailureRecorder {
 
   /**
    * 获取历史记录
+   *
+   * 坏行策略：显式 skip（harness#96 定稿：跳过 + stderr 一次性计数警告，
+   * stdout 含 --json 逐字节不变、退出码 0——#82 只把本调用点改走 jsonl
+   * 读链正本并吸收 #96 的局部跳过实现，对外行为不变）。
+   * 计数去向：透传（harness#100 四消费点之一）——skippedLines 进下面那句 console.error，
+   * #96 定稿的文案与退出码本票逐字不动。
    */
   async getHistory(limit?: number): Promise<FailureRecord[]> {
-    if (!fs.existsSync(this.logFile)) {
-      return [];
+    const { records, skippedLines } = readJsonl<FailureRecord>(this.logFile, 'skip');
+    if (skippedLines > 0) {
+      console.error(`[harness] ${path.basename(this.logFile)} 跳过 ${skippedLines} 行损坏记录`);
     }
-
-    const content = fs.readFileSync(this.logFile, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-
-    const records = lines.map((line) => JSON.parse(line) as FailureRecord);
 
     if (limit && limit > 0) {
       return records.slice(-limit);

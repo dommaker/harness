@@ -9,6 +9,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { analyzeSessions } from '../analyze-sessions';
 import { readTranscriptSessions, type MinedSession } from '../../session-mining';
@@ -69,13 +70,12 @@ function mkSession(partial: Partial<MinedSession> = {}): MinedSession {
   };
 }
 
-function lastJsonOutput(consoleSpy: jest.SpyInstance): Record<string, unknown> {
-  const jsonLine = consoleSpy.mock.calls.map(c => c[0]).join('\n');
-  return JSON.parse(jsonLine);
-}
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
 
 describe('analyze-sessions command', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -83,42 +83,48 @@ describe('analyze-sessions command', () => {
     fs.mkdirSync(path.join(TEST_HOME, '.claude', 'projects', '-root-projects', 'memory'), { recursive: true });
     fs.mkdirSync(TRANSCRIPTS_DIR, { recursive: true });
     process.env.CLAUDE_TRANSCRIPTS_DIR = TRANSCRIPTS_DIR;
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
     delete process.env.CLAUDE_TRANSCRIPTS_DIR;
   });
 
   test('transcripts 目录不存在：提示 No transcripts directory found', async () => {
     process.env.CLAUDE_TRANSCRIPTS_DIR = path.join(TEST_HOME, 'missing-dir');
 
-    await analyzeSessions({});
+    const result = await analyzeSessions({}, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No transcripts directory found'));
+    expect(io.outText()).toContain('No transcripts directory found');
+    expect(result).toEqual({ kind: 'skip', reason: expect.stringContaining('会话记录目录不存在') });
     expect(mockReadTranscriptSessions).not.toHaveBeenCalled();
   });
 
   test('窗口内无会话：提示 No sessions found（默认最近 7 天）', async () => {
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'old', mtimeMs: Date.now() - 30 * 86_400_000 }),
-    ]);
+    const before = Date.now() - 7 * 86_400_000;
+    mockReadTranscriptSessions.mockReturnValue([]);
 
-    await analyzeSessions({});
+    const result = await analyzeSessions({}, io);
+    const after = Date.now() - 7 * 86_400_000;
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No sessions found in the last 7 days'));
+    expect(io.outText()).toContain('No sessions found in the last 7 days');
+    expect(result).toEqual({ kind: 'skip', reason: '最近 7 天没有会话' });
+    // since 过滤下推到 seam：默认窗口 7 天
+    const filter = mockReadTranscriptSessions.mock.calls[0][1] as { since?: number };
+    expect(filter.since).toBeGreaterThanOrEqual(before);
+    expect(filter.since).toBeLessThanOrEqual(after);
   });
 
-  test('--days 1：只统计最近 1 天（mtimeMs 窗口过滤）', async () => {
-    mockReadTranscriptSessions.mockReturnValue([
-      mkSession({ id: 'today' }),
-      mkSession({ id: 'two-days-ago', mtimeMs: Date.now() - 2 * 86_400_000 }),
-    ]);
+  test('--days 1：since 过滤下推到 seam（mtimeMs 窗口）', async () => {
+    const before = Date.now() - 86_400_000;
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'today' })]);
 
-    await analyzeSessions({ days: 1 });
+    await analyzeSessions({ days: 1 }, io);
+    const after = Date.now() - 86_400_000;
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Analyzing 1 sessions (last 1 days)'));
+    expect(io.outText()).toContain('Analyzing 1 sessions (last 1 days)');
+    const filter = mockReadTranscriptSessions.mock.calls[0][1] as { since?: number };
+    expect(filter.since).toBeGreaterThanOrEqual(before);
+    expect(filter.since).toBeLessThanOrEqual(after);
   });
 
   test('缺省 --days：窗口为 7 天，两天前会话仍计入', async () => {
@@ -127,9 +133,9 @@ describe('analyze-sessions command', () => {
       mkSession({ id: 'two-days-ago', mtimeMs: Date.now() - 2 * 86_400_000 }),
     ]);
 
-    await analyzeSessions({});
+    await analyzeSessions({}, io);
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Analyzing 2 sessions (last 7 days)'));
+    expect(io.outText()).toContain('Analyzing 2 sessions (last 7 days)');
   });
 
   test('--json：纠正句跨 3 会话聚合为 correction 候选', async () => {
@@ -139,9 +145,9 @@ describe('analyze-sessions command', () => {
       mkSession({ id: 's3' }),
     ]);
 
-    await analyzeSessions({ json: true });
+    await analyzeSessions({ json: true }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     expect(output.sessions).toBe(3);
     expect(output.corrections).toBe(3);
     expect(output.candidates).toEqual(
@@ -168,9 +174,9 @@ describe('analyze-sessions command', () => {
       }),
     ]);
 
-    await analyzeSessions({ json: true });
+    await analyzeSessions({ json: true }, io);
 
-    const output = lastJsonOutput(consoleSpy);
+    const output = lastJsonOutput(io);
     const ngramCandidates = (output.candidates as Array<{ source: string }>)
       .filter(c => c.source === 'ngram');
     expect(ngramCandidates.length).toBeGreaterThan(0);

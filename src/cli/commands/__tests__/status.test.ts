@@ -3,6 +3,7 @@
  */
 
 import { status } from '../status';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs';
 import { TraceAnalyzer } from '../../../monitoring/trace-analyzer';
 
@@ -42,27 +43,26 @@ jest.mock('chalk', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>;
 const MockTraceAnalyzer = TraceAnalyzer as jest.MockedClass<typeof TraceAnalyzer>;
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('status command', () => {
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue('');
     mockFs.writeFileSync.mockImplementation();
     mockFs.mkdirSync.mockImplementation();
   });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   describe('未初始化情况', () => {
     it('应该显示未初始化提示', async () => {
       mockFs.existsSync.mockReturnValue(false);
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未初始化'));
+      await status({}, io);
+      expect(io.outText()).toContain('未初始化');
     });
   });
 
@@ -73,8 +73,8 @@ describe('status command', () => {
         .mockReturnValueOnce(true) // .harness dir
         .mockReturnValueOnce(false); // traces file
 
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('暂无 Trace'));
+      await status({}, io);
+      expect(io.outText()).toContain('暂无 Trace');
     });
   });
 
@@ -95,8 +95,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
-      expect(consoleSpy).toHaveBeenCalled();
+      await status({}, io);
+      expect(io.outText()).not.toBe('');
     });
 
     it('应该显示 Iron Laws 统计', async () => {
@@ -114,8 +114,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ detail: true });
-      expect(consoleSpy).toHaveBeenCalled();
+      await status({ detail: true }, io);
+      expect(io.outText()).not.toBe('');
     });
   });
 
@@ -137,8 +137,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ anomalies: true });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('异常'));
+      await status({ anomalies: true }, io);
+      expect(io.outText()).toContain('异常');
     });
   });
 
@@ -158,8 +158,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ detail: true });
-      expect(consoleSpy).toHaveBeenCalled();
+      await status({ detail: true }, io);
+      expect(io.outText()).not.toBe('');
     });
   });
 
@@ -173,7 +173,7 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
+      await status({}, io);
       expect(mockFs.writeFileSync).toHaveBeenCalled();
     });
   });
@@ -190,8 +190,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Guidelines'));
+      await status({}, io);
+      expect(io.outText()).toContain('Guidelines');
     });
   });
 
@@ -205,8 +205,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ anomalies: true });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未发现异常'));
+      await status({ anomalies: true }, io);
+      expect(io.outText()).toContain('未发现异常');
     });
 
     it('应该显示异常详情', async () => {
@@ -220,9 +220,9 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ anomalies: true });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('异常'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('下一步建议'));
+      await status({ anomalies: true }, io);
+      expect(io.outText()).toContain('异常');
+      expect(io.outText()).toContain('下一步建议');
     });
   });
 
@@ -237,8 +237,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('状态良好'));
+      await status({}, io);
+      expect(io.outText()).toContain('状态良好');
     });
 
     it('应该显示积累数据建议当 trace < 100', async () => {
@@ -250,8 +250,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('继续积累数据'));
+      await status({}, io);
+      expect(io.outText()).toContain('继续积累数据');
     });
 
     it('应该显示诊断建议当有异常', async () => {
@@ -265,8 +265,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({});
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harness status --detail'));
+      await status({}, io);
+      expect(io.outText()).toContain('harness status --detail');
     });
   });
 
@@ -282,8 +282,8 @@ describe('status command', () => {
       };
       (MockTraceAnalyzer as any).mockImplementation(() => mockAnalyze);
 
-      await status({ detail: true });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('检查:'));
+      await status({ detail: true }, io);
+      expect(io.outText()).toContain('检查:');
     });
   });
 });

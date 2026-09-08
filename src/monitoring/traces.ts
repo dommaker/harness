@@ -11,15 +11,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl, readJsonlEnds, appendJsonl } from '../utils/jsonl';
 import {
   DEFAULT_TRACE_FILE,
   type ExecutionTrace,
   type TraceFilter,
   type TraceCollectorConfig,
 } from '../types/trace';
-
-// 路径常量再导出，保持既有从 monitoring/traces 导入的用法不破
-export { DEFAULT_TRACE_FILE };
 
 /**
  * 默认配置
@@ -78,9 +76,8 @@ export class TraceCollector {
     // 检查文件大小，必要时滚动
     this.checkFileSize();
 
-    // 追加写入
-    const line = JSON.stringify(trace);
-    fs.appendFileSync(this.traceFile, line + '\n', 'utf-8');
+    // 追加写入（写链收口：ensureDir + append，harness#82）
+    appendJsonl(this.traceFile, trace);
   }
 
   /**
@@ -118,33 +115,43 @@ export class TraceCollector {
   }
 
   /**
+   * 批量读取 traces 并带出坏行计数（harness#100 报告入口）
+   *
+   * 支持过滤条件（同 `read()`）：时间范围 / 约束 ID / 结果类型 / 项目路径 / 会话 ID。
+   *
+   * **计数是文件级口径**：过滤只作用于合法记录——坏行没有 timestamp/约束 ID 可归窗，
+   * 丢不得。这正是消费方（studio 端点）无法自己算出坏行数的原因。
+   */
+  readReport(filter?: TraceFilter): { traces: ExecutionTrace[]; skippedLines: number } {
+    // 坏行策略：skip（harness#82 裁决 4：原裸 parse「抛」改 skip）；
+    // 计数去向：透传——skippedLines 随本方法返回，消费面是 TraceAnalyzer.analyzeRecentReport()
+    // （结构化）与包外调用方（studio 端点经配套票 #451 读它，见 studio#451）；
+    // `harness status` 另按 projectPath 直读 jsonl 正本，不经过本类
+    const { records, skippedLines } = readJsonl<ExecutionTrace>(this.traceFile, 'skip');
+
+    return { traces: filter ? this.applyFilter(records, filter) : records, skippedLines };
+  }
+
+  /**
    * 批量读取 traces
    *
    * 支持过滤条件：
  * - 时间范围
  * - 约束 ID
    * - 结果类型
+   *
+   * 兼容签名（#82 裁决 4 冻结）：只返回记录数组、丢掉了坏行计数。
+   * 需要告知用户「数据不全」的消费方走 `readReport()`。
    */
   read(filter?: TraceFilter): ExecutionTrace[] {
-    if (!fs.existsSync(this.traceFile)) {
-      return [];
-    }
-
-    const content = fs.readFileSync(this.traceFile, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
-
-    let traces = lines.map(line => JSON.parse(line) as ExecutionTrace);
-
-    // 应用过滤条件
-    if (filter) {
-      traces = this.applyFilter(traces, filter);
-    }
-
-    return traces;
+    return this.readReport(filter).traces;
   }
 
   /**
    * 读取最近 N 小时的 traces
+   *
+   * 经 `read()` 的兼容包装，丢计数；要带计数用 `readReport({ timeRange })`
+   * 或 `TraceAnalyzer.analyzeRecentReport()`。
    */
   readRecent(hours: number): ExecutionTrace[] {
     const start = Date.now() - hours * 3600 * 1000;
@@ -153,6 +160,8 @@ export class TraceCollector {
 
   /**
    * 读取特定约束的 traces
+   *
+   * 同 `readRecent()`：兼容包装，计数走 `readReport({ constraintId })`。
    */
   readByConstraint(constraintId: string): ExecutionTrace[] {
     return this.read({ constraintId });
@@ -277,25 +286,19 @@ export class TraceCollector {
     }
 
     const stats = fs.statSync(this.traceFile);
-    const content = fs.readFileSync(this.traceFile, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
-
-    let oldest: number | undefined;
-    let newest: number | undefined;
-
-    if (lines.length > 0) {
-      const firstTrace = JSON.parse(lines[0]) as ExecutionTrace;
-      const lastTrace = JSON.parse(lines[lines.length - 1]) as ExecutionTrace;
-      oldest = firstTrace.timestamp;
-      newest = lastTrace.timestamp;
-    }
+    // 坏行策略：skip（同 read，裁决 4）；首/末时间戳取首/末条合法记录；
+    // totalLines 保持原始非空行数口径（合法 + 坏行）
+    // 计数去向：并进 totalLines 的原始行数口径（裁决 4 冻结，改口径属行为变更）；
+    // 本方法只出统计不出告警，要单列坏行数的消费方走 readReport()
+    // 实现经 readJsonlEnds 只 parse 两端（harness#114）：签名与口径逐字节不变
+    const { totalLines, first, last } = readJsonlEnds<ExecutionTrace>(this.traceFile, 'skip');
 
     return {
       fileExists: true,
       fileSize: stats.size,
-      totalLines: lines.length,
-      oldestTrace: oldest,
-      newestTrace: newest,
+      totalLines,
+      oldestTrace: first?.timestamp,
+      newestTrace: last?.timestamp,
     };
   }
 }

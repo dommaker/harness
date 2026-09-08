@@ -3,6 +3,7 @@
  */
 
 import { security, auditDetails } from '../security';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import { SecurityGate } from '../../../gates/security';
 
 jest.mock('../../../gates/security', () => ({
@@ -22,20 +23,12 @@ jest.mock('chalk', () => ({
 const MockGate = SecurityGate as jest.MockedClass<typeof SecurityGate>;
 
 describe('security command', () => {
-  let consoleSpy: jest.SpyInstance;
-  let exitSpy: jest.SpyInstance;
+  let io: CapturingIO;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    process.exitCode = 0;
-  });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-    process.exitCode = 0;
+    io = captureIO();
+    jest.clearAllMocks();
   });
 
   describe('security', () => {
@@ -47,10 +40,10 @@ describe('security command', () => {
       });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await security({});
+      const result = await security({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('安全门控检查通过'));
-      expect(exitSpy).not.toHaveBeenCalled();
+      expect(io.outText()).toContain('安全门控检查通过');
+      expect(result.kind).toBe('ok');
     });
 
     it('should print failure and exit 1 when scan fails', async () => {
@@ -68,19 +61,22 @@ describe('security command', () => {
       });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await security({});
+      const result = await security({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('安全门控检查失败'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pkg-a'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pkg-b'));
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(io.outText()).toContain('安全门控检查失败');
+      expect(io.outText()).toContain('pkg-a');
+      expect(io.outText()).toContain('pkg-b');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'security gate denied (threshold high): vulnerabilities found',
+      });
     });
 
     it('should default severity to high', async () => {
       const mockScan = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await security({});
+      await security({}, io);
 
       expect(MockGate).toHaveBeenCalledWith(
         expect.objectContaining({ severityThreshold: 'high' }),
@@ -91,7 +87,7 @@ describe('security command', () => {
       const mockScan = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await security({ severity: 'critical' });
+      await security({ severity: 'critical' }, io);
 
       expect(MockGate).toHaveBeenCalledWith(
         expect.objectContaining({ severityThreshold: 'critical' }),
@@ -108,9 +104,9 @@ describe('security command', () => {
       });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await auditDetails({});
+      await auditDetails({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未发现安全漏洞'));
+      expect(io.outText()).toContain('未发现安全漏洞');
     });
 
     it('should list vulnerabilities when present', async () => {
@@ -127,17 +123,17 @@ describe('security command', () => {
       });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await auditDetails({});
+      await auditDetails({}, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('发现 2 个漏洞'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pkg-a'));
+      expect(io.outText()).toContain('发现 2 个漏洞');
+      expect(io.outText()).toContain('pkg-a');
     });
 
     it('should default severity to low for audit', async () => {
       const mockScan = jest.fn().mockResolvedValue({ passed: true, message: 'ok', details: {} });
       MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
 
-      await auditDetails({});
+      await auditDetails({}, io);
 
       expect(MockGate).toHaveBeenCalledWith(
         expect.objectContaining({ severityThreshold: 'low' }),

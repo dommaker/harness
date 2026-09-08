@@ -9,7 +9,7 @@
  * - trace 记录 result: 'skip'；TraceAnalyzer 的 pass/fail 率分母不计 skip
  */
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ConstraintChecker } from '../core/constraints/checker';
 import { detectTrigger, buildConstraintContext } from '../core/constraints/context-builder';
 import { IRON_LAWS } from '../core/constraints/definitions';
@@ -20,7 +20,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 
-const checker = ConstraintChecker.getInstance();
+/** 套件共用 checker：显式 no-op 记录器（trace 断言的用例自带记录器实例） */
+const checker = new ConstraintChecker({ record: () => undefined });
 
 function makeConstraint(
   id: string,
@@ -49,11 +50,6 @@ describe('skip 三态语义（ADR-0001）', () => {
     } catch {
       // ignore
     }
-  });
-
-  afterEach(() => {
-    // 复位 trace recorder，避免泄漏到其他用例
-    checker.setTraceRecorder({ record: () => undefined });
   });
 
   describe('capability_sync 存在性探测', () => {
@@ -289,9 +285,9 @@ describe('skip 三态语义（ADR-0001）', () => {
   describe('trace 的 skip 形态', () => {
     it('recordTrace：skip 记录为 result: skip', async () => {
       const records: ExecutionTrace[] = [];
-      checker.setTraceRecorder({ record: (t) => records.push(t) });
+      const recording = new ConstraintChecker({ record: (t) => records.push(t) });
 
-      await checker.checkConstraints({
+      await recording.checkConstraints({
         operation: 'code_implementation',
         projectPath: path.join(tempDir, 'empty'),
       });

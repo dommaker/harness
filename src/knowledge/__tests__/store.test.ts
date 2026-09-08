@@ -455,4 +455,198 @@ describe('KnowledgeStore', () => {
       expect(result!.total).toBe(2);
     });
   });
+
+  describe('readIndex memoize（harness#106）', () => {
+    // fs.readFileSync 不可 spy（Node 21+ 不可 redefine）；list/readIndex 路径上
+    // JSON.parse 仅用于解析 index.json，用其调用次数度量 index 重读次数
+    it('list() 单次调用内 index.json 只解析一次（消除 N+1 重读）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'Second' }));
+
+      const parseSpy = jest.spyOn(JSON, 'parse');
+      try {
+        store.list();
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('readIndex() 重复调用命中缓存，不重复解析', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+
+      const parseSpy = jest.spyOn(JSON, 'parse');
+      try {
+        store.readIndex();
+        store.readIndex();
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('index.json 变更后缓存自动失效（mtime+size 指纹）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      const first = store.readIndex();
+      expect(first).toHaveLength(1);
+
+      // 模拟外部进程直接改写 index.json
+      const indexPath = path.join(tempDir, 'index.json');
+      const external = [...first, { ...first[0], id: 'DEC-EXT' }];
+      fs.writeFileSync(indexPath, JSON.stringify(external, null, 2), 'utf-8');
+
+      const second = store.readIndex();
+      expect(second.map(e => e.id)).toContain('DEC-EXT');
+    });
+
+    it('index.json 被删除后缓存失效，readIndex 返回空', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      expect(store.readIndex()).toHaveLength(1);
+
+      fs.unlinkSync(path.join(tempDir, 'index.json'));
+      expect(store.readIndex()).toHaveLength(0);
+    });
+  });
+
+  describe('saveAll 批量写入（harness#107）', () => {
+    // writeIndex 是 store 内 JSON.stringify 的唯一调用方，用其调用次数度量 index.json 重写次数
+    it('K 条批量保存只重写一次 index.json', () => {
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        store.saveAll([
+          makeEntry({ id: 'DEC-001' }),
+          makeEntry({ id: 'DEC-002', title: 'Second' }),
+          makeEntry({ id: 'DEC-003', title: 'Third' }),
+        ]);
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(store.readIndex()).toHaveLength(3);
+      expect(store.get('DEC-002')!.title).toBe('Second');
+    });
+
+    it('批量保存只读一次 index.json', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+
+      const parseSpy = jest.spyOn(JSON, 'parse');
+      try {
+        store.saveAll([
+          makeEntry({ id: 'DEC-002', title: 'Second' }),
+          makeEntry({ id: 'DEC-003', title: 'Third' }),
+        ]);
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
+      expect(store.readIndex()).toHaveLength(3);
+    });
+
+    it('覆盖已存在同 id 条目，索引不产生重复', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'Old' }));
+
+      store.saveAll([
+        makeEntry({ id: 'DEC-001', title: 'New' }),
+        makeEntry({ id: 'DEC-002' }),
+      ]);
+
+      expect(store.readIndex()).toHaveLength(2);
+      expect(store.get('DEC-001')!.title).toBe('New');
+    });
+
+    it('批内同 id 后者覆盖前者', () => {
+      store.saveAll([
+        makeEntry({ id: 'DEC-001', title: 'First' }),
+        makeEntry({ id: 'DEC-001', title: 'Last' }),
+      ]);
+
+      expect(store.readIndex()).toHaveLength(1);
+      expect(store.get('DEC-001')!.title).toBe('Last');
+    });
+
+    it('空批零读写，不创建 index.json', () => {
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        store.saveAll([]);
+        expect(stringifySpy).not.toHaveBeenCalled();
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(fs.existsSync(path.join(tempDir, 'index.json'))).toBe(false);
+    });
+
+    it('saveAll 后 list() 立即可见（缓存指纹失效）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      expect(store.list()).toHaveLength(1); // 预热缓存
+
+      store.saveAll([makeEntry({ id: 'DEC-002' }), makeEntry({ id: 'DEC-003' })]);
+
+      expect(store.list().map(e => e.id)).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+    });
+  });
+
+  describe('frontmatter 收口（harness#89）', () => {
+    const entryPath = (id: string): string => path.join(tempDir, `decision-${id}.md`);
+    let errorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    it('load→save 往返字节稳定：已落盘条目不产生无意义 diff', () => {
+      store.save(makeEntry({ id: 'FM-001' }));
+      const before = fs.readFileSync(entryPath('FM-001'), 'utf-8');
+
+      const loaded = store.get('FM-001')!;
+      store.save(loaded);
+
+      expect(fs.readFileSync(entryPath('FM-001'), 'utf-8')).toBe(before);
+    });
+
+    it('正文含 --- 分隔线的条目往返字节稳定，正文完整保留', () => {
+      const body = '第一段\n\n---\n\n## 附录\n末行\n';
+      store.save(makeEntry({ id: 'FM-002', content: body }));
+      const before = fs.readFileSync(entryPath('FM-002'), 'utf-8');
+
+      const loaded = store.get('FM-002')!;
+      expect(loaded.content).toBe(body);
+      store.save(loaded);
+
+      expect(fs.readFileSync(entryPath('FM-002'), 'utf-8')).toBe(before);
+    });
+
+    it('未闭合 frontmatter：跳过条目并显式上报（不再静默丢，口径与 migration 同派）', () => {
+      fs.writeFileSync(entryPath('FM-003'), '---\nid: FM-003\ntype: decision\n', 'utf-8');
+
+      expect(store.get('FM-003')).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toMatch(/\[harness\].*unterminated/);
+    });
+
+    it('YAML 非法 frontmatter：跳过条目并显式上报', () => {
+      fs.writeFileSync(entryPath('FM-004'), '---\nid: [1,\n---\n\nBody\n', 'utf-8');
+
+      expect(store.get('FM-004')).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toMatch(/\[harness\].*invalid-yaml/);
+    });
+
+    it('空 meta：按无 frontmatter 处理（absent）——跳过且不上报', () => {
+      fs.writeFileSync(entryPath('FM-005'), '---\n\n---\n\nBody\n', 'utf-8');
+
+      expect(store.get('FM-005')).toBeUndefined();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('缺 frontmatter：合法的非条目文件——跳过且不上报', () => {
+      fs.writeFileSync(entryPath('FM-006'), '# 只是普通 markdown\n\n正文\n', 'utf-8');
+
+      expect(store.get('FM-006')).toBeUndefined();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+  });
 });

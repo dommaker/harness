@@ -12,31 +12,32 @@ import {
   ConstraintContext,
   ConstraintResult,
   ConstraintCheckResult,
-  ConstraintTrigger,
   ConstraintLevel,
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { getTraceCollector } from '../../monitoring/traces';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
-import { normalizeTriggers } from '../../utils/exec';
-import { runCommand } from '../../utils/exec';
+import { matchesTrigger } from '../../utils/exec';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
 import { getConstraintCheck, buildCheckEnv, type CheckOutcome } from './checkers';
+import { createGitEvidence, type GitEvidence } from './git-evidence';
 
 /**
- * trace 记录器最小接口（原工单 15 为消除 core→monitoring 循环；现 monitoring
- * 不反向依赖 core，方向单向、无环，checker 可直接值引用 getTraceCollector）
+ * trace 记录器最小接口（工单 15 decycle 收尾，harness#88）
  *
- * checker 不构造收集器；生产路径首次记录时惰性接线 getTraceCollector()
- * （幂等单点，ADR-0003），测试可经 setTraceRecorder 注入替身。
+ * core 不上行依赖 monitoring：记录器经**构造参数**注入，未注入 = no-op
+ * （默认无副作用）。真实收集器由组合根接线——CLI check/report 与 bootstrap
+ * 各自 `new ConstraintChecker(getTraceCollector())`。
  */
 export interface TraceRecorder {
   record(trace: ExecutionTrace): void;
 }
+
+/** 未注入时的默认记录器：不记录 */
+const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
 
 /**
  * 约束检查器
@@ -47,73 +48,21 @@ export class ConstraintChecker {
   /** 检查结果缓存（S7：src 扫描等重复 I/O，TTL=1s 防跨测试污染） */
   private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
 
-  /**
-   * run 级 memo（工单 18）：一次 checkConstraints 内
-   * git diff 等命令只执行一次；run 外直接调用私有检查方法时不 memo（恒新鲜）。
-   */
-  private runCache: Map<string, Promise<string>> | null = null;
+  /** trace 记录器（构造注入；缺省 no-op） */
+  private readonly traceRecorder: TraceRecorder;
 
-  /** trace 记录器（注入式；null = 未显式注入，首次记录时惰性接线全局收集器） */
-  private traceRecorder: TraceRecorder | null = null;
-
-  private constructor() {}
-
-  /**
-   * 取 trace 记录器：未显式注入时惰性接线全局收集器（幂等，ADR-0003 副作用收敛）
-   */
-  private getRecorder(): TraceRecorder {
-    if (!this.traceRecorder) {
-      this.traceRecorder = getTraceCollector();
-    }
-    return this.traceRecorder;
+  constructor(traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER) {
+    this.traceRecorder = traceRecorder;
   }
 
   /**
-   * run 内 memoize；无活动 run 时直接执行（工单 18）
-   */
-  private memoRun(key: string, fn: () => Promise<string>): Promise<string> {
-    if (!this.runCache) return fn();
-    let pending = this.runCache.get(key);
-    if (!pending) {
-      pending = fn();
-      this.runCache.set(key, pending);
-    }
-    return pending;
-  }
-
-  /**
-   * staged 全量 diff（同一次 run 内只执行一次 git 命令，工单 18）
-   */
-  private getStagedDiff(projectPath: string): Promise<string> {
-    return this.memoRun(`git_diff_staged:${projectPath}`, () =>
-      runCommand('git diff --cached', projectPath)
-    );
-  }
-
-  /**
-   * staged 变更文件名列表（同一次 run 内只执行一次 git 命令，工单 18）
-   */
-  private getStagedDiffNames(projectPath: string): Promise<string> {
-    return this.memoRun(`git_diff_staged_names:${projectPath}`, () =>
-      runCommand('git diff --cached --name-only', projectPath)
-    );
-  }
-
-  /**
-   * 获取单例实例
+   * 获取单例实例（未接线记录器的默认实例：不写 trace）
    */
   static getInstance(): ConstraintChecker {
     if (!ConstraintChecker.instance) {
       ConstraintChecker.instance = new ConstraintChecker();
     }
     return ConstraintChecker.instance;
-  }
-
-  /**
-   * 注入 trace 记录器（测试/定制场景；不调用则首次记录时惰性接线全局收集器）
-   */
-  setTraceRecorder(recorder: TraceRecorder): void {
-    this.traceRecorder = recorder;
   }
 
   /**
@@ -143,10 +92,13 @@ export class ConstraintChecker {
 
   /**
    * 检查单个约束
+   *
+   * @param evidence 可选，本 run 的 git 证据实例（#87）；不传 = 本次调用独占一份真 git 证据
    */
   async check(
     constraint: Constraint,
-    context: ConstraintContext
+    context: ConstraintContext,
+    evidence?: GitEvidence
   ): Promise<ConstraintResult> {
     // prompt 类约束不参与 checker 执行（ADR-0001：仅参与注入）
     if (constraint.kind === 'prompt') {
@@ -160,7 +112,7 @@ export class ConstraintChecker {
     }
 
     // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
-    const outcome = await this.checkPrecondition(constraint, context);
+    const outcome = await this.checkPrecondition(constraint, context, evidence);
 
     if (outcome === 'skip') {
       return {
@@ -204,27 +156,14 @@ export class ConstraintChecker {
   }
 
   /**
-   * 判断约束是否匹配当前触发条件
-   *
-   * context.operation 为主触发条件，context.extraTriggers 为次级推断
-   * （ADR-0001：pre-commit 代码变更附加 code_implementation），任一命中即匹配。
-   */
-  private matchesTrigger(constraint: Constraint, context: ConstraintContext): boolean {
-    const triggers = normalizeTriggers<ConstraintTrigger>(constraint.trigger);
-    const operations = [context.operation, ...(context.extraTriggers ?? [])];
-    return operations.some(op => triggers.includes(op));
-  }
-
-  /**
    * 记录约束检查的 trace
    */
   private recordTrace(
-    collector: TraceRecorder,
     constraint: Constraint,
     checkResult: ConstraintResult,
     context: ConstraintContext
   ): void {
-    collector.record({
+    this.traceRecorder.record({
       constraintId: constraint.id,
       level: constraint.level,
       timestamp: Date.now(),
@@ -241,10 +180,14 @@ export class ConstraintChecker {
    *
    * 注册表闭环（ADR-0001）：kind='check' 未注册 checker 直接抛错，
    * 不再有"未注册默认通过"路径；kind='prompt' 在 check() 入口已短路。
+   *
+   * git 证据（stagedDiff/stagedDiffNames）单一来源 = GitEvidence adapter（#87）：
+   * 一次 run 内调用方传同一实例即至多取证一次，run 外调用独占一份。
    */
   private async checkPrecondition(
     constraint: Constraint,
-    context: ConstraintContext
+    context: ConstraintContext,
+    evidence?: GitEvidence
   ): Promise<CheckOutcome> {
     const impl = getConstraintCheck(constraint.id);
     if (!impl) {
@@ -255,9 +198,10 @@ export class ConstraintChecker {
     }
 
     const projectPath = context.projectPath || process.cwd();
+    const git = evidence ?? createGitEvidence(projectPath);
     const env = buildCheckEnv(context, {
-      stagedDiff: () => this.getStagedDiff(projectPath),
-      stagedDiffNames: () => this.getStagedDiffNames(projectPath),
+      stagedDiff: async () => git.stagedDiff(),
+      stagedDiffNames: async () => git.changedFileNames(true),
       srcScan: (root: string) =>
         this.cache.getSync(`src_scan_${root}`, projectPath, () =>
           findTsSourceFiles(join(projectPath, root), { skipIndex: true }).map((f) =>
@@ -287,12 +231,9 @@ export class ConstraintChecker {
     const constraints = this.getConstraints(customConfig);
 
     const filterByTrigger = (constraintSet: Record<string, Constraint>): Constraint[] => {
-      return Object.values(constraintSet).filter(constraint => {
-        const triggers = Array.isArray(constraint.trigger)
-          ? constraint.trigger
-          : [constraint.trigger];
-        return operations.some(op => triggers.includes(op));
-      });
+      return Object.values(constraintSet).filter(constraint =>
+        matchesTrigger(constraint, operations)
+      );
     };
 
     return {
@@ -310,57 +251,58 @@ export class ConstraintChecker {
    *
    * @param context 约束上下文
    * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
+   * @param evidence 可选，本 run 的 git 证据 adapter（#87）。调用方（CLI check）与
+   *   buildConstraintContext 传同一实例 → 一次 run 内 git 取证单一来源；
+   *   不传则本 run 自建一份，run 级 memo 照样生效（memo 在实例层，非隐式全局）。
    */
   async checkConstraints(
     context: ConstraintContext,
-    customConfig?: MergedConstraintsConfig | null
+    customConfig?: MergedConstraintsConfig | null,
+    evidence?: GitEvidence
   ): Promise<ConstraintCheckResult> {
-    // run 起始：重置 run 级缓存；run 结束（含铁律提前抛出）清空（工单 18）
+    // run 起始：重置 src 扫描缓存（S7）；git 证据 = 本 run 独占的 adapter 实例（工单 18 → #87）
     this.cache.invalidate();
-    this.runCache = new Map();
+    const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());
 
-    try {
-      const result: ConstraintCheckResult = {
-        ironLaws: [],
-        guidelines: [],
-        passed: true,
-        warningCount: 0,
-      };
+    const result: ConstraintCheckResult = {
+      ironLaws: [],
+      guidelines: [],
+      passed: true,
+      warningCount: 0,
+    };
 
-      const traceCollector = this.getRecorder();
-      const constraints = this.getConstraints(customConfig);
+    const constraints = this.getConstraints(customConfig);
+    // context.operation 为主触发条件，extraTriggers 为次级推断（ADR-0001），任一命中即匹配
+    const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-      // 1. Iron Laws: 必须全部通过
-      for (const constraint of Object.values(constraints.ironLaws)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
+    // 1. Iron Laws: 必须全部通过
+    for (const constraint of Object.values(constraints.ironLaws)) {
+      if (!matchesTrigger(constraint, operations)) continue;
 
-        const checkResult = await this.check(constraint, context);
-        result.ironLaws.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
+      const checkResult = await this.check(constraint, context, run);
+      result.ironLaws.push(checkResult);
+      this.recordTrace(constraint, checkResult, context);
 
-        if (!checkResult.satisfied) {
-          result.passed = false;
-          throw new ConstraintViolationError(checkResult);
-        }
+      if (!checkResult.satisfied) {
+        result.passed = false;
+        throw new ConstraintViolationError(checkResult);
       }
-
-      // 2. Guidelines: 记录警告
-      for (const constraint of Object.values(constraints.guidelines)) {
-        if (!this.matchesTrigger(constraint, context)) continue;
-
-        const checkResult = await this.check(constraint, context);
-        result.guidelines.push(checkResult);
-        this.recordTrace(traceCollector, constraint, checkResult, context);
-
-        if (!checkResult.satisfied) {
-          result.warningCount++;
-        }
-      }
-
-      return result;
-    } finally {
-      this.runCache = null;
     }
+
+    // 2. Guidelines: 记录警告
+    for (const constraint of Object.values(constraints.guidelines)) {
+      if (!matchesTrigger(constraint, operations)) continue;
+
+      const checkResult = await this.check(constraint, context, run);
+      result.guidelines.push(checkResult);
+      this.recordTrace(constraint, checkResult, context);
+
+      if (!checkResult.satisfied) {
+        result.warningCount++;
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -368,19 +310,22 @@ export class ConstraintChecker {
    *
    * @param context 约束上下文
    * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
+   * @param evidence 可选，本次检查共用的 git 证据 adapter（#87，同 checkConstraints）
    * @throws ConstraintViolationError 如果有铁律违规
    */
   async beforeExecution(
     context: ConstraintContext,
-    customConfig?: MergedConstraintsConfig | null
+    customConfig?: MergedConstraintsConfig | null,
+    evidence?: GitEvidence
   ): Promise<void> {
+    const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());
     const constraints = this.getConstraints(customConfig);
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
     for (const constraint of Object.values(constraints.ironLaws)) {
-      if (!normalizeTriggers(constraint.trigger).some((t) => operations.includes(t))) continue;
+      if (!matchesTrigger(constraint, operations)) continue;
 
-      const result = await this.check(constraint, context);
+      const result = await this.check(constraint, context, run);
       if (!result.satisfied) {
         throw new ConstraintViolationError(result);
       }
@@ -465,5 +410,5 @@ export async function checkBeforeExecution(
   return ConstraintChecker.getInstance().beforeExecution(context, customConfig);
 }
 
-// 导出单例
+// 导出单例（未接线记录器：只评估约束，不写 trace；写 trace 由组合根自行 new）
 export const constraintChecker = ConstraintChecker.getInstance();

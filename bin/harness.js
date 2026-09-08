@@ -11,18 +11,43 @@
  * COMMAND_DEFINITIONS（非门禁命令）与 GATE_DEFINITIONS.cli（6 门禁命令，
  * 形状同为 CommandDefinition，ADR-0007），不含任何单命令知识；
  * 新增命令 = 命令文件 + 定义表一条 + 测试，不再改本文件。
+ *
+ * 架构评审候选7：本文件是**全仓唯一的退出码出口**。命令实现返回 CommandResult
+ * （{ kind, reason? }），此处按 kind 做唯一映射（ok/skip → 0，fail/usage-error → 1）；
+ * 命令实现与定义表内不得出现 process.exit / process.exitCode。
  */
 
 const { Command } = require('commander');
 const { version } = require('../package.json');
 
 /**
- * 命令定义表（纯数据模块，无实现 import），--help/--version 懒加载不受影响；
- * 门禁注册表双向闭环校验在实现加载期执行（src/gates/registry.ts），
- * 命令实现引用可解析性断言在测试期执行（src/cli/commands/__tests__/registry.test.ts）。
+ * kind → 对外退出码（历史面只有 0/1；语义进类型，码值映射只在这一处）。
+ * 未知/缺失 kind = 命令契约违规 → fail-closed。
  */
-const { COMMAND_DEFINITIONS } = require('../dist/cli/commands/definitions');
-const { GATE_DEFINITIONS } = require('../dist/gates/definitions');
+function exitCodeFor(result) {
+  switch (result && result.kind) {
+    case 'ok':
+    case 'skip':
+      return 0;
+    case 'fail':
+    case 'usage-error':
+      return 1;
+    default:
+      console.error(`[harness] 命令返回了未知判定结果（期望 kind ok/skip/fail/usage-error）: ${JSON.stringify(result)}`);
+      return 1;
+  }
+}
+
+/**
+ * 把命令判定映射到进程退出码。
+ * 0 不退出（沿用进程自然退出，保持 stdout 冲刷行为不变）；非 0 立即退出
+ * （与历史各命令自身的 process.exit 行为一致：首败即停）。
+ */
+function applyResult(result) {
+  const code = exitCodeFor(result);
+  if (code !== 0) process.exit(code);
+  return code;
+}
 
 /**
  * per-command 懒加载（O2）：按定义表中的 module+export 引用，只在 action
@@ -82,18 +107,30 @@ function buildCommand(parent, def) {
 }
 
 /**
+ * 子命令解析：主名直查，别名表遍历匹配（候选7：别名是数据，不再复印条目）
+ */
+function resolveSubcommand(subcommands, name) {
+  if (subcommands[name]) return subcommands[name];
+  for (const entry of Object.values(subcommands)) {
+    if (entry.aliases && entry.aliases.includes(name)) return entry;
+  }
+  return null;
+}
+
+/**
  * 执行一条命令定义：
  * 1. optionRoutes（选项条件路由，全部匹配项按序执行，替代默认 action）
- * 2. subcommands（位置参数首值路由；strict 下未知值报错退出）
+ * 2. subcommands（位置参数首值路由，含别名；strict 下未知值报错退出）
  * 3. 默认 action
- * afterRun 统一接收返回值（如 sync-docs --check 失败 exit(1)）
+ * 每条路由/子命令/action 的返回值都经 applyResult 映射退出码（首败即停，
+ * 与历史命令自身 process.exit 的截断行为一致）。
  */
 async function runDefinition(command, def, positionals, options) {
   if (def.optionRoutes) {
     const matched = def.optionRoutes.filter(r => options[r.flag] === r.when);
     if (matched.length > 0) {
       for (const route of matched) {
-        await callImpl(route.impl, route.args ? route.args(positionals, options) : [options]);
+        applyResult(await callImpl(route.impl, [options]));
       }
       return;
     }
@@ -102,15 +139,18 @@ async function runDefinition(command, def, positionals, options) {
   if (def.subcommands) {
     const sub = positionals[0];
     if (sub != null) {
-      const entry = def.subcommands[sub];
+      const entry = resolveSubcommand(def.subcommands, sub);
       if (entry) {
-        const result = await callImpl(entry.impl, entry.args ? entry.args(positionals.slice(1), options) : [options]);
-        if (def.afterRun) def.afterRun(result, options);
+        const callArgs = entry.withPositionals
+          ? [positionals.slice(1), options]
+          : [options];
+        applyResult(await callImpl(entry.impl, callArgs));
         return;
       }
       if (def.subcommandStrict !== false) {
         console.error(`未知子命令: ${sub}`);
-        process.exit(1);
+        applyResult({ kind: 'usage-error', reason: `未知子命令: ${sub}` });
+        return;
       }
       // 非 strict（如 spec / 门禁命令）：未知位置参数落回默认 action
     } else if (!def.bareRunsAction) {
@@ -124,27 +164,41 @@ async function runDefinition(command, def, positionals, options) {
     command.help();
     return;
   }
-  const result = await callImpl(def.action, def.mapActionArgs ? def.mapActionArgs(positionals, options) : [options]);
-  if (def.afterRun) def.afterRun(result, options);
+  applyResult(await callImpl(def.action, def.mapActionArgs ? def.mapActionArgs(positionals, options) : [options]));
 }
 
-const program = new Command();
+/**
+ * 构建命令树并解析。定义表在此处才 require（纯数据模块，保持 --help/--version
+ * 零命令实现加载）；被 require 时（bin 侧退出码映射测试）不触发解析。
+ */
+function main() {
+  const { COMMAND_DEFINITIONS } = require('../dist/cli/commands/definitions');
+  const { GATE_DEFINITIONS } = require('../dist/gates/definitions');
 
-program
-  .name('harness')
-  .description('通用工程约束框架 - 铁律系统、检查点验证、测试门控、执行追踪')
-  .version(version);
+  const program = new Command();
 
-// ========================================
-// 全部命令：注册表驱动生成（非门禁 COMMAND_DEFINITIONS + 门禁 GATE_DEFINITIONS.cli，
-// 形状同为 CommandDefinition，ADR-0007）
-// ========================================
-for (const def of [
-  ...COMMAND_DEFINITIONS,
-  ...GATE_DEFINITIONS.filter(g => g.cli).map(g => g.cli),
-]) {
-  buildCommand(program, def);
+  program
+    .name('harness')
+    .description('通用工程约束框架 - 铁律系统、检查点验证、测试门控、执行追踪')
+    .version(version);
+
+  // ========================================
+  // 全部命令：注册表驱动生成（非门禁 COMMAND_DEFINITIONS + 门禁 GATE_DEFINITIONS.cli，
+  // 形状同为 CommandDefinition，ADR-0007）
+  // ========================================
+  for (const def of [
+    ...COMMAND_DEFINITIONS,
+    ...GATE_DEFINITIONS.filter(g => g.cli).map(g => g.cli),
+  ]) {
+    buildCommand(program, def);
+  }
+
+  // 解析命令行参数
+  program.parse();
 }
 
-// 解析命令行参数
-program.parse();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { exitCodeFor, applyResult };

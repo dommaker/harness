@@ -32,10 +32,13 @@ Every check-layer constraint must reference a registered checker (registry close
 
 Presets (`src/presets/`) are pure data: `strict` and `standard` enable all constraints; `relaxed` enables only the 5 core check constraints. Filtering lives in `mergeConstraints`; unknown preset names fall back to `standard` with a stderr warning.
 
-### Core Singletons
+### Layering and Composition
 
-- `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context
-- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`)
+The layering `types → utils → core → 领域层 → cli` is machine-enforced (harness#88): `src/core/**` has **zero value imports** of `cli/`, `gates/`, `monitoring/` (type-only imports are allowed), checked by the error-level `@typescript-eslint/no-restricted-imports` rule in `eslint.config.mjs` and guarded by `src/__tests__/layering.test.ts`. When core needs data or a capability that lives above it, the caller injects it:
+
+- `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context. Its trace recorder is constructor-injected and defaults to no-op; `constraintChecker` / `getInstance()` are therefore the *unwired* instance (they never write traces).
+- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`). Composition roots wire it: CLI `check`, CLI `report`, and `bootstrapHarness` do `new ConstraintChecker(getTraceCollector())`.
+- `capabilities-parser` takes a caller-supplied `CapabilityDefinitionSource` (`sync-docs` assembles `COMMAND_DEFINITIONS` + `GATE_DEFINITIONS`) for capability-listing counts in CAPABILITIES.md.
 
 ### Key Subsystems
 
@@ -46,7 +49,6 @@ Presets (`src/presets/`) are pure data: `strict` and `standard` enable all const
 | `src/monitoring/` | Execution Trace collection/analysis, context usage tracking |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
 | `src/context/` | Session management, token budget, compaction, knowledge injection |
-| `src/spec/` | (empty) @spec annotation checker removed (ADR-0003); spec story lives in core/spec/validator + SpecAcceptanceGate |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
@@ -94,6 +96,7 @@ When making changes to this codebase, follow these rules:
 - Iron Law violations MUST throw `ConstraintViolationError`, never silently pass
 - Trace records must use the `ExecutionTrace` type from `src/types/trace.ts`
 - CLI 命令注册的单一来源是 `src/cli/commands/definitions.ts`（COMMAND_DEFINITIONS，含 CLI 元数据与 module+export 实现引用）；bin/harness.js 由定义表驱动生成，禁止手写命令块；definitions 是纯数据模块，禁止 import 任何命令实现/运行时依赖（per-command 懒加载，O2）；新增命令 = 命令实现文件 + 定义表一条 + 测试，实现引用可解析性由 `src/cli/commands/__tests__/registry.test.ts` 断言
+- CLI 命令的判定只经返回值外溢（架构评审候选7）：`src/cli/commands/` 下命令实现返回 `CommandResult`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位 `reason`，多闸门命令 reason 含 `gate <id>`），流式输出经末位可选形参 `io: CommandIO = processIO` 注入（缺省 process 流，`log`/`logError` 与 console 逐字节等价）。命令实现与定义表内禁止 `process.exit` / `process.exitCode`，kind → 退出码的唯一映射在 `bin/harness.js`；测试断言退出语义走返回值、输出走 `captureIO()`，禁止 `spyOn(process, 'exit')`。契约定义在 `src/cli/command-contract.ts`，细则见 `src/cli/commands/CONTEXT.md`
 - Hook 声明与实现必须注册表闭环：`HookConfig` 声明 ↔ `HookDefinition` 注册一一对应，`assertHookRegistryClosed` 双向校验（引用未注册/注册无定义/重复 → 抛错，断言限构建/测试期）；per-hook 配置归一走 `errorStrategy`（`blocking` → block/warn 无损映射见 `toErrorStrategy`），不再维护平行 blocking 语义
 
 ### Behavioral Guidelines

@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readJsonl } from '../../utils/jsonl';
 
 export interface MinedTurn {
   role: string;
@@ -41,8 +42,18 @@ function extractText(content: unknown): string {
  *
  * 不可读/损坏的行静默跳过（与原实现一致）。
  */
-export function readTranscriptSessions(dir: string): MinedSession[] {
+export interface TranscriptFilter {
+  /** 只读 mtimeMs >= since 的文件（stat 级过滤，命中即不 parse）；缺省不过滤 */
+  since?: number;
+  /** 按会话 ID（文件名去 .jsonl、截断 40 字符）排除（文件名级过滤，不 stat 不 parse）；缺省不排除 */
+  excludeIds?: string[];
+}
+
+export function readTranscriptSessions(dir: string, filter: TranscriptFilter = {}): MinedSession[] {
   const sessions: MinedSession[] = [];
+  const exclude = filter.excludeIds && filter.excludeIds.length > 0
+    ? new Set(filter.excludeIds)
+    : undefined;
 
   let files: string[];
   try {
@@ -53,6 +64,8 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
 
   for (const file of files) {
     if (!file.endsWith('.jsonl')) continue;
+    const id = file.replace('.jsonl', '').slice(0, 40);
+    if (exclude?.has(id)) continue;
     const filePath = path.join(dir, file);
 
     let stat: fs.Stats;
@@ -61,21 +74,26 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
     } catch {
       continue;
     }
+    if (filter.since !== undefined && stat.mtimeMs < filter.since) continue;
 
     const turns: MinedTurn[] = [];
     const toolCalls: string[] = [];
 
-    let content: string;
+    let records: Record<string, any>[];
     try {
-      content = fs.readFileSync(filePath, 'utf-8');
+      // 损坏行静默跳过（坏行策略 skip，与原实现一致，harness#82 走 jsonl 正本）；
+      // 外层 catch 兜文件不可读，沿用原「跳过该文件」语义
+      // 计数去向：豁免（harness#100）——读的是外部 Claude Code transcript（非 harness 写入面）。
+      // 影响方向如实：坏行使该会话少几条 turn，而 analyze-sessions 的候选按次数阈值筛
+      // （frequency>=4 / 跨会话>=2 / confidence=len/10）→ 只会少出候选，不会造出候选，且候选须人审；
+      // 告知需改 MinedSession 形状并波及 analyze-sessions/update-user-model 两个调用方，另票收口
+      records = readJsonl<Record<string, any>>(filePath, 'skip').records;
     } catch {
       continue;
     }
 
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue;
+    for (const entry of records) {
       try {
-        const entry = JSON.parse(line);
         const msg = entry.message;
         if (msg?.role && (msg.content || entry.type === 'user')) {
           turns.push({ role: msg.role, content: extractText(msg.content) });
@@ -88,13 +106,13 @@ export function readTranscriptSessions(dir: string): MinedSession[] {
           }
         }
       } catch {
-        // 损坏行跳过
+        // 单条记录提取异常跳过（原逐行 catch 语义：parse 已由 module skip，此处兜提取）
       }
     }
 
     if (turns.length > 0) {
       sessions.push({
-        id: file.replace('.jsonl', '').slice(0, 40),
+        id,
         date: stat.mtime.toISOString().slice(0, 10),
         mtimeMs: stat.mtimeMs,
         turns,

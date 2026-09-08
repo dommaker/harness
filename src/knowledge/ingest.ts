@@ -13,6 +13,7 @@ import type {
 } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeAudit } from './audit';
+import { splitFrontmatter } from '../utils/frontmatter';
 
 const MAX_SOURCE_REFS = 20;
 const MAX_EXTERNAL_CONTENT_LENGTH = 5000;
@@ -178,7 +179,10 @@ export class KnowledgeIngest {
 
   private generateId(type: KnowledgeSubsystem): string {
     const prefix = type.toUpperCase().slice(0, 3);
-    const existing = this.store.list({ types: [type] });
+    // 序号取自索引计数（harness#107）：不再走 list() 逐条读条目文件；
+    // 与 list() 默认过滤口径一致，archived/deprecated 不计入序号
+    const existing = this.store.readIndex()
+      .filter(e => e.type === type && e.maturity !== 'archived' && e.maturity !== 'deprecated');
     const seq = String(existing.length + 1).padStart(3, '0');
     return `${prefix}-${seq}`;
   }
@@ -242,9 +246,10 @@ export class KnowledgeIngest {
 
   /** Extract first 50 chars of content body (after frontmatter), stripped of whitespace */
   private getContentPrefix(content: string): string {
-    // Strip YAML frontmatter (may be nested if content includes raw markdown)
-    const body = content.replace(/^---[\s\S]*?---\n?/, '').trim();
-    return body.slice(0, 50).replace(/\s+/g, '');
+    // 正本判定（harness#89）：只有合法 frontmatter 块才剥头，正文里的 --- 分隔线不再被误吞
+    const fm = splitFrontmatter(content);
+    const body = fm.state === 'ok' ? fm.body : content;
+    return body.trim().slice(0, 50).replace(/\s+/g, '');
   }
 
   /** Calculate keyword overlap ratio between two normalized titles */

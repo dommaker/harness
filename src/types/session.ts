@@ -81,9 +81,10 @@ export interface TaskListJson {
 }
 
 /**
- * 动态任务定义
+ * 动态任务定义（模块内类型：包根同名导出是 types/passes-gate 版，此处仅
+ * TaskListJson/SessionInfo 结构引用；原 Extended* 别名导出已随 #85 删除）
  */
-export interface DynamicTask {
+interface DynamicTask {
   id: string;
   name?: string;
   category?: string;
@@ -101,14 +102,13 @@ export interface DynamicTask {
 }
 
 /**
- * 测试结果
+ * 测试结果（模块内类型，理由同 DynamicTask）
  */
-export interface TaskTestResult {
+interface TaskTestResult {
   passed: boolean;
   command: string;
   output?: string;
   failures?: string[];
-  coverage?: number;
   timestamp: Date;
   evidence?: string;
 }

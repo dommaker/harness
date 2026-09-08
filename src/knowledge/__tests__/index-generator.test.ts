@@ -332,4 +332,57 @@ Extra text
       expect(lines[0]).toContain('real.md');
     });
   });
+
+  describe('frontmatter 收口（harness#89）', () => {
+    let errorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    it('正文里的 --- 分隔线不误吞：headings 取自闭合之后的正文', () => {
+      fs.writeFileSync(
+        path.join(tmpDir, 'decision-SEP-001.md'),
+        '---\nid: SEP-001\ntype: decision\ntitle: "Sep"\nmaturity: verified\ntags: []\n---\n\n## 前段\n\n---\n\n## 附录\n',
+      );
+
+      const fields = new KnowledgeIndexGenerator(tmpDir).generateIndexLines()[0].split('|');
+      expect(fields).toHaveLength(7);
+      expect(fields[6]).toBe('前段;附录');
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('未闭合：按无 frontmatter best-effort 索引，并显式上报一行（不再静默）', () => {
+      fs.writeFileSync(path.join(tmpDir, 'decision-OPEN-001.md'), '---\nid: OPEN-001\n# 断掉的头\n\n## 附录\n');
+
+      const fields = new KnowledgeIndexGenerator(tmpDir).generateIndexLines()[0].split('|');
+      expect(fields[1]).toBe('decision-OPEN-001');
+      expect(fields[4]).toBe('unknown');
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toMatch(/\[harness\].*unterminated.*decision-OPEN-001\.md/);
+    });
+
+    it('YAML 非法：best-effort 索引 + 显式上报 invalid-yaml', () => {
+      fs.writeFileSync(path.join(tmpDir, 'decision-BAD-001.md'), '---\nid: [1,\n---\n\n正文\n');
+
+      const fields = new KnowledgeIndexGenerator(tmpDir).generateIndexLines()[0].split('|');
+      expect(fields[1]).toBe('decision-BAD-001');
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toMatch(/\[harness\].*invalid-yaml/);
+    });
+
+    it('空 meta：与缺 frontmatter 同走 absent——静默 best-effort，标题取 H1', () => {
+      fs.writeFileSync(path.join(tmpDir, 'decision-EMPTY-001.md'), '---\n\n---\n\n# 空头条目\n\n## 小节\n');
+
+      const fields = new KnowledgeIndexGenerator(tmpDir).generateIndexLines()[0].split('|');
+      expect(fields[1]).toBe('decision-EMPTY-001');
+      expect(fields[3]).toBe('空头条目');
+      expect(fields[6]).toBe('小节');
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+  });
 });

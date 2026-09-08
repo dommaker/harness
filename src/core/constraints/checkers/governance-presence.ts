@@ -10,42 +10,24 @@
  * 不强制迁移；两处都没有才报违规。
  */
 
-import { readFileSync } from 'fs';
 import { join } from 'path';
 import { loadRawProjectConfig } from '../../project-config-loader';
+import { hasGovernanceContract, hasPreserveBlock, readIfExists } from '../injection-writer';
 import type { ConstraintCheck } from './types';
 
 /** 治理契约 PRESERVE 段名（ADR 落点模型约定） */
 export const GOVERNANCE_PRESERVE_NAME = 'governance';
 
-const GOVERNANCE_BEGIN_RE = /^<!-- PRESERVE:governance -->\s*$/m;
-
-/** AGENTS.md 是否存在非空 PRESERVE:governance 块（标记须独占一行，与 preserve-block.ts 同语义） */
+/** AGENTS.md 是否存在非空 PRESERVE:governance 块（切片判定收口 injection-writer.hasPreserveBlock，#83） */
 export function hasGovernancePreserveBlock(agentsMdPath: string): boolean {
-  let content: string;
-  try {
-    content = readFileSync(agentsMdPath, 'utf-8');
-  } catch {
-    return false;
-  }
-  const beginMatch = GOVERNANCE_BEGIN_RE.exec(content);
-  if (!beginMatch) return false;
-  const rest = content.slice(beginMatch.index + beginMatch[0].length);
-  const endIdx = rest.indexOf(`<!-- /PRESERVE:${GOVERNANCE_PRESERVE_NAME} -->`);
-  if (endIdx === -1) return false;
-  // 块体（首尾标记之间）去空白后非空才算「在场」
-  return rest.slice(0, endIdx).trim().length > 0;
+  const content = readIfExists(agentsMdPath);
+  return content !== null && hasPreserveBlock(content, GOVERNANCE_PRESERVE_NAME);
 }
 
-/** CLAUDE.md 是否存在治理块（与 agents-syncer getGovernanceInfo 同判定，旧模型仓豁免） */
+/** CLAUDE.md 是否有治理契约在场（判定收口 injection-writer.hasGovernanceContract，#83；旧模型仓豁免） */
 export function hasClaudeGovernance(claudeMdPath: string): boolean {
-  let content: string;
-  try {
-    content = readFileSync(claudeMdPath, 'utf-8');
-  } catch {
-    return false;
-  }
-  return /^##\s+Governance Rules/m.test(content) || content.includes('HARNESS_CONSTRAINTS_START');
+  const content = readIfExists(claudeMdPath);
+  return content !== null && hasGovernanceContract(content);
 }
 
 export const governancePresence: ConstraintCheck = {

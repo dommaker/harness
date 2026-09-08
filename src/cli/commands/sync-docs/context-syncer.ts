@@ -4,6 +4,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
 
 /**
  * 创建 CONTEXT.md 模板
@@ -53,7 +54,7 @@ export async function findExistingContextFiles(projectPath: string, srcDirs: str
       return;
     }
     for (const entry of entries) {
-      if (entry === 'node_modules' || entry === '__tests__' || entry === 'dist') continue;
+      if (DEFAULT_SKIP_DIRS.includes(entry)) continue;
       const entryPath = path.join(dir, entry);
       const stat = await fs.stat(entryPath);
       if (stat.isDirectory()) {
@@ -90,7 +91,7 @@ export async function getLatestTsMtime(dirPath: string): Promise<number | null> 
       return;
     }
     for (const entry of entries) {
-      if (entry === 'node_modules' || entry === '__tests__' || entry === 'dist') continue;
+      if (DEFAULT_SKIP_DIRS.includes(entry)) continue;
       const entryPath = path.join(dir, entry);
       const stat = await fs.stat(entryPath);
       if (stat.isDirectory()) {

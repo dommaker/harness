@@ -17,12 +17,14 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import {
-  aggregateToSourceSubdir,
-  readCapabilitiesEntries,
   isCapabilityListingFormat,
   checkCapabilityCounts,
   updateCapabilityCounts,
+  type CapabilityDefinitionSource,
 } from '../../../core/constraints/capabilities-parser';
+import { COMMAND_DEFINITIONS } from '../definitions';
+import { GATE_DEFINITIONS } from '../../../gates/definitions';
+import { reconcileCapabilities } from '../../../core/constraints/capabilities-reconcile';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getCapabilitiesMode } from '../../../core/project-config-loader';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
@@ -35,6 +37,7 @@ import {
 import { createContextMd, findExistingContextFiles, getLatestTsMtime } from './context-syncer';
 import { buildAgentsMd } from './agents-syncer';
 import { extractPreserveBlocks, composeAgentsMd } from './preserve-block';
+import { log, processIO, type CommandIO, type CommandResult } from '../../command-contract';
 
 export interface SyncDocsOptions {
   /** 项目路径 */
@@ -52,11 +55,27 @@ export interface SyncDocsOptions {
 }
 
 /**
+ * 能力清单计数源（harness#88）
+ *
+ * core 的 capabilities-parser 不再值导入定义表（单向分层），命令/门禁计数由
+ * cli 侧在此组装后注入；两张表都是纯数据模块（ADR-0002 命令形状单一来源）。
+ */
+const CAPABILITY_DEFINITIONS: CapabilityDefinitionSource = {
+  commands: COMMAND_DEFINITIONS,
+  gates: GATE_DEFINITIONS,
+};
+
+/**
  * 同步文档
  */
-export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
+export async function syncDocs(
+  options: SyncDocsOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
   const projectPath = options.projectPath || process.cwd();
   const isCheck = options.check === true;
+  // 漂移译成 kind：--check 下判定失败；写入模式下漂移已被修掉 → 退出码面不变（历史行为）
+  const drift = (reason: string): CommandResult => (isCheck ? { kind: 'fail', reason } : { kind: 'ok' });
   const isJson = options.json === true;
   const capsMode = getCapabilitiesMode(projectPath);
 
@@ -68,22 +87,22 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       const compacted = compactCapabilitiesContent(content);
       if (compacted !== content) {
         await fs.writeFile(capsPath, compacted, 'utf-8');
-        if (!isJson) console.log(chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
+        if (!isJson) log(io, chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
       } else {
-        if (!isJson) console.log(chalk.green('✅ CAPABILITIES.md 无需折叠'));
+        if (!isJson) log(io, chalk.green('✅ CAPABILITIES.md 无需折叠'));
       }
-      return true;
+      return { kind: 'ok' };
     } catch {
-      if (!isJson) console.log(chalk.red('❌ CAPABILITIES.md 不存在，无法折叠'));
-      return false;
+      if (!isJson) log(io, chalk.red('❌ CAPABILITIES.md 不存在，无法折叠'));
+      return drift('CAPABILITIES.md 不存在，无法折叠');
     }
   }
 
   if (!isJson) {
     if (isCheck) {
-      console.log(chalk.blue('🔍 检查文档新鲜度...'));
+      log(io, chalk.blue('🔍 检查文档新鲜度...'));
     } else {
-      console.log(chalk.blue('📝 同步文档...'));
+      log(io, chalk.blue('📝 同步文档...'));
     }
   }
 
@@ -103,7 +122,7 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       currentModules.push(...modules);
     } catch {
       if (!isJson) {
-        console.log(chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
+        log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
       }
     }
   }
@@ -130,77 +149,31 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
 
   if (capsIsCapabilityListing) {
     // 能力清单格式：委托 FreshnessRunner 对比计数
-    const countCheck = checkCapabilityCounts(projectPath);
+    const countCheck = checkCapabilityCounts(projectPath, CAPABILITY_DEFINITIONS);
     capCountMismatches = countCheck.mismatches;
     // 不填充 result.added/removed（文件级对比不适用于此格式）
   } else {
-    // 传统的文件表格格式
+    // 传统的文件表格格式：覆盖/幽灵判定统一走 capabilities-reconcile（ADR-0009），
+    // 与 capability_sync / docs_freshness 检查器共享同一份规则，check 与 fix 口径必然一致
     const getBasename = (f: string) => {
       const clean = f.endsWith('/') ? f.slice(0, -1) : f;
       return clean.split('/').pop()!;
     };
-    const currentBasenames = currentModules.map(m => getBasename(m.file));
-    // 目录条目（如 src/、agents/）按前缀覆盖其中的文件，且不参与 removed 对比
-    // （basename 列表里永远不会有目录，直接对比会把目录行误报为「已删除的模块」）
-    const existingDirs = existingFiles.filter(f => f.endsWith('/'));
-    const existingFileNames = existingFiles.filter(f => !f.endsWith('/'));
+    const verdict = reconcileCapabilities({
+      content: capsContent,
+      populationFiles: currentModules.map((m) => m.file),
+      fileExists: (rel) => existsSync(path.join(projectPath, rel)),
+      sourceRoots: detectSourceRoots(projectPath),
+    });
     if (capsMode === 'module') {
-      // module 模式：文件条目精确匹配或目录条目前缀覆盖；
-      // added 不再是逐文件列表，聚合为「未覆盖目录」（与 capability_sync checker 同规则）
-      const entries = readCapabilitiesEntries(capabilitiesPath, { includeDirs: true });
-      const fileEntries = entries.filter(e => !e.endsWith('/'));
-      const dirEntries = entries.filter(e => e.endsWith('/'));
-      const uncoveredDirs = new Set<string>();
-      for (const m of currentModules) {
-        const covered =
-          fileEntries.includes(m.file) || dirEntries.some(d => m.file.startsWith(d));
-        if (!covered) {
-          const root = srcDirs.find(d => m.file.startsWith(d + '/')) || srcDirs[0] || '';
-          uncoveredDirs.add(aggregateToSourceSubdir(root, m.file));
-        }
-      }
-      result.added = [...uncoveredDirs];
+      // module 模式：added 为聚合后的「未覆盖目录」，需人工登记目录条目
+      result.added = verdict.uncoveredDirs;
     } else {
-      result.added = currentModules
-        .filter(
-          m =>
-            !existingDirs.some(d => m.file.startsWith(d)) &&
-            !existingFileNames.includes(getBasename(m.file))
-        )
-        .map(m => getBasename(m.file));
+      result.added = verdict.uncoveredFiles.map((f) => getBasename(f));
     }
-    // removed：basename 对比 + 全路径存在性兜底（#33）。
-    // 表格格式承诺 ts|tsx|js|jsx，但扫描只覆盖 .ts/.tsx——
-    // 指向真实存在文件的登记行（.js/.jsx 等扫描盲区）不得误判为「已删除」。
-    // 兜底按 basename 豁免；路径不存在的幽灵行进不了豁免，由下方清扫按完整路径补入 removed。
-    const sourceRoots = detectSourceRoots(projectPath);
-    const entryExists = (entry: string): boolean =>
-      existsSync(path.join(projectPath, entry)) ||
-      sourceRoots.some(root => existsSync(path.join(projectPath, root, entry)));
-
-    const registeredEntries = readCapabilitiesEntries(capabilitiesPath);
-    const livePathBasenames = new Set(
-      registeredEntries
-        .filter(e => !e.endsWith('/') && e.includes('/') && entryExists(e))
-        .map(getBasename)
-    );
-    result.removed = existingFileNames.filter(
-      f => !currentBasenames.includes(f) && !livePathBasenames.has(f)
-    );
-
-    // 幽灵条目清扫（2026-08-08 studio CI 4 连红事故）：上方按 basename 对比，
-    // 同名碰撞时幽灵不可见（如 agent-configs/routes.ts 已删但 agents/routes.ts 仍存在，
-    // basename routes.ts 仍在扫描结果中，永远不会被判 removed）。
-    // 这里按完整路径直接判存在性（与 docs_freshness 检查器同语义：项目根 + 源码根前缀）。
-    for (const entry of registeredEntries) {
-      // 纯文件名条目（无路径）无法用存在性判定，交由上方 basename 对比
-      if (!entry.includes('/') || entryExists(entry)) continue;
-      const basename = entry.split('/').pop()!;
-      // basename 对比已覆盖（无碰撞场景）时不重复加入
-      if (!result.removed.includes(basename) && !result.removed.includes(entry)) {
-        result.removed.push(entry);
-      }
-    }
+    // removed：文件与目录条目一起查（幽灵目录行若不清除，docs_freshness 从严后
+    // check 会持续报失败而 fix 修不掉——check/fix 必须同规则才能收敛）
+    result.removed = verdict.deadEntries;
   }
 
   // 4. 检查 CONTEXT.md（缺失 + 过时）
@@ -342,55 +315,55 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
       }
     }
 
-    console.log(JSON.stringify(jsonOutput, null, 2));
-    return !hasIssues;
+    log(io, JSON.stringify(jsonOutput, null, 2));
+    return hasIssues ? drift('文档不是最新的（详见 --json 输出 issues 字段）') : { kind: 'ok' };
   }
 
   // 6. 人读输出模式
   if (capsIsCapabilityListing && hasCapIssues) {
-    console.log(chalk.yellow(`\n📊 CAPABILITIES.md 计数不一致:`));
-    capCountMismatches.forEach(m => console.log(chalk.gray(`  - ${m}`)));
+    log(io, chalk.yellow(`\n📊 CAPABILITIES.md 计数不一致:`));
+    capCountMismatches.forEach(m => log(io, chalk.gray(`  - ${m}`)));
   }
 
   if (result.added.length > 0) {
     if (capsMode === 'module') {
-      console.log(chalk.yellow(`\n📄 CAPABILITIES.md 未登记以下模块（目录）:`));
-      result.added.forEach(d => console.log(chalk.gray(`  + ${d}`)));
-      console.log(
+      log(io, chalk.yellow(`\n📄 CAPABILITIES.md 未登记以下模块（目录）:`));
+      result.added.forEach(d => log(io, chalk.gray(`  + ${d}`)));
+      log(io, 
         chalk.gray('  请在 CAPABILITIES.md 中为这些目录登记一行目录条目（如 `| 模块名 | src/xxx/ | 说明 |`）')
       );
     } else {
-      console.log(chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
-      result.added.forEach(f => console.log(chalk.gray(`  + ${f}`)));
+      log(io, chalk.yellow(`\n📄 CAPABILITIES.md 缺少以下模块:`));
+      result.added.forEach(f => log(io, chalk.gray(`  + ${f}`)));
     }
   }
 
   if (result.removed.length > 0) {
-    console.log(chalk.yellow(`\n📄 CAPABILITIES.md 包含已删除的模块:`));
-    result.removed.forEach(f => console.log(chalk.gray(`  - ${f}`)));
+    log(io, chalk.yellow(`\n📄 CAPABILITIES.md 包含已删除的模块:`));
+    result.removed.forEach(f => log(io, chalk.gray(`  - ${f}`)));
   }
 
   if (result.contextMissing.length > 0) {
-    console.log(chalk.yellow(`\n📋 缺少 CONTEXT.md:`));
-    result.contextMissing.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
+    log(io, chalk.yellow(`\n📋 缺少 CONTEXT.md:`));
+    result.contextMissing.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
   if (result.contextStale.length > 0) {
-    console.log(chalk.yellow(`\n📋 CONTEXT.md 可能过时（源码比文档新）:`));
-    result.contextStale.forEach(d => console.log(chalk.gray(`  - ${d}/CONTEXT.md`)));
+    log(io, chalk.yellow(`\n📋 CONTEXT.md 可能过时（源码比文档新）:`));
+    result.contextStale.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
   if (hasAgentsIssues) {
-    console.log(
+    log(io, 
       chalk.yellow(agentsMdExists
         ? `\n🤖 AGENTS.md 与当前项目状态不一致:`
         : `\n🤖 缺少 AGENTS.md（agent 导读）:`)
     );
-    console.log(chalk.gray(`  - AGENTS.md`));
+    log(io, chalk.gray(`  - AGENTS.md`));
   }
 
   if (agentsMdMalformedPreserve.length > 0) {
-    console.log(
+    log(io, 
       chalk.yellow(
         `\n⚠️ AGENTS.md 中 PRESERVE 标记块未闭合（不予保留，重新生成将丢弃）: ${agentsMdMalformedPreserve.join(', ')}`
       )
@@ -398,37 +371,37 @@ export async function syncDocs(options: SyncDocsOptions): Promise<boolean> {
   }
 
   if (!hasIssues) {
-    console.log(chalk.green('✅ 所有文档都是最新的'));
-    return true;
+    log(io, chalk.green('✅ 所有文档都是最新的'));
+    return { kind: 'ok' };
   }
 
   // 7. 检查模式：只报告，不修改
   if (isCheck) {
-    console.log(chalk.red('\n❌ 文档不是最新的，请运行 harness sync-docs 更新'));
-    return false;
+    log(io, chalk.red('\n❌ 文档不是最新的，请运行 harness sync-docs 更新'));
+    return drift('文档不是最新的，请运行 harness sync-docs 更新');
   }
 
   // 8. 写入模式：更新文档
   if (capsIsCapabilityListing && hasCapIssues) {
-    capsContent = updateCapabilityCounts(capsContent, projectPath);
+    capsContent = updateCapabilityCounts(capsContent, CAPABILITY_DEFINITIONS);
     await fs.writeFile(capabilitiesPath, capsContent, 'utf-8');
-    console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md 计数`));
+    log(io, chalk.green(`\n✅ 已更新 CAPABILITIES.md 计数`));
   }
 
   if (!capsIsCapabilityListing && hasTableIssues) {
     await updateCapabilitiesFile(capabilitiesPath, currentModules, existingFiles, result, capsMode);
-    console.log(chalk.green(`\n✅ 已更新 CAPABILITIES.md`));
+    log(io, chalk.green(`\n✅ 已更新 CAPABILITIES.md`));
   }
 
   for (const dir of result.contextMissing) {
     await createContextMd(projectPath, dir);
-    console.log(chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+    log(io, chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
   }
 
   if (hasAgentsIssues && agentsMdExpected !== null) {
     await fs.writeFile(path.join(projectPath, 'AGENTS.md'), agentsMdExpected, 'utf-8');
-    console.log(chalk.green(agentsMdExists ? `✅ 已更新 AGENTS.md` : `✅ 已生成 AGENTS.md`));
+    log(io, chalk.green(agentsMdExists ? `✅ 已更新 AGENTS.md` : `✅ 已生成 AGENTS.md`));
   }
 
-  return !hasIssues;
+  return hasIssues ? drift('写入模式已修复漂移（历史面：退出码仍为 0）') : { kind: 'ok' };
 }

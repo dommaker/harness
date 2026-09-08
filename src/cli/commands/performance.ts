@@ -6,6 +6,7 @@
 
 import chalk from 'chalk';
 import { PerformanceGate } from '../../gates/performance';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface PerformanceOptions {
   /** 项目路径 */
@@ -27,8 +28,11 @@ export interface PerformanceOptions {
 /**
  * 执行性能门控
  */
-export async function performance(options: PerformanceOptions): Promise<void> {
-  console.log(chalk.blue('⚡ 性能门控检查...'));
+export async function performance(
+  options: PerformanceOptions,
+  io: CommandIO = processIO,
+): Promise<CommandResult> {
+  log(io, chalk.blue('⚡ 性能门控检查...'));
 
   const projectPath = options.projectPath || process.cwd();
 
@@ -62,47 +66,48 @@ export async function performance(options: PerformanceOptions): Promise<void> {
     } as any);
 
     if (result.passed) {
-      console.log();
-      console.log(chalk.green('✅ 性能门控检查通过'));
+      log(io);
+      log(io, chalk.green('✅ 性能门控检查通过'));
 
       // 显示详细指标
       if (result.details?.metrics) {
-        console.log();
-        console.log(chalk.gray('性能指标:'));
+        log(io);
+        log(io, chalk.gray('性能指标:'));
 
         const metrics = result.details.metrics as any;
         if (metrics.coverage !== undefined) {
           const threshold = options.coverageThreshold || 80;
           const status = metrics.coverage >= threshold ? '✅' : '❌';
-          console.log(chalk.gray(`  覆盖率: ${metrics.coverage.toFixed(2)}% ${status}`));
+          log(io, chalk.gray(`  覆盖率: ${metrics.coverage.toFixed(2)}% ${status}`));
         }
 
         if (metrics.bundleSize !== undefined) {
           const thresholdKB = options.bundleThreshold || 500;
           const actualKB = metrics.bundleSize / 1024;
           const status = actualKB <= thresholdKB ? '✅' : '❌';
-          console.log(chalk.gray(`  打包大小: ${actualKB.toFixed(2)} KB ${status}`));
+          log(io, chalk.gray(`  打包大小: ${actualKB.toFixed(2)} KB ${status}`));
         }
 
         if (metrics.benchmarkTime !== undefined) {
-          console.log(chalk.gray(`  基准测试: ${metrics.benchmarkTime}ms`));
+          log(io, chalk.gray(`  基准测试: ${metrics.benchmarkTime}ms`));
         }
       }
     } else {
-      console.log();
-      console.log(chalk.red('❌ 性能门控检查失败'));
-      console.log(chalk.red(`   ${result.message}`));
+      log(io);
+      log(io, chalk.red('❌ 性能门控检查失败'));
+      log(io, chalk.red(`   ${result.message}`));
       if (result.details?.failures) {
         (result.details.failures as string[]).forEach((failure: string) => {
-          console.log(chalk.red(`   - ${failure}`));
+          log(io, chalk.red(`   - ${failure}`));
         });
       }
-      process.exit(1);
+      return { kind: 'fail', reason: `performance gate denied: ${result.message}` };
     }
+    return { kind: 'ok' };
   } catch (error: any) {
-    console.log();
-    console.log(chalk.red('❌ 性能门控检查出错'));
-    console.log(chalk.red(`   ${error.message}`));
-    process.exit(1);
+    log(io);
+    log(io, chalk.red('❌ 性能门控检查出错'));
+    log(io, chalk.red(`   ${error.message}`));
+    return { kind: 'fail', reason: `performance gate error: ${error.message}` };
   }
 }

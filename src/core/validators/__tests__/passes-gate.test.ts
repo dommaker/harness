@@ -1,8 +1,9 @@
 /**
  * Tests for passes-gate.ts
  *
- * Priority: test pure logic methods (check, extractCoverage, extractFailures, extension management)
+ * Priority: test pure logic methods (check)
  * Skip methods that do real file I/O / exec (setPasses, runTests, runTest, detectTestCommand, etc.)
+ * 测试产物解析判定不在此面：见 test-output.test.ts（ADR-0012）
  */
 
 import { PassesGate, createPassesGate } from '../passes-gate';
@@ -67,65 +68,10 @@ describe('PassesGate', () => {
     });
   });
 
-  describe('extension management', () => {
-    it('registerExtension adds an extension', () => {
-      const gate = createPassesGate();
-      const ext = { name: 'e2e', run: async () => ({ passed: true, command: 'e2e' }) };
-      gate.registerExtension('e2e', ext);
-      expect(gate.getExtensionNames()).toContain('e2e');
-    });
-
-    it('unregisterExtension removes an extension', () => {
-      const gate = createPassesGate();
-      const ext = { name: 'e2e', run: async () => ({ passed: true, command: 'e2e' }) };
-      gate.registerExtension('e2e', ext);
-      const removed = gate.unregisterExtension('e2e');
-      expect(removed).toBe(true);
-      expect(gate.getExtensionNames()).not.toContain('e2e');
-    });
-
-    it('unregisterExtension returns false for non-existent extension', () => {
-      const gate = createPassesGate();
-      const removed = gate.unregisterExtension('nonexistent');
-      expect(removed).toBe(false);
-    });
-
-    it('getExtensionNames returns empty array when no extensions', () => {
-      const gate = createPassesGate();
-      expect(gate.getExtensionNames()).toEqual([]);
-    });
-
-    it('getExtensionNames returns multiple extension names', () => {
-      const gate = createPassesGate();
-      gate.registerExtension('a', { name: 'a', run: async () => ({ passed: true, command: 'a' }) });
-      gate.registerExtension('b', { name: 'b', run: async () => ({ passed: true, command: 'b' }) });
-      const names = gate.getExtensionNames();
-      expect(names).toContain('a');
-      expect(names).toContain('b');
-      expect(names).toHaveLength(2);
-    });
-  });
-
   describe('getTestResult', () => {
     it('returns undefined for unknown task', () => {
       const gate = createPassesGate();
       expect(gate.getTestResult('unknown')).toBeUndefined();
-    });
-  });
-
-  describe('extractCoverage (via extractCoverage private method behavior check)', () => {
-    // extractCoverage is private but we can infer behavior through public API
-    // runTest uses it internally — but that method is not easily testable without mocking exec
-    it('PassesGate instance is properly constructed', () => {
-      const gate = createPassesGate({ testCommand: 'npm test' });
-      expect(gate).toBeInstanceOf(PassesGate);
-    });
-  });
-
-  describe('extractFailures (via extractFailures private method behavior check)', () => {
-    it('PassesGate handles config properly', () => {
-      const gate = createPassesGate({ allowPartialPass: true, maxRetries: 0, retryDelay: 0 });
-      expect(gate).toBeInstanceOf(PassesGate);
     });
   });
 });

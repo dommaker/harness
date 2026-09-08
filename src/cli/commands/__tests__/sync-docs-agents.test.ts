@@ -3,8 +3,14 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { syncDocs } from '../sync-docs';
+
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
 
 describe('sync-docs --agents', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-sync-docs-agents');
@@ -21,15 +27,8 @@ describe('sync-docs --agents', () => {
     }
   });
 
-  let consoleSpy: jest.SpyInstance;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
   });
 
   /**
@@ -90,7 +89,7 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'gen-pnpm');
     createFixture(testDir, { pnpm: true });
 
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
 
     const agentsPath = path.join(testDir, 'AGENTS.md');
     expect(fs.existsSync(agentsPath)).toBe(true);
@@ -126,7 +125,7 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'gen-npm');
     createFixture(testDir);
 
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
 
     const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
     expect(content).toContain('npm run build');
@@ -141,18 +140,18 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'idempotent');
     createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
     const first = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
 
     // 第二次运行：无任何差异
-    const secondRun = await syncDocs({ projectPath: testDir, agents: true });
+    const secondRun = await syncDocs({ projectPath: testDir, agents: true }, io);
     const second = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
     expect(second).toBe(first);
-    expect(secondRun).toBe(true);
+    expect(secondRun).toEqual({ kind: 'ok' });
 
     // --check 模式应通过
-    const checkResult = await syncDocs({ projectPath: testDir, agents: true, check: true });
-    expect(checkResult).toBe(true);
+    const checkResult = await syncDocs({ projectPath: testDir, agents: true, check: true }, io);
+    expect(checkResult).toEqual({ kind: 'ok' });
 
     fs.rmSync(testDir, { recursive: true, force: true });
   });
@@ -161,9 +160,9 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'check-missing');
     createFixture(testDir, { withCapabilities: true });
 
-    const result = await syncDocs({ projectPath: testDir, agents: true, check: true });
-    expect(result).toBe(false);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('缺少 AGENTS.md'));
+    const result = await syncDocs({ projectPath: testDir, agents: true, check: true }, io);
+    expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+    expect(io.outText()).toContain('缺少 AGENTS.md');
     // check 模式不写入
     expect(fs.existsSync(path.join(testDir, 'AGENTS.md'))).toBe(false);
 
@@ -175,22 +174,22 @@ describe('sync-docs --agents', () => {
     createFixture(testDir, { pnpm: true, withCapabilities: true });
 
     // 先生成
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
 
     // 漂移 1：手改 AGENTS.md
     fs.appendFileSync(path.join(testDir, 'AGENTS.md'), '\n手动追加的一行\n');
-    expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(false);
+    expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
 
     // 重新生成恢复
-    await syncDocs({ projectPath: testDir, agents: true });
-    expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+    await syncDocs({ projectPath: testDir, agents: true }, io);
+    expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
     // 漂移 2：package.json 删除一个 curated 脚本
     const pkgPath = path.join(testDir, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
     delete pkg.scripts.lint;
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
-    expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(false);
+    expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
 
     fs.rmSync(testDir, { recursive: true, force: true });
   });
@@ -199,8 +198,8 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'no-agents');
     createFixture(testDir, { withCapabilities: true });
 
-    const result = await syncDocs({ projectPath: testDir });
-    expect(result).toBe(true);
+    const result = await syncDocs({ projectPath: testDir }, io);
+    expect(result).toEqual({ kind: 'ok' });
     expect(fs.existsSync(path.join(testDir, 'AGENTS.md'))).toBe(false);
 
     fs.rmSync(testDir, { recursive: true, force: true });
@@ -210,10 +209,10 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'json-agents');
     createFixture(testDir, { withCapabilities: true });
 
-    const result = await syncDocs({ projectPath: testDir, agents: true, check: true, json: true });
-    expect(result).toBe(false);
+    const result = await syncDocs({ projectPath: testDir, agents: true, check: true, json: true }, io);
+    expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
 
-    const jsonCall = consoleSpy.mock.calls.find(
+    const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
       (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
     );
     expect(jsonCall).toBeDefined();
@@ -230,7 +229,7 @@ describe('sync-docs --agents', () => {
     createFixture(testDir);
     fs.writeFileSync(path.join(testDir, 'yarn.lock'), '# yarn lockfile v1\n');
 
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
 
     const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
     expect(content).toContain('yarn dev');
@@ -250,7 +249,7 @@ describe('sync-docs --agents', () => {
       fs.mkdirSync(path.join(testDir, '.harness'), { recursive: true });
       fs.writeFileSync(path.join(testDir, '.harness', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('模块上下文正本：`.harness/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
@@ -260,9 +259,9 @@ describe('sync-docs --agents', () => {
       expect(content).toContain('项目知识库，用 `harness knowledge` 查询');
 
       // 幂等 + --check 通过（正本模型下无漂移）
-      const second = await syncDocs({ projectPath: testDir, agents: true });
-      expect(second).toBe(true);
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+      const second = await syncDocs({ projectPath: testDir, agents: true }, io);
+      expect(second).toEqual({ kind: 'ok' });
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -272,7 +271,7 @@ describe('sync-docs --agents', () => {
       createFixture(legacyDir, { pnpm: true, withCapabilities: true });
       fs.mkdirSync(path.join(legacyDir, '.studio'), { recursive: true });
       fs.writeFileSync(path.join(legacyDir, '.studio', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
-      await syncDocs({ projectPath: legacyDir, agents: true });
+      await syncDocs({ projectPath: legacyDir, agents: true }, io);
       expect(fs.readFileSync(path.join(legacyDir, 'AGENTS.md'), 'utf-8'))
         .toContain('模块上下文正本：`.studio/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
       fs.rmSync(legacyDir, { recursive: true, force: true });
@@ -283,7 +282,7 @@ describe('sync-docs --agents', () => {
       fs.writeFileSync(path.join(bothDir, '.studio', 'CONTEXT.md'), '# 旧\n');
       fs.mkdirSync(path.join(bothDir, '.harness'), { recursive: true });
       fs.writeFileSync(path.join(bothDir, '.harness', 'CONTEXT.md'), '# 新\n');
-      await syncDocs({ projectPath: bothDir, agents: true });
+      await syncDocs({ projectPath: bothDir, agents: true }, io);
       const content = fs.readFileSync(path.join(bothDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('模块上下文正本：`.harness/CONTEXT.md`');
       expect(content).not.toContain('.studio/CONTEXT.md');
@@ -294,13 +293,13 @@ describe('sync-docs --agents', () => {
       const testDir = path.join(tempDir, 'scattered-context-model');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('各源码目录的 `CONTEXT.md` 是权威模块文档（现有 1 个），改动代码时同步更新');
       expect(content).not.toContain('模块上下文正本');
 
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -310,7 +309,7 @@ describe('sync-docs --agents', () => {
       createFixture(testDir, { pnpm: true, withCapabilities: true });
       fs.mkdirSync(path.join(testDir, '.harness', 'CONTEXT.md'), { recursive: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain('各源码目录的 `CONTEXT.md` 是权威模块文档');
@@ -328,8 +327,8 @@ describe('sync-docs --agents', () => {
     fs.mkdirSync(path.join(testDir, '.next'), { recursive: true });
     fs.mkdirSync(path.join(testDir, '.vscode'), { recursive: true });
 
-    const result = await syncDocs({ projectPath: testDir, agents: true });
-    expect(result).toBe(false); // AGENTS.md 缺失 → 有问题，但已生成
+    const result = await syncDocs({ projectPath: testDir, agents: true }, io);
+    expect(result).toEqual({ kind: 'ok' }); // AGENTS.md 缺失 → 有问题，但已生成
 
     const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
     // 项目名回退到目录名，无 description
@@ -359,8 +358,8 @@ describe('sync-docs --agents', () => {
       '',
     ].join('\n'));
 
-    const result = await syncDocs({ projectPath: testDir, agents: true });
-    expect(result).toBe(false);
+    const result = await syncDocs({ projectPath: testDir, agents: true }, io);
+    expect(result).toEqual({ kind: 'ok' });
 
     // src 目录不存在：扫描/统计静默跳过，不中断生成
     const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
@@ -397,8 +396,8 @@ describe('sync-docs --agents', () => {
       scripts: { test: 'jest' },
     }));
 
-    const result = await syncDocs({ projectPath: testDir, agents: true });
-    expect(result).toBe(false); // CAPABILITIES.md/AGENTS.md 缺失 → 已生成
+    const result = await syncDocs({ projectPath: testDir, agents: true }, io);
+    expect(result).toEqual({ kind: 'ok' }); // CAPABILITIES.md/AGENTS.md 缺失 → 已生成
 
     const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
     expect(content).toContain('| `apps/` | monorepo 应用：api、web |');
@@ -419,7 +418,7 @@ describe('sync-docs --agents', () => {
     createFixture(testDir, { withCapabilities: true });
     fs.writeFileSync(path.join(testDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n（尚未配置约束）\n');
 
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
 
     const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
     expect(content).toContain('Governance Rules 块');
@@ -432,12 +431,12 @@ describe('sync-docs --agents', () => {
     const testDir = path.join(tempDir, 'json-idempotent');
     createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-    await syncDocs({ projectPath: testDir, agents: true });
+    await syncDocs({ projectPath: testDir, agents: true }, io);
 
-    const result = await syncDocs({ projectPath: testDir, agents: true, json: true });
-    expect(result).toBe(true);
+    const result = await syncDocs({ projectPath: testDir, agents: true, json: true }, io);
+    expect(result).toEqual({ kind: 'ok' });
 
-    const jsonCall = consoleSpy.mock.calls.find(
+    const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
       (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
     );
     expect(jsonCall).toBeDefined();
@@ -475,9 +474,9 @@ describe('sync-docs --agents', () => {
     fs.utimesSync(path.join(testDir, 'src', 'modules', 'CONTEXT.md'), past, past);
 
     // json 模式：结构化输出缺失/过时
-    const jsonResult = await syncDocs({ projectPath: testDir, agents: true, check: true, json: true });
-    expect(jsonResult).toBe(false);
-    const jsonCall = consoleSpy.mock.calls.find(
+    const jsonResult = await syncDocs({ projectPath: testDir, agents: true, check: true, json: true }, io);
+    expect(jsonResult).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+    const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
       (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
     );
     expect(jsonCall).toBeDefined();
@@ -491,11 +490,11 @@ describe('sync-docs --agents', () => {
     expect(parsed.agentsMd).toEqual({ file: 'AGENTS.md', exists: false, stale: true });
 
     // 人读模式：输出过时提示
-    consoleSpy.mockClear();
-    const humanResult = await syncDocs({ projectPath: testDir, agents: true, check: true });
-    expect(humanResult).toBe(false);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('可能过时'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('缺少 CONTEXT.md'));
+    io = captureIO();
+    const humanResult = await syncDocs({ projectPath: testDir, agents: true, check: true }, io);
+    expect(humanResult).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+    expect(io.outText()).toContain('可能过时');
+    expect(io.outText()).toContain('缺少 CONTEXT.md');
 
     fs.rmSync(testDir, { recursive: true, force: true });
   });
@@ -517,18 +516,18 @@ describe('sync-docs --agents', () => {
       const testDir = path.join(tempDir, 'preserve-basic');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       appendBlock(testDir, MANUAL_BLOCK);
 
       // 追加块后构成漂移 → 写入模式重组：生成部分 + PRESERVE 块
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain(MANUAL_BLOCK);
       // 块位于生成内容之后
       expect(content.indexOf('## 知识入口')).toBeLessThan(content.indexOf('<!-- PRESERVE:manual -->'));
 
       // 重组后幂等：--check 通过
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -537,10 +536,10 @@ describe('sync-docs --agents', () => {
       const testDir = path.join(tempDir, 'preserve-order');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       appendBlock(testDir, '<!-- PRESERVE:one -->\n第一块\n<!-- /PRESERVE:one -->');
       appendBlock(testDir, '<!-- PRESERVE:two -->\n第二块\n<!-- /PRESERVE:two -->');
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content.indexOf('PRESERVE:one')).toBeLessThan(content.indexOf('PRESERVE:two'));
@@ -554,20 +553,20 @@ describe('sync-docs --agents', () => {
       const testDir = path.join(tempDir, 'preserve-drift');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       appendBlock(testDir, MANUAL_BLOCK);
-      await syncDocs({ projectPath: testDir, agents: true }); // 重组为规范形态
+      await syncDocs({ projectPath: testDir, agents: true }, io); // 重组为规范形态
 
       // 块内手改 → 不报漂移
       const agentsPath = path.join(testDir, 'AGENTS.md');
       const edited = fs.readFileSync(agentsPath, 'utf-8').replace('使用者自有内容', '改过的内容');
       fs.writeFileSync(agentsPath, edited);
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
       // 块外手改（生成部分） → 报漂移；重生成后块仍在、块外改动被还原
       fs.appendFileSync(agentsPath, '\n块外手动追加\n');
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(false);
-      await syncDocs({ projectPath: testDir, agents: true });
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       const regenerated = fs.readFileSync(agentsPath, 'utf-8');
       expect(regenerated).toContain('改过的内容');
       expect(regenerated).not.toContain('块外手动追加');
@@ -579,11 +578,11 @@ describe('sync-docs --agents', () => {
       const testDir = path.join(tempDir, 'preserve-malformed');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       appendBlock(testDir, '<!-- PRESERVE:broken -->\n没有结束标记');
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('未闭合'));
+      expect(io.outText()).toContain('未闭合');
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).not.toContain('PRESERVE:broken');
       expect(content).not.toContain('没有结束标记');
@@ -595,9 +594,9 @@ describe('sync-docs --agents', () => {
       const testDir = path.join(tempDir, 'preserve-repo-change');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       appendBlock(testDir, MANUAL_BLOCK);
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       // package.json 删除一个 curated 脚本 → 生成部分变化
       const pkgPath = path.join(testDir, 'package.json');
@@ -605,13 +604,13 @@ describe('sync-docs --agents', () => {
       delete pkg.scripts.lint;
       fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
 
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(false);
-      await syncDocs({ projectPath: testDir, agents: true });
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).not.toContain('pnpm lint');
       expect(content).toContain(MANUAL_BLOCK);
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });
@@ -630,16 +629,16 @@ describe('sync-docs --agents', () => {
         '<!-- /PRESERVE:governance -->',
       ].join('\n');
 
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
       appendBlock(testDir, GOVERNANCE_BLOCK);
-      await syncDocs({ projectPath: testDir, agents: true });
+      await syncDocs({ projectPath: testDir, agents: true }, io);
 
       const content = fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8');
       expect(content).toContain(GOVERNANCE_BLOCK);
 
       // 幂等 + --check 通过（块内含 HARNESS_CONSTRAINTS 标记不影响漂移比对）
-      expect(await syncDocs({ projectPath: testDir, agents: true })).toBe(true);
-      expect(await syncDocs({ projectPath: testDir, agents: true, check: true })).toBe(true);
+      expect(await syncDocs({ projectPath: testDir, agents: true }, io)).toEqual({ kind: 'ok' });
+      expect(await syncDocs({ projectPath: testDir, agents: true, check: true }, io)).toEqual({ kind: 'ok' });
 
       fs.rmSync(testDir, { recursive: true, force: true });
     });

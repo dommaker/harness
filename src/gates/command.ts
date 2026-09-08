@@ -5,6 +5,7 @@
  * 检查命令是否安全，防止执行危险操作
  */
 
+import { pass, gateResult } from './types';
 import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, GateContext, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -232,32 +233,25 @@ export class CommandGate implements Gate {
     const startTime = Date.now();
 
     if (!this.config.enabled) {
-      return {
-        gate: 'command',
-        passed: true,
-        message: '命令门禁已禁用',
-        timestamp: new Date().toISOString(),
-        duration: Date.now() - startTime,
-      };
+      return pass('command', '命令门禁已禁用', startTime);
     }
 
     const result = this.checkBlacklist(command);
 
-    return {
-      gate: 'command',
-      passed: result.allowed,
-      message: result.allowed
+    return gateResult(
+      'command',
+      result.allowed,
+      result.allowed
         ? this.formatSuccessMessage(result)
         : this.formatBlockMessage(result),
-      details: {
+      startTime,
+      {
         blocked: result.blocked,
         warnings: result.warnings,
         audits: result.audits,
         command,
-      },
-      timestamp: new Date().toISOString(),
-      duration: Date.now() - startTime,
-    };
+      }
+    );
   }
 
   /**

@@ -3,6 +3,7 @@
  */
 
 import * as fs from 'fs';
+import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { FailureRecorder } from '../../../failure/recorder';
 import { ErrorType, FailureLevel } from '../../../failure/types';
@@ -11,10 +12,13 @@ import type { FailureRecord } from '../../../failure/types';
 // Mock FailureRecorder
 jest.mock('../../../failure/recorder');
 
+let io: CapturingIO;
+beforeEach(() => {
+  io = captureIO();
+});
+
 describe('failure CLI commands', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-failure-cli');
-  let consoleSpy: jest.SpyInstance;
-  let consoleErrorSpy: jest.SpyInstance;
   let mockRecorderInstance: {
     record: jest.Mock;
     getHistory: jest.Mock;
@@ -48,8 +52,6 @@ describe('failure CLI commands', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
     // Setup mock instance methods
     mockRecorderInstance = {
@@ -62,37 +64,32 @@ describe('failure CLI commands', () => {
     (FailureRecorder as jest.Mock).mockImplementation(() => mockRecorderInstance);
   });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
-  });
-
   describe('failureList', () => {
     it('应该列出所有记录', async () => {
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir });
+      await failureList({ projectPath: tempDir }, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('失败记录'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('TEST_FAILED'));
+      expect(io.outText()).toContain('失败记录');
+      expect(io.outText()).toContain('TEST_FAILED');
     });
 
     it('应该按类型过滤', async () => {
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir, type: 'TEST_FAILED' });
+      await failureList({ projectPath: tempDir, type: 'TEST_FAILED' }, io);
 
       expect(mockRecorderInstance.getHistory).toHaveBeenCalled();
     });
 
     it('应该按等级过滤', async () => {
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir, level: 'L1' });
+      await failureList({ projectPath: tempDir, level: 'L1' }, io);
 
       expect(mockRecorderInstance.getHistory).toHaveBeenCalled();
     });
 
     it('应该限制返回数量', async () => {
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir, limit: 2 });
+      await failureList({ projectPath: tempDir, limit: 2 }, io);
 
       expect(mockRecorderInstance.getHistory).toHaveBeenCalled();
     });
@@ -100,16 +97,16 @@ describe('failure CLI commands', () => {
     it('空记录应该输出提示', async () => {
       mockRecorderInstance.getHistory.mockResolvedValue([]);
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir });
+      await failureList({ projectPath: tempDir }, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('没有失败记录'));
+      expect(io.outText()).toContain('没有失败记录');
     });
 
     it('--json 模式应该输出 JSON', async () => {
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir, json: true });
+      await failureList({ projectPath: tempDir, json: true }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -120,9 +117,9 @@ describe('failure CLI commands', () => {
     it('--json 模式空记录应该输出 total:0', async () => {
       mockRecorderInstance.getHistory.mockResolvedValue([]);
       const { failureList } = await import('../failure');
-      await failureList({ projectPath: tempDir, json: true });
+      await failureList({ projectPath: tempDir, json: true }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -134,17 +131,17 @@ describe('failure CLI commands', () => {
   describe('failureStats', () => {
     it('应该输出统计信息', async () => {
       const { failureStats } = await import('../failure');
-      await failureStats({ projectPath: tempDir });
+      await failureStats({ projectPath: tempDir }, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('失败统计'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('TEST_FAILED'));
+      expect(io.outText()).toContain('失败统计');
+      expect(io.outText()).toContain('TEST_FAILED');
     });
 
     it('--json 模式应该输出 JSON 统计', async () => {
       const { failureStats } = await import('../failure');
-      await failureStats({ projectPath: tempDir, json: true });
+      await failureStats({ projectPath: tempDir, json: true }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -155,17 +152,17 @@ describe('failure CLI commands', () => {
     it('空记录应该输出绿色提示', async () => {
       mockRecorderInstance.getStats.mockResolvedValue({ total: 0, byType: {}, byLevel: {} });
       const { failureStats } = await import('../failure');
-      await failureStats({ projectPath: tempDir });
+      await failureStats({ projectPath: tempDir }, io);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('没有失败记录'));
+      expect(io.outText()).toContain('没有失败记录');
     });
 
     it('--json 模式空记录应该输出空统计', async () => {
       mockRecorderInstance.getStats.mockResolvedValue({ total: 0, byType: {}, byLevel: {} });
       const { failureStats } = await import('../failure');
-      await failureStats({ projectPath: tempDir, json: true });
+      await failureStats({ projectPath: tempDir, json: true }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();
@@ -177,17 +174,17 @@ describe('failure CLI commands', () => {
   describe('failureClear', () => {
     it('应该清空记录并输出结果', async () => {
       const { failureClear } = await import('../failure');
-      await failureClear({ projectPath: tempDir });
+      await failureClear({ projectPath: tempDir }, io);
 
       expect(mockRecorderInstance.clear).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('已清空'));
+      expect(io.outText()).toContain('已清空');
     });
 
     it('--json 模式应该输出清空的记录数', async () => {
       const { failureClear } = await import('../failure');
-      await failureClear({ projectPath: tempDir, json: true });
+      await failureClear({ projectPath: tempDir, json: true }, io);
 
-      const jsonCall = consoleSpy.mock.calls.find(
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
         (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
       );
       expect(jsonCall).toBeDefined();

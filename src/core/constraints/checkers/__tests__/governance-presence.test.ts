@@ -1,8 +1,11 @@
 /**
- * governance_presence checker 测试（studio #302，ADR 2026-08-21 落点模型）
+ * governance_presence 检查器旁测（studio #302，ADR 2026-08-21 落点模型）
  *
  * 在场守护：PRESERVE 只保「存在」不保「在场」——治理契约段被删除/掏空后
  * sync-docs 重新生成会静默丢失，本 checker 在 harness check 时校验在场性。
+ * 测试面 = evaluate(env)（架构评审候选4，自 src/__tests__/ 就近迁入）。
+ * 根由 src/test-setup/project-fixture 构造；本套件是 cwd 锚定用例，经
+ * parentDir: process.cwd() **显式** opt-out 保持原语义（harness#90 前置约束）。
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
@@ -12,8 +15,10 @@ import {
   governancePresence,
   hasGovernancePreserveBlock,
   hasClaudeGovernance,
-} from '../core/constraints/checkers/governance-presence';
-import type { CheckEnv } from '../core/constraints/checkers';
+} from '../governance-presence';
+import { detectInjectionDrift } from '../../injection-drift';
+import { createProjectFixture, writeProjectConfig } from '../../../../test-setup/project-fixture';
+import type { CheckEnv } from '../types';
 
 function makeEnv(projectPath: string): CheckEnv {
   return {
@@ -39,13 +44,13 @@ describe('governance_presence checker', () => {
   let tempDir: string;
   let errorSpy: jest.SpiedFunction<typeof console.error>;
 
-  const writeConfig = () => {
-    fs.mkdirSync(path.join(tempDir, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(tempDir, '.harness', 'config.yml'), 'preset: standard\n');
-  };
+  const writeConfig = () => writeProjectConfig(tempDir, 'preset: standard\n');
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-gov-presence-'));
+    tempDir = createProjectFixture({
+      name: 'temp-test-gov-presence',
+      parentDir: process.cwd(),
+    });
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -67,6 +72,12 @@ describe('governance_presence checker', () => {
   it('旧模型豁免：CLAUDE.md 有 Governance Rules 块（无 AGENTS.md）→ pass', async () => {
     writeConfig();
     fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n条款\n');
+    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
+  });
+
+  it('旧模型豁免：CLAUDE.md 标题双空格变体也认（宽松谓词，fail-open）→ pass', async () => {
+    writeConfig();
+    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n##  Governance Rules\n\n条款\n');
     expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
   });
 
@@ -107,7 +118,10 @@ describe('hasGovernancePreserveBlock / hasClaudeGovernance 判定函数', () => 
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-gov-helpers-'));
+    tempDir = createProjectFixture({
+      name: 'temp-test-gov-helpers',
+      parentDir: process.cwd(),
+    });
   });
 
   afterEach(() => {
@@ -125,5 +139,65 @@ describe('hasGovernancePreserveBlock / hasClaudeGovernance 判定函数', () => 
     expect(hasGovernancePreserveBlock(p)).toBe(false);
     fs.writeFileSync(p, `<!-- PRESERVE:governance -->\n条款一\n<!-- /PRESERVE:governance -->\n`);
     expect(hasGovernancePreserveBlock(p)).toBe(true);
+  });
+
+  it('结束标记嵌在行中 = 畸形块 → false（显式收紧，#83：按契约丢失报警）', () => {
+    const p = path.join(tempDir, 'AGENTS.md');
+    fs.writeFileSync(
+      p,
+      '<!-- PRESERVE:governance -->\n条款一 <!-- /PRESERVE:governance --> 尾注\n'
+    );
+    expect(hasGovernancePreserveBlock(p)).toBe(false);
+  });
+});
+
+describe('governance_presence × detectInjectionDrift 同 fixture 一致性（#83）', () => {
+  let tempDir: string;
+
+  const writeConfig = () => writeProjectConfig(tempDir, 'preset: standard\n');
+
+  beforeEach(() => {
+    tempDir = createProjectFixture({
+      name: 'temp-test-gov-consistency',
+      parentDir: process.cwd(),
+    });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('双空格标题：presence 认在场（pass），drift 严格计数 0 不报重复——两层不再互相矛盾', async () => {
+    writeConfig();
+    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n##  Governance Rules\n\n条款\n');
+
+    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
+    const drift = detectInjectionDrift(tempDir);
+    expect(drift.notInjected).toBe(true);
+    expect(drift.duplicateHeading).toBe(false);
+    expect(drift.hasDrift).toBe(false);
+  });
+
+  it('精确拼写单标题：presence pass，drift 不报重复', async () => {
+    writeConfig();
+    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n条款\n');
+
+    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
+    const drift = detectInjectionDrift(tempDir);
+    expect(drift.notInjected).toBe(true);
+    expect(drift.duplicateHeading).toBe(false);
+  });
+
+  it('精确拼写双标题：presence 认在场，drift 报重复章节（计数是 drift 的独立职责）', async () => {
+    writeConfig();
+    fs.writeFileSync(
+      path.join(tempDir, 'CLAUDE.md'),
+      '# CLAUDE.md\n\n## Governance Rules\n\n甲\n\n## Governance Rules\n\n乙\n'
+    );
+
+    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
+    const drift = detectInjectionDrift(tempDir);
+    expect(drift.notInjected).toBe(true);
+    expect(drift.duplicateHeading).toBe(true);
   });
 });

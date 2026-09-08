@@ -12,7 +12,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as glob from 'fast-glob';
-import { execAsync } from '../../utils/exec';
+import { createGitEvidence, splitFileNames, type GitCommandRunner } from '../constraints/git-evidence';
 import type {
   SpecValidatorConfig,
   SpecValidationResult,
@@ -243,7 +243,7 @@ export class SpecValidator {
     let files: string[];
 
     if (staged) {
-      files = await this.getStagedFiles();
+      files = await this.getStagedFiles(cwd);
     } else {
       files = await this.getSpecFiles(cwd);
     }
@@ -291,15 +291,14 @@ export class SpecValidator {
 
   /**
    * 获取暂存的 Spec 文件
+   *
+   * git 事实经 GitEvidence adapter（ADR-0021）；`run` 缺省真 git，测试注入替身。
    */
-  private async getStagedFiles(): Promise<string[]> {
-    try {
-      const { stdout } = await execAsync('git diff --cached --name-only');
-      const allFiles = stdout.trim().split('\n').filter(Boolean);
-      return allFiles.filter(f => this.isSpecFile(f));
-    } catch {
-      return [];
-    }
+  private async getStagedFiles(cwd: string, run?: GitCommandRunner): Promise<string[]> {
+    const evidence = createGitEvidence(cwd, run);
+    return splitFileNames(evidence.changedFileNames(true))
+      .filter(f => this.isSpecFile(f))
+      .map(f => path.resolve(cwd, f));
   }
 
   /**

@@ -157,7 +157,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     description: '生成检查报告',
     options: [
       { flags: '-o, --output <path>', description: '输出文件路径' },
-      { flags: '-f, --format <format>', description: '输出格式 (json/markdown/html)', defaultValue: 'markdown' },
+      { flags: '-f, --format <format>', description: '输出格式 (json/markdown)', defaultValue: 'markdown' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
     ],
     action: { module: 'report', export: 'report' },

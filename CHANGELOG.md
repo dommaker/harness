@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- refactor(failure,core,cli)!: 约束收集语义归宿 checker，删除 ConstraintViolationHandler 三策略模块（ADR-0017，架构评审候选1）——COLLECT 策略在唯一生产路径 `harness report` 上制造假绿（checker 首个铁律违规即 throw，handler 的 catch 丢弃 `error.result` 合成空结果 → 违规报成零、passed=全量），且 `ConstraintViolationError.result` 是单条 `ConstraintResult` 而非完整结果，「收集所有违规不抛出」对真实 checker 结构上不可交付。修复：`ConstraintChecker` 新增 `collectConstraints`（与 `checkConstraints` 共享私有检查体 `runAllConstraints`，唯一差别是不 throw：全量收集、guidelines 照常、trace 逐条照记），report 改直调；`checkConstraints` throw 契约逐字不动。**breaking**：包根删除六个公共导出符号——`ConstraintViolationHandler` / `executeWithBlock` / `executeWithCollect` / `executeWithSafeBoolean` / `ViolationStrategy` / `ViolationHandlingResult`（studio 零引用，迁移路径 = 删引用，收集语义改调 `collectConstraints`），按 major 发布。顺手裁掉 report 的 html 格式（零测试的内嵌模板，json/markdown 保留）。测试：假绿回归用例先红后绿（真 fixture 不 mock）、collect 五枚用例
+
 ## [1.5.0] - 2026-09-08
 
 ### Changes

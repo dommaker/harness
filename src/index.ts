@@ -240,10 +240,6 @@ export {
   getFailureLevel,
   FailureRecorder,
   createFailureRecorder,
-  ConstraintViolationHandler,
-  executeWithBlock,
-  executeWithCollect,
-  executeWithSafeBoolean,
 } from './failure';
 export type {
   FailureRecord,
@@ -251,8 +247,6 @@ export type {
   ClassificationResult,
   ErrorClassifierConfig,
   FailureRecorderConfig,
-  ViolationStrategy,
-  ViolationHandlingResult,
 } from './failure';
 
 // ========================================

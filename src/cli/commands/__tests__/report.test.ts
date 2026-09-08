@@ -44,11 +44,6 @@ describe('report command', () => {
       expect(io.outText()).toContain('Harness 检查报告');
     });
 
-    it('应该生成 HTML 格式报告', async () => {
-      await report({ format: 'html' }, io);
-      expect(io.outText()).toContain('<!DOCTYPE html>');
-    });
-
     it('应该保存报告到文件', async () => {
       mockFs.writeFile.mockResolvedValue(undefined);
 
@@ -70,15 +65,6 @@ describe('report command', () => {
       expect(output).toContain('报告由 @dommaker/harness 生成');
     });
 
-    it('HTML 报告应包含完整结构', async () => {
-      await report({ format: 'html' }, io);
-      const output = io.outText();
-      expect(output).toContain('<html lang="zh-CN">');
-      expect(output).toContain('</html>');
-      expect(output).toContain('Harness 检查报告');
-      expect(output).toContain('<table>');
-    });
-
     it('JSON 报告应包含约束统计', async () => {
       await report({ format: 'json' }, io);
       const output = io.outText();
@@ -98,12 +84,6 @@ describe('report command', () => {
       mockFs.writeFile.mockResolvedValue(undefined);
       await report({ format: 'markdown', output: 'report.md' }, io);
       expect(mockFs.writeFile).toHaveBeenCalledWith('report.md', expect.stringContaining('# Harness'), 'utf-8');
-    });
-
-    it('应该支持输出到文件 (html)', async () => {
-      mockFs.writeFile.mockResolvedValue(undefined);
-      await report({ format: 'html', output: 'report.html' }, io);
-      expect(mockFs.writeFile).toHaveBeenCalledWith('report.html', expect.stringContaining('<!DOCTYPE html>'), 'utf-8');
     });
   });
 });

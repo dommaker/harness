@@ -52,31 +52,12 @@ describe('report command - 补充覆盖', () => {
     });
   });
 
-  describe('HTML 报告完整内容', () => {
-    it('HTML 报告应该包含所有区块', async () => {
-      await report({ format: 'html' }, io);
-      const output = io.outText();
-
-      expect(output).toContain('<!DOCTYPE html>');
-      expect(output).toContain('<title>Harness 检查报告</title>');
-      expect(output).toContain('约束检查');
-      expect(output).toContain('Iron Laws');
-    });
-  });
-
   describe('文件输出', () => {
     it('Markdown 输出到文件', async () => {
       mockFs.writeFile.mockResolvedValue(undefined);
 
       await report({ format: 'markdown', output: 'report.md' }, io);
       expect(mockFs.writeFile).toHaveBeenCalledWith('report.md', expect.stringContaining('# Harness'), 'utf-8');
-    });
-
-    it('HTML 输出到文件', async () => {
-      mockFs.writeFile.mockResolvedValue(undefined);
-
-      await report({ format: 'html', output: 'report.html' }, io);
-      expect(mockFs.writeFile).toHaveBeenCalledWith('report.html', expect.stringContaining('<!DOCTYPE html>'), 'utf-8');
     });
   });
 

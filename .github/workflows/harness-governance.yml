@@ -30,6 +30,16 @@ jobs:
       - name: Quality gate
         run: node bin/harness.js passes-gate
 
-      - name: Check docs freshness
-        run: node bin/harness.js sync-docs --check
-        continue-on-error: true
+      # 顺序约束：写入必须在校验之前——sync-docs 会自愈 CAPABILITIES.md 幽灵条目并给缺登记补行，
+      # check 若跑在写入前，幽灵会先撞 check（2026-08-08 CI 4 连红结论，不回退）。
+      - name: Sync docs (heal ghosts, auto-register)
+        run: node bin/harness.js sync-docs
+
+      # 仓库级漏登门（harness#120 方案 A）：写入后 CAPABILITIES.md 有 diff = HEAD 文档过期。
+      # 自愈照做，但「需要自愈」本身成为门；diff 新增行即缺登记文件名单。
+      - name: Gate on stale CAPABILITIES.md
+        run: |
+          if ! git diff --exit-code CAPABILITIES.md; then
+            echo "::error::CAPABILITIES.md 已过期：上方 diff 的新增/删除行即未同步的登记变更。请本地跑 node bin/harness.js sync-docs 并提交结果。"
+            exit 1
+          fi

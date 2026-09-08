@@ -281,76 +281,6 @@ export async function knowledgeStats(options: KnowledgeOptions, io: CommandIO = 
   return { kind: 'ok' };
 }
 
-export interface KnowledgeUpsertOptions {
-  scope?: string;
-  title?: string;
-  content?: string;
-  file?: string;
-  type?: string;
-  source?: string;
-}
-
-/**
- * 设计时知识沉淀：写入 KnowledgeStore + 同步 Prisma Document（Studio UI 可见）
- *
- * 调用 Studio API POST /api/knowledge/upsert（内部端点，无 auth）
- */
-export async function knowledgeUpsert(options: KnowledgeUpsertOptions, io: CommandIO = processIO): Promise<CommandResult> {
-  const apiPort = process.env.API_PORT || '3001';
-  const url = `http://localhost:${apiPort}/api/knowledge/upsert`;
-
-  // Read content from file if --file specified
-  let content = options.content || '';
-  if (options.file && !content) {
-    try {
-      content = fs.readFileSync(options.file, 'utf-8');
-    } catch (e: any) {
-      logError(io, chalk.red(`Failed to read file: ${options.file}`));
-      logError(io, chalk.red(String(e)));
-      return { kind: 'fail', reason: `无法读取 --file ${options.file}: ${String(e)}` };
-    }
-  }
-
-  if (!options.scope || !options.title || !content) {
-    logError(io, chalk.red('--scope, --title, and --content (or --file) are required'));
-    return { kind: 'usage-error', reason: '--scope/--title/--content(--file) 缺一不可' };
-  }
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scope: options.scope,
-        title: options.title,
-        content,
-        type: options.type || 'architecture',
-        source: options.source || 'cli',
-      }),
-    });
-
-    if (!res.ok) {
-      const err: any = await res.json().catch(() => ({ error: res.statusText }));
-      logError(io, chalk.red(`API error ${res.status}: ${err.error || res.statusText}`));
-      return { kind: 'fail', reason: `upsert API error ${res.status}: ${err.error || res.statusText}` };
-    }
-
-    const result: any = await res.json();
-    log(io, chalk.green(`✅ Knowledge upserted`));
-    log(io, `   KnowledgeStore: ${result.knowledgeStore?.action} → ${result.knowledgeStore?.entryId}`);
-    log(io, `   Studio UI: ${result.prismaDocument?.action} → ${result.prismaDocument?.docId || 'skipped'}`);
-    return { kind: 'ok' };
-  } catch (e: any) {
-    if (e?.code === 'ECONNREFUSED') {
-      logError(io, chalk.red(`Cannot reach Studio API at ${url}. Is the API running?`));
-    } else {
-      logError(io, chalk.red(`Upsert failed: ${e.message}`));
-    }
-    return { kind: 'fail', reason: `knowledge upsert 失败: ${e?.code === 'ECONNREFUSED' ? `Studio API 不可达 ${url}` : e.message}` };
-  }
-}
-
-/**
 /**
  * RAG 同步：扫描 .harness/knowledge-docs/ 输出需要 ingest 的文件列表
  */
@@ -380,55 +310,6 @@ export async function knowledgeSyncRag(options: KnowledgeOptions, io: CommandIO 
   }
   log(io);
   log(io, chalk.gray('Run `mcp__local-rag__ingest_file` for each to sync to RAG'));
-  return { kind: 'ok' };
-}
-
-/**
- * 知识同步状态：检测所有 tracked scope 的新鲜度
- */
-export async function knowledgeSyncStatus(options: KnowledgeOptions, io: CommandIO = processIO): Promise<CommandResult> {
-  const apiPort = process.env.API_PORT || '3001';
-  const url = `http://localhost:${apiPort}/api/knowledge/sync-status`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      const err: any = await res.json().catch(() => ({ error: res.statusText }));
-      logError(io, chalk.red(`API error ${res.status}: ${err.error || res.statusText}`));
-      return { kind: 'fail', reason: `sync-status API error ${res.status}: ${err.error || res.statusText}` };
-    }
-
-    const data: any = await res.json();
-
-    if (options.json) {
-      log(io, JSON.stringify(data, null, 2));
-      return { kind: 'ok' };
-    }
-
-    log(io, chalk.blue(`🔄 KnowledgeSync Status\n`));
-    log(io, chalk.bold(`Tracked scopes: ${data.trackedScopes?.join(', ') || 'none'}`));
-    log(io, chalk.bold(`Stale entries: ${data.stale?.length || 0}`));
-
-    if (data.stale?.length > 0) {
-      log(io, chalk.yellow(`\n⚠️  Stale knowledge:\n`));
-      for (const s of data.stale) {
-        log(io, chalk.yellow(`  ${s.scope} (${s.title}): ${s.stalenessHours}h old, files changed: ${s.changedFiles.join(', ')}`));
-      }
-    } else {
-      log(io, chalk.green('\n✅ All knowledge fresh'));
-    }
-
-    if (data.healed?.length > 0) {
-      log(io, chalk.cyan(`\n🩹 Auto-healed: ${data.healed.join(', ')}`));
-    }
-  } catch (e: any) {
-    if (e?.code === 'ECONNREFUSED') {
-      logError(io, chalk.red(`Cannot reach Studio API at ${url}`));
-    } else {
-      logError(io, chalk.red(`Sync check failed: ${e.message}`));
-    }
-    return { kind: 'fail', reason: `knowledge sync status 检查失败: ${e?.code === 'ECONNREFUSED' ? `Studio API 不可达 ${url}` : e.message}` };
-  }
   return { kind: 'ok' };
 }
 

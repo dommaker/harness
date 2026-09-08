@@ -43,7 +43,7 @@ H5（#44）起：
 - init 治理约束段写入落点（studio #302，ADR 2026-08-21 落点模型）：新仓 → AGENTS.md `PRESERVE:governance` 段（sync-docs 重新生成时保留）；旧模型仓（CLAUDE.md 已有 HARNESS_CONSTRAINTS 标记或 `## Governance Rules` 块）→ 续写 CLAUDE.md，幂等重跑不制造双份正本。治理段「在场守护」由 core 侧 governance_presence checker 承担（段缺失/为空时 check 报警）
 - PRESERVE:governance 段内写入纪律：机器管理的只有 HARNESS_CONSTRAINTS 标记区间——有标记只换标记区间，无标记（纯手写段）在段尾追加注入段；段内其余手写内容（治理契约引言/流程/纪律等）必须原样保留（曾整段替换清空手写内容的回归，init-injection.test 有防回归用例）
 - 注入段落点路由与 marker-range 替换收口在 `core/constraints/injection-writer`（ADR-0011）：读侧 `resolveInjectionTarget`（漂移检测/retire 同步共用「CLAUDE.md 有标记优先，否则 AGENTS.md」）+ 写侧 `resolveGovernanceLanding`（init 落点选择）；init 三个治理段 writer 与 retire 注入同步均为「渲染 body + 调 writer」，半标记（单边/乱序）一律拒写告警；未注入 = 两处均无完整标记段
-- knowledge 命令包含 13 个子操作（list/search/import/decay/stats/upsert/sync-status/sync-rag/audit/snapshot/migrate/index/health）
+- knowledge 命令包含 11 个子操作（list/search/import/decay/stats/sync-rag/audit/snapshot/migrate/index/health）；upsert/sync-status 已迁至 studio CLI（harness#110，二者硬编码 localhost Studio 内部端点，不属 harness「通用框架、文件驱动」定位）
 - `stats` / `health` 的飞轮数字不在 CLI 内计算：分子口径唯一实现是 `knowledge/flywheel-metrics.ts`（`evaluateFlywheel`，ADR-0013），本层只做百分比取整/一位小数与字段名映射；`.consumption-stats.json` 的读取留在各命令（module 零 IO）
 - 特殊路由（选项条件、子命令兜底、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction 字段，bin 是纯通用引擎、不含单命令知识
 - **命令 interface = `CommandResult` + 注入 io（架构评审候选7）**：命令实现一律声明 `Promise<CommandResult>`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位的 `reason`，多闸门命令 reason 含 `gate <id>`），末位可选形参 `io: CommandIO = processIO`；类型与写入面在 `src/cli/command-contract.ts`

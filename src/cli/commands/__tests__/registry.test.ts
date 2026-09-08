@@ -175,6 +175,12 @@ function runWithModuleProbe(argv: string[]): { status: number | null; implModule
   }
 }
 
+// CI 上 dist 缺失时显式失败而非静默 skip（harness#99）：bin 懒加载/路由的
+// 端到端证据在下面的 smoke 块，CI 必须先 build 再 test，否则证据隐形。
+if (!hasDist && process.env.CI) {
+  throw new Error('dist 未构建：bin 端到端 smoke 不得静默 skip —— CI 必须先 npm run build 再 npm test（harness#99）');
+}
+
 const smoke = hasDist ? describe : describe.skip;
 
 smoke('bin/harness.js 端到端（dist 存在时）', () => {

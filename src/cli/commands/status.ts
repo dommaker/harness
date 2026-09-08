@@ -7,8 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { TraceCollector } from '../../monitoring/traces';
-import { TraceAnalyzer } from '../../monitoring/trace-analyzer';
+import { summarizeTraces, detectTraceAnomalies } from '../../monitoring/trace-analyzer';
 import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ExecutionTrace } from '../../types/trace';
@@ -57,18 +56,14 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
   // filter(Boolean) 沿用原语义：parse 成功但值为 falsy 的行（如 "null"）不进分析
   // 计数去向：harness#100——skippedLines 另起一行走 stderr 告知（口径不改，只补告知）。
   // 不经 TraceCollector.readReport()：本命令按 -p 的 projectPath 直读读链正本，且要的是
-  // records + skippedLines 的原始行数口径；下面另建的 collector/analyzer 只用于 summarize/detectAnomalies
+  // records + skippedLines 的原始行数口径；下游只做纯判定（ADR-0020 直调模块级函数）
   const { records, skippedLines } = readJsonl<ExecutionTrace>(tracesPath, 'skip');
   const traces = records.filter(Boolean);
   const traceCount = records.length + skippedLines;
 
-  // 创建收集器和分析器
-  const collector = new TraceCollector({ traceFile: tracesPath });
-  const analyzer = new TraceAnalyzer(collector);
-
-  // 生成统计
-  const summaries = analyzer.summarize(traces);
-  const anomalies = analyzer.detectAnomalies(summaries);
+  // 生成统计（数据进数据出，无需 collector/分析器实例）
+  const summaries = summarizeTraces(traces);
+  const anomalies = detectTraceAnomalies(summaries);
 
   // 基本统计
   log(io, chalk.gray(`记录数: ${traceCount} 条`));

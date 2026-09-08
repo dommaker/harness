@@ -7,6 +7,11 @@
  * - 统计汇总（每小时自动执行）
  * - 异常检测（每日检查）
  * - 趋势分析（对比上一周期）
+ *
+ * 形状（ADR-0020）：`summarize`/`detectAnomalies` 的判定本体是模块级纯函数
+ * （`summarizeTraces`/`detectTraceAnomalies`），`TraceAnalyzer` 类壳转发过去——
+ * 类壳是 studio 的运行时消费面，纯函数是已持有数据、不需要 collector 的消费端
+ * （`status`）的入口。两个纯函数不进包根导出（ADR-0003 零扩张）。
  */
 
 import type {
@@ -37,6 +42,153 @@ const DEFAULT_CONFIG: TraceAnalyzerConfig = {
 };
 
 /**
+ * 计算趋势（`summarizeTraces` 的模块内助手）
+ *
+ * 对比前半段和后半段的通过率
+ */
+function calculateTrend(traces: ExecutionTrace[]): 'stable' | 'rising' | 'falling' {
+  if (traces.length < MIN_TREND_SAMPLES) {
+    return 'stable';
+  }
+
+  // 分成前后两半（按时间排序）
+  const [firstHalf, secondHalf] = splitByTime(traces);
+
+  // 计算前半段和后半段的通过率
+  const firstPassRate = calcPassRate(firstHalf);
+  const secondPassRate = calcPassRate(secondHalf);
+
+  // 计算变化
+  const delta = secondPassRate - firstPassRate;
+
+  // 判断趋势（变化 > 5% 才算显著）
+  if (delta > 0.05) {
+    return 'rising';
+  } else if (delta < -0.05) {
+    return 'falling';
+  } else {
+    return 'stable';
+  }
+}
+
+/**
+ * 计算通过率（skip 未评估，不计入分母）
+ */
+function calcPassRate(traces: ExecutionTrace[]): number {
+  const evaluated = traces.filter(t => t.result !== 'skip');
+  if (evaluated.length === 0) return 0;
+  const passCount = evaluated.filter(t => t.result === 'pass').length;
+  return passCount / evaluated.length;
+}
+
+/**
+ * 生成统计汇总
+ *
+ * 纯计算，零 Token 成本。判定住在这里，`TraceAnalyzer.summarize()` 只是转发（ADR-0020）——
+ * 只要数据的消费端（`status`）直调本函数，不必为它构造带 mkdir 副作用的 collector。
+ */
+export function summarizeTraces(traces: ExecutionTrace[]): TraceSummary[] {
+  // 按约束 ID 分组
+  const grouped = groupByKey(traces, t => t.constraintId);
+
+  const summaries: TraceSummary[] = [];
+
+  for (const [constraintId, group] of grouped) {
+    // 提取层级（从第一条 trace）
+    const level = group[0].level;
+
+    // 计算时间范围
+    const timeRange = timeRangeOf(group.map(t => t.timestamp));
+
+    // 单次遍历计算核心统计（skip 单独计数，不计入 pass/fail 率分母，ADR-0001）
+    const totalChecks = group.length;
+    let passCount = 0, failCount = 0, ignoreCount = 0, skipCount = 0;
+    for (const t of group) {
+      if (t.result === 'pass') passCount++;
+      else if (t.result === 'fail') failCount++;
+      else if (t.result === 'skip') skipCount++;
+      if (t.userAction === 'ignore') ignoreCount++;
+    }
+
+    // 计算比率（分母 = 实际评估次数，skip 未评估不计入）
+    const evaluatedChecks = totalChecks - skipCount;
+    const passRate = evaluatedChecks > 0 ? passCount / evaluatedChecks : 0;
+    const failRate = evaluatedChecks > 0 ? failCount / evaluatedChecks : 0;
+
+    // 计算趋势
+    const recentTrend = calculateTrend(group);
+
+    summaries.push({
+      constraintId,
+      level,
+      timeRange,
+      totalChecks,
+      passCount,
+      failCount,
+      skipCount,
+      ignoreCount,
+      passRate,
+      failRate,
+      recentTrend,
+    });
+  }
+
+  return summaries;
+}
+
+/**
+ * 检测异常
+ *
+ * 基于阈值检测异常模式。阈值来自参数而非实例状态（ADR-0020）：省略 `config` 时
+ * 与类壳同一默认口径（`{ ...DEFAULT_CONFIG, ...config }`）。
+ */
+export function detectTraceAnomalies(
+  summaries: TraceSummary[],
+  config?: Partial<TraceAnalyzerConfig>
+): TraceAnomaly[] {
+  const anomalies: TraceAnomaly[] = [];
+  const thresholds = { ...DEFAULT_CONFIG, ...config }.thresholds!;
+
+  for (const summary of summaries) {
+    // 检测失败率上升
+    if (summary.failRate > thresholds.failRate! && summary.recentTrend === 'rising') {
+      anomalies.push({
+        type: 'rising_fail_rate',
+        constraintId: summary.constraintId,
+        level: summary.level,
+        message: `约束 ${summary.constraintId} 失败率 ${Math.round(summary.failRate * 100)}% 且趋势上升`,
+        data: {
+          currentRate: summary.failRate,
+          threshold: thresholds.failRate!,
+          trend: 'rising',
+        },
+        detectedAt: Date.now(),
+        suggestedAction: 'diagnose',
+      });
+    }
+
+    // 检测低通过率
+    if (summary.passRate < 0.3) {
+      anomalies.push({
+        type: 'low_pass_rate',
+        constraintId: summary.constraintId,
+        level: summary.level,
+        message: `约束 ${summary.constraintId} 通过率 ${Math.round(summary.passRate * 100)}%，低于 30%`,
+        data: {
+          currentRate: summary.passRate,
+          threshold: 0.3,
+          trend: summary.recentTrend,
+        },
+        detectedAt: Date.now(),
+        suggestedAction: 'adjust_threshold',
+      });
+    }
+  }
+
+  return anomalies;
+}
+
+/**
  * Trace 分析器
  *
  * 使用方式：
@@ -59,54 +211,12 @@ export class TraceAnalyzer {
    * 生成统计汇总
  *
    * 纯计算，零 Token 成本
+   *
+   * ADR-0020：判定本体在模块级 `summarizeTraces()`，此处只是类壳转发
+   * （studio 经类消费的面逐字不动）。
    */
   summarize(traces: ExecutionTrace[]): TraceSummary[] {
-    // 按约束 ID 分组
-    const grouped = groupByKey(traces, t => t.constraintId);
-
-    const summaries: TraceSummary[] = [];
-
-    for (const [constraintId, group] of grouped) {
-      // 提取层级（从第一条 trace）
-      const level = group[0].level;
-
-      // 计算时间范围
-      const timeRange = timeRangeOf(group.map(t => t.timestamp));
-
-      // 单次遍历计算核心统计（skip 单独计数，不计入 pass/fail 率分母，ADR-0001）
-      const totalChecks = group.length;
-      let passCount = 0, failCount = 0, ignoreCount = 0, skipCount = 0;
-      for (const t of group) {
-        if (t.result === 'pass') passCount++;
-        else if (t.result === 'fail') failCount++;
-        else if (t.result === 'skip') skipCount++;
-        if (t.userAction === 'ignore') ignoreCount++;
-      }
-
-      // 计算比率（分母 = 实际评估次数，skip 未评估不计入）
-      const evaluatedChecks = totalChecks - skipCount;
-      const passRate = evaluatedChecks > 0 ? passCount / evaluatedChecks : 0;
-      const failRate = evaluatedChecks > 0 ? failCount / evaluatedChecks : 0;
-
-      // 计算趋势
-      const recentTrend = this.calculateTrend(group);
-
-      summaries.push({
-        constraintId,
-        level,
-        timeRange,
-        totalChecks,
-        passCount,
-        failCount,
-        skipCount,
-        ignoreCount,
-        passRate,
-        failRate,
-        recentTrend,
-      });
-    }
-
-    return summaries;
+    return summarizeTraces(traces);
   }
 
   /**
@@ -148,48 +258,12 @@ export class TraceAnalyzer {
    * 检测异常
    *
    * 基于阈值检测异常模式
+   *
+   * ADR-0020：判定本体在模块级 `detectTraceAnomalies()`（阈值经参数传入），
+   * 此处只是类壳转发。
    */
   detectAnomalies(summaries: TraceSummary[]): TraceAnomaly[] {
-    const anomalies: TraceAnomaly[] = [];
-    const thresholds = this.config.thresholds!;
-
-    for (const summary of summaries) {
-      // 检测失败率上升
-      if (summary.failRate > thresholds.failRate! && summary.recentTrend === 'rising') {
-        anomalies.push({
-          type: 'rising_fail_rate',
-          constraintId: summary.constraintId,
-          level: summary.level,
-          message: `约束 ${summary.constraintId} 失败率 ${Math.round(summary.failRate * 100)}% 且趋势上升`,
-          data: {
-            currentRate: summary.failRate,
-            threshold: thresholds.failRate!,
-            trend: 'rising',
-          },
-          detectedAt: Date.now(),
-          suggestedAction: 'diagnose',
-        });
-      }
-
-      // 检测低通过率
-      if (summary.passRate < 0.3) {
-        anomalies.push({
-          type: 'low_pass_rate',
-          constraintId: summary.constraintId,
-          level: summary.level,
-          message: `约束 ${summary.constraintId} 通过率 ${Math.round(summary.passRate * 100)}%，低于 30%`,
-          data: {
-            currentRate: summary.passRate,
-            threshold: 0.3,
-            trend: summary.recentTrend,
-          },
-          detectedAt: Date.now(),
-          suggestedAction: 'adjust_threshold',
-        });
-      }
-    }
-
-    return anomalies;
+    return detectTraceAnomalies(summaries, this.config);
   }
 
   /**
@@ -217,46 +291,6 @@ export class TraceAnalyzer {
 
       return summary;
     });
-  }
-
-  /**
-   * 计算趋势
- *
-   * 对比前半段和后半段的通过率
-   */
-  private calculateTrend(traces: ExecutionTrace[]): 'stable' | 'rising' | 'falling' {
-    if (traces.length < MIN_TREND_SAMPLES) {
-      return 'stable';
-    }
-
-    // 分成前后两半（按时间排序）
-    const [firstHalf, secondHalf] = splitByTime(traces);
-
-    // 计算前半段和后半段的通过率
-    const firstPassRate = this.calcPassRate(firstHalf);
-    const secondPassRate = this.calcPassRate(secondHalf);
-
-    // 计算变化
-    const delta = secondPassRate - firstPassRate;
-
-    // 判断趋势（变化 > 5% 才算显著）
-    if (delta > 0.05) {
-      return 'rising';
-    } else if (delta < -0.05) {
-      return 'falling';
-    } else {
-      return 'stable';
-    }
-  }
-
-  /**
-   * 计算通过率（skip 未评估，不计入分母）
-   */
-  private calcPassRate(traces: ExecutionTrace[]): number {
-    const evaluated = traces.filter(t => t.result !== 'skip');
-    if (evaluated.length === 0) return 0;
-    const passCount = evaluated.filter(t => t.result === 'pass').length;
-    return passCount / evaluated.length;
   }
 
   /**

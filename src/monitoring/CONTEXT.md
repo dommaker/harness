@@ -5,12 +5,12 @@
 
 ## 核心导出
 - `TraceCollector` — 执行追踪收集（append-only JSONL，`.harness/logs/traces.log`）。读入口两个：`readReport(filter?)` 报告入口（返回 `{ traces, skippedLines }`，harness#100）与 `read()/readRecent()/readByConstraint()` 兼容包装（#82 裁决 4 冻结的签名，丢计数）
-- `TraceAnalyzer` — 追踪统计分析 + 异常检测（共用 analyzer-base 纯函数）。`analyzeRecentReport(hours)` 带坏行数，`analyzeRecent()/analyzeConstraint()` 仍返回 `TraceSummary[]`
+- `TraceAnalyzer` — 追踪统计分析 + 异常检测（共用 analyzer-base 纯函数）。`analyzeRecentReport(hours)` 带坏行数，`analyzeRecent()/analyzeConstraint()` 仍返回 `TraceSummary[]`。**ADR-0020**：`summarize`/`detectAnomalies` 的判定本体是 trace-analyzer.ts 的模块级纯函数 `summarizeTraces(traces)` / `detectTraceAnomalies(summaries, config?)`（阈值经参数传入，不再是实例状态），类壳只转发——类壳是 studio 的运行时消费面（`new TraceAnalyzer(c)` + `analyzeRecentReport`/`detectAnomalies`，签名逐字不动），已持有数据的消费端直调纯函数。两函数**不进包根导出**（ADR-0003 零扩张），仓内经相对 import
 - `ContextTracker` — LLM 调用上下文使用快照记录
 
 ## 依赖关系
 - 依赖 `src/types/trace` ExecutionTrace 类型
-- 消费者：`src/cli/commands/{check,report}` 与 `src/hooks/bootstrap`——组合根经 `getTraceCollector()` 把收集器注入 `ConstraintChecker` 构造参数（harness#88）；`status` 另按 projectPath 自建收集器/分析器
+- 消费者：`src/cli/commands/{check,report}` 与 `src/hooks/bootstrap`——组合根经 `getTraceCollector()` 把收集器注入 `ConstraintChecker` 构造参数（harness#88）；`status` 按 projectPath 直读读链正本后**直调模块级纯函数**，不构造 collector/类壳（ADR-0020：collector 构造函数的 mkdir 副作用就此退出该路径）
 - core 不再依赖本模块（方向由 eslint no-restricted-imports 锁死，`src/__tests__/layering.test.ts` 守卫）
 
 ## 约定

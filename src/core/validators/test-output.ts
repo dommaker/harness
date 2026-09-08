@@ -18,6 +18,12 @@
  *
  * extractFailures 的正则、分支顺序、返回形状逐字迁移自 ADR-0012；仍保持原样的已知粗糙处：
  * - 一次跑完收集所有失败（首个失败即定的编排）→ #93 范围外，另票
+ *
+ * PR #117 实发修正（2026-09-08）：四个 runner 正则由「可跨行」收紧为行首锚定/行内匹配。
+ * 原 mocha 正则 /\d+\)\s+(.+?):/g 的 \s+ 跨行——绿色运行的 console 噪音里一行以
+ * 数字+")"结尾（stack 帧 checker.ts:213:23)、init 日志 (v1.3.0)）、下一行含 ":"，
+ * 就被误捕为失败用例，governance 门禁对全绿 npm test 输出误判 24 条失败（exit 0 遭
+ * judgeTestRun 文本否决）。jest ✕ / pytest FAILED / go --- FAIL: 的 \s+ 同理收紧。
  */
 
 /**
@@ -26,26 +32,27 @@
 export function extractFailures(output: string): string[] {
   const failures: string[] = [];
 
-  // Jest 格式
-  const jestMatches = output.matchAll(/✕\s+(.+?)\s+\(/g);
+  // Jest 格式（✕ 与用例名同行；\s 不跨行，防把下一行日志/堆栈捕进来）
+  const jestMatches = output.matchAll(/✕[ \t]+([^\n]+?)[ \t]+\(/g);
   for (const match of jestMatches) {
     if (match[1]) failures.push(match[1]);
   }
 
-  // Mocha 格式
-  const mochaMatches = output.matchAll(/\d+\)\s+(.+?):/g);
+  // Mocha 格式（行首锚定：「N) 标题:」必须是一行的开头形状；
+  // 旧写法不锚行首且 \s+ 跨行，绿输出的 console 噪音会被误判——见文件头 PR #117 段）
+  const mochaMatches = output.matchAll(/^[ \t]*\d+\)[ \t]+([^\n]+?):/gm);
   for (const match of mochaMatches) {
     if (match[1]) failures.push(match[1]);
   }
 
   // pytest 格式
-  const pytestMatches = output.matchAll(/FAILED\s+(.+?)::/g);
+  const pytestMatches = output.matchAll(/FAILED[ \t]+([^\n]+?)::/g);
   for (const match of pytestMatches) {
     if (match[1]) failures.push(match[1]);
   }
 
   // Go test 格式
-  const goMatches = output.matchAll(/--- FAIL:\s+(.+?)\s+\(/g);
+  const goMatches = output.matchAll(/--- FAIL:[ \t]+([^\n]+?)[ \t]+\(/g);
   for (const match of goMatches) {
     if (match[1]) failures.push(match[1]);
   }

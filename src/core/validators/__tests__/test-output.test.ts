@@ -66,6 +66,26 @@ const JEST_FAILURES_WITH_STACK = `FAIL src/app.test.ts
 Test Suites: 1 failed, 1 total
 `;
 
+/**
+ * PR #117 实发样本（2026-09-08）：全绿 jest 输出混 console 噪音——init/sync-docs 测试
+ * 直接打印的 ✅ 日志行（行尾 (v1.0.0)）与失败路径测试的 stack trace（行尾 :213:23)）。
+ * 行尾「数字+)」+ 下一行含 ":" 是旧 mocha 正则（\s+ 跨行）的诱饵：它在同形状的真实输出
+ * 上捕出 24 条假失败，governance 门禁因此对 exit 0 的绿色 npm test 误判失败。
+ */
+const JEST_GREEN_WITH_CONSOLE_NOISE = `PASS src/cli/commands/__tests__/init-injection.test.ts
+✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v1.0.0)
+✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v1.0.0)
+✅ 已更新 CLAUDE.md 治理约束 (v1.0.0)
+PASS src/__tests__/skip-semantics.test.ts
+      at Object.evaluate (src/core/constraints/checkers/docs-freshness.ts:100:15)
+      at ConstraintChecker.checkPrecondition (src/core/constraints/checker.ts:213:23)
+      at Object.<anonymous> (src/__tests__/skip-semantics.test.ts:152:36)
+PASS src/failure/__tests__/recorder.test.ts
+
+Test Suites: 156 passed, 156 total
+Tests:       7 skipped, 2182 passed, 2189 total
+`;
+
 /** mocha 单行形状：编号 + 套件 + 标题同行，末尾带冒号（正则认的形状） */
 const MOCHA_ONE_LINE = `  1) Account "should open":
      AssertionError: expected false to be true
@@ -184,9 +204,9 @@ type FailuresCase = { name: string; output: string; expected: string[] };
 const FAILURES_CASES: FailuresCase[] = [
   { name: 'jest ✕ 行 → 两个用例名', output: JEST_FAILURES, expected: ['renders title', 'handles click'] },
   {
-    name: '⚠ jest 带堆栈行 → 未锚定行首的 mocha 正则跨行误捕 "Test Suites"',
+    name: 'jest 带堆栈行 → 只有 ✕ 用例名（旧跨行 mocha 误捕 "Test Suites"，PR #117 已修）',
     output: JEST_FAILURES_WITH_STACK,
-    expected: ['renders title', 'Test Suites'],
+    expected: ['renders title'],
   },
   {
     name: 'mocha 单行形状 → 套件 + 标题',
@@ -195,9 +215,14 @@ const FAILURES_CASES: FailuresCase[] = [
   },
   { name: '⚠ mocha 10 两行形状 → 识别不到任何失败', output: MOCHA_TWO_LINE, expected: [] },
   {
-    name: '⚠ mocha 两行 + 堆栈 → 捕到的是堆栈帧而非测试名',
+    name: 'mocha 两行 + 堆栈 → []（旧跨行误捕堆栈帧 "at processImmediate (node"，PR #117 已修）',
     output: MOCHA_TWO_LINE_WITH_STACK,
-    expected: ['at processImmediate (node'],
+    expected: [],
+  },
+  {
+    name: '全绿 jest 输出混 console 噪音（行尾数字+")" 跨行诱饵）→ []（PR #117 实发误否决）',
+    output: JEST_GREEN_WITH_CONSOLE_NOISE,
+    expected: [],
   },
   {
     name: '⚠ pytest 节点 id 在首个 :: 前截断 → 同文件多条失败重复且丢测试名',
@@ -284,6 +309,12 @@ const JUDGE_CASES: JudgeCase[] = [
   },
   { name: 'exit 0 + playwright 全过 → true', exitCode: 0, output: PW_PASS, expected: true },
   { name: 'exit 0 + 通用 PASS 行 → true', exitCode: 0, output: GENERIC_PASS, expected: true },
+  {
+    name: 'exit 0 + 全绿输出混 console 噪音 → true（PR #117 实发：extractFailures 跨行误捕曾否决绿色输出）',
+    exitCode: 0,
+    output: JEST_GREEN_WITH_CONSOLE_NOISE,
+    expected: true,
+  },
   // ── allowPartialPass 的新位置：只作用于文本否决这一维 ──
   {
     name: 'exit 0 + jest ✕ 清单 + allowPartialPass → true（部分通过 = 放弃文本否决）',

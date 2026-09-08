@@ -10,8 +10,8 @@
  *   studio/.harness/knowledge/                 (知识新鲜度)
  *   ~/.claude/projects/-root-projects/memory/  (规则库)
  *
- * 模型状态: ~/.claude/user-model-state.json
- * 画像输出: ~/.claude/projects/-root-projects/memory/user_profile.md
+ * 模型状态: $HARNESS_UUM_STATE_FILE，默认 ~/.claude/user-model-state.json
+ * 画像输出: $HARNESS_UUM_PROFILE_FILE，默认 ~/.claude/projects/-root-projects/memory/user_profile.md
  *
  * 工单 19-C：transcript 解析/纠正模式/相似度收敛至 cli/session-mining/。
  */
@@ -50,15 +50,30 @@ interface ModelState {
   evolutionLog: Array<{ date: string; change: string }>;
 }
 
-const STATE_FILE = path.join(os.homedir(), '.claude', 'user-model-state.json');
-const PROFILE_FILE = path.join(os.homedir(), '.claude', 'projects', '-root-projects', 'memory', 'user_profile.md');
+// 路径集中解析（harness#116）：默认值保持原行为，env 可覆盖（多工作区/测试隔离）。
+// 运行时解析而非模块加载期常量，保证 env 设置后生效。
+export interface UserModelPaths {
+  stateFile: string;
+  profileFile: string;
+}
+
+export function resolveUserModelPaths(env: NodeJS.ProcessEnv = process.env): UserModelPaths {
+  const home = os.homedir();
+  return {
+    stateFile: env.HARNESS_UUM_STATE_FILE
+      || path.join(home, '.claude', 'user-model-state.json'),
+    profileFile: env.HARNESS_UUM_PROFILE_FILE
+      || path.join(home, '.claude', 'projects', '-root-projects', 'memory', 'user_profile.md'),
+  };
+}
 
 export async function updateUserModel(options: UpdateUserModelOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const transcriptDir = process.env.CLAUDE_TRANSCRIPTS_DIR
     || path.join(os.homedir(), '.claude', 'projects', '-root--claude');
 
   // 1. Load previous state
-  const state = loadState();
+  const paths = resolveUserModelPaths();
+  const state = loadState(paths);
 
   // 2. Scan new data
   const newSessions = findNewSessions(transcriptDir, state.sessionsProcessed, options.days);
@@ -90,8 +105,8 @@ export async function updateUserModel(options: UpdateUserModelOptions, io: Comma
       state.sessionsProcessed = state.sessionsProcessed.slice(-200);
     }
 
-    saveState(state);
-    updateProfile(state);
+    saveState(state, paths);
+    updateProfile(state, paths);
   }
 
   // 6. Output
@@ -107,10 +122,10 @@ export async function updateUserModel(options: UpdateUserModelOptions, io: Comma
 
 // ── State I/O ──
 
-function loadState(): ModelState {
+function loadState(paths: UserModelPaths): ModelState {
   try {
-    if (fs.existsSync(STATE_FILE)) {
-      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    if (fs.existsSync(paths.stateFile)) {
+      return JSON.parse(fs.readFileSync(paths.stateFile, 'utf-8'));
     }
   } catch {}
   return {
@@ -123,11 +138,11 @@ function loadState(): ModelState {
   };
 }
 
-function saveState(state: ModelState): void {
+function saveState(state: ModelState, paths: UserModelPaths): void {
   try {
-    const dir = path.dirname(STATE_FILE);
+    const dir = path.dirname(paths.stateFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+    fs.writeFileSync(paths.stateFile, JSON.stringify(state, null, 2), 'utf-8');
   } catch {}
 }
 
@@ -373,9 +388,9 @@ function applySignals(state: ModelState, signals: SessionSignals[], mergedConcep
 
 // ── Profile update ──
 
-function updateProfile(state: ModelState): void {
+function updateProfile(state: ModelState, paths: UserModelPaths): void {
   try {
-    let content = fs.readFileSync(PROFILE_FILE, 'utf-8');
+    let content = fs.readFileSync(paths.profileFile, 'utf-8');
 
     // Replace Derived Rules section
     const derivedStart = '## Derived Rules';
@@ -410,7 +425,7 @@ function updateProfile(state: ModelState): void {
       }
     }
 
-    fs.writeFileSync(PROFILE_FILE, content, 'utf-8');
+    fs.writeFileSync(paths.profileFile, content, 'utf-8');
   } catch (e) {
     // Profile file might not exist yet — skip
   }

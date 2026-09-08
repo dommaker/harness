@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
-import { updateUserModel } from '../update-user-model';
+import { updateUserModel, resolveUserModelPaths } from '../update-user-model';
 import { readTranscriptSessions, type MinedSession } from '../../session-mining';
 
 const TEST_HOME = '/tmp/harness-uum-test-home';
@@ -54,6 +54,7 @@ const mockReadTranscriptSessions = readTranscriptSessions as jest.MockedFunction
 >;
 
 const STATE_FILE = path.join(TEST_HOME, '.claude', 'user-model-state.json');
+const PROFILE_FILE = path.join(TEST_HOME, '.claude', 'projects', '-root-projects', 'memory', 'user_profile.md');
 
 function todayStr(offsetDays = 0): string {
   return new Date(Date.now() - offsetDays * 86_400_000).toISOString().slice(0, 10);
@@ -89,6 +90,39 @@ describe('update-user-model command', () => {
 
   afterEach(() => {
     delete process.env.CLAUDE_TRANSCRIPTS_DIR;
+    delete process.env.HARNESS_UUM_STATE_FILE;
+    delete process.env.HARNESS_UUM_PROFILE_FILE;
+  });
+
+  // 路径解析（harness#116）：默认值保持原行为，env 覆盖生效
+  test('resolveUserModelPaths 默认：homedir 下的原路径（现行为不变）', () => {
+    expect(resolveUserModelPaths({})).toEqual({
+      stateFile: STATE_FILE,
+      profileFile: PROFILE_FILE,
+    });
+  });
+
+  test('resolveUserModelPaths env 覆盖：HARNESS_UUM_STATE_FILE / HARNESS_UUM_PROFILE_FILE', () => {
+    expect(resolveUserModelPaths({
+      HARNESS_UUM_STATE_FILE: '/custom/state.json',
+      HARNESS_UUM_PROFILE_FILE: '/custom/profile.md',
+    })).toEqual({
+      stateFile: '/custom/state.json',
+      profileFile: '/custom/profile.md',
+    });
+  });
+
+  test('env 覆盖端到端：state 落 env 指定路径，不写默认路径', async () => {
+    const customState = path.join(TEST_HOME, 'custom', 'state.json');
+    process.env.HARNESS_UUM_STATE_FILE = customState;
+    mockReadTranscriptSessions.mockReturnValue([mkSession({ id: 'session-a' })]);
+
+    await updateUserModel({}, io);
+
+    expect(fs.existsSync(customState)).toBe(true);
+    expect(fs.existsSync(STATE_FILE)).toBe(false);
+    const state = JSON.parse(fs.readFileSync(customState, 'utf-8'));
+    expect(state.sessionsProcessed).toContain('session-a');
   });
 
   test('无新会话：提示 No new sessions to process', async () => {

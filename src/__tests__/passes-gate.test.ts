@@ -33,34 +33,6 @@ describe('PassesGate', () => {
     }
   });
 
-  describe('setPasses', () => {
-    it('设置为 false 应该直接允许', async () => {
-      const result = await gate.setPasses('task-1', false, tempDir);
-      
-      expect(result.allowed).toBe(true);
-      expect(result.testResult?.passed).toBe(false);
-    });
-
-    it('设置为 true 应该运行测试', async () => {
-      const result = await gate.setPasses('task-2', true, tempDir, {
-        id: 'task-2',
-      });
-      
-      // 测试命令是 echo "1 passed"，所以应该通过
-      expect(result.allowed).toBe(true);
-      expect(result.testResult?.command).toContain('npm test');
-    });
-
-    it('禁用时应该允许所有设置', async () => {
-      const disabledGate = createPassesGate({ enabled: false });
-      
-      const result = await disabledGate.setPasses('task-3', true, tempDir);
-      
-      expect(result.allowed).toBe(true);
-      expect(result.attempts).toBe(0);
-    });
-  });
-
   describe('runTests', () => {
     // 执行根由调用方传入（#95）：tempDir 的 package.json 测试命令是 echo，不再跑真实套件
     it('应该返回测试结果', async () => {
@@ -69,15 +41,6 @@ describe('PassesGate', () => {
       expect(result.passed).toBe(true);
       expect(result.passedTests).toBe(1);
       expect(result.duration).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  describe('detectTestCommand', () => {
-    it('应该检测 npm test', async () => {
-      // package.json 有 test script
-      const result = await gate.setPasses('task-4', true, tempDir);
-      
-      expect(result.testResult?.command).toContain('npm');
     });
   });
 
@@ -153,70 +116,13 @@ describe('PassesGate', () => {
       expect(await detectTestCommand(emptyDir)).toBeUndefined();
     });
 
-    it('探测失败时 runTests 与 setPasses 双路径 fail-closed', async () => {
+    it('探测失败时 runTests fail-closed', async () => {
       const emptyDir = join(detectDir, 'fail-closed');
       mkdirSync(emptyDir, { recursive: true });
 
       const runResult = await gate.runTests(emptyDir);
       expect(runResult.passed).toBe(false);
       expect(runResult.message).toBe('未检测到测试命令');
-
-      const setResult = await gate.setPasses('task-nocmd', true, emptyDir);
-      expect(setResult.allowed).toBe(false);
-      expect(setResult.testResult?.passed).toBe(false);
-      expect(setResult.testResult?.output).toBe('未检测到测试命令');
-    });
-  });
-
-  describe('checkTestFileChanges', () => {
-    it('应该检测测试文件变更', async () => {
-      // 无 git 变更时返回空数组
-      const changes = await gate.checkTestFileChanges(tempDir);
-      
-      expect(Array.isArray(changes)).toBe(true);
-    });
-  });
-
-  describe('getTestResult', () => {
-    it('应该返回已存储的测试结果', async () => {
-      const result = await gate.setPasses('stored-task', true, tempDir);
-      
-      if (result.allowed && result.testResult) {
-        const stored = gate.getTestResult('stored-task');
-        expect(stored).toBeDefined();
-        expect(stored?.command).toContain('npm');
-      }
-    });
-
-    it('未存储任务应返回 undefined', () => {
-      const stored = gate.getTestResult('nonexistent-task');
-      expect(stored).toBeUndefined();
-    });
-  });
-
-  describe('测试失败重试', () => {
-    it('测试失败后应重试', async () => {
-      const retryDir = join(process.cwd(), 'temp-test-retry');
-      mkdirSync(retryDir, { recursive: true });
-      
-      writeFileSync(join(retryDir, 'package.json'), JSON.stringify({
-        name: 'retry-project',
-        scripts: { test: 'exit 1' },  // 总是失败
-      }));
-      
-      const retryGate = createPassesGate({
-        enabled: true,
-        maxRetries: 1,
-        retryDelay: 100,
-      });
-      
-      const result = await retryGate.setPasses('retry-task', true, retryDir);
-      
-      expect(result.allowed).toBe(false);
-      expect(result.attempts).toBeGreaterThan(1);
-      expect(result.error).toBeDefined();
-      
-      rmSync(retryDir, { recursive: true, force: true });
     });
   });
 
@@ -237,13 +143,13 @@ describe('PassesGate', () => {
       },
     });
 
-    it('setPasses 结果不带 coverage 字段', async () => {
+    it('runTests 结果不带 coverage 字段', async () => {
       const covGate = createPassesGate({ enabled: true, requireEvidence: false });
 
-      const result = await covGate.setPasses('cov-task', true, covDir);
+      const result = await covGate.runTests(covDir);
 
-      expect(result.testResult?.passed).toBe(true);
-      expect(result.testResult).not.toHaveProperty('coverage');
+      expect(result.passed).toBe(true);
+      expect(result).not.toHaveProperty('coverage');
     });
 
     it('TaskTestResult 公开类型面不再接受 coverage 字段', () => {

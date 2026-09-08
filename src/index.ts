@@ -114,29 +114,6 @@ export type {
 } from './types/cso';
 
 // ========================================
-// 会话启动 / 净室状态
-// ========================================
-export {
-  SessionStartup,
-  createSessionStartup,
-  DEFAULT_CODE_CHECKPOINTS,
-  MINIMAL_CHECKPOINTS,
-  CleanStateManager,
-  createCleanStateManager,
-} from './core/session';
-export type {
-  StartupCheckpoints,
-  StartupCheckpointType,
-  StartupCheckpointResult,
-  CleanStateConfig,
-  CleanStateResult,
-  DetectedBug,
-  TaskListJson,
-  TaskStepStatus,
-  SessionInfo,
-} from './types/session';
-
-// ========================================
 // Spec 验证（已接线的 spec 故事：validator + SpecAcceptanceGate）
 // ========================================
 export { SpecValidator, validateSpec, validateAllSpecs } from './core/spec/validator';
@@ -250,21 +227,17 @@ export type {
 } from './failure';
 
 // ========================================
-// 上下文管理（Token 预算 + 会话压缩 + 知识注入）
+// 上下文管理（Token 预算 + 会话管理 + 知识注入）
 // ========================================
 export {
-  AdaptiveTokenBudget,
   TokenBudget,
   TokenEstimator,
-  DEFAULT_COMPACTION_CONFIG,
-  SessionCompaction,
   SessionManager,
   KnowledgeInjector,
 } from './context';
 export type {
   CompactionConfig,
   CompactionLevel,
-  CompactionResult,
   ContextSource,
   ContextSourceType,
   ContextUsageSnapshot,
@@ -290,7 +263,6 @@ export {
   KnowledgeLinter,
   ColdStartImporter,
   KnowledgeHealthScorer,
-  KnowledgeLifecycleHooks,
   KnowledgeAudit,
   migrateKnowledgeEntries,
   extractCodeStructure,

@@ -1,7 +1,7 @@
 /**
  * 上下文管理模块（ADR-0003：显式清单，禁 export *）
  *
- * Token 预算 + 会话压缩 + 知识注入
+ * Token 预算 + 会话管理 + 知识注入
  */
 
 // 类型
@@ -17,14 +17,9 @@ export type {
   SessionHandle,
   SessionMessage,
 } from './types';
-export { DEFAULT_COMPACTION_CONFIG } from './types';
 
 // Token 预算
-export { AdaptiveTokenBudget, TokenBudget, TokenEstimator } from './token-budget';
-
-// 会话压缩
-export { SessionCompaction } from './compaction';
-export type { CompactionResult } from './compaction';
+export { TokenBudget, TokenEstimator } from './token-budget';
 
 // 会话管理
 export { SessionManager } from './session-manager';

@@ -19,15 +19,6 @@ export interface CompactionConfig {
   fallbackStrategy: 'truncate-middle' | 'head-drop' | 'retry-with-clamp';
 }
 
-export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
-  triggerRatio: 0.8,
-  level: 'eviction',
-  preserveToolCallPairs: true,
-  structuredSummary: true,
-  maxSummaryTokens: 2000,
-  fallbackStrategy: 'truncate-middle',
-};
-
 export interface SessionMessage {
   role: 'user' | 'assistant' | 'tool';
   content: string;

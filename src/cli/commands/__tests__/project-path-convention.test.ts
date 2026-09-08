@@ -7,9 +7,11 @@
  *
  * 本文件是这条约定的机器可检面，三道闸：
  * 1. CLI 入口层：cwd 只能以 `xxx || process.cwd()` 的兜底形状出现，例外逐个点名并记理由
- * 2. 下游层（core / gates / context / monitoring / hooks）：cwd 站点集合冻结，
- *    新增即失败——要么把根传下去，要么在此记下豁免理由
- * 3. `xxxPath: '相对路径'` 默认值同理冻结（acceptance 的 `tasksPath: './tasks.yml'` 就是这一类）
+ * 2. 下游层（= src 减 cli，含 core / gates / context / monitoring / hooks 等）：cwd 站点**逐行**冻结
+ *    （harness#98，不再只冻文件键集——豁免文件内新增站点/行变形同样失败），
+ *    要么把根传下去，要么在此记下豁免理由
+ * 3. 相对路径默认值同理冻结（harness#98 收紧：对象字面量 `xxxPath: '相对'` 之外，
+ *    参数默认值形 `xxxPath = '相对'`（含类型标注）与模板字面量同罪；扫描域 = 整个下游层）
  *
  * 冻结集合还要求**每条豁免仍然成立**（站点消失却不删条目 → 同样失败），豁免不会烂成化石。
  * 「根参数已传入却又取 cwd」这类静态看不出的漂移，由 project-path-anchoring.test.ts 的真实 IO 行为用例守。
@@ -83,28 +85,86 @@ const CLI_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: string }> = 
  * 下游豁免的共同理由：这些是**库层公开 API 的可选根参数默认值**（调用方没给根时的缺省），
  * 不是「根已经传进来了，取 IO 时又绕回 cwd」。core 不能 import cli，兜底只能留在各自入口，
  * 故冻结而非删除；新增站点必须在此逐个点名并单独说明。
+ *
+ * harness#98：冻结粒度从文件键集收紧到**行内容**——已豁免文件内悄悄新增 cwd 站点
+ * （不动键集）曾是绕过通道，现在新增行/行变形都会顶失败。
  */
-const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, string> = {
-  'src/context/session-manager.ts': '构造参数 basePath 缺省（会话存储根，CLI 已显式传 projectPath）',
-  'src/core/constraints/checker.ts': 'check 上下文缺 projectPath 时的根兜底（3 处同一形状）',
-  'src/core/constraints/checkers/types.ts': 'checker 环境的根兜底（context.projectPath 可选）',
-  'src/core/constraints/context-builder.ts': 'buildCheckEnv 的 options.projectPath 缺省兜底（2 处）',
-  'src/core/constraints/usage-report.ts': 'projectRoot 形参默认值（库层可选根）',
-  'src/core/effective-constraints.ts': '生效集三函数 projectRoot 形参默认值（库层可选根，JSDoc 已声明）',
-  'src/core/project-config-loader.ts': 'config 加载器 projectPath 构造参数缺省兜底',
-  'src/core/spec/validator.ts': 'validateAll 的可选 projectPath 兜底（其相对 schemaPath 默认值见闸 3 豁免）',
-  'src/gates/checker-gate.ts': 'GateContext.projectPath 缺省兜底（门禁适配器的根入口）',
-  'src/gates/effective-gates.ts': 'projectRoot 形参默认值（库层可选根）',
-  'src/hooks/bootstrap.ts': 'bootstrapHarness 的可选 projectPath 兜底（组合根入口，2 处）',
-  'src/monitoring/context-tracker.ts': 'basePath 构造参数缺省兜底',
+const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: string }> = {
+  'src/context/session-manager.ts': {
+    lines: ['this.basePath = basePath || process.cwd();'],
+    reason: '构造参数 basePath 缺省（会话存储根，CLI 已显式传 projectPath）',
+  },
+  'src/core/constraints/checker.ts': {
+    lines: [
+      'const projectPath = context.projectPath || process.cwd();',
+      'const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());',
+      'const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());',
+    ],
+    reason: 'check 上下文缺 projectPath 时的根兜底（3 处同一形状）',
+  },
+  'src/core/constraints/checkers/types.ts': {
+    lines: ['const projectPath = context.projectPath || process.cwd();'],
+    reason: 'checker 环境的根兜底（context.projectPath 可选）',
+  },
+  'src/core/constraints/context-builder.ts': {
+    lines: [
+      'const projectPath = options.projectPath || process.cwd();',
+      'const projectPath = options.projectPath || process.cwd();',
+    ],
+    reason: 'buildCheckEnv 的 options.projectPath 缺省兜底（2 处）',
+  },
+  'src/core/constraints/usage-report.ts': {
+    lines: ['projectRoot: string = process.cwd(),'],
+    reason: 'projectRoot 形参默认值（库层可选根）',
+  },
+  'src/core/effective-constraints.ts': {
+    lines: [
+      'projectRoot: string = process.cwd(),',
+      'projectRoot: string = process.cwd(),',
+      'export function lintEffectiveConfig(projectRoot: string = process.cwd()): EffectiveConfigLint {',
+    ],
+    reason: '生效集三函数 projectRoot 形参默认值（库层可选根，JSDoc 已声明）',
+  },
+  'src/core/project-config-loader.ts': {
+    lines: ['this.projectPath = projectPath || process.cwd();'],
+    reason: 'config 加载器 projectPath 构造参数缺省兜底',
+  },
+  'src/core/spec/validator.ts': {
+    lines: ['const cwd = projectPath || process.cwd();'],
+    reason: 'validateAll 的可选 projectPath 兜底（其相对 schemaPath 默认值见闸 3 豁免）',
+  },
+  'src/gates/checker-gate.ts': {
+    lines: ['const projectPath = ctx.projectPath || process.cwd();'],
+    reason: 'GateContext.projectPath 缺省兜底（门禁适配器的根入口）',
+  },
+  'src/gates/effective-gates.ts': {
+    lines: ['export function getEffectiveGates(projectRoot: string = process.cwd()): Gate[] {'],
+    reason: 'projectRoot 形参默认值（库层可选根）',
+  },
+  'src/hooks/bootstrap.ts': {
+    lines: [
+      'const resolvedPath = projectPath || process.cwd();',
+      'const resolvedPath = projectPath || process.cwd();',
+    ],
+    reason: 'bootstrapHarness 的可选 projectPath 兜底（组合根入口，2 处）',
+  },
+  'src/monitoring/context-tracker.ts': {
+    lines: ['const base = basePath || process.cwd();'],
+    reason: 'basePath 构造参数缺省兜底',
+  },
 };
 
 // ========================================
-// 闸 3：core/gates 的相对路径默认值
+// 闸 3：下游层的相对路径默认值
 // ========================================
 
-/** key 必须 camelCase 以 Path 结尾，值为相对字面量——这类默认值按 cwd 解析，即 #95 的病根形状 */
-const RELATIVE_PATH_DEFAULT = /\b\w+Path\s*:\s*'(?!\/)([^']+)'/;
+/**
+ * key 必须 camelCase 以 Path 结尾，值为相对字面量——这类默认值按 cwd 解析，即 #95 的病根形状。
+ * harness#98 收紧匹配形状（原为只认对象字面量 `xxxPath: '相对'`）：
+ * 参数默认值形 `xxxPath = '相对'`、带类型标注的 `xxxPath: string = '相对'`、模板字面量、
+ * 双引号形同罪（仓内 lint 不强制引号风格，三种引号都得认）。
+ */
+const RELATIVE_PATH_DEFAULT = /\b\w+Path\s*(?::\s*[^=,)]+?)?[:=]\s*['"`](?!\/)/;
 
 const RELATIVE_PATH_DEFAULT_EXEMPTIONS: Record<string, string> = {
   'src/core/spec/validator.ts':
@@ -133,11 +193,13 @@ describe('projectPath 传递约定（harness#95）', () => {
   });
 
   describe('闸 2：下游层不得二次取 cwd', () => {
-    it('下游 cwd 站点集合 = 冻结豁免表（新增即失败；站点消失却不删条目也失败）', () => {
+    it('下游 cwd 站点 = 冻结豁免表且逐行一致（新增文件/新增行/行变形/豁免化石都失败）', () => {
       const sites = cwdSites(downstreamFiles);
 
       expect([...sites.keys()].sort()).toEqual(Object.keys(DOWNSTREAM_CWD_EXEMPTIONS).sort());
-      expect(sites.size).toBe(Object.keys(DOWNSTREAM_CWD_EXEMPTIONS).length);
+      for (const [rel, exemption] of Object.entries(DOWNSTREAM_CWD_EXEMPTIONS)) {
+        expect({ rel, lines: sites.get(rel) }).toEqual({ rel, lines: exemption.lines });
+      }
     });
 
     it('PassesGate 执行侧不再取 cwd（站点 1 的收口形状：workDir 由调用方传入）', () => {
@@ -149,9 +211,9 @@ describe('projectPath 传递约定（harness#95）', () => {
   });
 
   describe('闸 3：相对路径默认值不再按 cwd 解析', () => {
-    it('core/gates 里 xxxPath: 相对字面量 的站点 = 冻结豁免表', () => {
+    it('下游层（= src 减 cli）的相对字面量路径默认值 = 冻结豁免表', () => {
       const hits = new Set<string>();
-      for (const file of listTsFiles(path.join(SRC_ROOT, 'core')).concat(listTsFiles(path.join(SRC_ROOT, 'gates')))) {
+      for (const file of downstreamFiles) {
         if (codeLines(file).some(line => RELATIVE_PATH_DEFAULT.test(line))) hits.add(repoPath(file));
       }
 

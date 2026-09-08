@@ -37,6 +37,30 @@ describe('createCheckerGate', () => {
     expect(decision.result.message).toContain('跳过');
   });
 
+  // harness#119：CheckDetail 形状接入后，映射必须经 normalizeCheckOutcome——
+  // 写 `outcome !== false` 会把 { pass: false } 读成「不是 false」= 通过，deny 静默丢失
+  it('CheckDetail{pass:false} → deny，理由带出证据行', async () => {
+    const gate = createCheckerGate({
+      id: 'detail-fail',
+      evaluate: () => ({ pass: false, evidence: ['src/gone.ts'] }),
+    });
+    const decision = await gate.evaluate(ctx);
+    expect(decision.status).toBe('deny');
+    expect(decision.result.passed).toBe(false);
+    expect(decision.result.message).toContain('判定违规');
+    expect(decision.result.message).toContain('src/gone.ts');
+  });
+
+  it('CheckDetail{pass:true} + 提示证据 → abstain（提示不得变拦截）', async () => {
+    const gate = createCheckerGate({
+      id: 'detail-hint',
+      evaluate: () => ({ pass: true, evidence: ['仓库级漂移 1 项', 'src/drifted.ts'] }),
+    });
+    const decision = await gate.evaluate(ctx);
+    expect(decision.status).toBe('abstain');
+    expect(decision.result.message).toContain('通过');
+  });
+
   it('决策浅冻结（单调语义契约）', async () => {
     const gate = createCheckerGate(contextFlag('flag-freeze', () => true));
     const decision = await gate.evaluate(ctx);

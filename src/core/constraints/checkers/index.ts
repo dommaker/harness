@@ -80,5 +80,12 @@ export function registeredCheckCount(): number {
   return registry.size;
 }
 
-export { buildCheckEnv } from './types';
-export type { ConstraintCheck, CheckEnv, CheckOutcome, EvidenceProviders } from './types';
+export { buildCheckEnv, normalizeCheckOutcome } from './types';
+export type {
+  ConstraintCheck,
+  CheckEnv,
+  CheckOutcome,
+  CheckDetail,
+  NormalizedOutcome,
+  EvidenceProviders,
+} from './types';

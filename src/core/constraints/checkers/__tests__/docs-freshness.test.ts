@@ -6,16 +6,20 @@
  * 项目根由 src/test-setup/project-fixture 声明式构造（回收仍走 mkdtemp-cleanup）。
  */
 
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { docsFreshness } from '../docs-freshness';
-import { buildCheckEnv } from '../types';
+import { buildCheckEnv, normalizeCheckOutcome, type CheckOutcome } from '../types';
 import { collectSourceFiles } from '../../capabilities-reconcile';
 import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
 const TABLE_HEAD = '| 模块 | 文件 | 说明 |\n|------|------|------|\n';
+
+/** 证据行拼成单串，便于按路径断言（harness#119） */
+const evidenceText = (outcome: CheckOutcome): string =>
+  normalizeCheckOutcome(outcome).evidence.join('\n');
 
 function setupProject(name: string, files: string[]): string {
   return createProjectFixture({
@@ -66,10 +70,9 @@ describe('docs_freshness — 幽灵判定（文档→代码方向）', () => {
       dir,
       `${TABLE_HEAD}| old | src/old.ts | old |\n| deleted | src/deleted.ts | deleted |`
     );
-    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await docsFreshness.evaluate(makeEnv(dir))).toBe(false);
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('src/deleted.ts'));
-    errSpy.mockRestore();
+    const outcome = await docsFreshness.evaluate(makeEnv(dir));
+    expect(normalizeCheckOutcome(outcome).satisfied).toBe(false);
+    expect(evidenceText(outcome)).toContain('src/deleted.ts');
   });
 
   it('登记的目录条目已消失 → 失败（ADR-0009 口径从严，文件+目录都查）', async () => {
@@ -78,7 +81,9 @@ describe('docs_freshness — 幽灵判定（文档→代码方向）', () => {
       dir,
       `${TABLE_HEAD}| 核心 | src/core/ | 核心 |\n| 遗魂 | src/gone/ | 已删目录 |`
     );
-    expect(await docsFreshness.evaluate(makeEnv(dir))).toBe(false);
+    const outcome = await docsFreshness.evaluate(makeEnv(dir));
+    expect(normalizeCheckOutcome(outcome).satisfied).toBe(false);
+    expect(evidenceText(outcome)).toContain('src/gone/');
   });
 
   it('登记的目录条目仍存在 → 通过', async () => {
@@ -93,7 +98,9 @@ describe('docs_freshness — 幽灵判定（文档→代码方向）', () => {
       dir,
       `${TABLE_HEAD}| routes | src/agents/routes.ts | 活 |\n| 旧路由 | src/agent-configs/routes.ts | 已删 |`
     );
-    expect(await docsFreshness.evaluate(makeEnv(dir))).toBe(false);
+    const outcome = await docsFreshness.evaluate(makeEnv(dir));
+    expect(normalizeCheckOutcome(outcome).satisfied).toBe(false);
+    expect(evidenceText(outcome)).toContain('src/agent-configs/routes.ts');
   });
 });
 
@@ -112,6 +119,8 @@ describe('docs_freshness — 内置 Runner 检查（changelog/context）', () =>
       JSON.stringify({ name: 'x', version: '2.0.0' })
     );
     fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '## [1.0.0] - 2026-01-01\n\n- old\n');
-    expect(await docsFreshness.evaluate(makeEnv(dir))).toBe(false);
+    const outcome = await docsFreshness.evaluate(makeEnv(dir));
+    expect(normalizeCheckOutcome(outcome).satisfied).toBe(false);
+    expect(evidenceText(outcome)).toContain('1.0.0 !== package.json 版本 2.0.0');
   });
 });

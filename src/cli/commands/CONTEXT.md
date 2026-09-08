@@ -30,7 +30,7 @@ H5（#44）起：
 - 命令选项类型命名规范：XxxOptions
 - **本层是上行数据的注入方（harness#88）**：core 对 cli/gates/monitoring 零值导入，故 `check`/`report` 自己 `new ConstraintChecker(getTraceCollector())`（组合根接线 trace 记录器；用 `constraintChecker`/`getInstance()` 拿到的默认实例不写 trace），`sync-docs` 把 `COMMAND_DEFINITIONS` + `GATE_DEFINITIONS` 组装成 `CapabilityDefinitionSource` 注入 `capabilities-parser` 供能力清单计数
 - **projectPath 只在入口兜底一次，并传到每个 IO/执行点（harness#95）**：`-p/--project-path` 的 cwd 兜底唯一落点是命令模块入口（`const projectPath = options.projectPath || process.cwd()`）；往下每层只能收参数，**禁止再取一次 `process.cwd()`、也禁止用相对路径默认值**——两者都让 `-p` 半失效：执行/读写位置悄悄回到调用方 cwd，而 acceptance 的「无 tasks.yml 即跳过」本身就是 `passed:true`，于是失效表现为假绿。落地形状：执行/IO 根用**必传形参**表达（`PassesGate.runTests(workDir)`），门禁内的相对子路径锚到 projectPath：`ContractGate` 一直是 `path.join(context.projectPath, contractPath)`，`SpecAcceptanceGate` 的 tasksPath 随 #95 对齐成 `path.resolve(projectPath, 相对值)`（绝对值原样，缺省 `<projectPath>/tasks.yml`）
-  - 机器可检：`__tests__/project-path-convention.test.ts` 三道闸——CLI 层 cwd 必须是 `xxx || process.cwd()` 兜底形状、下游层（core/gates/context/monitoring/hooks）cwd 站点集合冻结、`xxxPath: '相对值'` 默认值冻结；豁免逐条带理由，站点消失却不删条目同样失败
+  - 机器可检：`__tests__/project-path-convention.test.ts` 三道闸——CLI 层 cwd 必须是 `xxx || process.cwd()` 兜底形状、下游层（= src 减 cli）cwd 站点**逐行**冻结（#98，豁免文件内新增行/行变形同样失败）、相对路径默认值冻结（#98 收紧：`xxxPath: '相对值'` 对象字面量之外，参数默认值形/模板字面量/双引号形同罪，扫描域 = 整个下游层）；豁免逐条带理由，站点消失却不删条目同样失败
   - 行为可检：`__tests__/project-path-anchoring.test.ts` 前提统一 **cwd ≠ projectPath**、不 mock 任何 IO，断言测试真在 B 执行、证据落 `B/.harness/evidence/`、acceptance 读 `B/tasks.yml`。「根已传入却又取 cwd」这类静态看不出的漂移由它守，冻结表守的是不再新增站点
 - **读到部分结果必须告知（harness#100）**：命令面以 `skip` 策略读 JSONL（traces.log / failures.log）时，坏行计数要到用户可见输出，**不允许默默丢弃**。共同约束：无损坏零噪声（计数为 0 不出行）、不改任何既有计数口径（`status` 的 `记录数` 仍是原始非空行数，逐字节不变）、计数一律取自 `src/utils/jsonl` 读链返回的 `skippedLines`（经报告入口透传或在读点就地取用），**禁止**用「原始行数 − 统计条数」反推（窗过滤掉的合法行与坏行分不开）。三处落点各自对得上一行代码：
   - `status`：告知**走 stderr**（`logError(io, …)`），因为 stdout 是报告体、其字节已被 `记录数` 那一行定死，挤进去等于改输出
@@ -43,7 +43,7 @@ H5（#44）起：
 - init 治理约束段写入落点（studio #302，ADR 2026-08-21 落点模型）：新仓 → AGENTS.md `PRESERVE:governance` 段（sync-docs 重新生成时保留）；旧模型仓（CLAUDE.md 已有 HARNESS_CONSTRAINTS 标记或 `## Governance Rules` 块）→ 续写 CLAUDE.md，幂等重跑不制造双份正本。治理段「在场守护」由 core 侧 governance_presence checker 承担（段缺失/为空时 check 报警）
 - PRESERVE:governance 段内写入纪律：机器管理的只有 HARNESS_CONSTRAINTS 标记区间——有标记只换标记区间，无标记（纯手写段）在段尾追加注入段；段内其余手写内容（治理契约引言/流程/纪律等）必须原样保留（曾整段替换清空手写内容的回归，init-injection.test 有防回归用例）
 - 注入段落点路由与 marker-range 替换收口在 `core/constraints/injection-writer`（ADR-0011）：读侧 `resolveInjectionTarget`（漂移检测/retire 同步共用「CLAUDE.md 有标记优先，否则 AGENTS.md」）+ 写侧 `resolveGovernanceLanding`（init 落点选择）；init 三个治理段 writer 与 retire 注入同步均为「渲染 body + 调 writer」，半标记（单边/乱序）一律拒写告警；未注入 = 两处均无完整标记段
-- knowledge 命令包含 13 个子操作（list/search/import/decay/stats/upsert/sync-status/sync-rag/audit/snapshot/migrate/index/health）
+- knowledge 命令包含 11 个子操作（list/search/import/decay/stats/sync-rag/audit/snapshot/migrate/index/health）；upsert/sync-status 已迁至 studio CLI（harness#110，二者硬编码 localhost Studio 内部端点，不属 harness「通用框架、文件驱动」定位）
 - `stats` / `health` 的飞轮数字不在 CLI 内计算：分子口径唯一实现是 `knowledge/flywheel-metrics.ts`（`evaluateFlywheel`，ADR-0013），本层只做百分比取整/一位小数与字段名映射；`.consumption-stats.json` 的读取留在各命令（module 零 IO）
 - 特殊路由（选项条件、子命令兜底、裸跑语义）表达在定义表的 optionRoutes / subcommands / subcommandStrict / bareRunsAction 字段，bin 是纯通用引擎、不含单命令知识
 - **命令 interface = `CommandResult` + 注入 io（架构评审候选7）**：命令实现一律声明 `Promise<CommandResult>`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位的 `reason`，多闸门命令 reason 含 `gate <id>`），末位可选形参 `io: CommandIO = processIO`；类型与写入面在 `src/cli/command-contract.ts`

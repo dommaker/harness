@@ -108,7 +108,16 @@ export interface ConstraintResult {
   
   /** 消息 */
   message?: string;
-  
+
+  /**
+   * 证据行（harness#119）
+   *
+   * checker 经 CheckDetail 返回的具体判定依据（如未登记的文件路径）。
+   * 违规时随 message 一并展示；满足但非空时为「提示」（不进 pass/fail 统计）。
+   * skip 恒为空——未评估不得留下证据行。
+   */
+  evidence?: string[];
+
   /** 建议操作 */
   requiredAction?: string;
   
@@ -194,7 +203,12 @@ export class ConstraintViolationError extends Error {
   public readonly result: ConstraintResult;
 
   constructor(result: ConstraintResult) {
-    super(result.message || 'Constraint violation');
+    // 铁律违规在 checkConstraints 处直接 throw，CLI 的结构化输出块走不到这里，
+    // error.message 是判定证据唯一的外溢面（harness#119）
+    const detail = result.evidence?.length
+      ? `：\n${result.evidence.map((line) => `  - ${line}`).join('\n')}`
+      : '';
+    super(`${result.message || 'Constraint violation'}${detail}`);
     this.name = 'ConstraintViolationError';
     this.result = result;
   }

@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { PassesGate, createPassesGate, detectTestCommand } from '../core/validators/passes-gate';
 import type { TaskTestResult } from '../types/passes-gate';
+import { createProjectFixture } from '../test-setup/project-fixture';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -224,24 +225,16 @@ describe('PassesGate', () => {
    * （extractCoverage → TaskTestResult.coverage）整体删除，结果面不再有 coverage 字段。
    */
   describe('覆盖率取数路删除（harness#94）', () => {
-    const covDir = join(process.cwd(), 'temp-test-no-coverage-field');
-
-    beforeAll(() => {
-      mkdirSync(covDir, { recursive: true });
-
-      // 输出里放一份 jest 覆盖率表：删除前 extractCoverage 会从中抠出 80.5 填进结果字段
-      writeFileSync(join(covDir, 'package.json'), JSON.stringify({
-        name: 'coverage-project',
-        scripts: { test: 'echo "All files | 80.50 | 70.21 | 83.33 | 79.59 |"' },
-      }));
-    });
-
-    afterAll(() => {
-      try {
-        rmSync(covDir, { recursive: true, force: true });
-      } catch {
-        // ignore
-      }
+    // 临时根走 createProjectFixture 正本（tmpdir，mkdtemp 劫持统一回收），不建在仓内
+    const covDir = createProjectFixture({
+      name: 'pg-no-coverage',
+      files: {
+        // 输出里放一份 jest 覆盖率表：删除前 extractCoverage 会从中抠出 80.5 填进结果字段
+        'package.json': JSON.stringify({
+          name: 'coverage-project',
+          scripts: { test: 'echo "All files | 80.50 | 70.21 | 83.33 | 79.59 |"' },
+        }),
+      },
     });
 
     it('setPasses 结果不带 coverage 字段', async () => {

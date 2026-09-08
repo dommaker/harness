@@ -1,7 +1,7 @@
 # ADR-0010: CLI 子命令别名合并——定义表退回纯路由
 
 - 日期：2026-09-02
-- 状态：已接受
+- 状态：已接受（2026-09-08 部分失效：`knowledge upsert`/`sync-status` 两子命令已迁出至 studio CLI，见 harness#110 与文末「后续变更」）
 - 影响版本：随下个 minor 发布（无对外破坏：改动的类型不在包根导出面）
 
 ## 背景
@@ -30,3 +30,7 @@
 - CLI 行为逐字不变（命令名/别名/选项/help/错误消息/退出码）：`registry.test.ts` 新增别名唯一性守卫 + 端到端用例钉死（`knowledge ls --json` 解析到 list 实现且仅加载 knowledge 模块；`kb s` 缺参提示逐字保持、exit 1；未知子命令报错不变）。
 - 内部类型 `CommandSubcommand.args`/`CommandOptionRoute.args` 删除：不在包根导出面（ADR-0003 清单未含），对装包的人无感。
 - `knowledgeUpsert` 参数 scope/title 由必填放宽为可选：程序内调用方全部传齐，无签名破坏。
+
+## 后续变更
+
+- 2026-09-08（harness#110 裁决）：`knowledge upsert`/`sync-status` 两子命令（硬编码 localhost Studio 内部端点的 HTTP 客户端，不属 harness「通用框架、文件驱动」定位）迁出至 studio 仓 CLI（`studio knowledge upsert`/`sync-status`，studio #452）。harness 侧删除 `knowledgeUpsert`/`knowledgeSyncStatus`、`definitions.ts` 两条路由（含别名 `up`/`sync`）及 upsert 专用 options（`--scope/--title/--content/--file/--source`）。本文「决策」第 4 条与「影响」第 3 条所述 `knowledge upsert` 条目随之失效，保留原文作历史记录。

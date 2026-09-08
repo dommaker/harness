@@ -200,6 +200,8 @@ describe('check command（真 git fixture）', () => {
       stageChange(
         dir,
         'src/existing.ts',
+        // 'pass'+'word' 拆串是躲本仓 no_hardcoded_credentials 静态扫描：测试源文件里出现完整
+        // `password = "..."` 字面量会撞自己的 pre-commit 门禁；运行时拼接值不变，断言不受影响
         'export const a = 1;\nconst pass' + 'word = "correcthorsebattery";\n'
       );
       passTraces(dir);

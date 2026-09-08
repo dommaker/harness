@@ -12,7 +12,7 @@
 1. **判定本身没错**：当时 studio 确有一个文件未登记——`apps/api/src/modules/review-proposal/routes.ts`（#351 同目录另 4 个文件都登记了，只漏它）。file 模式 Step 2 要求源码根下每个 `.ts` 都在 CAPABILITIES.md 有行。
 2. **但 100% 这个数字不是「代码持续违规」，是归因错位**：Step 2（T-058 全量扫描）是**仓库级完备性不变量**，与正在被评估的那次变更没有因果关系。一处历史漏登会让它之后每一次 `module_*` 评估都红——缺口一日不补，fail 率一日 100%。
 3. **红在哪无法知道**：checker 只回 `boolean | 'skip'`。CLI 打印的是约束定义里的静态 message，trace 记录只有 `{constraintId, result, operation}`。票面问「fail 的具体 message / 证据是什么」——现状答案是「没有」：定位这一个文件要靠手工重写一遍判定逻辑跑脚本。
-4. **同一判定早有带证据的出口**：`harness sync-docs --check` 在 studio 直接输出 `CAPABILITIES.md 缺少以下模块: + routes.ts`，缺登记时 exit 1，studio CI（`.github/workflows/ci.yml`）已跑这一步。也就是说完备性本就有执法处，checker 的 Step 2 是重复实现 + 挂错接缝。
+4. **同一判定早有带证据的出口，但没有自动牙齿**：`harness sync-docs --check` 在 studio 直接输出 `CAPABILITIES.md 缺少以下模块: + routes.ts` 且 exit 1——**单独跑时**才成立。studio CI（`.github/workflows/ci.yml`）与 `studio-ship` 都按「先 `sync-docs` 写入、后 `--check`」的顺序跑（2026-08-08 CI 4 连红固化的顺序：幽灵条目要先自愈），而 file 模式的写入恰好会给缺登记自动补行（`capabilities-syncer.ts` 的 `mode !== 'module'` 分支），CI 那份写入又不回提。于是 `--check` 永远查不到漏登，checker 的 Step 2 是当时**唯一**会红的地方——它的红虽然报错了对象，却也是唯一的信号源，这一层在决策 3 里必须一起记账（见「影响」的已知缺口）。
 5. `docs_freshness` 在 2026-08-08 撞过同一堵墙，当时的办法是 `console.error` 打幽灵条目——侧信道：进不了 CLI 结构化输出，更进不了 trace，而它是铁律，违规时直接 throw，用户只见一句通用提示。
 
 ## 决策
@@ -40,15 +40,15 @@ type CheckOutcome = boolean | 'skip' | CheckDetail
 ### 3. `capability_sync` 按因果分层
 
 - **Step 1（staged 增量未登记）→ 判违规**，证据点名是哪些变更文件。
-- **Step 2（全量完备性）→ 不判违规，只出提示**。执法收归 `harness sync-docs --check`（CI 已跑、缺登记 exit 1、输出本就带文件名）。
-- 「有表格但零条目」的文档退化门**保留为违规**，但不再借 Step 2 兜——显式化（这是文档被清空，与「某个新文件没登记」不是一回事）。
-- 判定规则（`isCoveredBy`、目录条目恒参与、listing 短路、散文放行、fail-open+warn、存在性 skip）逐条不动，ADR-0009 的单一来源地位不动。
+- **Step 2（全量完备性）→ 不判违规，只出提示**。收口位置经核实**不是**「别处已有更强的门」：`sync-docs --check` 单独跑会 exit 1，但 studio CI 与 `studio-ship` 都先跑写入（file 模式自动补行，见背景 4）、harness 自有 CI 的那一步还挂着 `continue-on-error: true`——所以降级之后仓库级漏登**没有自动拦截点**，只剩每次 check 的可见提示。这是本 ADR 明确接受的代价，理由是「把仓库级事实计入每次变更评估」并不能凭空造出收敛压力（事实是它连一条都没真正拦下过，只是把每一次评估都弄红）。补牙齿归流水线侧，另票。
+- 「有表格但零条目」的文档退化门**保留为违规**，但不再借 Step 2 兜——显式化，且限定「源码根下确有文件」时才判（空仓 + 空表没有可登记对象，历史行为是放行，本票不顺手收紧这一维）。
+- 判定规则（`isCoveredBy`、目录条目恒参与、listing 短路、散文放行、存在性 skip）逐条不动，ADR-0009 的单一来源地位不动。**唯一例外是 fail-open**：不拦的语义不变，但异常原因除 `console.warn` 外同时进 evidence——warn 只落本地 stderr，进不了 CLI 结构化输出与 trace，「因异常而永远通过」与本票要治的静默红是同一族病。
 
 ### 4. `docs_freshness` 侧信道下线
 
 幽灵条目与 Runner 失败项都改走证据通道，`console.error` 删除。判定条件与失败面逐条不变（只是从「说不清」变成「说得出」）。
 
-不选「拆独立 constraint id（如 `capability_completeness`）」：要为一条提示新增生效集/注入/统计形状，代价大于收益；输出侧的「违规 / 提示」分层与 trace 的 `result` 字段已把两类信号分开计量。
+不选「拆独立 constraint id（如 `capability_completeness`）」：要为一条提示新增生效集/注入/统计形状，代价大于收益——何况统计侧现在也分不出两类信号（`constraints report` 只数 pass/fail/skip，带 evidence 的 pass 就是一个普通 pass），拆出来短期内也只是多一条恒绿的约束。
 不选「只加证据、保留 Step 2 fail」：缺口补上前 fail 率仍是 100%，信号照样不可信——高噪判据（evolution / constraints report）读的就是这个比率。
 不选「studio 切 `governance.capabilities.mode: module`」（2026-08-08 评估方案 A 的收尾项）：实测切了仍 fail，只是聚合成 `apps/api/src/modules/review-proposal/` 一个目录名——mode 选择是 studio 的文档策划制问题，不解决归因，留作 studio 侧独立决策。
 
@@ -56,12 +56,13 @@ type CheckOutcome = boolean | 'skip' | CheckDetail
 
 - **约束的 fail 必须可归因到被评估的对象**。挂在 per-change 接缝上的检查，若结论可以完全由与本次变更无关的历史状态决定，那它统计出的就不是「这次做得对不对」，而是「仓库历史上欠了几笔」——两者都该有出口，但不能共用一个 pass/fail 位。
 - **零证据的约束等于不可治理的约束**：100% fail 率两周无人能说出红在哪，进化侧（E1 约束进化）拿到的是「高噪，疑似误报」这种无从下手的结论；补上证据后同一个数字读作「缺 1 个文件，跑 sync-docs」。
-- **一份判定只留一个执法处**：完备性已由 `sync-docs --check` 在 CI 拦（exit 1），checker 再拦一次只是把一个仓库级事实重复计入每一次变更评估。
+- **信号的可信度优先于信号的覆盖度**：一条恒定红、且红的原因与本次变更无关的约束，实际价值是零——它教会所有人的是「忽略这个警告」。降级为提示没有削弱任何**存在过的**执法：仓库级漏登在流水线里本就拦不住（背景 4），差别只在以前用假红假装它在管。
 
 ## 影响
 
 - 代码：`checkers/types.ts`（新增 `CheckDetail`/`NormalizedOutcome`/`normalizeCheckOutcome`/`formatEvidence`）、`checker.ts`（归一 + trace 带证据）、`checkers/capability-sync.ts`（分层）、`checkers/docs-freshness.ts`（证据替侧信道）、`cli/commands/check.ts`（证据行 + 提示块）、`gates/checker-gate.ts`（deny 理由带证据，并修掉 `outcome !== false` 对新形状的误判）、`types/{constraint,trace}.ts`。
 - 公开面：`CheckOutcome` 联合类型扩支、`ConstraintResult.evidence` / `ExecutionTrace.evidence` 新增可选字段——均为向后兼容的扩面，旧 boolean 与不读新字段的消费方（studio、constraints report、evolution）不受影响。
 - 行为：**studio 侧 `capability_sync` 从恒红转绿**（历史漏登不再判违规，只出提示）；fail 的语义收窄为「本次 staged 变更里有未登记文件」，因此约束统计里它的 fail 率不再等价于「文档是否干净」——读历史统计（2026-07 起的 22 条 fail）时要按新口径理解，历史数据不回填。
-- 文档：`src/CONTEXT.md` 术语表加「判定证据 / 提示」，`src/core/CONTEXT.md` 与 `CAPABILITIES.md` 的 Constraint Model 段随之更新。
-- 本 ADR 不解决：studio 的 `capabilities.mode` 缺省选择（另票）；`context_doc_sync` 等其他 checker 的证据补写（仍是裸 boolean，接缝已就位）；Step 1 用 staged 名单而 `sync-docs --check` 用全量名单的口径差（两者职责不同，暂不统一）。
+- 文档：`src/CONTEXT.md` 术语表加「判定证据（evidence）」，`src/core/CONTEXT.md`（接缝与归因口径）、`src/gates/CONTEXT.md`（映射改经归一点）、`CAPABILITIES.md` 的 Constraint Model 段同步。
+- **两个可见性代价（本 ADR 接受、不在此解决）**：① 提示在约束快照里不可见——`usage-report` / `constraints report` 只数 pass/fail/skip，带 evidence 的 pass 就是一个普通 pass，下一轮快照会把这个约束读作 0% fail 而看不到漂移条数（盲区方向反了，不再是假红而是无信号）；② 仓库级漏登自此没有自动拦截点（CI/ship 的 `--check` 跑在自愈写入之后，见背景 4）。两者的修法都不该塞回这条约束里：① 归报告侧（trace 已有 `evidence` 字段，加一条「带提示的评估数」统计即可）；② 归流水线侧，候选做法是「`sync-docs` 写入后 `git diff --exit-code CAPABILITIES.md`，非空即失败」（ = HEAD 的文档过期），或按 2026-08-08 方案 A 让 file 模式停止自动补行、把 `--check` 变成真门。
+- 本 ADR 不解决：studio 的 `capabilities.mode` 缺省选择（另票）；`context_doc_sync` 等其他 checker 的证据补写（仍是裸 boolean，接缝已就位）；Step 1 用 staged 名单而 `sync-docs --check` 用全量名单的口径差（两者职责不同，暂不统一）；上述 ①②。

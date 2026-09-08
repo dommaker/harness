@@ -70,11 +70,11 @@ describe('capability_sync — skip 与文档格式门槛', () => {
     expect(passed(await capabilitySync.evaluate(makeEnv(dir, ['src/foo.ts'])))).toBe(true);
   });
 
-  it('有表格但零条目 + 有变更 → 不得放行', async () => {
+  it('有表格但零条目 + 有变更 → 不得放行（step1 拦下，证据点名变更文件）', async () => {
     const dir = setupDir('empty-table', `# Capabilities\n\n${TABLE_HEAD}`);
     const outcome = await capabilitySync.evaluate(makeEnv(dir, ['src/foo.ts']));
     expect(passed(outcome)).toBe(false);
-    expect(evidenceText(outcome)).toContain('零条目');
+    expect(evidenceText(outcome)).toContain('src/foo.ts');
   });
 
   it('有表格但零条目 + 源码有文件 → 文档退化门拦下（不靠 step2 兜，harness#119）', async () => {
@@ -82,6 +82,11 @@ describe('capability_sync — skip 与文档格式门槛', () => {
     const outcome = await capabilitySync.evaluate(makeEnv(dir, []));
     expect(passed(outcome)).toBe(false);
     expect(evidenceText(outcome)).toContain('零条目');
+  });
+
+  it('有表格但零条目 + 源码无文件 → 放行（门限定「确有可登记对象」，不扩大 fail 面）', async () => {
+    const dir = setupDir('empty-table-nosrc', `# Capabilities\n\n${TABLE_HEAD}`);
+    expect(passed(await capabilitySync.evaluate(makeEnv(dir, [])))).toBe(true);
   });
 });
 
@@ -248,7 +253,7 @@ describe('capability_sync — module 模式（未覆盖聚合为目录形状）'
 });
 
 describe('capability_sync — fail-open 可观测', () => {
-  it('证据读取异常时放行但输出 warn', async () => {
+  it('证据读取异常时放行但输出 warn，且异常原因进 evidence', async () => {
     const dir = setupDir('failopen', `# C\n\n${TABLE_HEAD}| foo | src/foo.ts | foo |\n`);
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const env: CheckEnv = {
@@ -257,7 +262,11 @@ describe('capability_sync — fail-open 可观测', () => {
         throw new Error('git boom');
       },
     };
-    expect(passed(await capabilitySync.evaluate(env))).toBe(true);
+    const outcome = await capabilitySync.evaluate(env);
+    // fail-open 语义不变（仍不拦），但「因异常而通过」必须留痕：warn 只进本地 stderr
+    expect(passed(outcome)).toBe(true);
+    expect(evidenceText(outcome)).toContain('git boom');
+    expect(evidenceText(outcome)).toContain('fail-open');
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });

@@ -14,6 +14,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { ConstraintChecker } from '../../checker';
 import { normalizeCheckOutcome } from '../types';
+import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ExecutionTrace } from '../../../../types/trace';
 import { ConstraintViolationError } from '../../../../types/constraint';
 import type { Constraint, ConstraintResult } from '../../../../types/constraint';
@@ -29,15 +30,9 @@ const CAPABILITY_SYNC: Constraint = {
   enforcement: 'update-capabilities',
 };
 
-/** 建临时项目根：CAPABILITIES.md + 指定源文件（无 git，staged 证据自然为空） */
-function projectRoot(files: Record<string, string>): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-evidence-'));
-  for (const [rel, content] of Object.entries(files)) {
-    const target = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content, 'utf-8');
-  }
-  return dir;
+/** 声明式夹具（harness#90）：CAPABILITIES.md + 源文件，无 git，staged 证据自然为空 */
+function fixture(name: string, files: Record<string, string>): string {
+  return createProjectFixture({ name: `cap-sync-${name}`, files });
 }
 
 describe('normalizeCheckOutcome — 三态 + 证据归一', () => {
@@ -91,9 +86,25 @@ async function runGuideline(dir: string): Promise<{
   return { result, trace };
 }
 
+/** 需要真 git 的用例专用手写根：夹具不建 git，而 staged 分区只能由真仓库产生 */
+function gitProjectRoot(files: Record<string, string>): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-evidence-git-'));
+  for (const [rel, content] of Object.entries(files)) {
+    const target = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content, 'utf-8');
+  }
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  execFileSync('git', ['config', 'user.email', 'fixture@example.com'], { cwd: dir });
+  execFileSync('git', ['config', 'user.name', 'Fixture'], { cwd: dir });
+  execFileSync('git', ['add', '.'], { cwd: dir });
+  execFileSync('git', ['commit', '-q', '-m', 'baseline'], { cwd: dir });
+  return dir;
+}
+
 describe('capability_sync 证据经编排层落到 ConstraintResult 与 trace', () => {
   it('满足但存在仓库级未登记文件 → satisfied=true，evidence 带路径，trace 记 pass', async () => {
-    const dir = projectRoot({
+    const dir = fixture('hint', {
       'CAPABILITIES.md': '| 模块 | 文件 | 说明 |\n|------|------|------|\n| foo | src/foo.ts | foo |\n',
       'src/foo.ts': 'export const a = 1;\n',
       'src/unlisted.ts': 'export const b = 2;\n',
@@ -109,15 +120,10 @@ describe('capability_sync 证据经编排层落到 ConstraintResult 与 trace', 
   });
 
   it('违规（staged 新文件未登记）→ satisfied=false，evidence 指出该文件，trace 记 fail', async () => {
-    const dir = projectRoot({
+    const dir = gitProjectRoot({
       'CAPABILITIES.md': '| 模块 | 文件 | 说明 |\n|------|------|------|\n| foo | src/foo.ts | foo |\n',
       'src/foo.ts': 'export const a = 1;\n',
     });
-    execFileSync('git', ['init', '-q'], { cwd: dir });
-    execFileSync('git', ['config', 'user.email', 'fixture@example.com'], { cwd: dir });
-    execFileSync('git', ['config', 'user.name', 'Fixture'], { cwd: dir });
-    execFileSync('git', ['add', '.'], { cwd: dir });
-    execFileSync('git', ['commit', '-q', '-m', 'baseline'], { cwd: dir });
     fs.writeFileSync(path.join(dir, 'src/brand-new.ts'), 'export const c = 3;\n');
     execFileSync('git', ['add', '--', 'src/brand-new.ts'], { cwd: dir });
 
@@ -130,7 +136,7 @@ describe('capability_sync 证据经编排层落到 ConstraintResult 与 trace', 
   });
 
   it('skip 不携带证据（未评估不得留下证据行）', async () => {
-    const dir = projectRoot({ 'README.md': '# no capabilities convention\n' });
+    const dir = fixture('no-convention', { 'README.md': '# no capabilities convention\n' });
 
     const { result, trace } = await runGuideline(dir);
 

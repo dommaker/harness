@@ -108,16 +108,13 @@ export const MAX_EVIDENCE_ITEMS = 10;
  * 组装证据行：一行说明 + 逐条依据（超限截断）
  *
  * 每行自描述且不带缩进——缩进由消费端（CLI / gate 理由 / 铁律异常文案）决定，trace 原样存。
- * 截断行指向全量入口，不让读者以为列完了。
+ * 修复入口不写在这里：那是各约束自己的事，写进各自的 summary 行（docs_freshness 的
+ * 幽灵条目与 sync-docs 无关，共用一个指针会误导）。
  */
 export function formatEvidence(summary: string, items: string[]): string[] {
   const shown = items.slice(0, MAX_EVIDENCE_ITEMS);
   const hidden = items.length - shown.length;
-  return [
-    summary,
-    ...shown,
-    ...(hidden > 0 ? [`…另 ${hidden} 项（全量见 harness sync-docs --check）`] : []),
-  ];
+  return [...(summary ? [summary] : []), ...shown, ...(hidden > 0 ? [`…另 ${hidden} 项`] : [])];
 }
 
 /**

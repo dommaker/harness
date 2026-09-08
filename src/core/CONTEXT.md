@@ -31,4 +31,4 @@
 - 零 Token 成本：所有分析纯文件操作，无 LLM 调用
 - 约束配置支持 .harness/config.yml 自定义合并（preset 真实生效）
 - 存在性探测约束（capability_sync/docs_freshness/context_doc_sync）在约定文件缺失，或 context_files 约定已立但无目标（enabled-empty）时 skip，不计 pass/fail；context_doc_sync 与 docs_freshness 对三态判定同构（工单 84）
-- **fail 必须可归因到被评估的对象**（harness#119/ADR-0016）：`capability_sync` 的 Step 1（staged 增量未登记）判违规，Step 2（T-058 全量完备性）与本次变更无因果、只出提示（`satisfied=true` + evidence），完备性执法在 `harness sync-docs --check`（CI 跑，缺登记 exit 1）；「有表格但零条目」的文档退化门仍判违规（显式，不借 Step 2 兜）。2026-09-08 前 `capability_sync` 恒红（studio 22/22）就是这条错位造成的
+- **fail 必须可归因到被评估的对象**（harness#119/ADR-0016）：`capability_sync` 的 Step 1（staged 增量未登记）判违规，Step 2（T-058 全量完备性）与本次变更无因果、只出提示（`satisfied=true` + evidence）；「有表格但零条目 + 确有源文件」的文档退化门仍判违规（显式，不借 Step 2 兜）。2026-09-08 前 `capability_sync` 恒红（studio 22/22）就是这条错位造成的。注意降级并不换来执法：`sync-docs --check` 单独跑才 exit 1，CI/ship 都先跑写入（file 模式自补行）再 `--check`，harness 自有 CI 那步还是 `continue-on-error`——仓库级漏登目前无自动拦截点，缺口与修法见 ADR-0016「影响」

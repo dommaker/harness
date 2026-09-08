@@ -105,8 +105,6 @@ harness command        # 命令黑名单检查
 # 知识与演化
 harness knowledge      # 知识库管理（list/search/import/decay/stats/audit）
 harness failure        # 失败记录管理（list/stats/clear）
-harness analyze-sessions  # 挖掘会话中的纠正模式，生成规则候选
-harness update-user-model # 增量更新用户思维模型
 
 # 文档与 Spec
 harness sync-docs      # 同步 CAPABILITIES.md + CONTEXT.md + AGENTS.md

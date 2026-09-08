@@ -4,7 +4,7 @@
  * - 定义表内每个实现引用（module+export）都必须可解析（构建/测试期断言，
  *   取代 commands barrel 的编译期保护——R6 消灭手工同步后的闭环兜底）
  * - definitions 是纯数据模块：require 它不加载任何命令实现（保 --help/--version 懒加载）
- * - 命令面与 CAPABILITIES.md 的 24 顶层命令一致（防误删回归）
+ * - 命令面与 CAPABILITIES.md 的 21 顶层命令一致（防误删回归）
  * - bin/harness.js 端到端冒烟（dist 存在时）：--version/--help 零命令实现模块，
  *   单命令执行只加载该命令模块（O2 per-command 懒加载）
  */
@@ -35,7 +35,7 @@ function collectRefs(defs: CommandDefinition[]): CommandImplRef[] {
 const EXPECTED_TOP_LEVEL_COMMANDS = [
   'check', 'validate', 'passes-gate', 'init', 'report', 'status', 'spec',
   'sync-docs', 'knowledge', 'sdd', 'failure', 'posteval-plan',
-  'update-user-model', 'release', 'analyze-sessions', 'constraints',
+  'release', 'constraints',
   'spec-baseline-check',
   // 6 门禁命令（GATE_DEFINITIONS 驱动）
   'acceptance', 'command', 'contract', 'performance', 'review', 'security',
@@ -88,7 +88,7 @@ describe('命令注册表闭环', () => {
     }
   });
 
-  it('顶层命令面与预期 24 命令一致（含 6 门禁）', () => {
+  it('顶层命令面与预期 21 命令一致（含 6 门禁）', () => {
     const names = [
       ...COMMAND_DEFINITIONS.map(d => d.command.split(' ')[0]),
       ...GATE_DEFINITIONS.map(d => d.cli.command.split(' ')[0]),

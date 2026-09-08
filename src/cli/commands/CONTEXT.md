@@ -1,7 +1,7 @@
 # cli/commands/
 
 ## 职责
-CLI 子命令实现：23 个顶层命令 + constraints 治理子命令 report/retire，覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布/会话分析等。
+CLI 子命令实现：21 个顶层命令 + constraints 治理子命令 report/retire，覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布等。
 
 H5（#44）起：
 - **命令定义即注册**：`definitions.ts` 的 `COMMAND_DEFINITIONS` 是命令形状（名称/别名/位置参数/选项/子命令/实现引用）的单一来源；bin/harness.js 遍历本表注册表驱动生成，不再手写 commander 命令块，不再有 index.ts barrel 两处同步（R6）
@@ -10,7 +10,7 @@ H5（#44）起：
 ## 核心导出
 - `COMMAND_DEFINITIONS`（definitions.ts）— 全部非门禁命令定义（纯数据模块、零闭包，禁止 import 命令实现；ADR-0010）
 - 命令契约（`src/cli/command-contract.ts`，上层目录）— `CommandResult` / `CommandKind` / `CommandIO` / `processIO` / `captureIO` / `lastJsonOutput` / `log` / `logError`
-- 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / analyze-sessions / update-user-model / constraints / spec-baseline-check
+- 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / constraints / spec-baseline-check
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）
 
 `constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置落 config.yml retired 元数据，custom 落 custom-constraints.yml 条目 retired 段（studio#82 D6 一处真相）+ KnowledgeStore 沉淀 + 治理注入段同步）。

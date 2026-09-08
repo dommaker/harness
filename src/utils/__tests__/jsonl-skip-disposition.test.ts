@@ -42,7 +42,6 @@ const POLICY_WINDOW_LINES = 6;
  */
 const EXPECTED_SKIP_READ_SITES: Record<string, number> = {
   'src/cli/commands/status.ts': 1,
-  'src/cli/session-mining/transcript.ts': 1,
   'src/context/session-manager.ts': 2,
   'src/core/constraints/context-builder.ts': 2,
   'src/core/constraints/usage-report.ts': 1,

@@ -35,7 +35,7 @@ describe('performance command', () => {
       passed: true,
       message: 'ok',
       details: {
-        metrics: { coverage: 85.5, bundleSize: 204800, benchmarkTime: 150 },
+        metrics: { coverage: 85.5, bundleSize: 204800 },
       },
     });
     MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
@@ -76,7 +76,7 @@ describe('performance command', () => {
     });
   });
 
-  it('should convert bundleThreshold from KB to bytes', async () => {
+  it('bundleThreshold 直传 KB 到 maxBundleSize（不再按字节错位换算）', async () => {
     const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
     MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
@@ -84,23 +84,12 @@ describe('performance command', () => {
 
     expect(MockGate).toHaveBeenCalledWith(
       expect.objectContaining({
-        thresholds: expect.objectContaining({ bundleSize: 500 * 1024 }),
+        thresholds: expect.objectContaining({ maxBundleSize: 500 }),
       }),
     );
   });
 
-  it('should convert benchmarkTimeout from seconds to ms', async () => {
-    const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-    MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
-
-    await performance({ benchmarkTimeout: 30 }, io);
-
-    expect(MockGate).toHaveBeenCalledWith(
-      expect.objectContaining({ benchmarkTimeout: 30000 }),
-    );
-  });
-
-  it('should set coverage threshold when both flags provided', async () => {
+  it('coverage 旗帜对齐 minCoverage 字段（原 coverage 错位键名恒不生效）', async () => {
     const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
     MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
 
@@ -108,7 +97,7 @@ describe('performance command', () => {
 
     expect(MockGate).toHaveBeenCalledWith(
       expect.objectContaining({
-        thresholds: expect.objectContaining({ coverage: 90 }),
+        thresholds: expect.objectContaining({ minCoverage: 90 }),
       }),
     );
   });

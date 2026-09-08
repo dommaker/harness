@@ -38,7 +38,7 @@ describe('PerformanceGate', () => {
       const gate = new PerformanceGate({
         enabled: true,
         thresholds: {
-          maxResponseTime: 1000,
+          maxBundleSize: 1000,
         },
       });
 
@@ -55,17 +55,9 @@ describe('PerformanceGate', () => {
     it('应该支持自定义阈值', () => {
       const gate = new PerformanceGate({
         thresholds: {
-          maxResponseTime: 500,
-          maxMemoryUsage: 1000,
+          minCoverage: 80,
+          maxBundleSize: 1000,
         },
-      });
-
-      expect(gate).toBeDefined();
-    });
-
-    it('应该支持基准测试命令', () => {
-      const gate = new PerformanceGate({
-        benchmarkCommand: 'npm run benchmark',
       });
 
       expect(gate).toBeDefined();

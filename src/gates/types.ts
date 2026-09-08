@@ -133,7 +133,6 @@ export interface GateContext {
   
   // Performance Gate
   performanceThresholds?: PerformanceThresholds;
-  benchmarkCommand?: string;
   
   // Contract Gate
   oldContractPath?: string;
@@ -151,14 +150,12 @@ export interface GateContext {
 }
 
 /**
- * 性能阈值
+ * 性能阈值（架构评审候选2：只留有真实现的维度——coverage 走 json-summary、
+ * bundleSize 走 dist 目录测量；responseTime/memoryUsage/throughput 无真实现已删）
  */
 export interface PerformanceThresholds {
-  maxResponseTime?: number;   // ms
-  maxMemoryUsage?: number;    // MB
   minCoverage?: number;       // %
   maxBundleSize?: number;     // KB
-  minThroughput?: number;     // req/s
 }
 
 /**
@@ -187,10 +184,7 @@ export interface SecurityGateConfig {
  */
 export interface PerformanceGateConfig {
   enabled: boolean;
-  benchmarkCommand?: string;
   thresholds: PerformanceThresholds;
-  warmupRuns: number;
-  measureRuns: number;
 }
 
 /**

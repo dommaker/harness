@@ -1,12 +1,14 @@
 /**
  * 性能门禁
- * 
- * 检查性能指标：
- * - 响应时间
- * - 内存使用
- * - 测试覆盖率
- * - 打包大小
- * 
+ *
+ * 检查性能指标（架构评审候选2：只留有真实现的维度）：
+ * - 测试覆盖率（json-summary）
+ * - 打包大小（dist 目录测量）
+ *
+ * 响应时间/内存使用/吞吐量维度已删除：原实现用 Math.random() 伪造指标并据此判负，
+ * runBenchmark 的真实现从未被 check() 调用且语义可疑（量的是 harness 进程自己的
+ * heap）——零真实消费者的维度按 ADR-0015 同构判例删薄（ADR-0018）。
+ *
  * 改进：
  * - 添加超时机制
  * - 改进错误处理
@@ -23,8 +25,6 @@ import { decisionFromResult } from './decision';
 // 默认超时时间（毫秒）
 const DEFAULT_TIMEOUTS = {
   coverage: 120000,  // 覆盖率测试：2分钟
-  benchmark: 60000,  // 基准测试：1分钟
-  bundle: 10000,     // 打包大小：10秒
 };
 
 /**
@@ -33,8 +33,6 @@ const DEFAULT_TIMEOUTS = {
 export interface ExtendedPerformanceGateConfig extends PerformanceGateConfig {
   /** 覆盖率测试超时（毫秒） */
   coverageTimeout?: number;
-  /** 基准测试超时（毫秒） */
-  benchmarkTimeout?: number;
 }
 
 /**
@@ -48,12 +46,8 @@ export class PerformanceGate implements Gate {
   constructor(config: Partial<ExtendedPerformanceGateConfig> = {}) {
     this.config = {
       enabled: config.enabled ?? true,
-      benchmarkCommand: config.benchmarkCommand ?? '',
       thresholds: config.thresholds ?? {},
-      warmupRuns: config.warmupRuns ?? 2,
-      measureRuns: config.measureRuns ?? 5,
       coverageTimeout: config.coverageTimeout ?? DEFAULT_TIMEOUTS.coverage,
-      benchmarkTimeout: config.benchmarkTimeout ?? DEFAULT_TIMEOUTS.benchmark,
     };
   }
 
@@ -79,20 +73,6 @@ export class PerformanceGate implements Gate {
       const metrics = await this.collectMetrics(context.projectPath, thresholds);
       const failures: string[] = [];
       const warnings: string[] = [];
-
-      // 检查响应时间
-      if (thresholds.maxResponseTime && metrics.responseTime !== undefined) {
-        if (metrics.responseTime > thresholds.maxResponseTime) {
-          failures.push(`响应时间 ${metrics.responseTime}ms > ${thresholds.maxResponseTime}ms`);
-        }
-      }
-
-      // 检查内存使用
-      if (thresholds.maxMemoryUsage && metrics.memoryUsage !== undefined) {
-        if (metrics.memoryUsage > thresholds.maxMemoryUsage) {
-          failures.push(`内存使用 ${metrics.memoryUsage}MB > ${thresholds.maxMemoryUsage}MB`);
-        }
-      }
 
       // 检查覆盖率
       if (thresholds.minCoverage) {
@@ -124,8 +104,6 @@ export class PerformanceGate implements Gate {
         startTime,
         {
           metrics: {
-            responseTime: metrics.responseTime,
-            memoryUsage: metrics.memoryUsage,
             coverage: metrics.coverage,
             bundleSize: metrics.bundleSize,
           },
@@ -146,8 +124,6 @@ export class PerformanceGate implements Gate {
     projectPath: string,
     thresholds: PerformanceThresholds
   ): Promise<{
-    responseTime?: number;
-    memoryUsage?: number;
     coverage?: number;
     coverageError?: string;
     bundleSize?: number;
@@ -173,15 +149,6 @@ export class PerformanceGate implements Gate {
       } else {
         metrics.bundleSize = result.bundleSize;
       }
-    }
-
-    // 模拟响应时间和内存（需要实际基准测试）
-    if (thresholds.maxResponseTime) {
-      metrics.responseTime = Math.floor(Math.random() * 500) + 100;
-    }
-
-    if (thresholds.maxMemoryUsage) {
-      metrics.memoryUsage = Math.floor(Math.random() * 200) + 50;
     }
 
     return metrics;
@@ -258,76 +225,9 @@ export class PerformanceGate implements Gate {
    */
   private formatMetrics(metrics: any): string {
     const parts: string[] = [];
-    if (metrics.responseTime !== undefined) parts.push(`响应时间=${metrics.responseTime}ms`);
-    if (metrics.memoryUsage !== undefined) parts.push(`内存=${metrics.memoryUsage}MB`);
     if (metrics.coverage !== undefined) parts.push(`覆盖率=${metrics.coverage}%`);
     if (metrics.bundleSize !== undefined) parts.push(`打包=${metrics.bundleSize}KB`);
     return parts.join(', ') || '无指标';
-  }
-
-  /**
-   * 运行基准测试（带超时）
-   */
-  async runBenchmark(context: GateContext): Promise<{
-    avgResponseTime: number;
-    avgMemoryUsage: number;
-    minResponseTime: number;
-    maxResponseTime: number;
-    error?: string;
-  }> {
-    const results: Array<{ responseTime: number; memoryUsage: number }> = [];
-
-    try {
-      // 预热运行
-      for (let i = 0; i < this.config.warmupRuns; i++) {
-        await this.singleBenchmark(context);
-      }
-
-      // 测量运行
-      for (let i = 0; i < this.config.measureRuns; i++) {
-        const result = await this.singleBenchmark(context);
-        results.push(result);
-      }
-
-      const responseTimes = results.map(r => r.responseTime);
-      const memoryUsages = results.map(r => r.memoryUsage);
-
-      return {
-        avgResponseTime: responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length,
-        avgMemoryUsage: memoryUsages.reduce((a, b) => a + b, 0) / memoryUsages.length,
-        minResponseTime: Math.min(...responseTimes),
-        maxResponseTime: Math.max(...responseTimes),
-      };
-    } catch (error: any) {
-      return {
-        avgResponseTime: 0,
-        avgMemoryUsage: 0,
-        minResponseTime: 0,
-        maxResponseTime: 0,
-        error: error.message || '基准测试失败',
-      };
-    }
-  }
-
-  /**
-   * 单次基准测试（带超时）
-   */
-  private async singleBenchmark(context: GateContext): Promise<{ responseTime: number; memoryUsage: number }> {
-    const start = Date.now();
-
-    // 如果有基准测试命令，运行它
-    if (this.config.benchmarkCommand || context.benchmarkCommand) {
-      await execAsync(this.config.benchmarkCommand || context.benchmarkCommand!, {
-        cwd: context.projectPath,
-        timeout: this.config.benchmarkTimeout,
-        killSignal: 'SIGTERM',
-      });
-    }
-
-    const responseTime = Date.now() - start;
-    const memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024;
-
-    return { responseTime, memoryUsage };
   }
 
   /**
@@ -342,10 +242,8 @@ export class PerformanceGate implements Gate {
    */
   setTimeouts(options: {
     coverage?: number;
-    benchmark?: number;
   }): void {
     if (options.coverage) this.config.coverageTimeout = options.coverage;
-    if (options.benchmark) this.config.benchmarkTimeout = options.benchmark;
   }
 
   /**

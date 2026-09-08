@@ -15,6 +15,7 @@ import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { reconcileCapabilities } from '../capabilities-reconcile';
 import type { DocFreshnessCheck } from '../../../types/project-config';
 import type { ConstraintCheck, CheckEnv } from './types';
+import { formatEvidence } from './types';
 
 /**
  * 内置默认文档新鲜度检查配置
@@ -95,10 +96,13 @@ export const docsFreshness: ConstraintCheck = {
     // Step 1: 文件表格式 — 登记的条目（文件+目录）是否仍存在（ADR-0009）
     const deadEntries = findDeadCapabilityEntries(projectPath, env);
     if (deadEntries.length > 0) {
-      // 报出具体条目：此前只返回 false，CLI 只能打印通用提示，
-      // 幽灵条目 basename 碰撞时 sync-docs 也不剔除，用户无从定位（2026-08-08 studio CI 4 连红）
-      console.error(`[docs_freshness] CAPABILITIES.md 登记的条目不存在: ${deadEntries.join(', ')}`);
-      return false;
+      // 证据通道点名条目（harness#119）：此前是 console.error 侧信道（2026-08-08 studio
+      // CI 4 连红时的临时办法），CLI 结构化输出与 trace 两头都拿不到，
+      // 铁律拦截时用户只看到一句通用提示，basename 碰撞下无从定位
+      return {
+        pass: false,
+        evidence: formatEvidence('CAPABILITIES.md 登记的条目不存在', deadEntries),
+      };
     }
 
     // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
@@ -120,7 +124,16 @@ export const docsFreshness: ConstraintCheck = {
         results = runner.runAll({ checks: getBuiltInDocFreshnessConfig() }, projectPath, { requiredDirs });
       }
 
-      if (!results.every(r => r.pass)) return false;
+      const failed = results.filter(r => !r.pass);
+      if (failed.length > 0) {
+        return {
+          pass: false,
+          evidence: formatEvidence(
+            '文档新鲜度检查未通过',
+            failed.map(r => `${r.label}: ${r.message ?? '未通过'}`)
+          ),
+        };
+      }
     } catch {
       // FreshnessRunner 失败不影响整体
     }

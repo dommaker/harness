@@ -8,7 +8,7 @@
  */
 
 import type { ConstraintCheck } from '../core/constraints/checkers';
-import { buildCheckEnv } from '../core/constraints/checkers';
+import { buildCheckEnv, normalizeCheckOutcome } from '../core/constraints/checkers';
 import type { Gate, GateContext, GateDecision } from './types';
 import { gateResult } from './types';
 import { decisionFromResult } from './decision';
@@ -16,7 +16,8 @@ import { decisionFromResult } from './decision';
 /**
  * 将已注册 checker 适配为统一 Gate（checker-as-guard 接线点）
  *
- * 判定映射：false（违反）→ deny；true（满足）/ 'skip'（未评估）→ abstain。
+ * 判定映射：violated（false 或 CheckDetail.pass=false）→ deny；
+ * 满足 / 'skip'（未评估）→ abstain。违规证据随理由带出。
  *
  * @param check 已注册的 ConstraintCheck（经 checkers 注册表取回）
  * @param order 门禁顺序（供 guard 链排序）
@@ -29,19 +30,14 @@ export function createCheckerGate(check: ConstraintCheck, order = 0): Gate {
       const startTime = Date.now();
       const projectPath = ctx.projectPath || process.cwd();
       const env = buildCheckEnv({ operation: 'manual', projectPath }, 'none');
-      const outcome = await check.evaluate(env);
-      return decisionFromResult(
-        gateResult(
-          check.id,
-          outcome !== false,
-          outcome === false
-            ? `checker "${check.id}" 判定违规`
-            : outcome === 'skip'
-              ? `checker "${check.id}" 跳过（证据未接线）`
-              : `checker "${check.id}" 通过`,
-          startTime
-        )
-      );
+      const outcome = normalizeCheckOutcome(await check.evaluate(env));
+      const evidence = outcome.evidence.map((e) => `\n  - ${e}`).join('');
+      const reason = outcome.skipped
+        ? `checker "${check.id}" 跳过（证据未接线）`
+        : outcome.satisfied
+          ? `checker "${check.id}" 通过`
+          : `checker "${check.id}" 判定违规${evidence}`;
+      return decisionFromResult(gateResult(check.id, outcome.satisfied, reason, startTime));
     },
   };
 }

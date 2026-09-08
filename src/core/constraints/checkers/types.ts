@@ -73,8 +73,67 @@ export function buildCheckEnv(
  * - true = 满足（pass）
  * - false = 违反（fail）
  * - 'skip' = 未评估（项目未采用对应约定，或证据 flag 未接线），不计 pass/fail
+ * - CheckDetail = 判定 + 证据行（harness#119）
  */
-export type CheckOutcome = boolean | 'skip';
+export type CheckOutcome = boolean | 'skip' | CheckDetail;
+
+/**
+ * 带证据的检查结果（harness#119）
+ *
+ * 动机：只回布尔时，fail 的具体原因（哪个文件没登记）在 CLI 与 trace 两头都落脚不了，
+ * 一条恒红的约束无法被诊断。证据行由 checker 自行措辞（自描述、可直接给人看），
+ * 编排层只负责透传与打印，不参与解释内容。
+ *
+ * `pass: true` + 非空 evidence = 「满足但有提示」：不进 pass/fail 统计口径，
+ * 仅作为可观测输出（如仓库级文档漂移——与本次变更无因果，不该判违规）。
+ */
+export interface CheckDetail {
+  /** false = 违反；true = 满足 */
+  pass: boolean;
+  /** 证据行（每条自描述，如「变更文件未登记: src/foo.ts」） */
+  evidence?: string[];
+}
+
+/** 归一后的检查结果：编排层 / gate 唯一消费形状 */
+export interface NormalizedOutcome {
+  satisfied: boolean;
+  skipped: boolean;
+  evidence: string[];
+}
+
+/** 证据条数上限：trace 是 JSONL，缺口上百项时不能整仓落盘 */
+export const MAX_EVIDENCE_ITEMS = 10;
+
+/**
+ * 组装证据行：一行说明 + 逐条依据（超限截断）
+ *
+ * 每行自描述且不带缩进——缩进由消费端（CLI / gate 理由 / 铁律异常文案）决定，trace 原样存。
+ * 截断行指向全量入口，不让读者以为列完了。
+ */
+export function formatEvidence(summary: string, items: string[]): string[] {
+  const shown = items.slice(0, MAX_EVIDENCE_ITEMS);
+  const hidden = items.length - shown.length;
+  return [
+    summary,
+    ...shown,
+    ...(hidden > 0 ? [`…另 ${hidden} 项（全量见 harness sync-docs --check）`] : []),
+  ];
+}
+
+/**
+ * 归一 CheckOutcome（boolean | 'skip' | CheckDetail）为统一形状
+ *
+ * skip 恒不携带证据：未评估的约束不得留下证据行（否则统计侧会把「没查」读成「查出问题」）。
+ */
+export function normalizeCheckOutcome(outcome: CheckOutcome): NormalizedOutcome {
+  if (outcome === 'skip') return { satisfied: true, skipped: true, evidence: [] };
+  if (typeof outcome === 'boolean') return { satisfied: outcome, skipped: false, evidence: [] };
+  return {
+    satisfied: outcome.pass,
+    skipped: false,
+    evidence: outcome.evidence ?? [],
+  };
+}
 
 /**
  * 单条约束检查实现
@@ -82,7 +141,7 @@ export type CheckOutcome = boolean | 'skip';
 export interface ConstraintCheck {
   /** 约束 ID（与 definitions 一致） */
   id: string;
-  /** 检查主体：true = 满足；false = 违反；'skip' = 未评估 */
+  /** 检查主体：true = 满足；false = 违反；'skip' = 未评估；CheckDetail = 判定 + 证据行 */
   evaluate(env: CheckEnv): Promise<CheckOutcome> | CheckOutcome;
 }
 

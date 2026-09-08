@@ -22,7 +22,7 @@ import { matchesTrigger } from '../../utils/exec';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
-import { getConstraintCheck, buildCheckEnv, type CheckOutcome } from './checkers';
+import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, type CheckOutcome } from './checkers';
 import { createGitEvidence, type GitEvidence } from './git-evidence';
 
 /**
@@ -112,9 +112,11 @@ export class ConstraintChecker {
     }
 
     // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
-    const outcome = await this.checkPrecondition(constraint, context, evidence);
+    const outcome = normalizeCheckOutcome(
+      await this.checkPrecondition(constraint, context, evidence)
+    );
 
-    if (outcome === 'skip') {
+    if (outcome.skipped) {
       return {
         id: constraint.id,
         level: constraint.level,
@@ -126,7 +128,7 @@ export class ConstraintChecker {
       };
     }
 
-    const satisfied = outcome;
+    const satisfied = outcome.satisfied;
 
     return {
       id: constraint.id,
@@ -134,6 +136,7 @@ export class ConstraintChecker {
       satisfied,
       constraint,
       message: satisfied ? undefined : constraint.message,
+      evidence: outcome.evidence.length > 0 ? outcome.evidence : undefined,
       requiredAction: satisfied ? undefined : constraint.enforcement,
       checkedAt: new Date(),
     };
@@ -172,6 +175,7 @@ export class ConstraintChecker {
       severity: this.getSeverity(constraint.level),
       projectPath: context.projectPath,
       sessionId: context.sessionId,
+      evidence: checkResult.evidence,
     });
   }
 

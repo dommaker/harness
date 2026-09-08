@@ -21,8 +21,34 @@ import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { getTraceCollector } from '../../monitoring/traces';
 import { countJsonlLines } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE } from '../../types/trace';
-import type { ConstraintTrigger } from '../../types/constraint';
+import type { ConstraintResult, ConstraintTrigger } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+
+/** 证据行着色（与调用处所属结论块一致） */
+const EVIDENCE_PAINT = {
+  red: chalk.red,
+  yellow: chalk.yellow,
+  gray: chalk.gray,
+} as const;
+
+/**
+ * 打印 checker 的判定证据行（harness#119）
+ *
+ * 文案由 checker 自行措辞（每行自描述），CLI 只负责缩进与着色——
+ * 不在这里解释内容，否则证据形状与措辞会两头漂移。
+ * 传 id 时首行挂上约束 id（提示块里没有父级结论行可依附）。
+ */
+function logEvidence(
+  io: CommandIO,
+  result: ConstraintResult,
+  color: keyof typeof EVIDENCE_PAINT,
+  id?: string
+): void {
+  const paint = EVIDENCE_PAINT[color];
+  (result.evidence ?? []).forEach((line, index) => {
+    log(io, paint(index === 0 && id ? `   - ${id}: ${line}` : `     ${line}`));
+  });
+}
 
 export interface CheckOptions {
   /** 预设名称 */
@@ -110,6 +136,7 @@ export async function check(
         if (r.constraint) {
           log(io, chalk.red(`   - ${r.constraint.id}: ${r.constraint.message}`));
           log(io, chalk.red(`     ${r.constraint.rule}`));
+          logEvidence(io, r, 'red');
         }
       });
       log(io);
@@ -126,12 +153,23 @@ export async function check(
       result.guidelines.filter(r => !r.satisfied).forEach(r => {
         if (r.constraint) {
           log(io, chalk.yellow(`   - ${r.constraint.id}: ${r.constraint.message}`));
+          logEvidence(io, r, 'yellow');
         }
       });
     } else if (result.guidelines.length > 0) {
       const evaluatedGuidelines = result.guidelines.filter(r => !r.skipped);
       const passedGuidelines = evaluatedGuidelines.filter(r => r.satisfied).length;
       log(io, chalk.green(`✅ 指导原则: ${passedGuidelines}/${evaluatedGuidelines.length} 通过`));
+    }
+
+    // 提示：通过但带证据（harness#119）——与本次变更无因果的仓库级漂移在此露出，
+    // 不判违规、不改 exit code，只保证「看得见且能自己修」
+    const hints = [...result.ironLaws, ...result.guidelines].filter(
+      r => !r.skipped && r.satisfied && (r.evidence?.length ?? 0) > 0
+    );
+    if (hints.length > 0) {
+      log(io, chalk.gray(`💡 提示: ${hints.length} 条（不判违规，供参考）`));
+      hints.forEach(r => logEvidence(io, r, 'gray', r.id));
     }
 
     // Skipped：约定未采用 / 证据未接线，未评估（不计通过/失败）

@@ -14,7 +14,7 @@
 import { describe, it, expect } from '@jest/globals';
 import { contextDocSync } from '../context-doc-sync';
 import { docsFreshness } from '../docs-freshness';
-import { buildCheckEnv } from '../types';
+import { buildCheckEnv, normalizeCheckOutcome, type CheckOutcome } from '../types';
 import { collectSourceFiles } from '../../capabilities-reconcile';
 import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
@@ -62,10 +62,16 @@ function evalDocsFreshness(dir: string) {
   );
 }
 
+/** 三态判定（比较判定结论本身，不比较返回形状——harness#119 后 checker 可带回证据） */
+function verdictOf(outcome: CheckOutcome): true | false | 'skip' {
+  const normalized = normalizeCheckOutcome(outcome);
+  return normalized.skipped ? 'skip' : normalized.satisfied;
+}
+
 /** 同一 fixture 上两条约束的判定必须一致（对照断言） */
 async function expectBoth(dir: string, verdict: true | false | 'skip'): Promise<void> {
-  expect(await evalContextDocSync(dir)).toBe(verdict);
-  expect(await evalDocsFreshness(dir)).toBe(verdict);
+  expect(verdictOf(await evalContextDocSync(dir))).toBe(verdict);
+  expect(verdictOf(await evalDocsFreshness(dir))).toBe(verdict);
 }
 
 describe('context_files 三态对照 — context_doc_sync vs docs_freshness（工单 84）', () => {
@@ -140,6 +146,8 @@ describe('docs_freshness 评估段 skip 行为变更（工单 84：约定已立�
       files: ['src/old.ts'],
       capabilitiesBody: `${TABLE_HEAD}| old | src/old.ts | 活 |\n| 遗魂 | src/gone/ | 已删 |`,
     });
-    expect(await evalDocsFreshness(dir)).toBe(false);
+    const outcome = await evalDocsFreshness(dir);
+    expect(verdictOf(outcome)).toBe(false);
+    expect(normalizeCheckOutcome(outcome).evidence.join('\n')).toContain('src/gone/');
   });
 });

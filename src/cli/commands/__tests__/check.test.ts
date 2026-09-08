@@ -242,6 +242,78 @@ describe('check command（真 git fixture）', () => {
     });
   });
 
+  describe('判定证据外显（harness#119）', () => {
+    /** 带 CAPABILITIES.md 的 git 仓库：登记列表外的源文件即为仓库级漂移 */
+    function capRepo(registered: string[]): string {
+      const dir = gitRepo();
+      const rows = registered
+        .map((rel) => `| ${path.basename(rel, '.ts')} | ${rel} | fixture |\n`)
+        .join('');
+      write(dir, 'CAPABILITIES.md', `# C\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n${rows}`);
+      git(dir, 'add', 'CAPABILITIES.md');
+      git(dir, 'commit', '-q', '-m', 'capabilities');
+      return dir;
+    }
+
+    /** 从本用例 trace 文件里取某条约束的记录 */
+    function traceOf(constraintId: string) {
+      return fs
+        .readFileSync(traceFile, 'utf-8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { constraintId: string; result: string; evidence?: string[] })
+        .find((l) => l.constraintId === constraintId);
+    }
+
+    it('变更文件未登记 → 警告随附证据点名该文件', async () => {
+      const dir = capRepo(['src/existing.ts', 'src/nested/deep.ts']);
+      stageChange(dir, 'src/nested/extra.ts', 'export const e = 1;\n');
+      passTraces(dir);
+
+      const result = await check(
+        { preset: 'standard', staged: true, projectPath: dir, trigger: 'module_modification' },
+        io
+      );
+
+      expect(io.outText()).toContain('- capability_sync');
+      expect(io.outText()).toContain('src/nested/extra.ts');
+      expect(result).toEqual({ kind: 'ok' });
+    });
+
+    it('仓库级漂移（与本次变更无关）→ 提示块露出，不判违规', async () => {
+      const dir = capRepo(['src/existing.ts']);
+      passTraces(dir);
+
+      const result = await check(
+        { preset: 'standard', staged: true, projectPath: dir, trigger: 'module_modification' },
+        io
+      );
+
+      const out = io.outText();
+      expect(out).toContain('✅ 指导原则: 1/1 通过');
+      expect(out).not.toContain('指导原则警告');
+      expect(out).toContain('💡 提示: 1 条（不判违规，供参考）');
+      expect(out).toContain('- capability_sync:');
+      expect(out).toContain('src/nested/deep.ts');
+      expect(out).toContain('✅ 约束检查通过');
+      expect(result).toEqual({ kind: 'ok' });
+    });
+
+    it('提示与违规都写进 trace 的 evidence 字段（统计侧可诊断）', async () => {
+      const dir = capRepo(['src/existing.ts']);
+      passTraces(dir);
+
+      await check(
+        { preset: 'standard', staged: true, projectPath: dir, trigger: 'module_modification' },
+        io
+      );
+
+      const record = traceOf('capability_sync');
+      expect(record?.result).toBe('pass');
+      expect(record?.evidence?.join('\n')).toContain('src/nested/deep.ts');
+    });
+  });
+
   describe('git 证据单一来源（#87 验收）', () => {
     it('两个 checker 请求同一份 staged diff → 一次 run 内只 spawn 一次', async () => {
       // 新增（非删除）测试行：no_test_simplification 请求 stagedDiff 后放行，

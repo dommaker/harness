@@ -19,6 +19,8 @@ export const DEFAULT_TRACE_FILE = '.harness/logs/traces.log';
  * - 只记录核心字段（零 Token）
  * - 不记录代码片段（需要时从 git diff 获取）
  * - 不记录决策路径（需要时从 execution logs 获取）
+ * - 例外（harness#119）：判定证据允许记录——路径级依据不是代码片段，
+ *   而没有它，一条恒红的约束在统计侧根本无法回答「红在哪」
  */
 export interface ExecutionTrace {
   // ========================================
@@ -52,6 +54,14 @@ export interface ExecutionTrace {
 
   /** 会话 ID（用于追踪同一会话的多次检查） */
   sessionId?: string;
+
+  /**
+   * 判定证据行（harness#119）
+   *
+   * 只落 checker 给出的路径级依据（如未登记文件清单），由 checker 截断条数；
+   * 不落 pass 结果的空数组，避免无信息记录膨胀 JSONL。
+   */
+  evidence?: string[];
 
   // ========================================
   // 用户响应（可选，用于诊断）

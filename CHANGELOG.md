@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-08
+
+### Changes
+- ci(governance): CAPABILITIES.md 漏登 diff 门——sync-docs 写入后非空 diff 即失败，摘掉 --check 的 continue-on-error 空转 (#120)
+- fix(constraints): code-review 修正——执法声明失实、门不限宽、gate 回归补测 (#119)
+- test(cli): projectPath 约定闸收紧——闸2 从文件键集收紧为逐行冻结（豁免文件内新增 cwd 站点/行变形不再静默通过），闸3 补参数默认值形/模板字面量/双引号形匹配且扫描域从 core+gates 扩至整个下游层（src 减 cli）（harness#98）
+- feat(constraints): 判定自带证据，capability_sync 按因果归因 (#119)
+- test(cli): bin smoke 在 CI 缺 dist 时显式失败而非静默 skip；coverage-gate 补 build 先于 test（harness#99）
+- test(core,cli): review 修正——passes-gate 覆盖率用例临时根改走 createProjectFixture 正本（tmpdir，mkdtemp 劫持统一回收，不再建仓内 temp-test-no-coverage-field 留未跟踪目录）；check.test 凭证字面量拆串补 WHY 注释（harness#97）
+- refactor(cli): knowledge upsert/sync-status 迁出至 studio CLI (#110)
+- refactor(update-user-model): 路径常量集中为 resolveUserModelPaths + env 覆盖（HARNESS_UUM_STATE_FILE/HARNESS_UUM_PROFILE_FILE），默认值不变 (#116)
+
 ## [1.4.0] - 2026-09-08
 
 ### Changes

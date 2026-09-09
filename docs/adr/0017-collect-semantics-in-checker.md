@@ -2,7 +2,7 @@
 
 - 日期：2026-09-08
 - 状态：已接受
-- 影响版本：下个 major（2.0.0）—— 包根删除六个公共导出符号（breaking）
+- 影响版本：1.6.0（breaking 内容按 minor 号发布，2026-09-09 人类裁决推翻原「下个 major（2.0.0）」）—— 包根删除六个公共导出符号（breaking）
 - 关联：架构评审 2026-09-08 候选1（grilling 决策树已走完）；ADR-0003（公共导出显式清单，本次为裁决后变更）；ADR-0001（check/prompt 二元模型）；#104 判例（零 adapter 假想 seam 收口）
 
 ## 背景
@@ -29,7 +29,7 @@
 ## 影响
 
 - 代码：删 `src/failure/constraint-handler.ts` 与其测试；`checker.ts` 新增 `collectConstraints` + 私有 `runAllConstraints`；`report.ts` 直调并裁 html；`src/index.ts` / `src/failure/index.ts` 移除六符号。
-- 公开面（breaking）：删 `ConstraintViolationHandler` / `executeWithBlock` / `executeWithCollect` / `executeWithSafeBoolean`（值）与 `ViolationStrategy` / `ViolationHandlingResult`（类型）。迁移路径 = 删引用；需要收集语义的消费者改调 `checker.collectConstraints`（返回形状即原 `ConstraintCheckResult`）。按 major 发布。
+- 公开面（breaking）：删 `ConstraintViolationHandler` / `executeWithBlock` / `executeWithCollect` / `executeWithSafeBoolean`（值）与 `ViolationStrategy` / `ViolationHandlingResult`（类型）。迁移路径 = 删引用；需要收集语义的消费者改调 `checker.collectConstraints`（返回形状即原 `ConstraintCheckResult`）。按 1.6.0 发布。
 - 行为：**`harness report` 在铁律违规时如实上报**（violations 点名、failed ≥ 1、passed < total），不再是零违规全通过；report 运行会对全部触发域内约束逐条写 trace（此前铁律违规即中断，只写到违规那条）。
 - 测试：新增 `report-false-green.test.ts`（假绿回归，先红后绿，真 fixture 不 mock）、`collect-constraints.test.ts`（五枚：不抛/如实/不截断/guidelines 照常/干净对照）；删 constraint-handler 规格测试。
 - 文档：`src/failure/CONTEXT.md`（S4 段重写，记录删除与语义归宿）、`src/core/CONTEXT.md`（检查引擎双出口说明）；`docs/public-exports-review.md` 是 2026-08-19 历史评审快照，不回改。

@@ -2,7 +2,7 @@
 
 - 日期：2026-09-08
 - 状态：已接受
-- 影响版本：下个 major（2.0.0）—— 删两个 CLI 命令（breaking，与 ADR-0017/0018 同车）
+- 影响版本：1.6.0（breaking 内容按 minor 号发布，2026-09-09 人类裁决推翻原「下个 major（2.0.0）」）—— 删两个 CLI 命令（breaking，与 ADR-0017/0018 同车）
 - 关联：架构评审 2026-09-08 候选3（grilling 决策树已走完）；#110 判例（knowledge upsert/sync-status 迁往 studio CLI）；harness#112（readTranscriptSessions 过滤 seam）、harness#116（路径常量 env 覆盖）；src/CONTEXT.md「公共包，禁止硬编码业务路径」
 
 ## 背景

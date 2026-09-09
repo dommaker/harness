@@ -2,7 +2,7 @@
 
 - 日期：2026-09-08
 - 状态：已接受
-- 影响版本：下个 major（2.0.0）—— 公开类型字段收缩 + 公共方法删除 + CLI 选项删除（breaking，与 ADR-0017 同车）
+- 影响版本：1.6.0（breaking 内容按 minor 号发布，2026-09-09 人类裁决推翻原「下个 major（2.0.0）」）—— 公开类型字段收缩 + 公共方法删除 + CLI 选项删除（breaking，与 ADR-0017 同车）
 - 关联：架构评审 2026-09-08 候选2（grilling 决策树已走完）；ADR-0015（覆盖率删薄，同构判例）；ADR-0003（公共导出/类型面裁决后变更）
 
 ## 背景
@@ -29,7 +29,7 @@
 ## 影响
 
 - 代码：`gates/performance.ts`（357→254 行，删随机分支/两维判定/runBenchmark/singleBenchmark/benchmark 配置）、`gates/types.ts`（六字段收缩）、`cli/commands/performance.ts`（字段对齐 + 幽灵面删除）、`gates/definitions.ts`（两个 CLI 选项删除）。
-- 公开面（breaking）：`PerformanceThresholds` 收缩 3 字段、`PerformanceGateConfig` 收缩 3 字段、`GateContext` 收缩 1 字段、`PerformanceGate.runBenchmark` 方法删除、`setTimeouts` 选项收缩、CLI `harness performance` 删 `--benchmark` / `--benchmark-timeout`。studio 对全部删除面零引用。按 major 发布（与 ADR-0017 同车 2.0.0）。
+- 公开面（breaking）：`PerformanceThresholds` 收缩 3 字段、`PerformanceGateConfig` 收缩 3 字段、`GateContext` 收缩 1 字段、`PerformanceGate.runBenchmark` 方法删除、`setTimeouts` 选项收缩、CLI `harness performance` 删 `--benchmark` / `--benchmark-timeout`。studio 对全部删除面零引用。按 1.6.0 发布（与 ADR-0017 同车）。
 - 行为：**`harness performance --coverage-threshold N` / `--bundle-threshold N` 从此真正生效**（此前恒不生效、命令恒绿）；设了 `maxResponseTime`/`maxMemoryUsage` 阈值的假设性消费方不再拿到伪造指标（该消费方全仓不存在）。
 - 测试：CLI 侧两枚红灯先写后绿（构造参数钉 `minCoverage` / `maxBundleSize` KB 直传）；gate 侧删 runBenchmark 套件与随机维度用例，coverage/bundle 行为用例全保留。
 - 文档：`gates/CONTEXT.md` 补「只执法有真实现的维度」约定、benchmark 引用清理；`CAPABILITIES.md` 只登记命令名，无变化。

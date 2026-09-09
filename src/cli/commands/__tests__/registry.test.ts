@@ -97,6 +97,49 @@ describe('命令注册表闭环', () => {
     expect(names.sort()).toEqual([...EXPECTED_TOP_LEVEL_COMMANDS].sort());
   });
 
+  /**
+   * 文档手抄面根因闸（review A5）
+   *
+   * `CLAUDE.md` 的「N CLI subcommands (…)」与 `cli/commands/CONTEXT.md` 的命令清单/计数
+   * 都是注册表实面的人工抄本，无闸时必然漂移：#122 机械 −2 后 CLAUDE.md 仍列着早已按
+   * ADR-0009 删除的 `doc-freshness-check`，声明 22 而实面 21。三向钉死——计数等于条数、
+   * 无幽灵条目、无漏列条目。
+   */
+  it('CLAUDE.md 与 cli/commands/CONTEXT.md 的命令抄本与定义表实面双向一致', () => {
+    const actual = [
+      ...COMMAND_DEFINITIONS.map(d => d.command.split(' ')[0]),
+      ...GATE_DEFINITIONS.map(d => d.cli.command.split(' ')[0]),
+    ].sort();
+
+    const claudeLine = fs
+      .readFileSync(path.join(repoRoot, 'CLAUDE.md'), 'utf-8')
+      .split('\n')
+      .find(line => line.includes('| `src/cli/commands/` |'));
+    expect(claudeLine).toBeDefined();
+    const claudeMatch = (claudeLine || '').match(/(\d+) CLI subcommands \(([^)]*)\)/);
+    expect(claudeMatch).toBeDefined();
+    const claudeNames = claudeMatch![2]
+      .split(',')
+      .map(name => name.trim())
+      .filter(Boolean)
+      .sort();
+    expect(Number(claudeMatch![1])).toBe(actual.length);
+    expect(claudeNames).toEqual(actual);
+
+    const contextDoc = fs.readFileSync(path.join(repoCommandsDir, 'CONTEXT.md'), 'utf-8');
+    const contextCount = contextDoc.match(/(\d+) 个顶层命令/);
+    expect(contextCount).toBeDefined();
+    expect(Number(contextCount![1])).toBe(actual.length);
+    const contextNames = [
+      ...(contextDoc.match(/各命令文件：([^\n]+)/)?.[1] || '').split('/'),
+      ...(contextDoc.match(/门禁命令实现在 ([^（]+)（/)?.[1] || '').split('/'),
+    ]
+      .map(name => name.replace(/`/g, '').trim())
+      .filter(Boolean)
+      .sort();
+    expect(contextNames).toEqual(actual);
+  });
+
   it('命令定义无重复注册名', () => {
     const names = COMMAND_DEFINITIONS.map(d => d.command);
     expect(new Set(names).size).toBe(names.length);

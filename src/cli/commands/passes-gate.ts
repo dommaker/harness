@@ -19,8 +19,6 @@ export interface PassesGateOptions {
   projectPath?: string;
   /** 是否允许部分通过 */
   allowPartial?: boolean;
-  /** 最大重试次数 */
-  maxRetries?: number;
 }
 
 /**
@@ -54,7 +52,6 @@ export async function runPassesGate(
     testCommand,
     requireEvidence: false,
     allowPartialPass: options.allowPartial || false,
-    maxRetries: options.maxRetries || 2,
   };
 
   // 执行测试

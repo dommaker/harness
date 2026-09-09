@@ -16,7 +16,7 @@ describe('PassesGate', () => {
     });
 
     it('creates a PassesGate instance with custom config', () => {
-      const gate = createPassesGate({ enabled: false, maxRetries: 5 });
+      const gate = createPassesGate({ enabled: false, allowPartialPass: true });
       expect(gate).toBeInstanceOf(PassesGate);
     });
   });

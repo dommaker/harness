@@ -29,8 +29,6 @@ const DEFAULT_CONFIG: Required<PassesGateConfig> = {
   testCommand: '',
   requireEvidence: true,
   allowPartialPass: false,
-  maxRetries: 2,
-  retryDelay: 1000,
 };
 
 /**

@@ -128,7 +128,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-t, --test-command <command>', description: '测试命令' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
       { flags: '--allow-partial', description: '允许部分测试通过', defaultValue: false },
-      { flags: '--max-retries <n>', description: '最大重试次数', defaultValue: '2' },
       { flags: '--coverage', description: '检查测试覆盖率' },
       { flags: '--coverage-threshold <n>', description: '覆盖率阈值', defaultValue: '80' },
     ],

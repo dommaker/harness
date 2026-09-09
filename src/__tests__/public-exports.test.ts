@@ -137,6 +137,10 @@ describe('公共导出清单（ADR-0003）', () => {
  * `PassesGateResult`（已删 `setPasses` 的返回形状）正是这样从 #125 的「关联类型导出随迁」
  * 里漏掉、经四级 barrel 存活为公开类型。手法同 #125 的 AC-007：编译期 `@ts-expect-error`
  * 钉住删除 + 源形状钉住整条链，活类型正钉防删多。
+ *
+ * `DynamicTask` 是同案的第二个漏收项（二次复审 B1）：它是 `setPasses(taskId, workDir, task?)`
+ * 的入参形状，#125 删掉 setPasses 后只剩私有 `runTest` 那个从不读取的 `_task` 形参在供养它，
+ * 而包根同名导出取自 `./types/passes-gate`（见 5959b79），所以它是**公开的**死类型。
  */
 describe('包根类型面（ADR-0022 关联类型随迁）', () => {
   const BARREL_CHAIN = [
@@ -146,19 +150,33 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
     '../index.ts',
   ];
 
-  it('PassesGateResult 在整条 barrel 链四级都已消失', () => {
+  function expectAbsentAcrossBarrelChain(typeName: string): void {
     for (const rel of BARREL_CHAIN) {
       const source = fs.readFileSync(path.join(__dirname, rel), 'utf-8');
-      expect({ file: rel, mentions: /PassesGateResult/.test(source) }).toEqual({
+      expect({ file: rel, mentions: source.includes(typeName) }).toEqual({
         file: rel,
         mentions: false,
       });
     }
+  }
+
+  it('PassesGateResult 在整条 barrel 链四级都已消失', () => {
+    expectAbsentAcrossBarrelChain('PassesGateResult');
+  });
+
+  it('DynamicTask 在整条 barrel 链四级都已消失', () => {
+    expectAbsentAcrossBarrelChain('DynamicTask');
   });
 
   it('PassesGateResult 不再是包根可导入类型（编译期钉）', () => {
     // @ts-expect-error 该类型是已删 setPasses 的返回形状，随 ADR-0022 关联类型口径删除
     const removedType: import('../index').PassesGateResult | undefined = undefined;
+    expect(removedType).toBeUndefined();
+  });
+
+  it('DynamicTask 不再是包根可导入类型（编译期钉）', () => {
+    // @ts-expect-error 该类型是已删 setPasses 的 task 入参形状，消费者净删后随 A2 同案收口
+    const removedType: import('../index').DynamicTask | undefined = undefined;
     expect(removedType).toBeUndefined();
   });
 

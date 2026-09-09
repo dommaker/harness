@@ -3,7 +3,7 @@
 - 日期：2026-09-08
 - 状态：已接受
 - 影响版本：无（内部重构 + 文档口径修正，公开面零变化）
-- 关联：架构评审 2026-09-08 候选5（grilling 决策树已走完）；#87（GitEvidence adapter 引入）；候选6/ADR-0022（`checkTestFileChanges` 删除连带消掉一个违例站点）
+- 关联：架构评审 2026-09-08 候选5（grilling 决策树已走完）；#87（GitEvidence adapter 引入）；候选6/ADR-0022（`checkTestFileChanges` 删除连带消掉一个违例站点）；#125（净删 `core/session/` 连带消掉两个豁免站点 → 清单实面四站点，口径见「影响」）
 
 ## 背景
 
@@ -29,6 +29,7 @@
 ## 影响
 
 - 代码：`core/spec/validator.ts:297` 改经 GitEvidence（构造点沿调用链传入或就地 createGitEvidence，按该文件签名现状最小改动）。
-- 文档：`core/CONTEXT.md:28` 禁令改写 + 豁免清单（六站点逐条带理由）；`git-evidence.ts:4,81` 自我声明同步。
+- 文档：`core/CONTEXT.md` 约定段的禁令改写 + 链外豁免清单（逐站点带理由）；`git-evidence.ts` 头部与 `createGitEvidence` 两处自我声明同步。
+- **豁免清单站点数：本 ADR 决策 3 原列六站点，交付实面是四站点。** 多出的两站点 `core/session/clean-state.ts`、`core/session/startup.ts` 随 ADR-0022（#125）净删 `src/core/session/` 整目录而消失——既非改判收口进 seam、也非豁免被撤销，是站点本身不复存在，故清单随该票移除它们（该删除动作的记账见 CHANGELOG `[1.6.0]` 的 #125 条目）。留存四站点 = `cli/commands/release.ts`、`gates/review.ts`、`cli/commands/review.ts`、`knowledge/import.ts`，理由逐条照旧（决策 3）。本文件是本批新建 ADR 而非历史快照，留旧数即被新人照抄错名义（同 ADR-0022 决策 2 的 review A4 口径），故就地回勾、不另立 ADR、不改写决策 3 的原始列法。
 - 连带：`passes-gate.ts:414` 站点随 ADR-0022 删除后，豁免清单不收录它。
 - 测试：spec/validator 改道后补一枚「git 事实经 adapter」用例（mock GitCommandRunner 而非 child_process）。

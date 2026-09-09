@@ -5,9 +5,13 @@
  * 改动 src/index.ts 导出清单时同步更新本文件的 EXPECTED_RUNTIME_EXPORTS，
  * diff 即 PR 评审材料。
  *
- * 两个面两道闸：运行时（值）导出由 Object.keys 逐字冻结；纯类型导出在运行时不可见，
- * 由下方「包根类型面」闸把关——编译期 `@ts-expect-error` 钉已删类型 + 源形状钉整条 barrel 链。
- * 类型面曾有此空缺时 `PassesGateResult` 漏删未被抓到（review A2），钉子据此补上。
+ * 类型面共三道闸，本文件占前两道：① 运行时（值）导出由 Object.keys 逐字冻结；② 下方「包根
+ * 类型面」闸钉的是**删完之后**——编译期 `@ts-expect-error` 钉已删类型 + 源形状钉整条 barrel 链
+ * （`PassesGateResult` 曾从 #125「关联类型导出随迁」漏删且无测试可捕获，review A2 据此补钉）。
+ * 第 ③ 道是类型面**全量清单**冻结，在 `public-type-surface.test.ts`（ADR-0022 追记 4）；它刻意
+ * 不 import 包根，因为本文件的编译期钉在类型面被改动时会让整套 suite「failed to run」（实测注入
+ * 一条 `export type { DynamicTask }` 得 0 tests），拿不到可执行的清单 diff——定级阶段那句
+ * 「这个符号在不在包根导出面」由第 ③ 道回答，不由人的 grep 记忆回答。
  */
 
 import * as fs from 'fs';

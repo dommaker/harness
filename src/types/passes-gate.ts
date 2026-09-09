@@ -56,26 +56,6 @@ export interface TaskTestResult {
 }
 
 /**
- * 测试门控结果
- */
-export interface PassesGateResult {
-  /** 任务 ID */
-  taskId: string;
-  
-  /** 是否允许设置 */
-  allowed: boolean;
-  
-  /** 测试结果 */
-  testResult?: TaskTestResult;
-  
-  /** 尝试次数 */
-  attempts: number;
-  
-  /** 错误信息 */
-  error?: string;
-}
-
-/**
  * 动态任务（用于 passes-gate）
  */
 export interface DynamicTask {

@@ -100,7 +100,6 @@ export {
 export type { CSOIssue, CSOValidationResult } from './core/validators';
 export type {
   PassesGateConfig,
-  PassesGateResult,
   PassesGateCheckResult,
   PassesGateViolation,
   TestResult,

@@ -59,7 +59,6 @@ export type {
   CheckType,
   CheckConfig,
   PassesGateConfig,
-  PassesGateResult,
   TaskTestResult,
   DynamicTask,
 } from './validators';

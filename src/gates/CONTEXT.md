@@ -23,11 +23,12 @@
 - deny 单调是接口契约：决策浅冻结，下游不得改写上游决策
 - `runGates` 是 Gate 链语义的**参考实现**（deny 单调 / ask fail-closed / 全决策浅冻结）：仓内暂无生产调用方（harness CLI 文件驱动逐命令执行，studio `runCompletionGuards` 经 checker-gate 复用语义但不 import），消费方只有测试。「deny 后短路跳过剩余门禁」类优化在出现真实消费者前不做——它与「按执行顺序的全部决策」报告契约直接冲突，短路等于改 GateResult 语义（harness#115 裁决，防后续评审重复提议）
 - ask 枚举预留：暂无实现，runGates fail-closed 按 deny 计
-- **收到的根要传到自己每个 IO/执行点（harness#95）**：门禁只认 `context.projectPath`，内部相对子路径一律锚到它（`SpecAcceptanceGate` 的 tasksPath、`ContractGate` 的 contractPath、e2e/scan/benchmark 的 `cwd`），禁止「根已传入却又取 cwd」、禁止 `xxxPath: './…'` 相对默认值——否则 `-p` 半失效且表现为假绿（acceptance 的「无 tasks.yml 即跳过」= passed:true）。本层唯一保留的 cwd 站点是 `checker-gate` 对 `ctx.projectPath` 的缺省兜底（豁免理由见守护表）。约定正本与两道机器可检的闸见 `src/cli/commands/CONTEXT.md`
+- **收到的根要传到自己每个 IO/执行点（harness#95）**：门禁只认 `context.projectPath`，内部相对子路径一律锚到它（`SpecAcceptanceGate` 的 tasksPath、`ContractGate` 的 contractPath、e2e/scan 的 `cwd`），禁止「根已传入却又取 cwd」、禁止 `xxxPath: './…'` 相对默认值——否则 `-p` 半失效且表现为假绿（acceptance 的「无 tasks.yml 即跳过」= passed:true）。本层唯一保留的 cwd 站点是 `checker-gate` 对 `ctx.projectPath` 的缺省兜底（豁免理由见守护表）。约定正本与两道机器可检的闸见 `src/cli/commands/CONTEXT.md`
 
 ## 注意事项
 - 门禁系统不包含业务逻辑，只提供检查能力
 - `acceptance.ts` 的 13 处 return 是 `AcceptanceGateResult`（无 gate/duration 字段，`evaluate()` 归一化为 GateResult 报告——设计如此，见该方法注释），不是 GateResult 字面量，故不套 `pass`/`fail` 构造器；改成 GateResult 会动公共类型形状
-- 统一的是决策协议（id/order/三态），执行细节（gh pr view/正则黑名单/OpenAPI diff/benchmark）私有——不要把执行细节塞进 Gate 接口
+- 统一的是决策协议（id/order/三态），执行细节（gh pr view/正则黑名单/OpenAPI diff/json-summary 覆盖率）私有——不要把执行细节塞进 Gate 接口
+- `PerformanceGate` 只执法有真实现的维度（coverage 走 json-summary、bundleSize 走 dist 测量）；responseTime/memoryUsage/throughput 三维无真实现（原 Math.random 伪造 + 未接线的 runBenchmark）已随 benchmark 机制整体删除（ADR-0018，架构评审候选2）
 - config.yml gates 段为新增面：引用未注册 id 直接抛错（无历史残留配置需兼容）
 - CommandGate 为命令黑名单检查(SEC-006)

@@ -5,7 +5,8 @@
  */
 
 import chalk from 'chalk';
-import { PerformanceGate } from '../../gates/performance';
+import { PerformanceGate, type ExtendedPerformanceGateConfig } from '../../gates/performance';
+import type { GateContext, PerformanceThresholds } from '../../gates/types';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface PerformanceOptions {
@@ -19,10 +20,6 @@ export interface PerformanceOptions {
   bundle?: boolean;
   /** 打包大小阈值（KB） */
   bundleThreshold?: number;
-  /** 是否检查基准测试 */
-  benchmark?: boolean;
-  /** 基准测试超时（秒） */
-  benchmarkTimeout?: number;
 }
 
 /**
@@ -36,34 +33,28 @@ export async function performance(
 
   const projectPath = options.projectPath || process.cwd();
 
-  // 构建配置
-  const config: any = {};
+  // 构建配置（架构评审候选2：键名对齐 PerformanceThresholds 真字段——
+  // 原 thresholds.coverage / bundleSize 字节换算是错位键，旗帜恒不生效）
+  const config: Partial<ExtendedPerformanceGateConfig> = {};
+  const thresholds: PerformanceThresholds = {};
 
   if (options.coverage && options.coverageThreshold) {
-    config.thresholds = {
-      coverage: options.coverageThreshold,
-    };
+    thresholds.minCoverage = options.coverageThreshold;
   }
 
   if (options.bundleThreshold) {
-    config.thresholds = config.thresholds || {};
-    config.thresholds.bundleSize = options.bundleThreshold * 1024; // KB to bytes
+    thresholds.maxBundleSize = options.bundleThreshold; // KB 直传，gate 按 KB 比较
   }
 
-  if (options.benchmarkTimeout) {
-    config.benchmarkTimeout = options.benchmarkTimeout * 1000; // seconds to ms
+  if (Object.keys(thresholds).length > 0) {
+    config.thresholds = thresholds;
   }
 
   // 创建性能门控实例
   const gate = new PerformanceGate(config);
 
   try {
-    const result = await gate.check({
-      projectPath,
-      checkCoverage: options.coverage,
-      checkBundle: options.bundle,
-      checkBenchmark: options.benchmark,
-    } as any);
+    const result = await gate.check({ projectPath } as GateContext);
 
     if (result.passed) {
       log(io);
@@ -83,13 +74,8 @@ export async function performance(
 
         if (metrics.bundleSize !== undefined) {
           const thresholdKB = options.bundleThreshold || 500;
-          const actualKB = metrics.bundleSize / 1024;
-          const status = actualKB <= thresholdKB ? '✅' : '❌';
-          log(io, chalk.gray(`  打包大小: ${actualKB.toFixed(2)} KB ${status}`));
-        }
-
-        if (metrics.benchmarkTime !== undefined) {
-          log(io, chalk.gray(`  基准测试: ${metrics.benchmarkTime}ms`));
+          const status = metrics.bundleSize <= thresholdKB ? '✅' : '❌';
+          log(io, chalk.gray(`  打包大小: ${metrics.bundleSize} KB ${status}`));
         }
       }
     } else {

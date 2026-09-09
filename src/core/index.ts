@@ -59,20 +59,9 @@ export type {
   CheckType,
   CheckConfig,
   PassesGateConfig,
-  PassesGateResult,
   TaskTestResult,
   DynamicTask,
 } from './validators';
-
-// 会话启动 / 净室状态
-export {
-  SessionStartup,
-  createSessionStartup,
-  DEFAULT_CODE_CHECKPOINTS,
-  MINIMAL_CHECKPOINTS,
-  CleanStateManager,
-  createCleanStateManager,
-} from './session';
 
 // Spec 验证器
 export { SpecValidator } from './spec/validator';

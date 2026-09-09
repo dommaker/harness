@@ -4,7 +4,7 @@
  * - 定义表内每个实现引用（module+export）都必须可解析（构建/测试期断言，
  *   取代 commands barrel 的编译期保护——R6 消灭手工同步后的闭环兜底）
  * - definitions 是纯数据模块：require 它不加载任何命令实现（保 --help/--version 懒加载）
- * - 命令面与 CAPABILITIES.md 的 24 顶层命令一致（防误删回归）
+ * - 命令面与 CAPABILITIES.md 的 21 顶层命令一致（防误删回归）
  * - bin/harness.js 端到端冒烟（dist 存在时）：--version/--help 零命令实现模块，
  *   单命令执行只加载该命令模块（O2 per-command 懒加载）
  */
@@ -35,7 +35,7 @@ function collectRefs(defs: CommandDefinition[]): CommandImplRef[] {
 const EXPECTED_TOP_LEVEL_COMMANDS = [
   'check', 'validate', 'passes-gate', 'init', 'report', 'status', 'spec',
   'sync-docs', 'knowledge', 'sdd', 'failure', 'posteval-plan',
-  'update-user-model', 'release', 'analyze-sessions', 'constraints',
+  'release', 'constraints',
   'spec-baseline-check',
   // 6 门禁命令（GATE_DEFINITIONS 驱动）
   'acceptance', 'command', 'contract', 'performance', 'review', 'security',
@@ -88,13 +88,56 @@ describe('命令注册表闭环', () => {
     }
   });
 
-  it('顶层命令面与预期 24 命令一致（含 6 门禁）', () => {
+  it('顶层命令面与预期 21 命令一致（含 6 门禁）', () => {
     const names = [
       ...COMMAND_DEFINITIONS.map(d => d.command.split(' ')[0]),
       ...GATE_DEFINITIONS.map(d => d.cli.command.split(' ')[0]),
     ];
     expect(new Set(names).size).toBe(names.length);
     expect(names.sort()).toEqual([...EXPECTED_TOP_LEVEL_COMMANDS].sort());
+  });
+
+  /**
+   * 文档手抄面根因闸（review A5）
+   *
+   * `CLAUDE.md` 的「N CLI subcommands (…)」与 `cli/commands/CONTEXT.md` 的命令清单/计数
+   * 都是注册表实面的人工抄本，无闸时必然漂移：#122 机械 −2 后 CLAUDE.md 仍列着早已按
+   * ADR-0009 删除的 `doc-freshness-check`，声明 22 而实面 21。三向钉死——计数等于条数、
+   * 无幽灵条目、无漏列条目。
+   */
+  it('CLAUDE.md 与 cli/commands/CONTEXT.md 的命令抄本与定义表实面双向一致', () => {
+    const actual = [
+      ...COMMAND_DEFINITIONS.map(d => d.command.split(' ')[0]),
+      ...GATE_DEFINITIONS.map(d => d.cli.command.split(' ')[0]),
+    ].sort();
+
+    const claudeLine = fs
+      .readFileSync(path.join(repoRoot, 'CLAUDE.md'), 'utf-8')
+      .split('\n')
+      .find(line => line.includes('| `src/cli/commands/` |'));
+    expect(claudeLine).toBeDefined();
+    const claudeMatch = (claudeLine || '').match(/(\d+) CLI subcommands \(([^)]*)\)/);
+    expect(claudeMatch).toBeDefined();
+    const claudeNames = claudeMatch![2]
+      .split(',')
+      .map(name => name.trim())
+      .filter(Boolean)
+      .sort();
+    expect(Number(claudeMatch![1])).toBe(actual.length);
+    expect(claudeNames).toEqual(actual);
+
+    const contextDoc = fs.readFileSync(path.join(repoCommandsDir, 'CONTEXT.md'), 'utf-8');
+    const contextCount = contextDoc.match(/(\d+) 个顶层命令/);
+    expect(contextCount).toBeDefined();
+    expect(Number(contextCount![1])).toBe(actual.length);
+    const contextNames = [
+      ...(contextDoc.match(/各命令文件：([^\n]+)/)?.[1] || '').split('/'),
+      ...(contextDoc.match(/门禁命令实现在 ([^（]+)（/)?.[1] || '').split('/'),
+    ]
+      .map(name => name.replace(/`/g, '').trim())
+      .filter(Boolean)
+      .sort();
+    expect(contextNames).toEqual(actual);
   });
 
   it('命令定义无重复注册名', () => {

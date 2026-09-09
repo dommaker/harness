@@ -130,9 +130,13 @@ describe('passes-gate command', () => {
       }));
 
       await runPassesGate({ testCommand: 'pytest' }, io);
-      expect(MockPassesGate).toHaveBeenCalledWith(
-        expect.objectContaining({ testCommand: 'pytest' })
-      );
+      // 精确形状（A1）：装配面只剩四个活字段，只写不读的重试字段已随旗帜一并删除
+      expect(MockPassesGate).toHaveBeenCalledWith({
+        enabled: true,
+        testCommand: 'pytest',
+        requireEvidence: false,
+        allowPartialPass: false,
+      });
     });
   });
 

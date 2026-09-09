@@ -264,6 +264,35 @@ export class ConstraintChecker {
     customConfig?: MergedConstraintsConfig | null,
     evidence?: GitEvidence
   ): Promise<ConstraintCheckResult> {
+    return this.runAllConstraints(context, customConfig, evidence, 'block');
+  }
+
+  /**
+   * 收集模式执行约束检查（harness report 的不抛出口，架构评审候选1）
+   *
+   * 与 checkConstraints 共享同一检查体，唯一差别是不 throw：
+   * 铁律违规照进 result.ironLaws、passed=false，后续铁律与 guidelines 照常执行，
+   * trace 逐条照记。报告类消费者拿全量视图；阻断语义只属于 checkConstraints
+   * （throw 契约是 #119 判定证据的外溢面，逐字不动）。
+   */
+  async collectConstraints(
+    context: ConstraintContext,
+    customConfig?: MergedConstraintsConfig | null,
+    evidence?: GitEvidence
+  ): Promise<ConstraintCheckResult> {
+    return this.runAllConstraints(context, customConfig, evidence, 'collect');
+  }
+
+  /**
+   * checkConstraints / collectConstraints 的共享检查体；
+   * mode='block' 首个铁律违规即抛，mode='collect' 全量跑完不抛
+   */
+  private async runAllConstraints(
+    context: ConstraintContext,
+    customConfig: MergedConstraintsConfig | null | undefined,
+    evidence: GitEvidence | undefined,
+    mode: 'block' | 'collect'
+  ): Promise<ConstraintCheckResult> {
     // run 起始：重置 src 扫描缓存（S7）；git 证据 = 本 run 独占的 adapter 实例（工单 18 → #87）
     this.cache.invalidate();
     const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());
@@ -279,7 +308,7 @@ export class ConstraintChecker {
     // context.operation 为主触发条件，extraTriggers 为次级推断（ADR-0001），任一命中即匹配
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-    // 1. Iron Laws: 必须全部通过
+    // 1. Iron Laws: block 模式首个违规即抛；collect 模式全量收集
     for (const constraint of Object.values(constraints.ironLaws)) {
       if (!matchesTrigger(constraint, operations)) continue;
 
@@ -289,7 +318,9 @@ export class ConstraintChecker {
 
       if (!checkResult.satisfied) {
         result.passed = false;
-        throw new ConstraintViolationError(checkResult);
+        if (mode === 'block') {
+          throw new ConstraintViolationError(checkResult);
+        }
       }
     }
 

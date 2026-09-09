@@ -1,9 +1,12 @@
 /**
- * git 证据适配器（架构评审 #87）
+ * git 证据适配器（架构评审 #87，适用范围按 ADR-0021 收窄）
  *
- * 全仓唯一的 git 取证点：context-builder（触发推断）与 checker 层（CheckEnv 证据）
+ * check 链路的唯一 git 取证点：context-builder（触发推断）与 checker 层（CheckEnv 证据）
  * 共用同一实例 = 共用同一证据来源。此前两处各自抓真 git，一次 CLI check 里
  * `git diff --cached --name-only` 实跑两遍。
+ *
+ * 链外站点（写操作 / 发布编排 / 审查流 / 降级容忍）不并入本 seam，记名豁免清单见
+ * `core/CONTEXT.md` 约定段；同型站点（spec/validator 的 staged 列表）经此取证据。
  *
  * seam 上的两个真 adapter：
  * - 缺省 realGitCommandRunner：真 git 子进程
@@ -77,7 +80,7 @@ export function parseHeadDirs(treeOutput: string): Set<string> {
 }
 
 /**
- * 构造 git 证据 adapter（生产侧唯一构造点）
+ * 构造 git 证据 adapter（GitEvidence 实例的唯一构造点：check 链路与 spec/validator 的 staged 取证都经此）
  *
  * @param projectPath 取证目录
  * @param run 命令执行器，缺省真 git；测试注入计数/替身执行器即可脱离子进程

@@ -29,12 +29,11 @@
 - `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)
 - `ColdStartImporter` — 冷启动知识导入
 - `KnowledgeHealthScorer` — 知识健康评分（doctor.ts）
-- `KnowledgeLifecycleHooks` — 生命周期 hook
 
 ## 依赖关系
 - 依赖 `src/types/` 知识相关类型
 - 依赖 `src/utils/frontmatter` — markdown frontmatter 解析/序列化的唯一正本（harness#89：store、migration、index-generator、ingest 共用同一套语法判定，不再各写正则）
-- 依赖 `src/context/types`（ContextUsageSnapshot 等类型；不依赖 monitoring——知识健康评分由本目录 doctor.ts 的 KnowledgeHealthScorer 承载）
+- 不依赖 `src/context/`（原 `lifecycle-hooks.ts` 是唯一 import `context/types` 的文件，已随 ADR-0022 删除），也不依赖 monitoring——知识健康评分由本目录 doctor.ts 的 KnowledgeHealthScorer 承载
 - 被 `src/cli/commands/knowledge.ts` CLI 消费（含 `migrate` 子命令）
 
 ## 约定

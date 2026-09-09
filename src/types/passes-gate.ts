@@ -24,12 +24,6 @@ export interface PassesGateConfig {
    * 不赦免非零退出码（判定依据收在 core/validators/test-output.ts 的 judgeTestRun，ADR-0014）
    */
   allowPartialPass?: boolean;
-  
-  /** 最大重试次数 */
-  maxRetries?: number;
-  
-  /** 重试延迟（毫秒） */
-  retryDelay?: number;
 }
 
 /**
@@ -59,26 +53,6 @@ export interface TaskTestResult {
   
   /** 证据路径 */
   evidence?: string;
-}
-
-/**
- * 测试门控结果
- */
-export interface PassesGateResult {
-  /** 任务 ID */
-  taskId: string;
-  
-  /** 是否允许设置 */
-  allowed: boolean;
-  
-  /** 测试结果 */
-  testResult?: TaskTestResult;
-  
-  /** 尝试次数 */
-  attempts: number;
-  
-  /** 错误信息 */
-  error?: string;
 }
 
 /**

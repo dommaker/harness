@@ -111,8 +111,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--coverage-threshold <n>', description: '覆盖率阈值', defaultValue: '80' },
         { flags: '--bundle', description: '检查打包大小', defaultValue: false },
         { flags: '--bundle-threshold <n>', description: '打包大小阈值 (KB)', defaultValue: '500' },
-        { flags: '--benchmark', description: '运行基准测试', defaultValue: false },
-        { flags: '--benchmark-timeout <n>', description: '基准测试超时（秒）', defaultValue: '60' },
       ],
       action: { module: 'performance', export: 'performance' },
       mapActionArgs: (_positionals, options) => [
@@ -122,8 +120,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
           coverageThreshold: parseInt(String(options.coverageThreshold), 10),
           bundle: options.bundle,
           bundleThreshold: parseInt(String(options.bundleThreshold), 10),
-          benchmark: options.benchmark,
-          benchmarkTimeout: parseInt(String(options.benchmarkTimeout), 10),
         },
       ],
     },

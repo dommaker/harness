@@ -37,21 +37,16 @@ describe('PerformanceGate', () => {
       const defaultGate = new PerformanceGate();
       const config = defaultGate.getConfig();
       expect(config.enabled).toBe(true);
-      expect(config.warmupRuns).toBe(2);
-      expect(config.measureRuns).toBe(5);
+      expect(config.thresholds).toEqual({});
     });
 
     it('should accept custom config', () => {
       const customGate = new PerformanceGate({
         enabled: false,
-        warmupRuns: 3,
-        measureRuns: 10,
         coverageTimeout: 60000,
       });
       const config = customGate.getConfig();
       expect(config.enabled).toBe(false);
-      expect(config.warmupRuns).toBe(3);
-      expect(config.measureRuns).toBe(10);
       expect(config.coverageTimeout).toBe(60000);
     });
   });
@@ -164,17 +159,16 @@ describe('PerformanceGate', () => {
 
     it('should include metrics in result', async () => {
       const strictGate = new PerformanceGate({
-        thresholds: {
-          maxResponseTime: 1000,
-          maxMemoryUsage: 500,
-        },
+        thresholds: { maxBundleSize: 1000 },
       });
+
+      mockFs.readdir.mockResolvedValueOnce(['bundle.js'] as any);
+      mockFs.stat.mockResolvedValueOnce({ isFile: () => true, size: 500 * 1024 } as any);
 
       const result = await strictGate.check(baseContext);
 
       expect(result.details?.metrics).toBeDefined();
-      expect(result.details?.metrics.responseTime).toBeDefined();
-      expect(result.details?.metrics.memoryUsage).toBeDefined();
+      expect(result.details?.metrics.bundleSize).toBeDefined();
     });
   });
 
@@ -257,66 +251,6 @@ describe('PerformanceGate', () => {
     });
   });
 
-  describe('runBenchmark()', () => {
-    it('should return benchmark results', async () => {
-      mockExec.mockImplementation((cmd, opts, callback) => {
-        callback(null, { stdout: '', stderr: '' });
-      });
-
-      const result = await gate.runBenchmark(baseContext);
-
-      expect(result.avgResponseTime).toBeGreaterThanOrEqual(0);
-      expect(result.avgMemoryUsage).toBeGreaterThanOrEqual(0);
-    });
-
-    it('should run warmup and measure runs', async () => {
-      const customGate = new PerformanceGate({
-        warmupRuns: 1,
-        measureRuns: 2,
-        benchmarkCommand: 'npm run bench',
-      });
-
-      // Each exec call should succeed
-      mockExec.mockImplementation((cmd, opts, callback) => {
-        callback(null, { stdout: '', stderr: '' });
-      });
-
-      await customGate.runBenchmark(baseContext);
-
-      // warmupRuns + measureRuns = 3 calls
-      expect(mockExec).toHaveBeenCalledTimes(3);
-    });
-
-    it('should use custom benchmark command', async () => {
-      const customGate = new PerformanceGate({
-        benchmarkCommand: 'npm run benchmark',
-      });
-
-      mockExec.mockImplementation((cmd, opts, callback) => {
-        expect(cmd).toContain('npm run benchmark');
-        callback(null, { stdout: '', stderr: '' });
-      });
-
-      await customGate.runBenchmark(baseContext);
-    });
-
-    it('should handle benchmark error', async () => {
-      const errorGate = new PerformanceGate({
-        warmupRuns: 1,
-        benchmarkCommand: 'npm run bench',
-      });
-
-      // Mock exec to fail
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(new Error('Benchmark failed'), null);
-      });
-
-      const result = await errorGate.runBenchmark(baseContext);
-
-      expect(result.error).toContain('failed');
-    });
-  });
-
   describe('setThresholds()', () => {
     it('should update thresholds', () => {
       gate.setThresholds({
@@ -346,12 +280,10 @@ describe('PerformanceGate', () => {
     it('should update timeouts', () => {
       gate.setTimeouts({
         coverage: 30000,
-        benchmark: 20000,
       });
 
       const config = gate.getConfig();
       expect(config.coverageTimeout).toBe(30000);
-      expect(config.benchmarkTimeout).toBe(20000);
     });
   });
 

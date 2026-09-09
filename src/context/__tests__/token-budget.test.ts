@@ -2,7 +2,7 @@
  * TokenBudget 和 TokenEstimator 测试
  */
 
-import { TokenBudget, TokenEstimator, AdaptiveTokenBudget } from '../token-budget';
+import { TokenBudget, TokenEstimator } from '../token-budget';
 
 describe('TokenEstimator', () => {
   describe('estimateText()', () => {
@@ -253,86 +253,6 @@ describe('TokenBudget', () => {
     it('should return false when not affordable', () => {
       const budget = new TokenBudget(100);
       expect(budget.canAfford(200)).toBe(false);
-    });
-  });
-});
-
-describe('AdaptiveTokenBudget', () => {
-  describe('recordActualUsage()', () => {
-    it('should record usage history', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      budget.recordActualUsage(500);
-      budget.recordActualUsage(600);
-      expect(budget.getAverageUsage()).toBe(550);
-    });
-
-    it('should trim history when exceeding max size', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      for (let i = 0; i < 15; i++) {
-        budget.recordActualUsage(100 + i);
-      }
-      expect(budget.getAverageUsage()).toBeGreaterThan(0);
-    });
-  });
-
-  describe('getAverageUsage()', () => {
-    it('should return 0 when no history', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      expect(budget.getAverageUsage()).toBe(0);
-    });
-  });
-
-  describe('predictNeed()', () => {
-    it('should return total when no history', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      expect(budget.predictNeed()).toBe(1000);
-    });
-
-    it('should predict based on history', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      budget.recordActualUsage(400);
-      budget.recordActualUsage(500);
-      budget.recordActualUsage(600);
-      const predicted = budget.predictNeed(0.9);
-      expect(predicted).toBeGreaterThan(0);
-    });
-  });
-
-  describe('suggestBudgetAdjustment()', () => {
-    it('should suggest increase when ratio > 0.9', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      for (let i = 0; i < 5; i++) {
-        budget.recordActualUsage(950);
-      }
-      const suggestion = budget.suggestBudgetAdjustment();
-      expect(suggestion.action).toBe('increase');
-      expect(suggestion.suggestedBudget).toBeGreaterThan(1000);
-    });
-
-    it('should suggest decrease when ratio < 0.5 and history >= 5', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      for (let i = 0; i < 5; i++) {
-        budget.recordActualUsage(100);
-      }
-      const suggestion = budget.suggestBudgetAdjustment();
-      expect(suggestion.action).toBe('decrease');
-    });
-
-    it('should maintain when ratio is moderate', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      for (let i = 0; i < 5; i++) {
-        budget.recordActualUsage(600);
-      }
-      const suggestion = budget.suggestBudgetAdjustment();
-      expect(suggestion.action).toBe('maintain');
-    });
-
-    it('should maintain when history < 5 even if low usage', () => {
-      const budget = new AdaptiveTokenBudget(1000);
-      budget.recordActualUsage(100);
-      budget.recordActualUsage(100);
-      const suggestion = budget.suggestBudgetAdjustment();
-      expect(suggestion.action).toBe('maintain');
     });
   });
 });

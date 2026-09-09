@@ -19,7 +19,6 @@ export type {
 
 export type {
   PassesGateConfig,
-  PassesGateResult,
   TaskTestResult,
   DynamicTask,
 } from '../../types/passes-gate';

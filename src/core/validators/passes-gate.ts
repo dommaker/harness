@@ -7,13 +7,12 @@
  * 「过了没」的判定依据不在本文件：唯一入口是 test-output.ts 的 judgeTestRun（ADR-0014）
  */
 
-import { execAsync, delay } from '../../utils/exec';
+import { execAsync } from '../../utils/exec';
 import { judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type {
   PassesGateConfig,
-  PassesGateResult,
   TaskTestResult,
   DynamicTask,
   TestResult,
@@ -30,23 +29,7 @@ const DEFAULT_CONFIG: Required<PassesGateConfig> = {
   testCommand: '',
   requireEvidence: true,
   allowPartialPass: false,
-  maxRetries: 2,
-  retryDelay: 1000,
 };
-
-/**
- * 测试文件保护模式
- */
-const PROTECTED_TEST_PATTERNS = [
-  '**/*.test.ts',
-  '**/*.test.tsx',
-  '**/*.test.js',
-  '**/*.spec.ts',
-  '**/*.spec.tsx',
-  '**/*.spec.js',
-  '**/tests/**',
-  '**/__tests__/**',
-];
 
 /**
  * 检测项目的测试命令（唯一正本，CLI 与库调用共消费，架构评审 A2）
@@ -98,7 +81,6 @@ export async function detectTestCommand(projectPath: string): Promise<string | u
  */
 export class PassesGate {
   private config: Required<PassesGateConfig>;
-  private testResults: Map<string, TaskTestResult> = new Map();
 
   constructor(config: Partial<PassesGateConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -167,99 +149,6 @@ export class PassesGate {
     return {
       allowed: true,
       testResult,
-    };
-  }
-
-  /**
-   * 设置任务通过状态
-   * 核心方法：强制测试验证
-   */
-  async setPasses(
-    taskId: string,
-    value: boolean,
-    workDir: string,
-    task?: DynamicTask
-  ): Promise<PassesGateResult> {
-    if (!this.config.enabled) {
-      return {
-        taskId,
-        allowed: true,
-        attempts: 0,
-      };
-    }
-
-    // 如果设置为 false，直接允许
-    if (value === false) {
-      return {
-        taskId,
-        allowed: true,
-        testResult: {
-          passed: false,
-          command: 'manual',
-          timestamp: new Date(),
-        },
-        attempts: 0,
-      };
-    }
-
-    // 如果设置为 true，必须运行测试
-    let attempts = 0;
-    let lastError: string | undefined;
-    let testResult: TaskTestResult | undefined;
-
-    while (attempts <= this.config.maxRetries) {
-      attempts++;
-      
-      try {
-        testResult = await this.runTest(workDir, task);
-        
-        if (testResult.passed) {
-          // 记录测试结果
-          this.testResults.set(taskId, testResult);
-          
-          // 如果要求证据，验证证据存在
-          if (this.config.requireEvidence && testResult.evidence) {
-            const evidenceExists = await this.verifyEvidence(testResult.evidence, workDir);
-            if (!evidenceExists) {
-              return {
-                taskId,
-                allowed: false,
-                error: 'Test evidence not found',
-                testResult,
-                attempts,
-              };
-            }
-          }
-          
-          return {
-            taskId,
-            allowed: true,
-            testResult,
-            attempts,
-          };
-        }
-        
-        lastError = `Tests failed: ${testResult.failures?.join(', ') || 'Unknown error'}`;
-        
-        // 等待后重试
-        if (attempts <= this.config.maxRetries) {
-          await delay(this.config.retryDelay);
-        }
-      } catch (error: any) {
-        lastError = error.message;
-        
-        if (attempts <= this.config.maxRetries) {
-          await delay(this.config.retryDelay);
-        }
-      }
-    }
-
-    return {
-      taskId,
-      allowed: false,
-      error: lastError,
-      testResult,
-      attempts,
     };
   }
 
@@ -402,43 +291,6 @@ export class PassesGate {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * 检测是否修改了测试文件
-   */
-  async checkTestFileChanges(workDir: string): Promise<string[]> {
-    const changedTestFiles: string[] = [];
-
-    try {
-      const { stdout } = await execAsync('git diff --name-only', { cwd: workDir });
-      const changedFiles = stdout.split('\n').filter(Boolean);
-
-      // 简单的模式匹配
-      for (const file of changedFiles) {
-        const isTestFile = PROTECTED_TEST_PATTERNS.some(() => {
-          return file.includes('.test.') ||
-                 file.includes('.spec.') ||
-                 file.includes('/tests/') ||
-                 file.includes('/__tests__/');
-        });
-
-        if (isTestFile) {
-          changedTestFiles.push(file);
-        }
-      }
-    } catch {
-      // Git 不可用，跳过检查
-    }
-
-    return changedTestFiles;
-  }
-
-  /**
-   * 获取任务的测试结果
-   */
-  getTestResult(taskId: string): TaskTestResult | undefined {
-    return this.testResults.get(taskId);
   }
 
 }

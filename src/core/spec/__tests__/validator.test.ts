@@ -3,6 +3,7 @@
  */
 
 import { SpecValidator, validateSpec, validateAllSpecs } from '../validator';
+import type { GitCommandRunner } from '../../constraints/git-evidence';
 import * as fs from 'fs/promises';
 
 // Mock fs
@@ -262,6 +263,29 @@ describe('SpecValidator', () => {
       // 可能无法找到 spec 文件
       expect(result).toBeDefined();
       expect(result.total).toBeGreaterThanOrEqual(0);
+    });
+
+    it('staged 取证经 GitEvidence adapter（注入 runner，不落 child_process）', async () => {
+      const calls: Array<{ command: string; cwd: string }> = [];
+      const runner: GitCommandRunner = (command, cwd) => {
+        calls.push({ command, cwd });
+        return 'specs/test.yml\nARCHITECTURE.md\nsrc/utils/helper.ts';
+      };
+
+      const files: string[] = await (validator as any).getStagedFiles('/repo', runner);
+
+      expect(calls).toEqual([{ command: 'git diff --cached --name-only', cwd: '/repo' }]);
+      expect(files).toEqual(['/repo/specs/test.yml', '/repo/ARCHITECTURE.md']);
+    });
+
+    it('runner 抛错 → 空列表（取证失败降级语义与迁移前一致）', async () => {
+      const runner: GitCommandRunner = () => {
+        throw new Error('not a git repository');
+      };
+
+      const files: string[] = await (validator as any).getStagedFiles('/repo', runner);
+
+      expect(files).toEqual([]);
     });
   });
 

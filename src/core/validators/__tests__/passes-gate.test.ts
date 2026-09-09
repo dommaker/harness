@@ -2,7 +2,7 @@
  * Tests for passes-gate.ts
  *
  * Priority: test pure logic methods (check)
- * Skip methods that do real file I/O / exec (setPasses, runTests, runTest, detectTestCommand, etc.)
+ * Skip methods that do real file I/O / exec (runTests, runTest, detectTestCommand, etc.)
  * 测试产物解析判定不在此面：见 test-output.test.ts（ADR-0012）
  */
 
@@ -16,7 +16,7 @@ describe('PassesGate', () => {
     });
 
     it('creates a PassesGate instance with custom config', () => {
-      const gate = createPassesGate({ enabled: false, maxRetries: 5 });
+      const gate = createPassesGate({ enabled: false, allowPartialPass: true });
       expect(gate).toBeInstanceOf(PassesGate);
     });
   });
@@ -65,13 +65,6 @@ describe('PassesGate', () => {
       const testResult = { passed: true, command: 'npm test', coverage: 85 };
       const result = gate.check(testResult);
       expect(result.testResult).toEqual(testResult);
-    });
-  });
-
-  describe('getTestResult', () => {
-    it('returns undefined for unknown task', () => {
-      const gate = createPassesGate();
-      expect(gate.getTestResult('unknown')).toBeUndefined();
     });
   });
 });

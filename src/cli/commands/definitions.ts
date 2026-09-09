@@ -128,7 +128,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-t, --test-command <command>', description: '测试命令' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
       { flags: '--allow-partial', description: '允许部分测试通过', defaultValue: false },
-      { flags: '--max-retries <n>', description: '最大重试次数', defaultValue: '2' },
       { flags: '--coverage', description: '检查测试覆盖率' },
       { flags: '--coverage-threshold <n>', description: '覆盖率阈值', defaultValue: '80' },
     ],
@@ -157,7 +156,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     description: '生成检查报告',
     options: [
       { flags: '-o, --output <path>', description: '输出文件路径' },
-      { flags: '-f, --format <format>', description: '输出格式 (json/markdown/html)', defaultValue: 'markdown' },
+      { flags: '-f, --format <format>', description: '输出格式 (json/markdown)', defaultValue: 'markdown' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
     ],
     action: { module: 'report', export: 'report' },
@@ -299,22 +298,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     mapActionArgs: (positionals) => [{ planPath: positionals[0] }],
   },
   {
-    command: 'update-user-model',
-    alias: 'uum',
-    description: '从新对话中提取信号，更新用户思维模型（增量演化）',
-    options: [
-      { flags: '--json', description: 'JSON 格式输出', defaultValue: false },
-      { flags: '--dry-run', description: '只显示变化，不更新状态', defaultValue: false },
-      { flags: '--days <n>', description: '只处理最近 N 天的会话（自然日，含今天）' },
-    ],
-    action: { module: 'update-user-model', export: 'updateUserModel' },
-    mapActionArgs: (_pos, options) => [{
-      days: options.days !== undefined ? parseInt(String(options.days), 10) : undefined,
-      json: options.json,
-      dryRun: options.dryRun,
-    }],
-  },
-  {
     command: 'release',
     description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。不依赖 Studio API。',
     options: [
@@ -323,20 +306,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     ],
     action: { module: 'release', export: 'release' },
     mapActionArgs: (_pos, options) => [{ bumpType: options.bump, dryRun: options.dryRun }],
-  },
-  {
-    command: 'analyze-sessions',
-    alias: 'analyze',
-    description: '分析 Claude Code 对话，挖掘纠正模式和高频概念，生成规则候选',
-    options: [
-      { flags: '-d, --days <n>', description: '分析最近 N 天的会话', defaultValue: '7' },
-      { flags: '--json', description: 'JSON 格式输出', defaultValue: false },
-    ],
-    action: { module: 'analyze-sessions', export: 'analyzeSessions' },
-    mapActionArgs: (_pos, options) => [{
-      days: parseInt(String(options.days), 10),
-      json: options.json,
-    }],
   },
   {
     command: 'constraints',

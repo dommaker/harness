@@ -95,12 +95,28 @@ describe('PassesGate.check()', () => {
   });
 
   /**
-   * AC-007：保留原有 setPasses() 方法（向后兼容）
+   * AC-007（ADR-0022 改写）：零消费者方法已从公共面删除
+   *
+   * 原用例断言「保留 setPasses() 向后兼容」——兼容对象经 harness+studio 双仓
+   * 核实不存在，ADR-0022 明确推翻该 AC。`@ts-expect-error` 在编译期钉住删除，
+   * 运行期断言同时钉住形状（方法不存在于原型）。
    */
-  it('AC-007: should keep setPasses() method for backward compatibility', () => {
+  it('AC-007: setPasses()/getTestResult()/checkTestFileChanges() are removed from the public surface', () => {
     const gate = new PassesGate();
-    expect(gate.setPasses).toBeDefined();
-    expect(typeof gate.setPasses).toBe('function');
+
+    // @ts-expect-error setPasses 已随 ADR-0022 删除
+    expect(gate.setPasses).toBeUndefined();
+    // @ts-expect-error getTestResult 已随 ADR-0022 删除
+    expect(gate.getTestResult).toBeUndefined();
+    // @ts-expect-error checkTestFileChanges 已随 ADR-0022 删除
+    expect(gate.checkTestFileChanges).toBeUndefined();
+    expect(PassesGate.prototype).not.toHaveProperty('setPasses');
+    expect(PassesGate.prototype).not.toHaveProperty('getTestResult');
+    expect(PassesGate.prototype).not.toHaveProperty('checkTestFileChanges');
+
+    // 保留面：真实消费的方法不动
+    expect(typeof gate.check).toBe('function');
+    expect(typeof gate.runTests).toBe('function');
   });
 
   /**

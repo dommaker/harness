@@ -27,7 +27,7 @@
 1. **删除六项**（上表），各自连带：实现文件、barrel 链（子目录 index → core/index → src/index）、public-exports.test.ts 条目、自有测试文件、CONTEXT.md 提及。`PROTECTED_TEST_PATTERNS` 死数据随 `checkTestFileChanges` 同删。
 2. **PassesGate 保留面**：`check()` / `runTests()` 两个真实消费点不动——类成员实面只有这两个公开方法加 `constructor` 与私有的 `config`/`runTest`/`generateEvidence`/`verifyEvidence`（本项初稿把 `setThresholds` 列为保留面成员，是虚列：`setThresholds`/`setTimeouts` 属 `PerformanceGate`，`src/gates/performance.ts:236,243`，review A4 修正；本文件是本批新建 ADR 而非历史快照，留错即被新人照抄错名义，正是 ADR-0021 要治的病）；AC-007 用例改写为钉新形状（三方法不存在，`@ts-expect-error` 编译期钉 + 运行期原型断言双钉）。
 3. **不动 ErrorClassifier / CSOValidator / TokenBudget 基类**：前两者 studio 有消费，后者虽无实例化点但作为公开基类另案评估。
-4. breaking 同车 major；`docs/public-exports-review.md` 是 2026-08-19 历史评审快照，不回改。
+4. breaking 同车发布（级别：2026-09-09 人类裁决按 1.6.0 minor，推翻原 major 判定）；`docs/public-exports-review.md` 是 2026-08-19 历史评审快照，不回改。
 
 ## 理由
 

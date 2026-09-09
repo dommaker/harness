@@ -20,7 +20,7 @@
 2. **类壳保留并改为转发**：`TraceAnalyzer` 的方法本体改为调模块级函数——studio 经类消费的面（`analyzeRecentReport`/`detectAnomalies`）逐字不动。
 3. **status.ts 直调纯函数**：删掉 `new TraceCollector` + `new TraceAnalyzer` 仪式，mkdir 副作用退出该路径；status 两套件对 TraceAnalyzer 的 mock 随迁删除（fs mock 按需保留）。
 4. **`compareWithPrevious` / `generateReport` 不动**（无外部消费痛点）；`analyzeRecent*` / `analyzeConstraint`（两段式：collector 读 + 纯算）与 saveSummary/runHourly*（文件副作用）保持类方法。
-5. **纯函数不进包根导出**（ADR-0003 零扩张）：仓内消费经相对 import，非 breaking，不跟 2.0.0 的车。
+5. **纯函数不进包根导出**（ADR-0003 零扩张）：仓内消费经相对 import，非 breaking，不属本车 breaking 集合（原表述「不跟 2.0.0 的车」随发布级别裁决改口径）。
 
 ## 理由
 

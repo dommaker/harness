@@ -17,7 +17,7 @@
 
 1. **整锅迁出**：`update-user-model` + `analyze-sessions` + `session-mining/` 全部迁往 studio CLI。不留 analyze-sessions——它硬编码同一组个人路径，留下等于留同型病灶。
 2. **时序按 #110 两步走**：studio 侧先行封装（studio 票：实现 `studio update-user-model` / `studio analyze-sessions`，session-mining 代码随迁，monitor-system-probes 调用点改 studio 自家 CLI）；harness 侧后删。
-3. **harness 删除面（净删无残留）**：两个命令文件、`src/cli/session-mining/` 整目录、`definitions.ts` 两条路由（含别名 `uum`/`analyze`）、registry 测试命令清单、`cli/commands/CONTEXT.md` 命令列表、`utils/__tests__/jsonl-skip-disposition.test.ts:45` 对 transcript.ts 的读点冻结条目。breaking 同车 major。
+3. **harness 删除面（净删无残留）**：两个命令文件、`src/cli/session-mining/` 整目录、`definitions.ts` 两条路由（含别名 `uum`/`analyze`）、registry 测试命令清单、`cli/commands/CONTEXT.md` 命令列表、`utils/__tests__/jsonl-skip-disposition.test.ts:45` 对 transcript.ts 的读点冻结条目。breaking 同车发布（级别：2026-09-09 人类裁决按 1.6.0 minor，推翻原 major 判定）。
 4. 不留命令名兼容占位（同 #110 净删）。
 
 ## 理由
@@ -29,5 +29,5 @@
 ## 影响
 
 - 前置：studio 封装票先落地（studio 侧 issue，含 monitor-system-probes 调用点改写与 state 文件路径口径不变）。
-- harness：上述删除面；`harness update-user-model` / `harness analyze-sessions` 命令消失（breaking，2.0.0）。
+- harness：上述删除面；`harness update-user-model` / `harness analyze-sessions` 命令消失（breaking，1.6.0）。
 - 文档：`cli/commands/CONTEXT.md`、`CAPABILITIES.md` 命令清单随 sync-docs 更新。

@@ -60,7 +60,6 @@ export type {
   CheckConfig,
   PassesGateConfig,
   TaskTestResult,
-  DynamicTask,
 } from './validators';
 
 // Spec 验证器

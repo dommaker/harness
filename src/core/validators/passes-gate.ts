@@ -14,7 +14,6 @@ import * as path from 'path';
 import type {
   PassesGateConfig,
   TaskTestResult,
-  DynamicTask,
   TestResult,
   PassesGateCheckResult,
   PassesGateViolation,
@@ -183,7 +182,7 @@ export class PassesGate {
         };
       }
 
-      const result = await this.runTest(workDir, undefined, testCommand);
+      const result = await this.runTest(workDir, testCommand);
       const duration = Date.now() - startTime;
 
       // 解析测试数量
@@ -218,7 +217,7 @@ export class PassesGate {
   /**
    * 运行测试
    */
-  private async runTest(workDir: string, _task?: DynamicTask, command?: string): Promise<TaskTestResult> {
+  private async runTest(workDir: string, command?: string): Promise<TaskTestResult> {
     const testCommand = command || this.config.testCommand || await detectTestCommand(workDir);
     const timestamp = new Date();
 

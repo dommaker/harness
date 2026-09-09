@@ -55,23 +55,6 @@ export interface TaskTestResult {
   evidence?: string;
 }
 
-/**
- * 动态任务（用于 passes-gate）
- */
-export interface DynamicTask {
-  /** 任务 ID */
-  id: string;
-  
-  /** 任务名称 */
-  name?: string;
-  
-  /** 是否通过 */
-  passes?: boolean;
-  
-  /** 测试结果 */
-  testResult?: TaskTestResult;
-}
-
 // ========================================
 // AS-006: 纯约束验证接口
 // ========================================

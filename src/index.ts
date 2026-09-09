@@ -103,7 +103,6 @@ export type {
   PassesGateCheckResult,
   PassesGateViolation,
   TestResult,
-  DynamicTask,
   TaskTestResult,
 } from './types/passes-gate';
 export type {

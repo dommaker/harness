@@ -5,7 +5,7 @@
  * 检查命令是否安全，防止执行危险操作
  */
 
-import { pass, gateResult } from './types';
+import { gateResult } from './types';
 import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, GateContext, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -205,7 +205,6 @@ export class CommandGate implements Gate {
 
   constructor(config: Partial<CommandGateConfig> = {}) {
     this.config = {
-      enabled: config.enabled ?? true,
       strict: config.strict ?? false,
       customBlacklist: config.customBlacklist ?? [],
       ignoreCategories: config.ignoreCategories ?? [],
@@ -231,10 +230,6 @@ export class CommandGate implements Gate {
    */
   async check(command: string): Promise<GateResult> {
     const startTime = Date.now();
-
-    if (!this.config.enabled) {
-      return pass('command', '命令门禁已禁用', startTime);
-    }
 
     const result = this.checkBlacklist(command);
 
@@ -338,8 +333,6 @@ export class CommandGate implements Gate {
    * 快速检查（不生成完整 GateResult）
    */
   isAllowed(command: string): boolean {
-    if (!this.config.enabled) return true;
-
     for (const rule of this.blacklist) {
       if (this.config.ignoreCategories.includes(rule.category)) {
         continue;
@@ -357,8 +350,6 @@ export class CommandGate implements Gate {
    * 获取命令风险等级
    */
   getRiskLevel(command: string): 'high' | 'medium' | 'low' {
-    if (!this.config.enabled) return 'low';
-
     for (const rule of this.blacklist) {
       if (this.config.ignoreCategories.includes(rule.category)) {
         continue;

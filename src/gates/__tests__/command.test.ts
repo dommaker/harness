@@ -87,12 +87,6 @@ describe('CommandGate', () => {
       }
     });
 
-    it('should respect enabled=false', async () => {
-      const gate = new CommandGate({ enabled: false });
-      const result = await gate.check('rm -rf /');
-      expect(result.passed).toBe(true);
-    });
-
     it('should support custom blacklist', async () => {
       const gate = new CommandGate({
         customBlacklist: [{

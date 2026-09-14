@@ -117,38 +117,34 @@ export interface Gate {
 }
 
 /**
- * 门禁上下文
+ * 门禁上下文：只带「这次在哪跑、跑什么」这类运行信息
+ *
+ * 配置一律走构造器（`ReviewGateConfig` 等），不要往这里加字段——
+ * 本类型曾有 6 个无人读取的配置型字段与构造器配置平行，填了不生效。
  */
 export interface GateContext {
-  projectId: string;
-  taskId?: string;
   projectPath: string;
-  
+  taskId?: string;
+
   // Review Gate
   prNumber?: number;
-  minReviewers?: number;
-  reviewers?: string[];
-  
+
   // Security Gate
   securityScanCommand?: string;
-  ignoreWarnings?: boolean;
-  
+
   // Performance Gate
   performanceThresholds?: PerformanceThresholds;
-  
+
   // Contract Gate
   oldContractPath?: string;
   newContractPath?: string;
-  openApiSpec?: string;
 
   // Command Gate
   command?: string;
 
   // Acceptance Gate
   tasksPath?: string;
-  
-  // 通用
-  timeout?: number;
+
   /**
    * 本 run 的运行级观察面（ADR-0023）。一条守卫链传同一枚 → 项目配置文件整链至多读一次；
    * 不传 = 各门禁自造一枚一次性观察面（判定不变，只是不共享读取）
@@ -179,7 +175,6 @@ export interface ReviewGateConfig {
  * 安全门禁配置
  */
 export interface SecurityGateConfig {
-  enabled: boolean;
   scanCommand?: string;
   ignoreWarnings: boolean;
   ignoreDevDependencies: boolean;
@@ -190,7 +185,6 @@ export interface SecurityGateConfig {
  * 性能门禁配置
  */
 export interface PerformanceGateConfig {
-  enabled: boolean;
   thresholds: PerformanceThresholds;
 }
 
@@ -198,7 +192,6 @@ export interface PerformanceGateConfig {
  * 契约门禁配置
  */
 export interface ContractGateConfig {
-  enabled: boolean;
   strict: boolean;
   allowBreakingChanges: boolean;
   contractPath?: string;
@@ -261,8 +254,6 @@ export interface CommandBlacklistRule {
  * 命令门禁配置
  */
 export interface CommandGateConfig {
-  /** 是否启用 */
-  enabled?: boolean;
   /** 严格模式（warn 也阻止） */
   strict?: boolean;
   /** 自定义黑名单规则 */

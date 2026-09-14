@@ -32,18 +32,18 @@ describe('ContractGate', () => {
 
   it('有效 OpenAPI → check 通过', async () => {
     fs.writeFileSync(path.join(dir, 'openapi.yaml'), VALID_SPEC);
-    const result = await new ContractGate().check({ projectId: 'p', projectPath: dir });
+    const result = await new ContractGate().check({projectPath: dir });
     expect(result.passed).toBe(true);
   });
 
   it('缺 openapi 版本 → check 失败', async () => {
     fs.writeFileSync(path.join(dir, 'openapi.yaml'), INVALID_SPEC);
-    const result = await new ContractGate().check({ projectId: 'p', projectPath: dir });
+    const result = await new ContractGate().check({projectPath: dir });
     expect(result.passed).toBe(false);
   });
 
   it('契约文件缺失 → 跳过（passed）', async () => {
-    const result = await new ContractGate().check({ projectId: 'p', projectPath: dir });
+    const result = await new ContractGate().check({projectPath: dir });
     expect(result.passed).toBe(true);
     expect(result.message).toContain('未找到契约文件');
   });
@@ -51,7 +51,7 @@ describe('ContractGate', () => {
   describe('统一接口 evaluate', () => {
     it('有效契约 → abstain（冻结决策）', async () => {
       fs.writeFileSync(path.join(dir, 'openapi.yaml'), VALID_SPEC);
-      const decision = await new ContractGate().evaluate({ projectId: 'p', projectPath: dir });
+      const decision = await new ContractGate().evaluate({projectPath: dir });
       expect(decision.status).toBe('abstain');
       expect(decision.result.gate).toBe('contract');
       expect(Object.isFrozen(decision)).toBe(true);
@@ -59,7 +59,7 @@ describe('ContractGate', () => {
 
     it('无效契约 → deny', async () => {
       fs.writeFileSync(path.join(dir, 'openapi.yaml'), INVALID_SPEC);
-      const decision = await new ContractGate().evaluate({ projectId: 'p', projectPath: dir });
+      const decision = await new ContractGate().evaluate({projectPath: dir });
       expect(decision.status).toBe('deny');
       expect(decision.result.passed).toBe(false);
     });

@@ -46,7 +46,7 @@ export async function review(
     const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
     log(io, chalk.gray(`当前分支: ${branch.trim()}`));
 
-    const result = await gate.check({ projectPath, projectId: 'default' });
+    const result = await gate.check({ projectPath });
 
     log(io);
     if (result.passed) {

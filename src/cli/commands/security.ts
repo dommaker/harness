@@ -40,7 +40,7 @@ export async function security(
       ignoreDevDependencies: options.ignoreDevDeps,
     });
 
-    const result = await gate.scan({ projectPath, projectId: 'default' });
+    const result = await gate.scan({ projectPath });
 
     log(io);
     if (result.passed) {
@@ -105,7 +105,7 @@ export async function auditDetails(
       scanCommand: options.scanCommand,
     });
 
-    const result = await gate.scan({ projectPath, projectId: 'default' });
+    const result = await gate.scan({ projectPath });
 
     if (result.passed && !result.details?.total) {
       log(io, chalk.green('✅ 未发现安全漏洞'));

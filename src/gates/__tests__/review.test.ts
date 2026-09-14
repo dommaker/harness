@@ -15,7 +15,6 @@ const mockExec = exec as unknown as jest.Mock;
 describe('ReviewGate', () => {
   let gate: ReviewGate;
   const baseContext = {
-    projectId: 'test-project',
     projectPath: '/test/project',
   };
 

@@ -20,7 +20,7 @@ describe('SecurityGate', () => {
       dependencies: {},
     }));
     
-    gate = new SecurityGate({ enabled: true, severityThreshold: 'high' });
+    gate = new SecurityGate({ severityThreshold: 'high' });
   });
 
   afterAll(() => {
@@ -32,22 +32,9 @@ describe('SecurityGate', () => {
   });
 
   describe('scan', () => {
-    it('禁用时应该返回通过', async () => {
-      const disabledGate = new SecurityGate({ enabled: false });
-      
-      const result = await disabledGate.scan({
-        projectId: 'test-project',
-        projectPath: tempDir,
-      });
-      
-      expect(result.passed).toBe(true);
-      expect(result.message).toContain('安全门禁已禁用');
-    });
-
     // 跳过：依赖真实 npm audit 结果，需要 mock 重构
     it.skip('应该运行 npm audit', async () => {
       const result = await gate.scan({
-        projectId: 'test-project',
         projectPath: tempDir,
       });
       
@@ -57,7 +44,6 @@ describe('SecurityGate', () => {
 
     it.skip('应该返回漏洞分析', async () => {
       const result = await gate.scan({
-        projectId: 'test-project',
         projectPath: tempDir,
       });
       
@@ -70,7 +56,6 @@ describe('SecurityGate', () => {
   describe('severityThreshold', () => {
     it.skip('high 阈值应该检查 critical + high', async () => {
       const result = await gate.scan({
-        projectId: 'test-project',
         projectPath: tempDir,
       });
       
@@ -89,7 +74,6 @@ describe('SecurityGate', () => {
   describe('analyzeResult', () => {
     it.skip('应该解析 npm audit JSON 或返回 passed', async () => {
       const result = await gate.scan({
-        projectId: 'test-project',
         projectPath: tempDir,
       });
       

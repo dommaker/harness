@@ -8,7 +8,7 @@
  */
 
 import { execAsync } from '../utils/exec';
-import { pass, gateResult, fromError } from './types';
+import { gateResult, fromError } from './types';
 import type { GateResult, GateContext, SecurityGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -22,7 +22,6 @@ export class SecurityGate implements Gate {
 
   constructor(config: Partial<SecurityGateConfig> = {}) {
     this.config = {
-      enabled: config.enabled ?? true,
       scanCommand: config.scanCommand ?? '',
       ignoreWarnings: config.ignoreWarnings ?? false,
       ignoreDevDependencies: config.ignoreDevDependencies ?? false,
@@ -42,10 +41,6 @@ export class SecurityGate implements Gate {
    */
   async scan(context: GateContext): Promise<GateResult> {
     const startTime = Date.now();
-
-    if (!this.config.enabled) {
-      return pass('security', '安全门禁已禁用', startTime);
-    }
 
     try {
       // 使用自定义命令或默认 npm audit

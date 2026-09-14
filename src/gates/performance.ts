@@ -18,7 +18,7 @@
 import { execAsync } from '../utils/exec';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { pass, gateResult, fromError } from './types';
+import { gateResult, fromError } from './types';
 import type { GateResult, GateContext, PerformanceGateConfig, PerformanceThresholds, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -45,7 +45,6 @@ export class PerformanceGate implements Gate {
 
   constructor(config: Partial<ExtendedPerformanceGateConfig> = {}) {
     this.config = {
-      enabled: config.enabled ?? true,
       thresholds: config.thresholds ?? {},
       coverageTimeout: config.coverageTimeout ?? DEFAULT_TIMEOUTS.coverage,
     };
@@ -63,10 +62,6 @@ export class PerformanceGate implements Gate {
    */
   async check(context: GateContext): Promise<GateResult> {
     const startTime = Date.now();
-
-    if (!this.config.enabled) {
-      return pass('performance', '性能门禁已禁用', startTime);
-    }
 
     try {
       const thresholds = context.performanceThresholds ?? this.config.thresholds;

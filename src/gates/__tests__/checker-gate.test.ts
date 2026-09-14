@@ -6,7 +6,7 @@ import { createCheckerGate } from '../checker-gate';
 import { contextFlag, contextEvidenceFlag } from '../../core/constraints/checkers/types';
 
 describe('createCheckerGate', () => {
-  const ctx = { projectId: 'p', projectPath: '/tmp/project' };
+  const ctx = {projectPath: '/tmp/project' };
 
   it('checker 通过（true）→ abstain', async () => {
     const gate = createCheckerGate(contextFlag('flag-pass', () => true), 7);

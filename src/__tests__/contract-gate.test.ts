@@ -37,23 +37,10 @@ describe('ContractGate', () => {
   });
 
   describe('check', () => {
-    it('禁用时应该返回通过', async () => {
-      const gate = new ContractGate({ enabled: false });
-
-      const result = await gate.check({
-        projectId: 'test',
-        projectPath: tempDir,
-      });
-
-      expect(result.passed).toBe(true);
-      expect(result.message).toContain('禁用');
-    });
-
     it('无契约文件时应该通过', async () => {
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 
@@ -76,10 +63,9 @@ paths:
       summary: Create user
 `);
 
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 
@@ -98,10 +84,9 @@ paths:
       summary: Test
 `);
 
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 
@@ -118,10 +103,9 @@ info:
 paths:
 `);
 
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 
@@ -139,10 +123,9 @@ paths:
         },
       }));
 
-      const gate = new ContractGate({ enabled: true, contractPath: 'openapi.json' });
+      const gate = new ContractGate({contractPath: 'openapi.json' });
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 
@@ -172,10 +155,9 @@ paths:
       summary: Test
 `);
 
-      const gate = new ContractGate({ enabled: true, allowBreakingChanges: false });
+      const gate = new ContractGate({allowBreakingChanges: false });
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
         oldContractPath: oldContractFile,
       });
@@ -205,10 +187,9 @@ paths:
       summary: Test
 `);
 
-      const gate = new ContractGate({ enabled: true, allowBreakingChanges: true });
+      const gate = new ContractGate({allowBreakingChanges: true });
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
         oldContractPath: oldContractFile,
       });
@@ -237,10 +218,9 @@ paths:
       summary: New endpoint
 `);
 
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
         oldContractPath: oldContractFile,
       });
@@ -258,10 +238,9 @@ paths:
       summary: Custom
 `);
 
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
         newContractPath: customContract,
       });
@@ -272,10 +251,9 @@ paths:
     it('无效 YAML 应该返回解析失败', async () => {
       fs.writeFileSync(contractFile, 'invalid: yaml: content: [broken');
 
-      const gate = new ContractGate({ enabled: true });
+      const gate = new ContractGate();
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 
@@ -295,14 +273,12 @@ paths:
 
     it('getConfig 应该返回当前配置', () => {
       const gate = new ContractGate({
-        enabled: true,
         strict: false,
         allowBreakingChanges: true,
         contractPath: 'api.yaml',
       });
 
       const config = gate.getConfig();
-      expect(config.enabled).toBe(true);
       expect(config.strict).toBe(false);
       expect(config.allowBreakingChanges).toBe(true);
       expect(config.contractPath).toBe('api.yaml');
@@ -312,7 +288,6 @@ paths:
       const gate = new ContractGate();
       const config = gate.getConfig();
 
-      expect(config.enabled).toBe(true);
       expect(config.strict).toBe(true);
       expect(config.allowBreakingChanges).toBe(false);
       expect(config.contractPath).toBe('openapi.yaml');

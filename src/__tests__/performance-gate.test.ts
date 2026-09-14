@@ -23,27 +23,14 @@ describe('PerformanceGate', () => {
   });
 
   describe('check', () => {
-    it('禁用时应该返回通过', async () => {
-      const gate = new PerformanceGate({ enabled: false });
-
-      const result = await gate.check({
-        projectId: 'test',
-        projectPath: tempDir,
-      });
-
-      expect(result.passed).toBe(true);
-    });
-
     it('应该返回检查结果', async () => {
       const gate = new PerformanceGate({
-        enabled: true,
         thresholds: {
           maxBundleSize: 1000,
         },
       });
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 

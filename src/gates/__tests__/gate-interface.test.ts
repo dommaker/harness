@@ -33,7 +33,6 @@ describe('ReviewGate 统一接口', () => {
   it('本地模式 requireApproval=true → deny（三态映射 + 冻结）', async () => {
     mockExec.mockImplementation(callExec);
     const decision = await new ReviewGate().evaluate({
-      projectId: 'p',
       projectPath: '/test/project',
     });
     expect(decision.status).toBe('deny');
@@ -45,7 +44,6 @@ describe('ReviewGate 统一接口', () => {
   it('本地模式 requireApproval=false → abstain', async () => {
     mockExec.mockImplementation(callExec);
     const decision = await new ReviewGate({ requireApproval: false }).evaluate({
-      projectId: 'p',
       projectPath: '/test/project',
     });
     expect(decision.status).toBe('abstain');
@@ -67,7 +65,6 @@ describe('SecurityGate 统一接口', () => {
       callback(null, { stdout: JSON.stringify({ audit: { advisories: {} } }) })
     );
     const decision = await new SecurityGate().evaluate({
-      projectId: 'p',
       projectPath: '/test/project',
     });
     expect(decision.status).toBe('abstain');
@@ -87,7 +84,6 @@ describe('SecurityGate 统一接口', () => {
       })
     );
     const decision = await new SecurityGate().evaluate({
-      projectId: 'p',
       projectPath: '/test/project',
     });
     expect(decision.status).toBe('deny');
@@ -102,15 +98,6 @@ describe('SecurityGate 统一接口', () => {
 });
 
 describe('PerformanceGate 统一接口', () => {
-  it('enabled=false → abstain（禁用即放行）', async () => {
-    const decision = await new PerformanceGate({ enabled: false }).evaluate({
-      projectId: 'p',
-      projectPath: '/test/project',
-    });
-    expect(decision.status).toBe('abstain');
-    expect(decision.result.passed).toBe(true);
-  });
-
   it('id/order 字段齐备', () => {
     const gate = new PerformanceGate();
     expect(gate.id).toBe('performance');
@@ -131,7 +118,6 @@ describe('SpecAcceptanceGate 统一接口', () => {
 
   it('tasks.yml 不存在 → abstain（跳过）', async () => {
     const decision = await new SpecAcceptanceGate().evaluate({
-      projectId: 'p',
       projectPath: dir,
       tasksPath: path.join(dir, 'no-such-tasks.yml'),
     });
@@ -157,7 +143,6 @@ describe('SpecAcceptanceGate 统一接口', () => {
       ].join('\n')
     );
     const decision = await new SpecAcceptanceGate().evaluate({
-      projectId: 'p',
       projectPath: dir,
       tasksPath,
     });
@@ -176,7 +161,6 @@ describe('SpecAcceptanceGate 统一接口', () => {
 describe('CommandGate 统一接口', () => {
   it('黑名单命令 → deny', async () => {
     const decision = await new CommandGate().evaluate({
-      projectId: 'p',
       projectPath: '/test/project',
       command: 'rm -rf /',
     });
@@ -186,7 +170,6 @@ describe('CommandGate 统一接口', () => {
 
   it('安全命令 → abstain', async () => {
     const decision = await new CommandGate().evaluate({
-      projectId: 'p',
       projectPath: '/test/project',
       command: 'echo hello',
     });

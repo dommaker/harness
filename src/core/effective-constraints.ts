@@ -11,6 +11,7 @@ import type { Constraint } from '../types/constraint';
 import type { MergedConstraintsConfig } from '../types/project-config';
 import { PROMPTS } from './constraints/definitions';
 import { ProjectConfigLoader } from './project-config-loader';
+import type { RunTarget } from './constraints/run-env';
 
 /**
  * 获取项目当前生效的约束集（check + prompt，带 kind）
@@ -21,15 +22,16 @@ import { ProjectConfigLoader } from './project-config-loader';
  * （带 appliesTo 的 prompt 仅当 config.yml `scenes` 与其交集非空时保留，
  * 缺省 scenes=[] 即场景专属 prompt 默认不进入生效集）。
  *
- * @param projectRoot 项目根路径（缺省 process.cwd()）
+ * @param target 项目根路径，或本 run 的运行级观察面（缺省 process.cwd()）
+ *   传观察面 = config.yml 读取与本 run 其余消费方共用同一份（ADR-0023 决策 2）
  * @param options.preset 覆盖 config.yml 的 preset；仅在项目无自定义配置时生效
  *   （与 getMergedConstraintsConfig 同一优先级规则），不传则尊重 config.yml
  */
 export function getEffectiveConstraints(
-  projectRoot: string = process.cwd(),
+  target: RunTarget = process.cwd(),
   options?: { preset?: string }
 ): Constraint[] {
-  const merged = getMergedConstraintsConfig(projectRoot, options);
+  const merged = getMergedConstraintsConfig(target, options);
   return [
     ...Object.values(merged.ironLaws),
     ...Object.values(merged.guidelines),
@@ -47,13 +49,13 @@ export function getEffectiveConstraints(
  * preset（工单 23 语义：项目自定义配置优先于 CLI 预设）；不传 preset 时
  * 完全尊重 config.yml 的 preset 键。
  *
- * @param projectRoot 项目根路径（缺省 process.cwd()）
+ * @param target 项目根路径，或本 run 的运行级观察面（缺省 process.cwd()）
  */
 export function getMergedConstraintsConfig(
-  projectRoot: string = process.cwd(),
+  target: RunTarget = process.cwd(),
   options?: { preset?: string }
 ): MergedConstraintsConfig {
-  const loader = new ProjectConfigLoader(projectRoot);
+  const loader = new ProjectConfigLoader(target);
   loader.load();
   if (loader.hasCustomConfig() || !options?.preset) {
     return loader.mergeConstraints();

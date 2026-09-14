@@ -71,18 +71,19 @@ function findDeadCapabilityEntries(projectPath: string, env: CheckEnv): string[]
  *
  * 全部缺失 → 项目未采用该约定，调用方应 skip 而非评估内置默认配置。
  */
-function hasFreshnessTargets(projectPath: string): boolean {
+function hasFreshnessTargets(env: CheckEnv): boolean {
+  const projectPath = env.projectPath;
   if (existsSync(join(projectPath, 'CAPABILITIES.md'))) return true;
   if (existsSync(join(projectPath, 'CHANGELOG.md')) || existsSync(join(projectPath, 'CHANGELOG'))) {
     return true;
   }
 
-  const governance = getGovernanceConfig(projectPath);
+  const governance = getGovernanceConfig(env);
   if (governance?.doc_freshness?.checks && governance.doc_freshness.checks.length > 0) {
     return true;
   }
 
-  return resolveContextFiles(projectPath).state === 'enabled';
+  return resolveContextFiles(env).state === 'enabled';
 }
 
 export const docsFreshness: ConstraintCheck = {
@@ -91,7 +92,7 @@ export const docsFreshness: ConstraintCheck = {
     const projectPath = env.projectPath;
 
     // ADR-0001 存在性探测：项目无任何 freshness 配置/目标 → skip（不计 pass/fail）
-    if (!hasFreshnessTargets(projectPath)) return 'skip';
+    if (!hasFreshnessTargets(env)) return 'skip';
 
     // Step 1: 文件表格式 — 登记的条目（文件+目录）是否仍存在（ADR-0009）
     const deadEntries = findDeadCapabilityEntries(projectPath, env);
@@ -107,11 +108,11 @@ export const docsFreshness: ConstraintCheck = {
 
     // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
     try {
-      const freshnessConfig = getGovernanceConfig(projectPath)?.doc_freshness;
+      const freshnessConfig = getGovernanceConfig(env)?.doc_freshness;
 
       // context_files 三态统一口径（工单 84）：约定已立但无目标（enabled 但
       // required_dirs 缺失/空）→ skip，与 context_doc_sync 同构；不再静默放行
-      const contextFiles = resolveContextFiles(projectPath);
+      const contextFiles = resolveContextFiles(env);
       if (contextFiles.state === 'enabled-empty') return 'skip';
       const requiredDirs = contextFiles.state === 'enabled' ? contextFiles.dirs : undefined;
 

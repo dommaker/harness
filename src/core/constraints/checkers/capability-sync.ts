@@ -47,7 +47,7 @@ export const capabilitySync: ConstraintCheck = {
     try {
       const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
       const content = readFileSync(capabilitiesPath, 'utf-8');
-      const capabilitiesMode = getCapabilitiesMode(projectPath);
+      const capabilitiesMode = getCapabilitiesMode(env);
 
       // 清单格式（计数行）没有文件表可核对，计数由 sync-docs 维护，直接放行
       if (capabilitiesMode === 'listing' || isCapabilityListingFormat(content)) {

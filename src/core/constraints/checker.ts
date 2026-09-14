@@ -24,6 +24,7 @@ import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
 import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, type CheckOutcome } from './checkers';
 import { createGitEvidence, type GitEvidence } from './git-evidence';
+import { createRunEnv, type RunEnv } from './run-env';
 
 /**
  * trace 记录器最小接口（工单 15 decycle 收尾，harness#88）
@@ -94,11 +95,13 @@ export class ConstraintChecker {
    * 检查单个约束
    *
    * @param evidence 可选，本 run 的 git 证据实例（#87）；不传 = 本次调用独占一份真 git 证据
+   * @param runEnv 可选，本 run 的运行级观察面（ADR-0023）；不传 = 本次调用独占一份
    */
   async check(
     constraint: Constraint,
     context: ConstraintContext,
-    evidence?: GitEvidence
+    evidence?: GitEvidence,
+    runEnv?: RunEnv
   ): Promise<ConstraintResult> {
     // prompt 类约束不参与 checker 执行（ADR-0001：仅参与注入）
     if (constraint.kind === 'prompt') {
@@ -113,7 +116,7 @@ export class ConstraintChecker {
 
     // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
     const outcome = normalizeCheckOutcome(
-      await this.checkPrecondition(constraint, context, evidence)
+      await this.checkPrecondition(constraint, context, evidence, runEnv)
     );
 
     if (outcome.skipped) {
@@ -187,11 +190,13 @@ export class ConstraintChecker {
    *
    * git 证据（stagedDiff/stagedDiffNames）单一来源 = GitEvidence adapter（#87）：
    * 一次 run 内调用方传同一实例即至多取证一次，run 外调用独占一份。
+   * 上行数据（config.yml / trace 尾部 / 源根）同一形状 = RunEnv（ADR-0023）。
    */
   private async checkPrecondition(
     constraint: Constraint,
     context: ConstraintContext,
-    evidence?: GitEvidence
+    evidence?: GitEvidence,
+    runEnv?: RunEnv
   ): Promise<CheckOutcome> {
     const impl = getConstraintCheck(constraint.id);
     if (!impl) {
@@ -212,7 +217,7 @@ export class ConstraintChecker {
             relative(projectPath, f)
           )
         ),
-    });
+    }, runEnv);
 
     return await impl.evaluate(env);
   }
@@ -258,13 +263,16 @@ export class ConstraintChecker {
    * @param evidence 可选，本 run 的 git 证据 adapter（#87）。调用方（CLI check）与
    *   buildConstraintContext 传同一实例 → 一次 run 内 git 取证单一来源；
    *   不传则本 run 自建一份，run 级 memo 照样生效（memo 在实例层，非隐式全局）。
+   * @param runEnv 可选，本 run 的运行级观察面（ADR-0023）。调用方（CLI check）与
+   *   buildConstraintContext 传同一实例 → 一次 run 内同一项目文件至多读一次。
    */
   async checkConstraints(
     context: ConstraintContext,
     customConfig?: MergedConstraintsConfig | null,
-    evidence?: GitEvidence
+    evidence?: GitEvidence,
+    runEnv?: RunEnv
   ): Promise<ConstraintCheckResult> {
-    return this.runAllConstraints(context, customConfig, evidence, 'block');
+    return this.runAllConstraints(context, customConfig, evidence, runEnv, 'block');
   }
 
   /**
@@ -278,9 +286,10 @@ export class ConstraintChecker {
   async collectConstraints(
     context: ConstraintContext,
     customConfig?: MergedConstraintsConfig | null,
-    evidence?: GitEvidence
+    evidence?: GitEvidence,
+    runEnv?: RunEnv
   ): Promise<ConstraintCheckResult> {
-    return this.runAllConstraints(context, customConfig, evidence, 'collect');
+    return this.runAllConstraints(context, customConfig, evidence, runEnv, 'collect');
   }
 
   /**
@@ -291,11 +300,15 @@ export class ConstraintChecker {
     context: ConstraintContext,
     customConfig: MergedConstraintsConfig | null | undefined,
     evidence: GitEvidence | undefined,
+    runEnv: RunEnv | undefined,
     mode: 'block' | 'collect'
   ): Promise<ConstraintCheckResult> {
     // run 起始：重置 src 扫描缓存（S7）；git 证据 = 本 run 独占的 adapter 实例（工单 18 → #87）
     this.cache.invalidate();
-    const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());
+    const projectPath = context.projectPath || process.cwd();
+    const run = evidence ?? createGitEvidence(projectPath);
+    // 观察面同一形状（ADR-0023）：调用方传了就共用，没传也只造一枚——逐条 checker 不再各读一遍配置
+    const env = runEnv ?? createRunEnv(projectPath);
 
     const result: ConstraintCheckResult = {
       ironLaws: [],
@@ -312,7 +325,7 @@ export class ConstraintChecker {
     for (const constraint of Object.values(constraints.ironLaws)) {
       if (!matchesTrigger(constraint, operations)) continue;
 
-      const checkResult = await this.check(constraint, context, run);
+      const checkResult = await this.check(constraint, context, run, env);
       result.ironLaws.push(checkResult);
       this.recordTrace(constraint, checkResult, context);
 
@@ -328,7 +341,7 @@ export class ConstraintChecker {
     for (const constraint of Object.values(constraints.guidelines)) {
       if (!matchesTrigger(constraint, operations)) continue;
 
-      const checkResult = await this.check(constraint, context, run);
+      const checkResult = await this.check(constraint, context, run, env);
       result.guidelines.push(checkResult);
       this.recordTrace(constraint, checkResult, context);
 
@@ -353,14 +366,17 @@ export class ConstraintChecker {
     customConfig?: MergedConstraintsConfig | null,
     evidence?: GitEvidence
   ): Promise<void> {
-    const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());
+    const projectPath = context.projectPath || process.cwd();
+    const run = evidence ?? createGitEvidence(projectPath);
+    // 独立 run 入口（ADR-0023）：本函数内所有 checker 共用一枚观察面
+    const env = createRunEnv(projectPath);
     const constraints = this.getConstraints(customConfig);
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
     for (const constraint of Object.values(constraints.ironLaws)) {
       if (!matchesTrigger(constraint, operations)) continue;
 
-      const result = await this.check(constraint, context, run);
+      const result = await this.check(constraint, context, run, env);
       if (!result.satisfied) {
         throw new ConstraintViolationError(result);
       }

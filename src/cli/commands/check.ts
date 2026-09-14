@@ -88,11 +88,14 @@ export async function check(
 
   try {
     const projectPath = options.projectPath || process.cwd();
+    // 一次 run 一份证据与观察面（#87 / ADR-0023）：入口构造，沿生效集、context、checker 向下传
+    const evidence = options.evidence ?? createGitEvidence(projectPath);
+    const runEnv = options.runEnv ?? createRunEnv(projectPath);
 
     // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
     // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（工单 23 语义：
     // 项目自定义配置优先于 CLI 预设），优先级规则收在 getMergedConstraintsConfig 一处。
-    const merged = getMergedConstraintsConfig(projectPath, { preset: options.preset });
+    const merged = getMergedConstraintsConfig(runEnv, { preset: options.preset });
     if (merged.custom.length > 0) {
       log(io, chalk.gray(`自定义约束: ${merged.custom.length} 条`));
     }
@@ -106,9 +109,7 @@ export async function check(
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
     // #87：一次 run 一份 git 证据——context-builder 与 checker 层共用同一实例
-    // ADR-0023：一次 run 一份运行级观察面——源根探测与 trace 证据探测共用同一份读取
-    const evidence = options.evidence ?? createGitEvidence(projectPath);
-    const runEnv = options.runEnv ?? createRunEnv(projectPath);
+    // ADR-0023：一次 run 一份运行级观察面——配置、源根探测、trace 证据探测全部共用同一份读取
     const context = await buildConstraintContext({
       projectPath: options.projectPath,
       staged: options.staged,
@@ -125,7 +126,7 @@ export async function check(
     // 执行三层检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
     // trace 记录器经构造参数接线（harness#88）：一次命令一个 checker 实例
     const checker = new ConstraintChecker(getTraceCollector());
-    const result = await checker.checkConstraints(context, merged, evidence);
+    const result = await checker.checkConstraints(context, merged, evidence, runEnv);
 
     // 输出结果
     log(io);
@@ -194,7 +195,7 @@ export async function check(
     // 注入漂移校验（ADR-0001 决策 7）：黄色警告块，不改 exit code、不影响门禁结果。
     // 无漂移/未注入零输出；漂移检测自身异常静默吞掉，绝不影响 check。
     try {
-      const drift = detectInjectionDrift(projectPath);
+      const drift = detectInjectionDrift(runEnv);
       if (drift.hasDrift) {
         log(io);
         log(io, chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));

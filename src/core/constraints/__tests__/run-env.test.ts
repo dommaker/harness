@@ -1,16 +1,20 @@
 /**
  * 运行级观察面测试（ADR-0023 决策 1/4）
  *
- * 钉三件事：① 一次运行内同一份 trace 至多读一次（懒建 + memo）；② 不同尾部窗口的口径
+ * 钉四件事：① 一次运行内同一份 trace 至多读一次（懒建 + memo）；② 不同尾部窗口的口径
  * 与 `readJsonl(..., {tail})` 逐字一致（含坏行占槽位）——这是"合并两处读"不改变判定的前提；
- * ③ context-builder 用注入的 env，而不是自己再读一遍。
+ * ③ context-builder 用注入的 env，而不是自己再读一遍；
+ * ④ 项目配置（config.yml 与自定义约束文件）一次运行一份快照（ADR-0023 决策 2：
+ *    进程级缓存撤销后的口径）。
  */
 
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createRunEnv, TRACE_TAIL_WINDOW, type RunEnv } from '../run-env';
+import { createRunEnv, resolveRunEnv, TRACE_TAIL_WINDOW, type RunEnv } from '../run-env';
 import { buildConstraintContext } from '../context-builder';
+import { loadRawProjectConfig } from '../../project-config-loader';
+import { createProjectFixture, writeProjectConfig } from '../../../test-setup/project-fixture';
 import { readJsonl } from '../../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../../types/trace';
 import type { GitEvidence } from '../git-evidence';
@@ -102,6 +106,95 @@ describe('createRunEnv', () => {
   });
 });
 
+describe('配置一次装载 — rawConfig / customConstraints（ADR-0023 决策 2）', () => {
+  let dir: string;
+
+  const writeConfig = (content: string) => writeProjectConfig(dir, content);
+
+  /** 落 `.harness/<fileName>`（夹具可能还没有 .harness 目录，先补上） */
+  const writeHarnessFile = (fileName: string, body: string) => {
+    const target = path.join(dir, '.harness', fileName);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, body, 'utf-8');
+  };
+
+  beforeEach(() => {
+    dir = createProjectFixture({ name: 'run-env-config' });
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('run 内至多读一次：取过之后再改文件，仍是老内容', () => {
+    writeConfig('preset: standard\n');
+    const env = createRunEnv(dir);
+    expect(env.rawConfig()).toEqual({ preset: 'standard' });
+
+    writeConfig('preset: strict\n');
+    expect(env.rawConfig()).toEqual({ preset: 'standard' });
+  });
+
+  it('懒建：造 env 不碰文件，之后落的配置才读得到', () => {
+    const env = createRunEnv(dir);
+    writeConfig('preset: minimal\n');
+    expect(env.rawConfig()).toEqual({ preset: 'minimal' });
+  });
+
+  it('无 config.yml = undefined（并记住这个结论，不反复探测）', () => {
+    const env = createRunEnv(dir);
+    expect(env.rawConfig()).toBeUndefined();
+    expect(env.rawConfig()).toBeUndefined();
+  });
+
+  it('空文件回落 {}，与改前 loadRawProjectConfig 逐字一致', () => {
+    writeConfig('');
+    expect(createRunEnv(dir).rawConfig()).toEqual({});
+  });
+
+  it('YAML 解析失败照抛——兜与否属消费方的判定，读面不替它决定', () => {
+    writeConfig('governance: [\n  broken: {{\n');
+    const env = createRunEnv(dir);
+    expect(() => env.rawConfig()).toThrow();
+    // 抛错不入 memo：修好文件后同一枚 env 也能读到正确内容
+    writeConfig('preset: standard\n');
+    expect(env.rawConfig()).toEqual({ preset: 'standard' });
+  });
+
+  it('resolveRunEnv：传 env 原样复用，传路径各自读当下内容（无进程级残留）', () => {
+    writeConfig('preset: standard\n');
+    const env = createRunEnv(dir);
+    expect(resolveRunEnv(env)).toBe(env);
+    expect(resolveRunEnv(dir).rawConfig()).toEqual({ preset: 'standard' });
+
+    writeConfig('preset: strict\n');
+    expect(loadRawProjectConfig(dir)).toEqual({ preset: 'strict' });
+    expect(resolveRunEnv().projectPath).toBe(process.cwd());
+  });
+
+  it('customConstraints 取 custom_constraints 段，run 内同名文件至多读一次', () => {
+    const write = (body: string) => writeHarnessFile('custom-constraints.yml', body);
+    write('custom_constraints:\n  a:\n    level: iron_law\n    rule: 只此一份\n');
+    const env = createRunEnv(dir);
+    expect(Object.keys(env.customConstraints('custom-constraints.yml'))).toEqual(['a']);
+
+    write('custom_constraints:\n  b:\n    level: guideline\n    rule: 后来的\n');
+    expect(Object.keys(env.customConstraints('custom-constraints.yml'))).toEqual(['a']);
+  });
+
+  it('customConstraints：文件缺失 = {}；不同文件名各自 memo', () => {
+    const env = createRunEnv(dir);
+    expect(env.customConstraints('missing.yml')).toEqual({});
+
+    writeHarnessFile(
+      'other.yml',
+      'custom_constraints:\n  c:\n    level: guideline\n    rule: r\n'
+    );
+    expect(Object.keys(env.customConstraints('other.yml'))).toEqual(['c']);
+    expect(env.customConstraints('missing.yml')).toEqual({});
+  });
+});
+
 describe('context-builder 经注入的观察面取证据', () => {
   let dir: string;
 
@@ -122,6 +215,8 @@ describe('context-builder 经注入的观察面取证据', () => {
         return { records: limit >= records.length ? records : records.slice(-limit), skippedLines: 0 };
       },
       sourceRoots: () => ['src'],
+      rawConfig: () => undefined,
+      customConstraints: () => ({}),
     };
     return { env, limits };
   }

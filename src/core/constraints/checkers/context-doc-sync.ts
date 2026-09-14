@@ -16,7 +16,7 @@ export const contextDocSync: ConstraintCheck = {
   id: 'context_doc_sync',
   async evaluate(env) {
     const projectPath = env.projectPath;
-    const resolution = resolveContextFiles(projectPath);
+    const resolution = resolveContextFiles(env);
     if (resolution.state !== 'enabled') {
       return 'skip'; // 未配置或约定已立但无目标，跳过评估
     }

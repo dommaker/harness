@@ -97,10 +97,12 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
   'src/core/constraints/checker.ts': {
     lines: [
       'const projectPath = context.projectPath || process.cwd();',
-      'const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());',
-      'const run = evidence ?? createGitEvidence(context.projectPath || process.cwd());',
+      'const projectPath = context.projectPath || process.cwd();',
+      'const projectPath = context.projectPath || process.cwd();',
     ],
-    reason: 'check 上下文缺 projectPath 时的根兜底（3 处同一形状）',
+    reason:
+      'check 三个 run 入口（checkPrecondition / runAllConstraints / beforeExecution）各取一次根兜底，' +
+      'git 证据与运行级观察面都从该变量派生、不再内联取 cwd（ADR-0023 步骤 3）',
   },
   'src/core/constraints/checkers/types.ts': {
     lines: ['const projectPath = context.projectPath || process.cwd();'],
@@ -113,21 +115,23 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
     ],
     reason: 'buildCheckEnv 的 options.projectPath 缺省兜底（2 处）',
   },
+  'src/core/constraints/run-env.ts': {
+    lines: ['return createRunEnv(target || process.cwd());'],
+    reason:
+      'resolveRunEnv 的根兜底：RunTarget 只给了路径或什么也没给时自造一枚一次性观察面' +
+      '（配置访问器族与 ProjectConfigLoader 的入参归一点，ADR-0023 决策 2）',
+  },
   'src/core/constraints/usage-report.ts': {
     lines: ['projectRoot: string = process.cwd(),'],
     reason: 'projectRoot 形参默认值（库层可选根）',
   },
   'src/core/effective-constraints.ts': {
     lines: [
-      'projectRoot: string = process.cwd(),',
-      'projectRoot: string = process.cwd(),',
+      'target: RunTarget = process.cwd(),',
+      'target: RunTarget = process.cwd(),',
       'export function lintEffectiveConfig(projectRoot: string = process.cwd()): EffectiveConfigLint {',
     ],
-    reason: '生效集三函数 projectRoot 形参默认值（库层可选根，JSDoc 已声明）',
-  },
-  'src/core/project-config-loader.ts': {
-    lines: ['this.projectPath = projectPath || process.cwd();'],
-    reason: 'config 加载器 projectPath 构造参数缺省兜底',
+    reason: '生效集三函数根形参默认值（库层可选根，JSDoc 已声明；前两者入参含 RunEnv，ADR-0023）',
   },
   'src/core/spec/validator.ts': {
     lines: ['const cwd = projectPath || process.cwd();'],

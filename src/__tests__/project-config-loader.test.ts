@@ -125,7 +125,7 @@ custom_rules:
   });
 
   describe('getCapabilitiesMode', () => {
-    /** 建一个带独立 .harness/config.yml 的临时项目目录（避免进程级缓存串扰） */
+    /** 建一个带独立 .harness/config.yml 的临时项目目录（各用例独占自己的配置内容） */
     const setupConfigDir = (name: string, configYaml: string): string => {
       const dir = path.join(tempDir, name);
       fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });

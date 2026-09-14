@@ -30,8 +30,8 @@ async function loadConfigAsync(projectPath: string): Promise<{
   config: ReturnType<ProjectConfigLoader['getConfig']>;
   mergedConstraints: MergedConstraintsConfig;
 }> {
-  // config.yml 解析经 loadRawProjectConfig 进程级 memoize（工单 16），
-  // 此处不再重复读取文件
+  // config.yml 的读取只有 loadRawProjectConfig 这一条路（ADR-0023 决策 2 撤销进程级
+  // 缓存后，每次调用读当下内容），此处不重复读文件
   const loader = new ProjectConfigLoader(projectPath);
   loader.load();
 

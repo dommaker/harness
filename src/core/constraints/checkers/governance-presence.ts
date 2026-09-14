@@ -38,7 +38,7 @@ export const governancePresence: ConstraintCheck = {
     // 存在性探测：无 harness 配置 = 未采用治理约定 → skip（不计 pass/fail）
     let adopted = false;
     try {
-      adopted = loadRawProjectConfig(projectPath) !== undefined;
+      adopted = loadRawProjectConfig(env) !== undefined;
     } catch {
       adopted = false;
     }

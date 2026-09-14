@@ -19,11 +19,12 @@ import {
 import { detectInjectionDrift } from '../../injection-drift';
 import { createProjectFixture, writeProjectConfig } from '../../../../test-setup/project-fixture';
 import type { CheckEnv } from '../types';
+import { createRunEnv } from '../../run-env';
 
 function makeEnv(projectPath: string): CheckEnv {
   return {
+    ...createRunEnv(projectPath),
     context: { operation: 'commit', projectPath },
-    projectPath,
     stagedDiff: async () => '',
     stagedDiffNames: async () => '',
     srcScan: () => [],

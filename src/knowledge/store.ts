@@ -55,8 +55,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
   /**
    * index.json 解析结果的实例级缓存（harness#106）
    *
-   * mtimeMs+size 指纹（先例：project-config-loader.ts rawConfigCache）：
-   * 文件未变则复用解析结果，消除 list() 一次调用内 N+1 次全量重读；
+   * mtimeMs+size 指纹（实例级，作用域限于本 store 的一次 list()）：
+   * 文件未变则复用解析结果，消除一次调用内 N+1 次全量重读；
    * 文件变更（含外部进程改写、删除）自动失效。
    */
   private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;

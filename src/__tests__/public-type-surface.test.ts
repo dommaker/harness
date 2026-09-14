@@ -281,6 +281,8 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'IronLawContext',
     'PassesGateConfig',
     'RenderConstraintsByTriggerOptions',
+    'RunEnv',
+    'RunTarget',
     'SpecSchemaDefinition',
     'SpecType',
     'SpecValidationResult',

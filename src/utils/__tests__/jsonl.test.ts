@@ -88,6 +88,72 @@ describe('readJsonl', () => {
     expect(readJsonl<Row>(filePath, 'skip', { tail: 10 }).records).toHaveLength(1);
     expect(readJsonl<Row>(filePath, 'skip', { head: 10 }).records).toHaveLength(1);
   });
+
+  // ===== tail 倒读（ADR-0023 决策 3）：语义必须与「整读后 slice」逐字一致 =====
+
+  it('tail：与整读后截断的结果逐字等价', () => {
+    const filePath = write('equiv.jsonl', ['{"n":1}', CORRUPT, '', '{"n":4}', '  ', '{"n":6}']);
+    const whole = readJsonl<Row>(filePath, 'skip');
+    const tail = readJsonl<Row>(filePath, 'skip', { tail: 3 });
+    // 末尾 3 个非空行含 1 个坏行 → records 只剩 2 条，坏行照旧计入 skippedLines
+    expect(tail.records).toEqual(whole.records.slice(-2));
+    expect(tail.records.map(r => r.n)).toEqual([4, 6]);
+    expect(tail.skippedLines).toBe(1);
+  });
+
+  it('tail：跨 64KB 块边界的多字节字符不被切断', () => {
+    // 每行含 CJK，行数足够跨过若干个分块边界；残段按字节留到下一轮才解码
+    const lines = Array.from(
+      { length: 1200 },
+      (_, i) => JSON.stringify({ n: i, 文本: '约束进化飞轮'.repeat(12) })
+    );
+    const filePath = write('wide.jsonl', lines);
+    expect(fs.statSync(filePath).size).toBeGreaterThan(64 * 1024);
+    const { records, skippedLines } = readJsonl<{ n: number; 文本: string }>(
+      filePath,
+      'throw',
+      { tail: 5 }
+    );
+    expect(skippedLines).toBe(0);
+    expect(records.map(r => r.n)).toEqual([1195, 1196, 1197, 1198, 1199]);
+    expect(records[0].文本).toBe('约束进化飞轮'.repeat(12));
+  });
+
+  it('tail：末行无换行也能取到', () => {
+    const filePath = path.join(dir, 'no-eol.jsonl');
+    fs.writeFileSync(filePath, '{"n":1}\n{"n":2}', 'utf-8');
+    expect(readJsonl<Row>(filePath, 'skip', { tail: 1 }).records.map(r => r.n)).toEqual([2]);
+  });
+
+  it('tail：CRLF 的 \\r 随行进文本，parse 照旧通过', () => {
+    const filePath = path.join(dir, 'crlf.jsonl');
+    fs.writeFileSync(filePath, '{"n":1}\r\n{"n":2}\r\n', 'utf-8');
+    expect(readJsonl<Row>(filePath, 'throw', { tail: 2 }).records.map(r => r.n)).toEqual([1, 2]);
+  });
+
+  it('tail：文件尾部的纯空白行不计数，继续往前找够数', () => {
+    const filePath = write('blank-tail.jsonl', ['{"n":1}', '{"n":2}', '', '   ', '\t']);
+    expect(readJsonl<Row>(filePath, 'skip', { tail: 2 }).records.map(r => r.n)).toEqual([1, 2]);
+  });
+
+  it('tail：走倒读分块，不整读全文——见 jsonl-tail-seek.test.ts（fs 导出属性不可 redefine，只能在模块层 mock）', () => {
+    const filePath = write('seek.jsonl', Array.from({ length: 5000 }, (_, i) => `{"n":${i}}`));
+    expect(readJsonl<Row>(filePath, 'skip', { tail: 2 }).records.map(r => r.n)).toEqual([
+      4998, 4999,
+    ]);
+  });
+
+  it('tail: 0 与缺文件均返回空结果，不打开文件', () => {
+    const filePath = write('zero.jsonl', ['{"n":1}']);
+    expect(readJsonl<Row>(filePath, 'skip', { tail: 0 })).toEqual({
+      records: [],
+      skippedLines: 0,
+    });
+    expect(readJsonl<Row>(path.join(dir, 'missing.jsonl'), 'skip', { tail: 5 })).toEqual({
+      records: [],
+      skippedLines: 0,
+    });
+  });
 });
 
 describe('countJsonlLines', () => {

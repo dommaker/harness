@@ -11,9 +11,11 @@
  * 也不反转既有容错调用点的语义。坏行指非空但 JSON.parse 失败的行
  * （半写入截断、手工编辑、磁盘满等）。
  *
- * tail / head：只解析尾部 / 头部 N 个非空行（文件仍全量读取，parse 才是大头），
- * 供「只看最近 K 条」的调用点避免全量 parse（check 等热路径）。
- * countJsonlLines 供纯计数消费方（完全不 parse）。
+ * tail：从文件末尾倒着分块 seek，只把够数的尾部行读进内存。2026-09-14 实测推翻本文件
+ * 早先「文件仍全量读取，parse 才是大头」的断言：6.7MB / 32723 行的 traces.log 上，
+ * 完全不 parse 的整读单次仍 16.6–21.1ms——成本在 split('\n') 与空白行过滤。
+ * head：消费点在文件头部，倒读无收益，保持整读后截断。
+ * countJsonlLines 供纯计数消费方（行数必须扫全文，但不 parse）。
  *
  * 计数去向（harness#100）：本模块是坏行计数的唯一正本，但正本≠终点——凡以 'skip'
  * 策略读，调用点必须把 skippedLines 带到该消费面的用户可见输出（CLI 走 stderr，
@@ -69,23 +71,68 @@ function readNonEmptyLines(filePath: string): string[] {
     .filter(line => line.trim().length > 0);
 }
 
+/** tail 倒读的分块大小：trace 行约 200B，一块即够几十行 */
+const TAIL_CHUNK_BYTES = 64 * 1024;
+
+/**
+ * 从文件末尾倒着分块读，只返回末尾 want 个非空行（文件顺序）
+ *
+ * 与「整读后 slice(-want)」逐字同语义：行以 `\n` 界定，末行允许无换行，`\r` 随行进文本，
+ * 纯空白行不计数。左侧残段（块边界切在多字节字符中间）不解码，按字节留到下一轮——
+ * UTF-8 的多字节序列不含 0x0a，故按 `\n` 切字节再解码不会破坏字符。
+ */
+function readTailNonEmptyLines(filePath: string, want: number): string[] {
+  if (want <= 0) return [];
+  if (!fs.existsSync(filePath)) return [];
+
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    let pos = fs.fstatSync(fd).size;
+    let acc = Buffer.alloc(0);
+    for (;;) {
+      const start = Math.max(0, pos - TAIL_CHUNK_BYTES);
+      if (pos > start) {
+        const chunk = Buffer.alloc(pos - start);
+        fs.readSync(fd, chunk, 0, pos - start, start);
+        acc = Buffer.concat([chunk, acc]);
+      }
+      pos = start;
+
+      const lines: string[] = [];
+      let cursor = pos === 0 ? 0 : -1;
+      for (let i = 0; i < acc.length; i++) {
+        if (acc[i] !== 0x0a) continue;
+        if (cursor >= 0) lines.push(acc.subarray(cursor, i).toString('utf-8'));
+        cursor = i + 1;
+      }
+      if (cursor >= 0 && cursor < acc.length) lines.push(acc.subarray(cursor).toString('utf-8'));
+
+      const kept = lines
+        .filter(line => line.trim().length > 0)
+        .slice(-want);
+      // 已到文件头 → 全部行都在手里；否则末尾 want 个非空行已凑齐，左侧只可能是更早的行
+      if (pos === 0 || kept.length >= want) return kept;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 /**
  * 读取 JSONL 文件：exists → read → split → parse → filter（正本读链）
  *
  * policy 必填无缺省（裁决 1）；缺文件返回空结果，不抛。
+ * 只要 tail 时走尾部 seek；带 head（含 head+tail 同给，截断顺序即既有语义）走整读。
  */
 export function readJsonl<T>(
   filePath: string,
   policy: JsonlBadLinePolicy,
   options?: JsonlReadOptions
 ): JsonlReadResult<T> {
-  let lines = readNonEmptyLines(filePath);
-  if (options?.head !== undefined) {
-    lines = options.head > 0 ? lines.slice(0, options.head) : [];
-  }
-  if (options?.tail !== undefined) {
-    lines = options.tail > 0 ? lines.slice(-options.tail) : [];
-  }
+  const tailOnly = options?.head === undefined && options?.tail !== undefined;
+  const lines = tailOnly
+    ? readTailNonEmptyLines(filePath, options!.tail!)
+    : applyHeadTail(readNonEmptyLines(filePath), options);
 
   const records: T[] = [];
   let skippedLines = 0;
@@ -98,6 +145,17 @@ export function readJsonl<T>(
     }
   }
   return { records, skippedLines };
+}
+
+/** 整读路径上的 head → tail 截断（顺序即既有语义：先截头再截尾） */
+function applyHeadTail(lines: string[], options?: JsonlReadOptions): string[] {
+  if (options?.head !== undefined) {
+    lines = options.head > 0 ? lines.slice(0, options.head) : [];
+  }
+  if (options?.tail !== undefined) {
+    lines = options.tail > 0 ? lines.slice(-options.tail) : [];
+  }
+  return lines;
 }
 
 /**

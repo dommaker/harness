@@ -240,6 +240,22 @@ describe('check command（真 git fixture）', () => {
       expect(io.outText()).not.toContain('变更文件');
       expect(result).toEqual({ kind: 'ok' });
     });
+
+    it('不带 -p 时标注预设来源，带 -p 时打印所传值（ADR-0023 步骤 4.5）', async () => {
+      const dir = gitRepo();
+      stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
+      passTraces(dir);
+
+      await check({ staged: true, projectPath: dir, trigger: 'code_implementation' }, io);
+      await check(
+        { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
+        io
+      );
+
+      const out = io.outText();
+      expect(out).toContain('预设: （按 config.yml，缺省 standard）');
+      expect(out).toContain('预设: standard');
+    });
   });
 
   describe('判定证据外显（harness#119）', () => {

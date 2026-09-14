@@ -114,4 +114,42 @@ describe('check 命令注入漂移警告', () => {
     expect(outputText()).not.toContain('注入漂移');
     expect(result.kind).toBe('ok');
   });
+
+  // ── 生效集来源与漂移比对的同一性（ADR-0023 步骤 4.5）──────────────────
+  // 改前 CLI 给 -p 塞了缺省值 'standard'，「没传」与「传了」不可区分，
+  // 于是「--preset 仅在无自定义配置时覆盖」这条规则恒被触发：项目 config.yml 的
+  // preset 静默失效，而漂移侧按 config.yml 算 → 两边稳定对不上（该报的漂移不报）。
+
+  it('config.yml 的 preset 不再被 CLI 缺省顶掉：不带 -p 按 relaxed 执法且零漂移', async () => {
+    const root = createProjectFixture({
+      name: 'harness-check-drift-relaxed',
+      config: 'preset: relaxed\n',
+    });
+    writeClaudeMd(root, REAL_VERSION); // getEffectiveConstraints(root) 走 config.yml = relaxed
+
+    const result = await check({ staged: false, projectPath: root }, io);
+
+    // relaxed 裁掉的内置条目会出现在「已禁用约束」行——改前 CLI 塞了 standard，这行根本不出现
+    const output = outputText();
+    expect(output).toContain('已禁用约束:');
+    expect(output).not.toContain('内容漂移');
+    expect(output).toContain('约束检查通过');
+    expect(result.kind).toBe('ok');
+  });
+
+  it('显式 -p 时，漂移比对用的就是本 run 实际执法的那份', async () => {
+    const root = createProjectFixture({
+      name: 'harness-check-drift-override',
+      config: 'preset: relaxed\n',
+    });
+    writeClaudeMd(root, REAL_VERSION); // 段里是 relaxed 的少数条目
+
+    await check({ preset: 'standard', staged: false, projectPath: root }, io);
+
+    // standard 不裁条目（无「已禁用约束」行），且期望段 = 本 run 执法的 standard
+    // → 段里条目只少不多，报「缺失 N 条 / 多余 0 条」
+    const output = outputText();
+    expect(output).not.toContain('已禁用约束:');
+    expect(output).toMatch(/内容漂移: 缺失 [1-9]\d* 条 \/ 多余 0 条/);
+  });
 });

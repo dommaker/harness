@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
-import { getMergedConstraintsConfig } from '../../core/effective-constraints';
+import { getMergedConstraintsConfig, constraintsFromMerged } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
 import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
@@ -52,8 +52,8 @@ function logEvidence(
 }
 
 export interface CheckOptions {
-  /** 预设名称 */
-  preset: string;
+  /** 预设名称；**不传 = 按项目 `.harness/config.yml` 的 preset**（CLI 不给缺省值，见 commands/definitions.ts） */
+  preset?: string;
   /** 是否只检查暂存文件 */
   staged: boolean;
   /** 触发条件 */
@@ -84,7 +84,7 @@ export async function check(
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
   log(io, chalk.blue('🔍 检查约束...'));
-  log(io, chalk.gray(`预设: ${options.preset}`));
+  log(io, chalk.gray(`预设: ${options.preset ?? '（按 config.yml，缺省 standard）'}`));
 
   try {
     const projectPath = options.projectPath || process.cwd();
@@ -95,6 +95,7 @@ export async function check(
     // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
     // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（工单 23 语义：
     // 项目自定义配置优先于 CLI 预设），优先级规则收在 getMergedConstraintsConfig 一处。
+    // CLI 不给 -p 缺省值：没传 = 尊重 config.yml（ADR-0023 步骤 4.5，缺省值曾让两者不可区分）
     const merged = getMergedConstraintsConfig(runEnv, { preset: options.preset });
     if (merged.custom.length > 0) {
       log(io, chalk.gray(`自定义约束: ${merged.custom.length} 条`));
@@ -195,7 +196,8 @@ export async function check(
     // 注入漂移校验（ADR-0001 决策 7）：黄色警告块，不改 exit code、不影响门禁结果。
     // 无漂移/未注入零输出；漂移检测自身异常静默吞掉，绝不影响 check。
     try {
-      const drift = detectInjectionDrift(runEnv);
+      // 生效集直接用本 run 那一份：一遍算完，且比对对象就是本次实际执法的规则集（ADR-0023 步骤 4.5）
+      const drift = detectInjectionDrift(runEnv, undefined, constraintsFromMerged(merged));
       if (drift.hasDrift) {
         log(io);
         log(io, chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));

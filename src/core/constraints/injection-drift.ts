@@ -18,6 +18,7 @@
  */
 
 import * as path from 'path';
+import type { Constraint } from '../../types/constraint';
 import { getEffectiveConstraints } from '../effective-constraints';
 import { resolveRunEnv, type RunTarget } from './run-env';
 import { getHarnessPackageVersion } from '../../utils/package-version';
@@ -76,10 +77,13 @@ function significantLines(section: string): string[] {
  * @param target 项目根路径，或本 run 的运行级观察面（CLI check 传入即与本 run 共用
  *   同一份 config.yml 读取，漂移侧的生效集计算不再重读文件——ADR-0023 决策 2）
  * @param currentVersion 当前 harness 版本（缺省经 getHarnessPackageVersion 正本读取；测试可显式传入）
+ * @param expectedConstraints 本 run 已算好的生效集（CLI check 传入 → 生效集链路一次运行只算
+ *   一遍，且比对用的就是本 run 实际执法的那份）。不传则按 target 自取，行为与改前逐字一致
  */
 export function detectInjectionDrift(
   target: RunTarget,
-  currentVersion: string = getHarnessPackageVersion()
+  currentVersion: string = getHarnessPackageVersion(),
+  expectedConstraints?: Constraint[]
 ): InjectionDrift {
   const env = resolveRunEnv(target);
   const projectRoot = env.projectPath;
@@ -121,7 +125,10 @@ export function detectInjectionDrift(
   }
 
   // 2. 内容漂移（条目级：期望渲染 vs 实际段）
-  const expectedSection = renderConstraintsSection(getEffectiveConstraints(env), currentVersion);
+  const expectedSection = renderConstraintsSection(
+    expectedConstraints ?? getEffectiveConstraints(env),
+    currentVersion
+  );
   const expectedLines = new Set(significantLines(expectedSection));
   const actualLines = new Set(significantLines(actualSection));
   const missing = [...expectedLines].filter(l => !actualLines.has(l));

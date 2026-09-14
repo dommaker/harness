@@ -31,7 +31,16 @@ export function getEffectiveConstraints(
   target: RunTarget = process.cwd(),
   options?: { preset?: string }
 ): Constraint[] {
-  const merged = getMergedConstraintsConfig(target, options);
+  return constraintsFromMerged(getMergedConstraintsConfig(target, options));
+}
+
+/**
+ * 从已算好的合并配置取出生效集清单（与 getEffectiveConstraints 同一形状）
+ *
+ * 给已经持有 `MergedConstraintsConfig` 的消费方复用（CLI check 把这一份同时交给
+ * 漂移检测，避免生效集链路在一次运行里算两遍，ADR-0023 步骤 4.5）。
+ */
+export function constraintsFromMerged(merged: MergedConstraintsConfig): Constraint[] {
   return [
     ...Object.values(merged.ironLaws),
     ...Object.values(merged.guidelines),

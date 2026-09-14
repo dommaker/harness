@@ -4,6 +4,7 @@
 
 import { review, reviewStatus } from '../review';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { decide, fakeGate, throwingGate } from './gate-decision';
 import { execAsync } from '../../../utils/exec';
 import { ReviewGate } from '../../../gates/review';
 
@@ -13,7 +14,7 @@ jest.mock('../../../utils/exec', () => ({
 
 jest.mock('../../../gates/review', () => ({
   ReviewGate: jest.fn().mockImplementation(() => ({
-    check: jest.fn(),
+    evaluate: jest.fn(),
   })),
 }));
 
@@ -41,12 +42,9 @@ describe('review command', () => {
   describe('review', () => {
     it('should print success when check passes', async () => {
       mockExec.mockResolvedValue({ stdout: 'main\n', stderr: '' });
-      const mockCheck = jest.fn().mockResolvedValue({
-        passed: true,
-        message: 'ok',
-        details: { approvals: 2, changesRequested: 0 },
-      });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(decide('review', true, 'ok', { approvals: 2, changesRequested: 0 })) as any
+      );
 
       const result = await review({}, io);
 
@@ -56,12 +54,9 @@ describe('review command', () => {
 
     it('should print failure and exit 1 when check fails', async () => {
       mockExec.mockResolvedValue({ stdout: 'main\n', stderr: '' });
-      const mockCheck = jest.fn().mockResolvedValue({
-        passed: false,
-        message: 'needs approval',
-        details: { suggestion: 'Request review from a teammate' },
-      });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(decide('review', false, 'needs approval', { suggestion: 'Request review from a teammate' })) as any
+      );
 
       const result = await review({}, io);
 
@@ -74,8 +69,7 @@ describe('review command', () => {
 
     it('should handle errors and exit 1', async () => {
       mockExec.mockResolvedValue({ stdout: 'main\n', stderr: '' });
-      const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() => throwingGate(new Error('gate error')) as any);
 
       const result = await review({}, io);
 
@@ -100,8 +94,7 @@ describe('review command', () => {
 
     it('should parse allowedReviewers from comma-separated string', async () => {
       mockExec.mockResolvedValue({ stdout: 'main\n', stderr: '' });
-      const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() => fakeGate(decide('review', true, 'ok')) as any);
 
       await review({ allowedReviewers: 'alice, bob, charlie' }, io);
 

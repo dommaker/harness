@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import { execAsync } from '../../utils/exec';
 import { ReviewGate } from '../../gates/review';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { reportGateDecision, reportGateError } from '../gate-command';
 
 export interface ReviewOptions {
   /** 项目路径 */
@@ -46,34 +47,27 @@ export async function review(
     const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
     log(io, chalk.gray(`当前分支: ${branch.trim()}`));
 
-    const result = await gate.check({ projectPath });
+    const decision = await gate.evaluate({ projectPath });
 
-    log(io);
-    if (result.passed) {
-      log(io, chalk.green('✅ 代码审查门控检查通过'));
-      if (result.details) {
-        log(io, chalk.gray(`   审批: ${result.details.approvals ?? 0}, 变更请求: ${result.details.changesRequested ?? 0}`));
-      }
-    } else {
-      log(io, chalk.red('❌ 代码审查门控检查失败'));
-      log(io, chalk.red(`   ${result.message}`));
-      if (result.details?.suggestion) {
-        log(io, chalk.gray(`   ${result.details.suggestion}`));
-      }
-      return { kind: 'fail', reason: `review gate denied: ${result.message}` };
-    }
-    return { kind: 'ok' };
-  } catch (error: any) {
-    log(io);
-    log(io, chalk.red('❌ 代码审查门控检查出错'));
-    log(io, chalk.red(`   ${error.message}`));
-
-    if (error.message.includes('not a git repository')) {
-      log(io);
-      log(io, chalk.gray('提示: 此命令需要在 Git 仓库中运行'));
-    }
-
-    return { kind: 'fail', reason: `review gate error: ${error.message}` };
+    return reportGateDecision(
+      io,
+      {
+        gateId: 'review',
+        label: '代码审查门控',
+        onPass: (r) =>
+          r.details
+            ? [chalk.gray(`   审批: ${r.details.approvals ?? 0}, 变更请求: ${r.details.changesRequested ?? 0}`)]
+            : [],
+        onFail: (r) => (r.details?.suggestion ? [chalk.gray(`   ${r.details.suggestion}`)] : []),
+      },
+      decision
+    );
+  } catch (error) {
+    return reportGateError(io, 'review', '代码审查门控', error, (message) =>
+      message.includes('not a git repository')
+        ? ['', chalk.gray('提示: 此命令需要在 Git 仓库中运行')]
+        : []
+    );
   }
 }
 

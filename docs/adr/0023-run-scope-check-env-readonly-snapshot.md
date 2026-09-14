@@ -7,7 +7,7 @@
 
 ## 背景
 
-用只插桩不改文件的 fs 计数脚本实测（monkeypatch `fs` 后直接 require `dist/cli/commands/check.js`，目标 `/root/projects/studio` 与 `/root/projects/harness`，写操作换 no-op）：
+用只插桩不改文件的 fs 计数脚本实测（monkeypatch `fs` 后直接 require `dist/cli/commands/check.js`，目标 = 本机的 studio 与 harness 两个真实项目 checkout，写操作换 no-op）：
 
 | 重复项 | 一次 `harness check` 实际次数 | 实测成本 |
 |---|---|---|

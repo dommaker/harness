@@ -2,6 +2,8 @@
  * 门禁类型定义 + GateResult 构造器
  */
 
+import type { RunEnv } from '../core/constraints/run-env';
+
 /**
  * 门禁结果（报告结构，保留）
  *
@@ -147,6 +149,11 @@ export interface GateContext {
   
   // 通用
   timeout?: number;
+  /**
+   * 本 run 的运行级观察面（ADR-0023）。一条守卫链传同一枚 → 项目配置文件整链至多读一次；
+   * 不传 = 各门禁自造一枚一次性观察面（判定不变，只是不共享读取）
+   */
+  runEnv?: RunEnv;
 }
 
 /**

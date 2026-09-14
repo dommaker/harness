@@ -248,6 +248,31 @@ describe('FreshnessRunner', () => {
       expect(results[0].message).toContain('unlisted');
     });
 
+    it('推不出任何根时用调用方注入的源码根兜底，本模块不再自探（ADR-0023 决策 4）', () => {
+      setupFixture('dirdir-roots-injected', {
+        // 条目是单段目录 `src`：docDirs 非空（否则会先走「未找到目录引用」早退），
+        // 但推不出任何根（根 = 去掉最后一段），落到兜底分支
+        'CLAUDE.md': ['## Key Subsystems', '', '| `src` | Core |'].join('\n'),
+      });
+      mkdirSync(join(TEST_ROOT, 'dirdir-roots-injected', 'src'), { recursive: true });
+      mkdirSync(join(TEST_ROOT, 'dirdir-roots-injected', 'lib', 'nested'), { recursive: true });
+
+      let injectedCalls = 0;
+      const config: DocFreshnessConfig = {
+        checks: [{ type: 'doc_dir_check', doc: 'CLAUDE.md', section: 'Key Subsystems' }],
+      };
+      const results = runner.runAll(config, join(TEST_ROOT, 'dirdir-roots-injected'), {
+        sourceRoots: () => {
+          injectedCalls++;
+          return ['lib'];
+        },
+      });
+
+      expect(injectedCalls).toBe(1);
+      expect(results[0].pass).toBe(false);
+      expect(results[0].message).toContain('lib/nested');
+    });
+
     it('passes for uncovered dir when skip_reverse_check is set', () => {
       setupFixture('dirdir-skip-reverse', {
         'CLAUDE.md': [

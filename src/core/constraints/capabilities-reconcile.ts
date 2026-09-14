@@ -16,6 +16,7 @@
  * module 读 uncoveredDirs（目录聚合），file 读 uncoveredFiles（逐文件）。
  */
 
+import { existsSync } from 'fs';
 import { join, relative } from 'path';
 import {
   aggregateToSourceSubdir,
@@ -67,8 +68,11 @@ export interface CapabilityVerdict {
  * 目录条目（以 / 结尾）前缀匹配；文件条目精确匹配或路径边界后缀匹配
  * （兼容 basename 条目，但拒绝 xfoo.ts 命中 foo.ts、docs/src/foo.tsx 命中 src/foo.ts
  * 这类 endsWith/includes 模糊匹配造成的碰撞）
+ *
+ * 对外导出（ADR-0023 步骤 4）：共享对照判定的消费方需要按自己的增量清单再算一次覆盖，
+ * 这条规则不得在别处重写。
  */
-function isCoveredBy(entries: string[], file: string): boolean {
+export function isCoveredByEntries(entries: string[], file: string): boolean {
   return entries.some((listed) =>
     listed.endsWith('/')
       ? file.startsWith(listed)
@@ -100,7 +104,7 @@ export function reconcileCapabilities(input: ReconcileInput): CapabilityVerdict 
   const dirEntries = allEntries.filter((e) => e.endsWith('/'));
   const coverageEntries = [...fileEntries, ...dirEntries];
 
-  const uncoveredFiles = populationFiles.filter((f) => !isCoveredBy(coverageEntries, f));
+  const uncoveredFiles = populationFiles.filter((f) => !isCoveredByEntries(coverageEntries, f));
   const uncoveredDirs = [...new Set(
     uncoveredFiles.map((file) => {
       // 与 sync-docs 历史聚合同语义：归属第一个能前缀匹配的来源根，兜底首根
@@ -111,7 +115,7 @@ export function reconcileCapabilities(input: ReconcileInput): CapabilityVerdict 
 
   // 条目在代码实况中仍有对应文件即算活（裸文件名条目无法做存在性判定的兜底）
   const aliveByPopulation = (entry: string): boolean =>
-    populationFiles.some((f) => isCoveredBy([entry], f));
+    populationFiles.some((f) => isCoveredByEntries([entry], f));
 
   const deadEntries = allEntries.filter((entry) => {
     if (entryExistsOnDisk(entry, fileExists, sourceRoots)) return false;
@@ -124,7 +128,7 @@ export function reconcileCapabilities(input: ReconcileInput): CapabilityVerdict 
     coverageEntries,
     hasTable: TABLE_SEPARATOR_REGEX.test(content),
     listingFormat: isCapabilityListingFormat(content),
-    uncoveredChanges: changedFiles.filter((f) => !isCoveredBy(coverageEntries, f)),
+    uncoveredChanges: changedFiles.filter((f) => !isCoveredByEntries(coverageEntries, f)),
     uncoveredFiles,
     uncoveredDirs,
     deadEntries,
@@ -161,6 +165,26 @@ export function collectSourceFiles(
       includeTsx: options.includeTsx,
     });
     files.push(...found.map((f) => relative(projectPath, f)));
+  }
+  return files;
+}
+
+/**
+ * 「代码实况清单」的唯一取法：只收真实存在的源码根下的文件（项目相对路径）
+ *
+ * 抽出的理由（ADR-0023 步骤 4）：capability_sync 与 docs_freshness 现在把同一份清单
+ * 喂给 run 内共享的对照判定（`RunEnv.capabilities()`，memo 只记第一次的输入），
+ * 两边必须逐字相同，否则共享的就是一份错的东西。扫描本身仍经调用方注入的 `scan`
+ * （保留 checker 侧 srcScan 证据接缝与测试可替身性）。
+ */
+export function collectPopulationFiles(
+  projectPath: string,
+  roots: string[],
+  scan: (root: string) => string[]
+): string[] {
+  const files: string[] = [];
+  for (const root of roots) {
+    if (existsSync(join(projectPath, root))) files.push(...scan(root));
   }
   return files;
 }

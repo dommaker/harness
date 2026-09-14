@@ -1,23 +1,42 @@
 /**
  * 运行级观察面测试（ADR-0023 决策 1/4）
  *
- * 钉四件事：① 一次运行内同一份 trace 至多读一次（懒建 + memo）；② 不同尾部窗口的口径
+ * 钉五件事：① 一次运行内同一份 trace 至多读一次（懒建 + memo）；② 不同尾部窗口的口径
  * 与 `readJsonl(..., {tail})` 逐字一致（含坏行占槽位）——这是"合并两处读"不改变判定的前提；
  * ③ context-builder 用注入的 env，而不是自己再读一遍；
  * ④ 项目配置（config.yml 与自定义约束文件）一次运行一份快照（ADR-0023 决策 2：
- *    进程级缓存撤销后的口径）。
+ *    进程级缓存撤销后的口径）；
+ * ⑤ 能力表一次解析多消费——两个 checker 共用同一枚 env 时文档只读一次、判定不变
+ *    （ADR-0023 决策 4）。
  */
 
+import { jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createRunEnv, resolveRunEnv, TRACE_TAIL_WINDOW, type RunEnv } from '../run-env';
 import { buildConstraintContext } from '../context-builder';
+import { buildCheckEnv, normalizeCheckOutcome } from '../checkers/types';
+import { docsFreshness } from '../checkers/docs-freshness';
+import { capabilitySync } from '../checkers/capability-sync';
+import { collectSourceFiles, reconcileCapabilities } from '../capabilities-reconcile';
 import { loadRawProjectConfig } from '../../project-config-loader';
 import { createProjectFixture, writeProjectConfig } from '../../../test-setup/project-fixture';
 import { readJsonl } from '../../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../../types/trace';
 import type { GitEvidence } from '../git-evidence';
+
+// ts-jest 的 namespace 导入属性不可重定义（jest.spyOn 会抛），只包一层 readFileSync
+// 做读计数——其余 fs 能力用真实实现，夹具搭建与被检代码读取都不受影响
+// （同一手法先例：src/__tests__/context-files-resolution.test.ts）
+jest.mock('fs', () => {
+  const actual = jest.requireActual<typeof import('fs')>('fs');
+  return { ...actual, readFileSync: jest.fn(actual.readFileSync) };
+});
+
+const readSpy = (fs as unknown as { readFileSync: jest.Mock }).readFileSync;
+const capsReads = () =>
+  readSpy.mock.calls.filter(call => String(call[0]).endsWith('CAPABILITIES.md')).length;
 
 const tracePathOf = (projectPath: string) => path.join(projectPath, DEFAULT_TRACE_FILE);
 
@@ -217,6 +236,7 @@ describe('context-builder 经注入的观察面取证据', () => {
       sourceRoots: () => ['src'],
       rawConfig: () => undefined,
       customConstraints: () => ({}),
+      capabilities: () => undefined,
     };
     return { env, limits };
   }
@@ -268,5 +288,90 @@ describe('context-builder 经注入的观察面取证据', () => {
       evidence: fakeGit(dir, ['README.md']),
     });
     expect(ctx.hasFailingTest).toBe(true);
+  });
+});
+
+describe('capabilities — 能力表一次解析多消费（ADR-0023 决策 4）', () => {
+  const TABLE = '| 能力 | 路径 | 说明 |\n|---|---|---|\n';
+  /** 幽灵条目 src/gone.ts + 一个真实源文件 src/live.ts */
+  const CAPS_DOC = `# C\n\n${TABLE}| 幽灵 | src/gone.ts | 已删 |\n`;
+
+  let dir: string;
+
+  beforeEach(() => {
+    dir = createProjectFixture({
+      name: 'run-env-caps',
+      files: { 'CAPABILITIES.md': CAPS_DOC, 'src/live.ts': 'export const x = 1;\n' },
+    });
+    readSpy.mockClear();
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** 两个 checker 共用同一枚 env（= 一次 check run 的形状） */
+  async function evaluateBoth(env: RunEnv) {
+    const scan = collectSourceFiles(dir, env.sourceRoots());
+    const checkEnv = buildCheckEnv(
+      { operation: 'module_modification', projectPath: dir },
+      { stagedDiff: async () => '', stagedDiffNames: async () => '', srcScan: () => scan },
+      env
+    );
+    return {
+      docs: normalizeCheckOutcome(await docsFreshness.evaluate(checkEnv)),
+      caps: normalizeCheckOutcome(await capabilitySync.evaluate(checkEnv)),
+    };
+  }
+
+  it('一次 run 内两个 checker 共用同一份读取：CAPABILITIES.md 只读一次', async () => {
+    const { docs, caps } = await evaluateBoth(createRunEnv(dir));
+
+    // 判定照旧：幽灵条目由 docs_freshness 点名，capability_sync 正常评估不 skip
+    expect(docs.satisfied).toBe(false);
+    expect(docs.evidence.join('\n')).toContain('src/gone.ts');
+    expect(caps.skipped).toBe(false);
+    expect(capsReads()).toBe(1);
+  });
+
+  it('取过之后再改文档 = 同一份内容（run 内 memo，不重复解析）', () => {
+    const env = createRunEnv(dir);
+    const first = env.capabilities(['src/live.ts']);
+    expect(capsReads()).toBe(1);
+
+    fs.writeFileSync(path.join(dir, 'CAPABILITIES.md'), `# C\n\n${TABLE}| 新 | src/live.ts | 在 |\n`, 'utf-8');
+    expect(env.capabilities(['src/live.ts'])).toBe(first);
+    expect(capsReads()).toBe(1);
+  });
+
+  it('无 CAPABILITIES.md → undefined；有文档时判定与直调对照模块同输入同结果', () => {
+    const noDoc = createProjectFixture({ name: 'run-env-caps-none', files: { 'src/a.ts': 'x\n' } });
+    try {
+      expect(createRunEnv(noDoc).capabilities(['src/a.ts'])).toBeUndefined();
+    } finally {
+      fs.rmSync(noDoc, { recursive: true, force: true });
+    }
+
+    const env = createRunEnv(dir);
+    const caps = env.capabilities(['src/live.ts']);
+    expect(caps?.verdict.deadEntries).toEqual(
+      reconcileCapabilities({
+        content: caps!.content,
+        populationFiles: ['src/live.ts'],
+        sourceRoots: caps!.sourceRoots,
+        fileExists: rel => fs.existsSync(path.join(dir, rel)),
+      }).deadEntries
+    );
+    // 增量那一维不在上行数据面（变更清单属 git 证据 #87），共享形状里恒空
+    expect(caps?.verdict.uncoveredChanges).toEqual([]);
+  });
+
+  it('源根探测与能力表共用同一份 memo：取过之后再改目录树不影响', () => {
+    const env = createRunEnv(dir);
+    const before = env.capabilities(['src/live.ts'])?.sourceRoots;
+
+    fs.mkdirSync(path.join(dir, 'packages'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'packages', 'p.ts'), 'export const p = 1;\n', 'utf-8');
+    expect(env.capabilities(['src/live.ts'])?.sourceRoots).toBe(before);
   });
 });

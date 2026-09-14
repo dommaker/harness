@@ -17,7 +17,9 @@
  *
  * 例外：「有表格但零条目」= 文档被清空，判违规（历史门，此前靠 Step 2 兜，现显式化）。
  *
- * 覆盖/漏登判定不在本文件实现，统一走 capabilities-reconcile（ADR-0009）：
+ * 覆盖/漏登判定不在本文件实现：全量对照（解析文档 + 代码实况 + 覆盖/幽灵）由
+ * capabilities-reconcile 一次算好并与 docs_freshness 共用（ADR-0009 + ADR-0023 决策 4），
+ * 本文件只按导出的唯一覆盖规则 `isCoveredByEntries` 算「本次变更」那一维（增量清单属 git 证据）。
  * 目录条目（以 / 结尾）前缀匹配，文件条目精确匹配或路径边界后缀匹配；
  * module 模式下目录条目参与覆盖，未覆盖文件按源码根下第一级子目录聚合。
  *
@@ -28,12 +30,15 @@
  * 不计 pass/fail，避免在未采用约定的项目上全量误报。
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
-import { isCapabilityListingFormat } from '../capabilities-parser';
 import { getCapabilitiesMode } from '../../project-config-loader';
-import { detectSourceRoots } from '../../../utils/detect-source-roots';
-import { reconcileCapabilities, significantCodeChanges } from '../capabilities-reconcile';
+import {
+  collectPopulationFiles,
+  isCoveredByEntries,
+  significantCodeChanges,
+} from '../capabilities-reconcile';
+import { CAPABILITIES_FILE_REL } from '../run-env';
 import { formatEvidence, type ConstraintCheck } from './types';
 
 export const capabilitySync: ConstraintCheck = {
@@ -41,41 +46,35 @@ export const capabilitySync: ConstraintCheck = {
   async evaluate(env) {
     const projectPath = env.projectPath;
     // ADR-0001 存在性探测：项目未采用 CAPABILITIES.md 约定 → skip（不计 pass/fail）
-    if (!existsSync(join(projectPath, 'CAPABILITIES.md'))) {
+    if (!existsSync(join(projectPath, CAPABILITIES_FILE_REL))) {
       return 'skip';
     }
     try {
-      const capabilitiesPath = join(projectPath, 'CAPABILITIES.md');
-      const content = readFileSync(capabilitiesPath, 'utf-8');
       const capabilitiesMode = getCapabilitiesMode(env);
+      // 文档原文 + 源码根 + 代码实况 + 对照判定 = run 内一份，与 docs_freshness 共用（ADR-0023 决策 4）
+      const caps = env.capabilities(
+        collectPopulationFiles(projectPath, env.sourceRoots(), (root) => env.srcScan(root))
+      );
+      if (!caps) return 'skip'; // 探测与取数之间文档消失：与上方同一语义
+      const verdict = caps.verdict;
 
       // 清单格式（计数行）没有文件表可核对，计数由 sync-docs 维护，直接放行
-      if (capabilitiesMode === 'listing' || isCapabilityListingFormat(content)) {
+      if (capabilitiesMode === 'listing' || verdict.listingFormat) {
         return true;
       }
 
-      const sourceRoots = detectSourceRoots(projectPath);
-      const population: string[] = [];
-      for (const root of sourceRoots) {
-        if (existsSync(join(projectPath, root))) {
-          population.push(...env.srcScan(root));
-        }
-      }
-
       const diffNames = (await env.stagedDiffNames()).split('\n').filter(Boolean);
-      const verdict = reconcileCapabilities({
-        content,
-        populationFiles: population,
-        changedFiles: significantCodeChanges(diffNames),
-        sourceRoots,
-      });
+      // 增量覆盖判定留在本文件：变更清单属 git 证据（#87），不在上行数据面
+      const uncoveredChanges = significantCodeChanges(diffNames).filter(
+        (f) => !isCoveredByEntries(verdict.coverageEntries, f)
+      );
 
       // 无表格的散文文档：历史放行语义
       if (!verdict.hasTable) return true;
 
       // 文档退化门：有表格却什么都没登记（限定「源码根下确有文件」——空仓 + 空表没有可登记
       // 对象，历史行为是放行，本票不顺手扩大 fail 面）
-      if (verdict.coverageEntries.length === 0 && population.length > 0) {
+      if (verdict.coverageEntries.length === 0 && caps.populationFiles.length > 0) {
         return {
           pass: false,
           evidence: ['CAPABILITIES.md 有表格但零条目登记，运行 harness sync-docs 或直接补登记'],
@@ -83,12 +82,12 @@ export const capabilitySync: ConstraintCheck = {
       }
 
       // ── Step 1: Git diff 增量检查（与本次变更有因果，每个变更文件都必须被覆盖）──
-      if (verdict.uncoveredChanges.length > 0) {
+      if (uncoveredChanges.length > 0) {
         return {
           pass: false,
           evidence: formatEvidence(
-            `本次变更有 ${verdict.uncoveredChanges.length} 个文件未登记进 CAPABILITIES.md`,
-            verdict.uncoveredChanges
+            `本次变更有 ${uncoveredChanges.length} 个文件未登记进 CAPABILITIES.md`,
+            uncoveredChanges
           ),
         };
       }

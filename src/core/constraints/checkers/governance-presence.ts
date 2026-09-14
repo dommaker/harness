@@ -47,10 +47,14 @@ export const governancePresence: ConstraintCheck = {
     if (hasGovernancePreserveBlock(join(projectPath, 'AGENTS.md'))) return true;
     if (hasClaudeGovernance(join(projectPath, 'CLAUDE.md'))) return true;
 
-    console.error(
-      '[governance_presence] 治理契约缺失：AGENTS.md 无非空 PRESERVE:governance 段，' +
-      '且 CLAUDE.md 无 Governance Rules 块——约束正本静默丢失，请恢复其一'
-    );
-    return false;
+    // 证据随判定一并返回（ADR-0016 补迁）：此前这里是 console.error 侧信道——
+    // 只进本地 stderr，进不了 CLI 结论块与 trace，铁律拦截时用户看不到该恢复哪个正本
+    return {
+      pass: false,
+      evidence: [
+        '治理契约缺失：AGENTS.md 无非空 PRESERVE:governance 段，CLAUDE.md 也无 Governance Rules 块（正本静默丢失）',
+        '修复: 恢复其一（重跑 `harness init` 会同步注入段）',
+      ],
+    };
   },
 };

@@ -17,12 +17,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { reconcileCapabilities, type CapabilityVerdict } from './capabilities-reconcile';
 import { readJsonlWindow, type JsonlWindow, type JsonlReadResult } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 import type { CustomConstraintDefinition } from '../../types/project-config';
 
 /** config.yml 在项目根下的相对路径（读取口径唯一落点） */
 const CONFIG_FILE_REL = path.join('.harness', 'config.yml');
+
+/** 能力表在项目根下的落点（checker 侧存在性探测与本读面共用此常量） */
+export const CAPABILITIES_FILE_REL = 'CAPABILITIES.md';
 
 /**
  * 尾部窗口上限 = 本 run 内最大的尾部消费方（有无失败记录看 20 条，见 context-builder）
@@ -53,6 +57,33 @@ export interface RunEnv {
    * 文件缺失或无 `custom_constraints` 段 → `{}`（与改前的直读逐字一致）。
    */
   customConstraints(fileName: string): Record<string, CustomConstraintDefinition>;
+  /**
+   * `CAPABILITIES.md` 的读取 + 解析 + 与代码实况的对照判定（ADR-0023 决策 4）
+   *
+   * 此前 capability_sync 与 docs_freshness 各读一遍文档、各跑一遍 `reconcileCapabilities`
+   * （studio 量得单次 7.6–15.9ms，两边解析输入逐字节相同）。此处一次供给两消费方。
+   * 文档缺失 → `undefined`（消费方据此 skip / 无幽灵）。
+   *
+   * **memo 只记第一次传入的 `populationFiles`**：同一 run 内两消费方必须给同一份代码实况清单。
+   * 二者一律经 `collectPopulationFiles(projectPath, roots, scan)` 取数，形状由构造保证；
+   * 出现第三个消费方且清单不同，就必须改成按输入分列的缓存而不是静默复用。
+   */
+  capabilities(populationFiles: string[]): ProjectCapabilities | undefined;
+}
+
+/**
+ * 一次运行内的能力表面貌：原文 + 源码根 + 代码实况清单 + 对照判定
+ *
+ * `verdict.deadEntries` 按「文件系统中真实存在也算活」的严口径算（带存在性 oracle），
+ * capability_sync 不读它、docs_freshness 只读它；`verdict.uncoveredChanges` 在此恒空
+ * ——本观察面不收 git 变更清单（属证据面，#87），增量覆盖由 capability_sync 自己按
+ * `coverageEntries` 算。直调 `reconcileCapabilities` 的消费方（如 sync-docs）仍可传 changedFiles。
+ */
+export interface ProjectCapabilities {
+  readonly content: string;
+  readonly sourceRoots: string[];
+  readonly populationFiles: string[];
+  readonly verdict: CapabilityVerdict;
 }
 
 /**
@@ -63,10 +94,12 @@ export interface RunEnv {
 export function createRunEnv(projectPath: string): RunEnv {
   const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
   let window: JsonlWindow<ExecutionTrace> | null = null;
-  let roots: string[] | null = null;
+  let sourceRoots: string[] | null = null;
   let configLoaded = false;
   let configRaw: Record<string, unknown> | undefined;
   const customDefs = new Map<string, Record<string, CustomConstraintDefinition>>();
+  /** 能力表 memo：undefined = 未算，null = 项目无 CAPABILITIES.md */
+  let caps: ProjectCapabilities | null | undefined;
 
   return {
     projectPath,
@@ -79,12 +112,7 @@ export function createRunEnv(projectPath: string): RunEnv {
       }
       return window.take(limit);
     },
-    sourceRoots() {
-      if (!roots) {
-        roots = detectSourceRoots(projectPath);
-      }
-      return roots;
-    },
+    sourceRoots: roots,
     rawConfig() {
       if (!configLoaded) {
         configRaw = readYamlFile(path.join(projectPath, CONFIG_FILE_REL));
@@ -100,7 +128,40 @@ export function createRunEnv(projectPath: string): RunEnv {
       }
       return defs;
     },
+    capabilities(populationFiles: string[]) {
+      if (caps === undefined) {
+        const content = readCapabilitiesContent();
+        caps = content === undefined
+          ? null
+          : {
+              content,
+              sourceRoots: roots(),
+              populationFiles,
+              verdict: reconcileCapabilities({
+                content,
+                populationFiles,
+                sourceRoots: roots(),
+                fileExists: rel => fs.existsSync(path.join(projectPath, rel)),
+              }),
+            };
+      }
+      return caps ?? undefined;
+    },
   };
+
+  /** 源根探测 memo（sourceRoots() 与能力表共用同一份） */
+  function roots(): string[] {
+    if (!sourceRoots) {
+      sourceRoots = detectSourceRoots(projectPath);
+    }
+    return sourceRoots;
+  }
+
+  /** 读 CAPABILITIES.md 原文；缺失 → undefined（不算异常，未采用该约定的项目占多数） */
+  function readCapabilitiesContent(): string | undefined {
+    const file = path.join(projectPath, CAPABILITIES_FILE_REL);
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : undefined;
+  }
 }
 
 /**

@@ -152,7 +152,6 @@ export {
   registeredGateCount,
   assertGateRegistryClosed,
   runGates,
-  getEffectiveGates,
   createCheckerGate,
 } from './gates';
 export type {
@@ -163,7 +162,6 @@ export type {
   GateDecisionStatus,
   GateDefinition,
   GateRunResult,
-  GatesConfig,
   PerformanceThresholds,
   ReviewGateConfig,
   SecurityGateConfig,

@@ -92,7 +92,7 @@ describe('-p 锚定：执行与 IO 必须落在 projectPath（cwd ≠ projectPat
   });
 
   describe('acceptance（站点 2：tasks.yml 解析）', () => {
-    it('默认构造的门禁实例（registry / getEffectiveGates 形状）→ 读 B/tasks.yml，不读 cwd 的', async () => {
+    it('默认构造的门禁实例（注册表单例形状）→ 读 B/tasks.yml，不读 cwd 的', async () => {
       const cwdSide = createProjectFixture({
         name: 'acccfg-cwd-side',
         files: { 'tasks.yml': tasksYml(true) },

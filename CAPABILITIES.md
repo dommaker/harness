@@ -10,7 +10,7 @@ check, validate, passes-gate, init, report, status, spec, acceptance, performanc
 ## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
 
-统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。`getEffectiveGates(projectRoot)` 声明式裁剪（对齐 getEffectiveConstraints：config.yml `gates.order` 重排 + `gates.<id>.enabled:false` 移除，引用未注册 id 抛错）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny。checker-as-guard 接线点 `createCheckerGate(check)`（studio #129 随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
+统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。6 个门禁 CLI 命令的判定一律穿过 `evaluate()`，`GateDecision → CommandResult` 的映射与失败措辞收在 `src/cli/gate-command.ts` 一处（架构评审候选1）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny；链级暂无调用方，`order` 与本执行器按 #115 的复开条件保留（config.yml 声明式顺序/开关面已收缩，见 ADR-0002「后续变更」）。checker-as-guard 接线点 `createCheckerGate(check)`（studio #129 随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
 
 ## Constraint Model (kind 二元, ADR-0001)
 - check (10)：必须带真实 checker，注册表闭环。Iron Laws (5) 违规阻断；Guidelines (5) 违规告警。

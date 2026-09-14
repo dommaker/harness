@@ -149,10 +149,6 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
     lines: ['const projectPath = ctx.projectPath || process.cwd();'],
     reason: 'GateContext.projectPath 缺省兜底（门禁适配器的根入口）',
   },
-  'src/gates/effective-gates.ts': {
-    lines: ['export function getEffectiveGates(projectRoot: string = process.cwd()): Gate[] {'],
-    reason: 'projectRoot 形参默认值（库层可选根）',
-  },
   'src/hooks/bootstrap.ts': {
     lines: [
       'const resolvedPath = projectPath || process.cwd();',

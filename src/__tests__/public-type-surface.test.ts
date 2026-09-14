@@ -37,8 +37,8 @@ const REPO_ROOT = path.join(__dirname, '../..');
  * ① `export { 值 } from '...'`；② `export type { 类型 } from '...'`；③ 内联值声明
  * `export function|const|let|var`（如 `src/gates/index.ts` 的 5 个 `create*Gate`）——纯值面，
  * 不属类型清单管辖。
- * 清单归类按**说明符自身**而非块形式：`export { getEffectiveGates, type GatesConfig }` 里的
- * `GatesConfig` 按 TS 语义就是类型导出，必须进类型清单（本闸的职责是如实刻画公开面，不是管写法）。
+ * 清单归类按**说明符自身**而非块形式：`export { runGates, type GateRunResult }` 里的
+ * `GateRunResult` 按 TS 语义就是类型导出，必须进类型清单（本闸的职责是如实刻画公开面，不是管写法）。
  * 其余行首 `export` 一律记为违禁而非跳过：`export *` / `export type *` 会让按名字扫描静默
  * 漏算；内联 `export interface|type|enum|class|declare` 更必须红——它绕过类型清单，而
  * `enum`/`class` 同时占值面与类型面，按单一分类必错一面。这正是 B1「公开面的定义比现实窄」
@@ -185,7 +185,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'GateDefinition',
     'GateResult',
     'GateRunResult',
-    'GatesConfig',
     'GovernanceConfig',
     'GrepCountActual',
     'HarnessBootstrap',
@@ -319,7 +318,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'GateDefinition',
     'GateResult',
     'GateRunResult',
-    'GatesConfig',
     'PerformanceGateConfig',
     'PerformanceThresholds',
     'ReviewGateConfig',

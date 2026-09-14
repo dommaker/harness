@@ -170,6 +170,21 @@ function readTailNonEmptyLines(filePath: string, want: number): string[] {
   }
 }
 
+/** parse 非空行文本（读链的末段；坏行策略同 readJsonl） */
+function parseJsonlLines<T>(lines: string[], policy: JsonlBadLinePolicy): JsonlReadResult<T> {
+  const records: T[] = [];
+  let skippedLines = 0;
+  for (const line of lines) {
+    try {
+      records.push(JSON.parse(line) as T);
+    } catch (error) {
+      if (policy === 'throw') throw error;
+      skippedLines++;
+    }
+  }
+  return { records, skippedLines };
+}
+
 /**
  * 读取 JSONL 文件：exists → read → split → parse → filter（正本读链）
  *
@@ -190,18 +205,37 @@ export function readJsonl<T>(
   } else {
     lines = applyHeadTail(readNonEmptyLines(filePath), options);
   }
+  return parseJsonlLines<T>(lines, policy);
+}
 
-  const records: T[] = [];
-  let skippedLines = 0;
-  for (const line of lines) {
-    try {
-      records.push(JSON.parse(line) as T);
-    } catch (error) {
-      if (policy === 'throw') throw error;
-      skippedLines++;
-    }
-  }
-  return { records, skippedLines };
+/**
+ * 尾部窗口：一次分块读行文本，之后按不同 tail 口径反复取用
+ *
+ * 供「同一次运行里有多个消费方、各看不同长度的尾部」的场景（ADR-0023 run 内共享），
+ * 取一份行文本而不是各捞一遍。`take(limit)` 与 `readJsonl(..., { tail: limit })` 逐字
+ * 同口径：**先按行文本截窗再 parse**——坏行占尾部槽位不占 records 名额，若改拿大窗口的
+ * records 再切，窗口内有坏行时小窗口会多收更老的有效记录，判定就变了。
+ */
+export interface JsonlWindow<T> {
+  take(limit: number): JsonlReadResult<T>;
+}
+
+export function readJsonlWindow<T>(
+  filePath: string,
+  policy: JsonlBadLinePolicy,
+  maxLines: number
+): JsonlWindow<T> {
+  const lines = readTailNonEmptyLines(filePath, maxLines);
+  return {
+    take: (limit: number) => {
+      if (limit > maxLines) {
+        throw new Error(
+          `尾部窗口上限 ${maxLines} 行，无法取 ${limit} 行——建窗口时按最大消费方取值，或改上限（不静默少给）`
+        );
+      }
+      return parseJsonlLines<T>(limit > 0 ? lines.slice(-limit) : [], policy);
+    },
+  };
 }
 
 /** 整读路径上的 head → tail 截断（顺序即既有语义：先截头再截尾） */

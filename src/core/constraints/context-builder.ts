@@ -8,14 +8,16 @@
  * 架构评审 #87：本模块只做装配不做取证——git 证据一律经 git-evidence
  * adapter 取（缺省真 git adapter，调用方可注入与 checker 层同源的那一份），
  * 因此此处不再有 child_process / raw execSync。
+ *
+ * ADR-0023：同理，trace 记录与源码根探测改经运行级观察面 `RunEnv` 取——
+ * 此前本模块的两个证据探测各自整读一次 traces.log、detectTrigger 与 checker 层
+ * 各探一次源码根，同一次运行内重复读同一批文件。缺省自造一份 env，调用方（CLI check）
+ * 注入即全 run 共用。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { detectSourceRoots } from '../../utils/detect-source-roots';
-import { readJsonl } from '../../utils/jsonl';
-import { DEFAULT_TRACE_FILE } from '../../types/trace';
-import type { ExecutionTrace } from '../../types/trace';
+import { createRunEnv, TRACE_TAIL_WINDOW, type RunEnv } from './run-env';
 import type { ConstraintContext, ConstraintTrigger } from '../../types/constraint';
 import { createGitEvidence, splitFileNames, type GitEvidence } from './git-evidence';
 
@@ -51,6 +53,8 @@ export function detectTrigger(
     trigger?: ConstraintTrigger;
     projectPath?: string;
     evidence?: GitEvidence;
+    /** 运行级观察面（ADR-0023）：注入即与其余消费方共用同一份源根探测 */
+    runEnv?: RunEnv;
   }
 ): ConstraintTrigger | ConstraintTrigger[] {
   if (options.trigger) return options.trigger;
@@ -62,7 +66,7 @@ export function detectTrigger(
   // pre-commit 场景下变更含代码文件 → 附加 code_implementation 推断
   const hasCodeChange = changedFiles.some(f => CODE_FILE_REGEX.test(f));
   const projectPath = options.projectPath || process.cwd();
-  const sourceRoots = detectSourceRoots(projectPath);
+  const sourceRoots = (options.runEnv ?? createRunEnv(projectPath)).sourceRoots();
   const hasModuleChange = changedFiles.some(f =>
     sourceRoots.some(root => f.startsWith(root + '/') || f.startsWith(root + '\\')) && !f.includes('__tests__')
   );
@@ -85,17 +89,14 @@ export function detectTrigger(
 }
 
 /**
- * 检测是否有失败的测试记录
- * 扫描 trace 文件（DEFAULT_TRACE_FILE）中最近的记录
+ * 检测是否有失败的测试记录（取运行级观察面的最近 20 条）
  */
-export async function detectFailingTest(projectPath: string): Promise<boolean> {
+async function detectFailingTest(env: RunEnv): Promise<boolean> {
   try {
-    const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
-    // 坏行策略：skip（原逐行 catch→false 语义不变）；只 parse 最近 20 行
-    // 计数去向：豁免（harness#100）——布尔证据探测，坏行只会让证据变少（判定方向保守），
-    // 消费面是 check 的 pass/fail 判定，没有可挂计数的输出位
-    const { records } = readJsonl<ExecutionTrace>(traceFile, 'skip', { tail: 20 });
-    return records.some(trace => trace.result === 'fail');
+    // 坏行策略与计数去向见 run-env 的读点（ADR-0023 合并两处独立 tail 读为一份窗口）
+    return env
+      .traceTail(TRACE_TAIL_WINDOW)
+      .records.some(trace => trace.result === 'fail');
   } catch {
     return false;
   }
@@ -123,19 +124,18 @@ export function detectRootCauseInvestigation(projectPath: string): boolean {
   return false;
 }
 
+/** 验证证据的尾部窗口（工单 23 原口径：只看最近 10 条） */
+const VERIFICATION_EVIDENCE_TAIL = 10;
+
 /**
- * 检测是否有验证证据
- * 检查 trace 文件（DEFAULT_TRACE_FILE）中最近的成功验证记录
+ * 检测是否有验证证据（取运行级观察面的最近 10 条）
  */
-export async function detectVerificationEvidence(projectPath: string): Promise<boolean> {
+async function detectVerificationEvidence(env: RunEnv): Promise<boolean> {
   try {
-    const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
-    // 坏行策略：skip（原逐行 catch→false 语义不变）；只 parse 最近 10 行
     // tail 在 parse 之前截断 → 坏行会占用尾部槽位（#82 裁决范围外的既有口径，本票不改）
-    // 计数去向：豁免（harness#100）——同 detectFailingTest：布尔证据探测无计数输出位，
-    // 坏行只会让证据变少
-    const { records } = readJsonl<ExecutionTrace>(traceFile, 'skip', { tail: 10 });
-    return records.some(trace => trace.result === 'pass');
+    return env
+      .traceTail(VERIFICATION_EVIDENCE_TAIL)
+      .records.some(trace => trace.result === 'pass');
   } catch {
     return false;
   }
@@ -191,17 +191,26 @@ export function detectReuseCheck(projectPath: string): boolean {
  *
  * options.evidence（#87）：git 证据适配器。调用方（CLI check）注入同一实例给
  * checkConstraints，即可让 context-builder 与 checker 层共用同一证据来源。
+ * options.runEnv（ADR-0023）：运行级观察面。注入即本函数内的源根探测与两处 trace
+ * 证据探测与其余消费方共用同一份读取，缺省自造一份（只服务本次调用）。
  */
 export async function buildConstraintContext(options: {
   projectPath?: string;
   staged: boolean;
   trigger?: ConstraintTrigger;
   evidence?: GitEvidence;
+  runEnv?: RunEnv;
 }): Promise<ConstraintContext> {
   const projectPath = options.projectPath || process.cwd();
+  const runEnv = options.runEnv ?? createRunEnv(projectPath);
   const evidence = options.evidence ?? createGitEvidence(projectPath);
   const changedFiles = splitFileNames(evidence.changedFileNames(options.staged));
-  const inferred = detectTrigger(changedFiles, { trigger: options.trigger, projectPath, evidence });
+  const inferred = detectTrigger(changedFiles, {
+    trigger: options.trigger,
+    projectPath,
+    evidence,
+    runEnv,
+  });
   const triggers = Array.isArray(inferred) ? inferred : [inferred];
 
   return {
@@ -210,9 +219,9 @@ export async function buildConstraintContext(options: {
     projectPath,
     changedFiles,
     hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),
-    hasFailingTest: await detectFailingTest(projectPath),
+    hasFailingTest: await detectFailingTest(runEnv),
     hasRootCauseInvestigation: detectRootCauseInvestigation(projectPath),
-    hasVerificationEvidence: await detectVerificationEvidence(projectPath),
+    hasVerificationEvidence: await detectVerificationEvidence(runEnv),
     hasReuseCheck: detectReuseCheck(projectPath),
     hasRequirement: detectRequirement(projectPath),
   };

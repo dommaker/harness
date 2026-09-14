@@ -46,6 +46,7 @@
 | 测试产物解读（test-output） | 从测试运行器 stdout 读出「过了没 / 哪些失败 / 覆盖率」的判定；唯一实现 `core/validators/test-output.ts`（包内，不进导出面），passes-gate / acceptance 共消费（ADR-0012）。两门禁判定依据不一致待 #93 裁决，覆盖率取数归属待 #94 裁决 |
 | 飞轮指标（flywheel） | 知识条目的引用与消费度量（refCoverage / avgRefs / consumptionHitRate）；唯一实现 `knowledge/flywheel-metrics.ts`（包内，不进导出面），canonical 分子为过滤 synthetic 后的 genuine refs，audit D6 / knowledge stats / knowledge health 共消费（ADR-0013，#81） |
 | 测试夹具（project fixture） | 临时项目根 + 落盘声明；唯一实现 `test-setup/project-fixture.ts`（测试层，不进导出面）——`config` 槽是 `.harness/config.yml` 落点唯一正本（字符串原样落盘，畸形/脏配置用例依赖此口径），`traces` 槽/`writeProjectTraces` 是 trace 落盘唯一正本（路径锚定 `DEFAULT_TRACE_FILE`、序列化走 `appendJsonl` 生产写链，harness#108），其余文件走 `files` 相对路径；非缺省根必须经 `parentDir` **显式** opt-out（cwd 锚定用例语义），回收经 `mkdtemp-cleanup` 劫持（harness#90） |
+| 运行级观察面（run env） | 一次 `harness check` 运行内对项目上行数据的只读视图，口径 = **同一文件至多读一次、跑完即弃、不做进程级全局**；唯一实现 `core/constraints/run-env.ts`（包内，不进导出面），与 git 证据（#87/ADR-0021）同形：入口构造、沿调用链显式传递。与 `CheckEnv` 的分工是构造顺序决定的——`CheckEnv` 含 `context`，而 `context` 是经本观察面读文件算出的产物，故观察面只承载「不需要 context 就能造」的部分（ADR-0023） |
 
 ## 注意事项
 - 公共包，禁止硬编码业务路径

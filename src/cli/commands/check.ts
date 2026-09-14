@@ -16,6 +16,7 @@ import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitio
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
+import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { getTraceCollector } from '../../monitoring/traces';
@@ -66,6 +67,13 @@ export interface CheckOptions {
    * 测试据此断言"同一 run 内每条 git 命令至多执行一次"。
    */
   evidence?: GitEvidence;
+  /**
+   * 运行级观察面（非 CLI flag；ADR-0023）
+   *
+   * 缺省 = 本 run 独占一份。注入则与调用方共用同一份上行数据读取，
+   * 测试据此断言「同一次运行内同一项目文件至多读一次」。
+   */
+  runEnv?: RunEnv;
 }
 
 /**
@@ -98,12 +106,15 @@ export async function check(
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
     // #87：一次 run 一份 git 证据——context-builder 与 checker 层共用同一实例
+    // ADR-0023：一次 run 一份运行级观察面——源根探测与 trace 证据探测共用同一份读取
     const evidence = options.evidence ?? createGitEvidence(projectPath);
+    const runEnv = options.runEnv ?? createRunEnv(projectPath);
     const context = await buildConstraintContext({
       projectPath: options.projectPath,
       staged: options.staged,
       trigger: options.trigger,
       evidence,
+      runEnv,
     });
     const changedFiles = context.changedFiles ?? [];
     if (changedFiles.length > 0) {

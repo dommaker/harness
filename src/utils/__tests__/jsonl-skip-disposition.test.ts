@@ -18,8 +18,9 @@
  * 定义处，排除。
  * `readJsonlEnds`（首尾读取）同样是 skip 读点，纳入同一识别正则——否则它成为本契约的
  * 绕行通道（harness#114）。
- * `countJsonlLines` 的纯行数站点（如 `check` 的提示计数）不 parse、不产坏行计数，也不在本表内
- * ——它把损坏行算进条数的问题属口径变更，#100 明确不做。
+ * `countJsonlLines`（纯计数入口，把坏行算进条数却不 parse）已随其唯一消费点——`check` 的
+ * 提示阈值——改用有界 `head` 读而删除（ADR-0023 决策 3 推广）；该消费点因此成为本表内的
+ * skip 站点，按契约就地记名豁免。
  */
 
 import * as fs from 'fs';
@@ -41,6 +42,7 @@ const POLICY_WINDOW_LINES = 6;
  * 每个读点的去向理由在调用点注释里，此表只钉「有哪些点、各几处」。
  */
 const EXPECTED_SKIP_READ_SITES: Record<string, number> = {
+  'src/cli/commands/check.ts': 1,
   'src/cli/commands/status.ts': 1,
   'src/context/session-manager.ts': 2,
   'src/core/constraints/context-builder.ts': 2,

@@ -19,8 +19,8 @@ import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { getTraceCollector } from '../../monitoring/traces';
-import { countJsonlLines } from '../../utils/jsonl';
-import { DEFAULT_TRACE_FILE } from '../../types/trace';
+import { readJsonl } from '../../utils/jsonl';
+import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 import type { ConstraintResult, ConstraintTrigger } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -221,6 +221,9 @@ export async function check(
   }
 }
 
+/** 智能提示阈值：trace 累计条数首次达到此数才提示跑 status（判定只要「够不够」，不要总数） */
+const TRACE_HINT_THRESHOLD = 50;
+
 /**
  * 智能提示：检查是否需要提示用户下一步操作
  */
@@ -228,8 +231,13 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
   const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
   const statePath = path.join(projectPath, '.harness', '.state.json');
 
-  // 只数非空行数（含坏行），零 parse——原语义不变，走 jsonl 正本（harness#82）
-  const traceCount = countJsonlLines(tracesPath);
+  // 只读够 TRACE_HINT_THRESHOLD 行即停（坏行照旧占位，条数口径与改前的纯计数逐字一致）——
+  // traces.log 是 append-only 无上限文件，为一个比较符整读不成立
+  // 计数去向：豁免（harness#100）——本消费面只输出「够不够」的提示行，没有可挂坏行计数的输出位
+  const { records, skippedLines } = readJsonl<ExecutionTrace>(tracesPath, 'skip', {
+    head: TRACE_HINT_THRESHOLD,
+  });
+  const traceCount = records.length + skippedLines;
   if (traceCount === 0) {
     return null;
   }
@@ -246,8 +254,8 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
   
   const hints: string[] = [];
   
-  // 条件 1: 记录数首次达到 50
-  if (traceCount >= 50 && !state.shownHints.includes('trace_50')) {
+  // 条件 1: 记录数首次达到阈值
+  if (traceCount >= TRACE_HINT_THRESHOLD && !state.shownHints.includes('trace_50')) {
     hints.push('📊 记录已足够，运行 harness status 查看统计');
     state.shownHints.push('trace_50');
   }

@@ -8,10 +8,10 @@ import type { ContextUsageSnapshot } from '../../context/types';
 
 jest.mock('fs', () => {
   // 两条读入口必须同源：utils/jsonl 的 tail 走倒读分块（openSync/fstatSync/readSync，
-  // ADR-0023 决策 3），head 与全文走 readFileSync。用例只设 readFileSync 的返回值，
-  // 故倒读入口按同一份内容出字节——两条路看到的是同一个文件。
+  // ADR-0023 决策 3），head 与全文走 readFileSync。假件收在 test-setup/jsonl-fake-fs
+  // 承接两处消费（jest.mock 工厂被提升，只能 require）。
+  const { jsonlBoundedReadChain } = require('../../test-setup/jsonl-fake-fs');
   const readFileSync = jest.fn().mockReturnValue('');
-  const contentBytes = () => Buffer.from(String(readFileSync('', 'utf-8')), 'utf-8');
   return {
     existsSync: jest.fn().mockReturnValue(true),
     mkdirSync: jest.fn(),
@@ -19,13 +19,7 @@ jest.mock('fs', () => {
     appendFileSync: jest.fn(),
     statSync: jest.fn().mockReturnValue({ size: 0 }),
     renameSync: jest.fn(),
-    openSync: jest.fn().mockReturnValue(7),
-    fstatSync: jest.fn(() => ({ size: contentBytes().length })),
-    readSync: jest.fn(
-      (_fd: number, buffer: Buffer, offset: number, length: number, position: number) =>
-        contentBytes().copy(buffer, offset, position, position + length)
-    ),
-    closeSync: jest.fn(),
+    ...jsonlBoundedReadChain((p: string) => readFileSync(p, 'utf-8')),
   };
 });
 

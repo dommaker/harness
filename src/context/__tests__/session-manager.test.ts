@@ -5,18 +5,25 @@
 import { SessionManager } from '../session-manager';
 import * as fs from 'fs';
 
-jest.mock('fs', () => ({
-  mkdirSync: jest.fn(),
-  appendFileSync: jest.fn(),
-  existsSync: jest.fn().mockReturnValue(false),
-  readFileSync: jest.fn().mockReturnValue(''),
-  readdirSync: jest.fn().mockReturnValue([]),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn().mockReturnValue({
-    birthtime: new Date(),
-    mtime: new Date(),
-  }),
-}));
+jest.mock('fs', () => {
+  // restoreSession 经有界 head 读 events.jsonl（ADR-0023 决策 3），需要倒读四件；
+  // 内容仍由下面按路径分派的 readFileSync 提供，两条读入口同源（夹具说明见其文件头）
+  const { jsonlBoundedReadChain } = require('../../test-setup/jsonl-fake-fs');
+  const readFileSync = jest.fn().mockReturnValue('');
+  return {
+    mkdirSync: jest.fn(),
+    appendFileSync: jest.fn(),
+    existsSync: jest.fn().mockReturnValue(false),
+    readFileSync,
+    readdirSync: jest.fn().mockReturnValue([]),
+    writeFileSync: jest.fn(),
+    statSync: jest.fn().mockReturnValue({
+      birthtime: new Date(),
+      mtime: new Date(),
+    }),
+    ...jsonlBoundedReadChain((p: string) => readFileSync(p, 'utf-8')),
+  };
+});
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 

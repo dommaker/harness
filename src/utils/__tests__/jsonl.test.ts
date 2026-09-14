@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readJsonl, countJsonlLines, readJsonlEnds, appendJsonl } from '../jsonl';
+import { readJsonl, readJsonlEnds, appendJsonl } from '../jsonl';
 
 interface Row {
   n: number;
@@ -156,25 +156,6 @@ describe('readJsonl', () => {
   });
 });
 
-describe('countJsonlLines', () => {
-  let dir: string;
-
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-jsonl-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('计非空行数（含坏行），缺文件为 0', () => {
-    const filePath = path.join(dir, 'c.jsonl');
-    fs.writeFileSync(filePath, ['{"n":1}', CORRUPT, '', '  '].join('\n') + '\n', 'utf-8');
-    expect(countJsonlLines(filePath)).toBe(2);
-    expect(countJsonlLines(path.join(dir, 'missing.jsonl'))).toBe(0);
-  });
-});
-
 describe('readJsonlEnds', () => {
   let dir: string;
 
@@ -238,7 +219,7 @@ describe('appendJsonl', () => {
     appendJsonl(filePath, { n: 1 });
     appendJsonl(filePath, { n: 2 });
 
-    expect(countJsonlLines(filePath)).toBe(2);
+    expect(readJsonl<Row>(filePath, 'skip').records.map(r => r.n)).toEqual([1, 2]);
     const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
     expect(lines[0]).toBe('{"n":1}');
     expect(lines[1]).toBe('{"n":2}');

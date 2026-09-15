@@ -120,21 +120,9 @@ export async function syncDocs(
     contextContentDrift: [],
   };
 
-  // 1. 扫描源码模块（从 governance config 读取目录列表，默认 src/）
+  // 1. 先判定本次运行需要什么：源码目录列表 + 现有 CAPABILITIES.md 的格式
+  //    （格式判定必须在扫描之前——它决定下面那份清单要不要去取）
   const srcDirs = await getSourceDirs(projectPath);
-  const currentModules: ModuleInfo[] = [];
-  for (const srcDir of srcDirs) {
-    try {
-      const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);
-      currentModules.push(...modules);
-    } catch {
-      if (!isJson) {
-        log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
-      }
-    }
-  }
-
-  // 2. 解析现有 CAPABILITIES.md，检测格式
   const capabilitiesPath = path.join(projectPath, 'CAPABILITIES.md');
   let existingFiles: string[] = [];
   let capsContent = '';
@@ -149,6 +137,23 @@ export async function syncDocs(
     }
   } catch {
     // CAPABILITIES.md 不存在，将创建
+  }
+
+  // 2. 扫描源码模块（从 governance config 读取目录列表，默认 src/）
+  // capability-listing 格式不做条目级比对（计数才是判定面），模块清单在本次运行里无人
+  // 消费 → 整树一份 .ts 内容都不读（harness#147；改造前是无条件全树逐文件读首行注释）。
+  const currentModules: ModuleInfo[] = [];
+  if (!capsIsCapabilityListing) {
+    for (const srcDir of srcDirs) {
+      try {
+        const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);
+        currentModules.push(...modules);
+      } catch {
+        if (!isJson) {
+          log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
+        }
+      }
+    }
   }
 
   // 3. 对比差异（分两种格式）

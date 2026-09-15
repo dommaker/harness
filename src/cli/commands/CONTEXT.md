@@ -43,6 +43,7 @@ H5（#44）起：
   - `constraints report`：提示属于**报告体内的降级位**，与既有的 `traceFileExists` 说明同在 stdout；结构化面另两份——`--json` 的 `skippedLines` 字段、`--export` markdown 的警示行（只报条数，不报路径与坏行内容）
   - `constraints retire`：两条路径都**走 stderr**——交互模式在候选列表前一行（沿用本函数既有的 console 例外，`console.error`），`--yes` 直达分支在落盘前 `logError(io, …)`（`retireConstraint` 本身按契约「纯执行无交互」不打印）
   - 原则正本与逐点去向见 `src/monitoring/CONTEXT.md`「约定」段；机器可检面是 `src/utils/__tests__/jsonl-skip-disposition.test.ts`（冻结全仓 skip 读点集合 + 要求每个读点记名声明 `计数去向：`）
+- **一次命令运行内，同一份数据至多取一次（harness#146，#140 A 票；与 ADR-0023 同族，但不扩 `RunEnv` 公共面）**：`spec-baseline-check` 的三条验证路径（文件存在性 / 依赖 / 代码模式）一律从命令级共享索引 `createBaselineIndex(projectPath)` 取数，不再各自裸调 `fs`——全仓 `.ts`/`.js` 内容扫描一遍建成 `路径 → 内容` 表、`package.json` 读解析一次（**读取失败态同样入库**，不逐条重试）、同一落点的存在性探测只 stat 一次；逐条前置与每个关键词只在索引上重放判定。索引**懒建**（没有前置需要某类数据时该类读取一次都不发生）、**运行结束即弃**（不跨命令复用：本命令是独立命令而非 `harness check` 的子步骤，「同一口径取一次」命令内自足即够，#140 triage 裁决 5）。改前代价 = 前置条件数 × 关键词数 × 源文件数，改后与条数无关，判定/证据文案/stdout/退出码逐字不变。机器可检：`__tests__/spec-baseline-read-count.test.ts`（形状照 `check-read-count.test.ts`：`readFileSync`·只读 `openSync`·`existsSync`·`readdirSync` 记件 + 整张读取表与目录扫描表逐条冻结 + 「同一份数据的同一口径至多取一次」+ N×K 缩放不变式 + 懒建不扫 + 失败态入库）
 
 ## 注意事项
 - 新增命令需同步更新 CLAUDE.md / CAPABILITIES.md / src/CONTEXT.md

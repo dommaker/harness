@@ -419,13 +419,37 @@ export async function knowledgeSyncRag(options: KnowledgeOptions, io: CommandIO 
 export type KnowledgeAuditOptions = KnowledgeOptions & KnowledgeDirOption & {
   fix?: boolean;
   dryRun?: boolean;
+  /**
+   * `--threshold <n>` 的 commander 原值。旗帜给到的恒是字符串（缺省 '50' 也是），
+   * 声明跟着运行时走（harness#152）；窄化在 `knowledgeAudit` 装配点做一次。
+   */
+  threshold?: string;
+};
+
+/** `knowledgeAuditView` 的入参面：threshold 已过装配窄化，引擎槽位要的是数值 */
+export type KnowledgeAuditViewOptions = Omit<KnowledgeAuditOptions, 'threshold'> & {
   threshold?: number;
 };
 
-export function knowledgeAuditView(options: KnowledgeAuditOptions, io: CommandIO) {
+/** 阈值装配结果：`ok: false` = 脏输入，由命令入口 fail-loud（不得往判定槽塞 NaN） */
+type ThresholdAssembly = { ok: true; value?: number } | { ok: false; raw: string };
+
+/**
+ * `--threshold` 的装配点窄化（harness#152）：非负整数字符串 → 数值，转不出来即脏输入。
+ * `undefined` = 未传，落引擎缺省（50）；`'0'` 是显式零值，不当「未传」兜掉。
+ */
+function assembleShortContentThreshold(raw: string | undefined): ThresholdAssembly {
+  if (raw === undefined) return { ok: true };
+  const digits = raw.trim();
+  return /^\d+$/.test(digits)
+    ? { ok: true, value: Number(digits) }
+    : { ok: false, raw };
+}
+
+export function knowledgeAuditView(options: KnowledgeAuditViewOptions, io: CommandIO) {
   const audit = new KnowledgeAudit({
     baseDir: resolveKnowledgeBaseDir(options, io),
-    shortContentThreshold: options.threshold ? parseInt(options.threshold as any, 10) : undefined,
+    shortContentThreshold: options.threshold,
   });
   const isDryRun = options.dryRun && !options.fix;
   if (!isDryRun) announce(io, options.json, '🔍 知识库质量审计...\n');
@@ -507,7 +531,12 @@ function auditSections(report: AuditReport, showFixHint: boolean): DisplaySectio
 }
 
 export async function knowledgeAudit(options: KnowledgeAuditOptions, io: CommandIO = processIO): Promise<CommandResult> {
-  const result = emitKnowledgeView(io, options, knowledgeAuditView(options, io));
+  const threshold = assembleShortContentThreshold(options.threshold);
+  if (!threshold.ok) {
+    logError(io, `错误：--threshold 需要非负整数阈值（字符数），收到 "${threshold.raw}"；短内容判定未执行`);
+    return { kind: 'usage-error', reason: `knowledge audit --threshold 非法阈值: "${threshold.raw}"` };
+  }
+  const result = emitKnowledgeView(io, options, knowledgeAuditView({ ...options, threshold: threshold.value }, io));
   // 审计可能改文件，人读路径收尾重建索引；--json 保持不写盘（现状冻结，#133 不动这条策略）
   if (!options.json) {
     new KnowledgeIndexGenerator(resolveKnowledgeBaseDir(options, io)).regenerate();

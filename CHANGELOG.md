@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- test(exports): 子路径入口值面全量冻结闸（#131，ADR-0022 追记第 5 条收口）——新增 `src/__tests__/public-value-surface.test.ts`，补齐 `public-type-surface.test.ts` 的另一半：类型面已按 `package.json` 的 `exports` 逐入口冻结，值面却只有包根被 `public-exports.test.ts` 钉住（`Object.keys` 只看得到 `.`），「这个函数不在公开面上、删它非 breaking」在子路径入口仍无闸可跑。四个子路径（`./core`/`./presets`/`./context`/`./gates`）的运行时导出键集合逐入口冻结、入口清单同样从 `exports` 派生（新增子路径未登记即红）；包根不重复钉（同一入口两份清单必然漂移，那条判定逐字保留），「两边都不漏」由登记闸 + 委派闸钉住。清单不手抄：`src` 侧 ts-jest 运行时键与 tsc 产物逐入口对撞，106/29/4/4/24 全部逐字一致。**落闸前实测校正了本票票面的前提**：删 `./gates` 的 `create*Gate` 其实会红（`src/index.ts` 经该 barrel 再导出），只是红名报 `.` 分不清入口；真正零覆盖的是包根未转发的 `./core` 七个（`ConstraintChecker`/`ProjectConfigLoader`/`constraintChecker`/`getCapabilitiesMode`/`getGovernanceConfig`/`loadRawProjectConfig`/`resolveContextFiles`）与 `./presets` 全部四个（实测删 `STRICT_PRESET` 时既有三道公共面闸全绿），新增方向四个子路径都漏。反向验闸四例各红一次且指名到入口与符号：删 `./gates` 的 `createReviewGate`、向 `./gates` 注入 `createScratchGate`、删 `./presets` 的 `STRICT_PRESET`、`package.json` 新增 `./monitoring` 子路径；另测类型面改动（注 `export type { DynamicTask }` 令 `public-exports.test.ts` TS2578「failed to run」）不连带抹掉本闸；每次注入后按 sha1 还原现场。文档：ADR-0022 追记第 5 条改判已收口、`src/gates/CONTEXT.md` 记账。非 breaking：纯测试 + 文档，零生产代码改动、零公共面变化。验收：`npx jest --runInBand` 全绿、`tsc --noEmit` 与 `eslint src` 零错
+
 ## [1.7.0] - 2026-09-09
 
 ### Changes

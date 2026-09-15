@@ -237,9 +237,7 @@ export class ProjectConfigLoader {
         ...Object.keys(PROMPTS),
         ...Object.keys(this.customConstraints),
       ]);
-      const filtered = filterEnabledEntries(knownIds, this.config.constraints, {
-        onUnknownId: 'collect',
-      });
+      const filtered = filterEnabledEntries(knownIds, this.config.constraints);
       unknownIds.push(...filtered.unknownIds);
       for (const constraintId of filtered.disabledIds) {
         result.disabled.push(constraintId);

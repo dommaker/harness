@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
+import * as os from 'os';
 import { FailureRecorder } from '../../../failure/recorder';
 import { ErrorType, FailureLevel } from '../../../types/failure';
 import type { FailureRecord } from '../../../types/failure';
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 
 describe('failure CLI commands', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-failure-cli');
+  let tempDir: string;
   let mockRecorderInstance: {
     record: jest.Mock;
     getHistory: jest.Mock;
@@ -39,7 +40,7 @@ describe('failure CLI commands', () => {
   };
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-failure-cli-'));
   });
 
   afterAll(() => {

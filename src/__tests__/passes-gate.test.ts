@@ -6,15 +6,16 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { PassesGate, createPassesGate, detectTestCommand } from '../core/validators/passes-gate';
 import type { TaskTestResult } from '../types/passes-gate';
 import { createProjectFixture } from '../test-setup/project-fixture';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('PassesGate', () => {
-  const tempDir = join(process.cwd(), 'temp-test-passes-gate');
+  let tempDir: string;
   let gate: PassesGate;
 
   beforeAll(() => {
-    mkdirSync(tempDir, { recursive: true });
+    tempDir = mkdtempSync(join(tmpdir(), 'temp-test-passes-gate-'));
     
     // 创建简单的 package.json
     writeFileSync(join(tempDir, 'package.json'), JSON.stringify({
@@ -47,12 +48,16 @@ describe('PassesGate', () => {
   // 探测正本行为钉住（架构评审 A2：CLI/core 双版收口后的统一语义，
   // 此前 e2e 优先级、echo 排除、兜底均无测试钉住）
   describe('detectTestCommand 正本（统一探测顺序）', () => {
-    const detectDir = join(process.cwd(), 'temp-test-detect-command');
+    let detectDir: string;
 
     const writePkg = (dir: string, scripts: Record<string, string>) => {
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'detect-case', scripts }));
     };
+
+    beforeAll(() => {
+      detectDir = mkdtempSync(join(tmpdir(), 'temp-test-detect-command-'));
+    });
 
     afterAll(() => {
       try {

@@ -6,12 +6,13 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { PerformanceGate } from '../gates/performance';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('PerformanceGate', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-perf-gate');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-perf-gate-'));
   });
 
   afterAll(() => {

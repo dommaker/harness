@@ -4,15 +4,16 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { CheckpointValidator } from '../core/validators/checkpoint';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('CheckpointValidator', () => {
-  const tempDir = join(process.cwd(), 'temp-test-checkpoint');
+  let tempDir: string;
   let validator: CheckpointValidator;
 
   beforeAll(async () => {
-    mkdirSync(tempDir, { recursive: true });
+    tempDir = mkdtempSync(join(tmpdir(), 'temp-test-checkpoint-'));
     validator = CheckpointValidator.getInstance();
     // 创建测试文件
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');

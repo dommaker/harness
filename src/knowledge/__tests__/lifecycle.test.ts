@@ -8,9 +8,10 @@ import { KnowledgeLifecycle } from '../lifecycle';
 import type { KnowledgeEntry } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('KnowledgeLifecycle', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-lifecycle');
+  let tempDir: string;
   let store: KnowledgeStore;
   let lifecycle: KnowledgeLifecycle;
 
@@ -36,7 +37,7 @@ describe('KnowledgeLifecycle', () => {
   });
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-lifecycle-'));
   });
 
   afterAll(() => {

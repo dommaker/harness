@@ -6,12 +6,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/glo
 import { migrateKnowledgeEntries } from '../migration';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('migrateKnowledgeEntries', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-migration');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-migration-'));
   });
 
   afterAll(() => {

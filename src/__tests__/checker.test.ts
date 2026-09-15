@@ -9,16 +9,17 @@
 import { ConstraintChecker, checkConstraint } from '../core/constraints/checker';
 import { PROMPTS } from '../core/constraints/definitions';
 import type { ConstraintContext } from '../types/constraint';
-import { writeFileSync, mkdirSync, rmSync } from 'fs';
+import { writeFileSync, rmSync, mkdtempSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('ConstraintChecker', () => {
   const checker = ConstraintChecker.getInstance();
-  const tempDir = join(process.cwd(), 'temp-test-checker');
+  let tempDir: string;
 
   beforeAll(() => {
     // 创建临时测试目录
-    mkdirSync(tempDir, { recursive: true });
+    tempDir = mkdtempSync(join(tmpdir(), 'temp-test-checker-'));
   });
 
   afterAll(() => {

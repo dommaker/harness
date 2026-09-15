@@ -7,15 +7,17 @@ import { FailureRecorder, createFailureRecorder } from '../failure/recorder';
 import { ErrorType, FailureLevel } from '../types/failure';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import type { FailureRecord } from '../types/failure';
 
 describe('FailureRecorder', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-recorder');
-  const logFile = path.join(tempDir, 'failures.log');
+  let tempDir: string;
+  let logFile: string;
   let recorder: FailureRecorder;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-recorder-'));
+    logFile = path.join(tempDir, 'failures.log');
   });
 
   afterAll(() => {

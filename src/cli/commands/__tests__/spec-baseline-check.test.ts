@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
+import * as os from 'os';
 import { extractBaselineSection, specBaselineCheck } from '../spec-baseline-check';
 
 let io: CapturingIO;
@@ -13,11 +14,11 @@ beforeEach(() => {
 });
 
 describe('spec-baseline-check', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-spec-baseline');
+  let tempDir: string;
   let originalExitCode: string | number | undefined;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-spec-baseline-'));
   });
 
   afterAll(() => {

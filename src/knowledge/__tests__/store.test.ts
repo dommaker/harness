@@ -7,9 +7,10 @@ import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import type { KnowledgeEntry } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('KnowledgeStore', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-knowledge');
+  let tempDir: string;
   let store: KnowledgeStore;
 
   const makeEntry = (overrides?: Partial<KnowledgeEntry>): KnowledgeEntry => ({
@@ -34,7 +35,7 @@ describe('KnowledgeStore', () => {
   });
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-knowledge-'));
   });
 
   afterAll(() => {
@@ -224,10 +225,11 @@ describe('KnowledgeStore', () => {
     });
 
     it('should create directory if it does not exist', () => {
-      const newDir = path.join(process.cwd(), 'temp-test-knowledge-nested', 'sub', 'deep');
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-knowledge-nested-'));
+      const newDir = path.join(root, 'sub', 'deep');
       new KnowledgeStore({ baseDir: newDir });
       expect(fs.existsSync(newDir)).toBe(true);
-      fs.rmSync(path.join(process.cwd(), 'temp-test-knowledge-nested'), { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true });
     });
 
     it('should handle corrupt index.json gracefully', () => {

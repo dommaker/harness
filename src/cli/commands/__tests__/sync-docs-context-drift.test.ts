@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { captureIO, type CapturingIO, type CommandResult } from '../../command-contract';
 import { syncDocs } from '../sync-docs';
 
@@ -31,7 +32,7 @@ function failReason(result: CommandResult): string {
   return result.reason;
 }
 
-const tempDir = path.join(process.cwd(), 'temp-test-sync-docs-drift');
+let tempDir: string;
 const CI = process.env.CI;
 
 let io: CapturingIO;
@@ -74,7 +75,7 @@ const BARREL = [
 
 beforeEach(() => {
   io = captureIO();
-  fs.mkdirSync(tempDir, { recursive: true });
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-sync-docs-drift-'));
   delete process.env.CI;
 });
 

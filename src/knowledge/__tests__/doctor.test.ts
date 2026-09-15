@@ -4,6 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeLinter } from '../lint';
 import { ReferenceTracker } from '../reference-tracker';
@@ -11,14 +12,14 @@ import { KnowledgeHealthScorer } from '../doctor';
 import type { KnowledgeEntry } from '../types';
 
 describe('KnowledgeHealthScorer', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-knowledge-doctor');
+  let tempDir: string;
   let store: KnowledgeStore;
   let tracker: ReferenceTracker;
   let linter: KnowledgeLinter;
   let scorer: KnowledgeHealthScorer;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-knowledge-doctor-'));
   });
 
   afterAll(() => {

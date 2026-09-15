@@ -8,15 +8,18 @@ import { SpecAcceptanceGate } from '../gates/acceptance';
 import { createSpecAcceptanceGate } from '../gates/index';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import * as yaml from 'js-yaml';
 
 describe('SpecAcceptanceGate', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-acceptance');
-  const tasksFile = path.join(tempDir, 'tasks.yml');
-  const customTasksFile = path.join(tempDir, 'custom-tasks.yml');
+  let tempDir: string;
+  let tasksFile: string;
+  let customTasksFile: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-acceptance-'));
+    tasksFile = path.join(tempDir, 'tasks.yml');
+    customTasksFile = path.join(tempDir, 'custom-tasks.yml');
   });
 
   afterAll(() => {

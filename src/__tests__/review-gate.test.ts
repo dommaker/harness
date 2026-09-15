@@ -4,16 +4,17 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ReviewGate } from '../gates/review';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { execSync } from 'child_process';
 
 describe('ReviewGate', () => {
-  const tempDir = join(process.cwd(), 'temp-test-review-gate');
+  let tempDir: string;
   let gate: ReviewGate;
 
   beforeAll(() => {
-    mkdirSync(tempDir, { recursive: true });
+    tempDir = mkdtempSync(join(tmpdir(), 'temp-test-review-gate-'));
     gate = new ReviewGate({ minReviewers: 1, requireApproval: true });
     
     // 初始化 git

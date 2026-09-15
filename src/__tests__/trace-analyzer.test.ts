@@ -11,16 +11,18 @@ import {
 import { TraceCollector } from '../monitoring/traces';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import type { ExecutionTrace, TraceSummary } from '../types/trace';
 
 describe('TraceAnalyzer', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-analyzer');
-  const logFile = path.join(tempDir, 'traces.log');
+  let tempDir: string;
+  let logFile: string;
   let collector: TraceCollector;
   let analyzer: TraceAnalyzer;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-analyzer-'));
+    logFile = path.join(tempDir, 'traces.log');
     fs.writeFileSync(logFile, '');
     collector = new TraceCollector({ traceFile: logFile, enabled: true });
     analyzer = new TraceAnalyzer(collector);

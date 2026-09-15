@@ -8,9 +8,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { collectContextExportSurface } from '../context-syncer';
 
-const tempDir = path.join(process.cwd(), 'temp-test-context-surface');
+let tempDir: string;
 
 function write(rel: string, content: string): void {
   const target = path.join(tempDir, rel);
@@ -19,7 +20,7 @@ function write(rel: string, content: string): void {
 }
 
 beforeAll(() => {
-  fs.mkdirSync(tempDir, { recursive: true });
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-context-surface-'));
 });
 
 afterAll(() => {

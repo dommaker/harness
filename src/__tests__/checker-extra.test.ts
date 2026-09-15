@@ -18,15 +18,16 @@ import { contextEvidenceFlag } from '../core/constraints/checkers/types';
 import type { ConstraintContext } from '../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { execSync } from 'child_process';
 
 describe('ConstraintChecker - 补充覆盖', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-checker-extra');
+  let tempDir: string;
   const checker = ConstraintChecker.getInstance();
 
   beforeAll(() => {
     // 创建临时 git 仓库
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-checker-extra-'));
     execSync('git init', { cwd: tempDir });
     execSync('git config user.email "test@test.com"', { cwd: tempDir });
     execSync('git config user.name "Test"', { cwd: tempDir });

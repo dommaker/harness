@@ -6,12 +6,15 @@ import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 import { ProjectConfigLoader, isConstraintRetired } from '../core/project-config-loader';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('ProjectConfigLoader - 补充覆盖', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-config-extra');
-  const harnessDir = path.join(tempDir, '.harness');
+  let tempDir: string;
+  let harnessDir: string;
 
   beforeAll(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-config-extra-'));
+    harnessDir = path.join(tempDir, '.harness');
     fs.mkdirSync(harnessDir, { recursive: true });
   });
 

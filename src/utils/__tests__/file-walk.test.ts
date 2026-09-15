@@ -4,13 +4,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { findTsSourceFiles } from '../file-walk';
 
 describe('findTsSourceFiles', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-file-walk');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-file-walk-'));
   });
 
   afterAll(() => {

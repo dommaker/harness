@@ -4,15 +4,16 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { SecurityGate } from '../gates/security';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('SecurityGate', () => {
-  const tempDir = join(process.cwd(), 'temp-test-security-gate');
+  let tempDir: string;
   let gate: SecurityGate;
 
   beforeAll(() => {
-    mkdirSync(tempDir, { recursive: true });
+    tempDir = mkdtempSync(join(tmpdir(), 'temp-test-security-gate-'));
     
     // 创建 package.json（无漏洞）
     writeFileSync(join(tempDir, 'package.json'), JSON.stringify({

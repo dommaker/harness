@@ -6,15 +6,19 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/glo
 import { ContractGate } from '../gates/contract';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('ContractGate', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-contract');
-  const contractFile = path.join(tempDir, 'openapi.yaml');
-  const oldContractFile = path.join(tempDir, 'openapi-old.yaml');
-  const jsonContractFile = path.join(tempDir, 'openapi.json');
+  let tempDir: string;
+  let contractFile: string;
+  let oldContractFile: string;
+  let jsonContractFile: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-contract-'));
+    contractFile = path.join(tempDir, 'openapi.yaml');
+    oldContractFile = path.join(tempDir, 'openapi-old.yaml');
+    jsonContractFile = path.join(tempDir, 'openapi.json');
   });
 
   afterAll(() => {

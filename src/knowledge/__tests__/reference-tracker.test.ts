@@ -8,9 +8,10 @@ import { ReferenceTracker } from '../reference-tracker';
 import type { KnowledgeEntry } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('ReferenceTracker', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-refs');
+  let tempDir: string;
   let store: KnowledgeStore;
   let tracker: ReferenceTracker;
 
@@ -36,7 +37,7 @@ describe('ReferenceTracker', () => {
   });
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-refs-'));
   });
 
   afterAll(() => {

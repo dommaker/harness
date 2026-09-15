@@ -36,3 +36,4 @@
 - `PerformanceGate` 只执法有真实现的维度（coverage 走 json-summary、bundleSize 走 dist 测量）；responseTime/memoryUsage/throughput 三维无真实现（原 Math.random 伪造 + 未接线的 runBenchmark）已随 benchmark 机制整体删除（ADR-0018，架构评审候选2）
 - config.yml gates 段为新增面：引用未注册 id 直接抛错（无历史残留配置需兼容）
 - CommandGate 为命令黑名单检查(SEC-006)
+- `SecurityGate` 的扫描命令是**三级优先级**（`scan()` 内 `??` 链，自上而下取第一个已提供值）：① `context.securityScanCommand` ② 构造时传入的 `scanCommand` ③ `detectScanCommand()` 自动探测（现为常量 `npm audit --json`）。缺省「未提供」的唯一表示是 `undefined`——构造器把 `''` 归一成 `undefined`（`getConfig()`/`this.config` 因此是 `SecurityGateConfig` 而非 `Required<…>`，`scanCommand` 保持可选）；曾因兜成空串令 `??` 链恒停在第二级、第三级探测不可达，`harness security` 不带 `--scan-command` 必抛 `The argument 'file' cannot be empty`（#138）。按包管理器探测（读 lock 选 pnpm/yarn）与 `auditDetails` 的吞错各另开票，本层不改 `detectScanCommand` 常量返回

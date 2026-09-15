@@ -18,11 +18,13 @@ import { decisionFromResult } from './decision';
 export class SecurityGate implements Gate {
   readonly id = 'security';
   order = 0;
-  private config: Required<SecurityGateConfig>;
+  private config: SecurityGateConfig;
 
   constructor(config: Partial<SecurityGateConfig> = {}) {
     this.config = {
-      scanCommand: config.scanCommand ?? '',
+      // 空串归一为 undefined：`?? ''` 曾把「未提供」表示成空串，令下方 `??` 链恒停在
+      // 第二级、detectScanCommand() 不可达（#138）。「未提供」的唯一表示是 undefined。
+      scanCommand: config.scanCommand || undefined,
       ignoreWarnings: config.ignoreWarnings ?? false,
       ignoreDevDependencies: config.ignoreDevDependencies ?? false,
       severityThreshold: config.severityThreshold ?? 'high',
@@ -43,8 +45,9 @@ export class SecurityGate implements Gate {
     const startTime = Date.now();
 
     try {
-      // 使用自定义命令或默认 npm audit
-      const scanCommand = context.securityScanCommand ?? 
+      // 三级优先级（自上而下取第一个「已提供」者）：context 覆盖 > 构造配置 > 自动探测。
+      // 缺省（未给命令）落到 detectScanCommand()——本行曾因构造器兜空串而恒停在第二级（#138）。
+      const scanCommand = context.securityScanCommand ??
         this.config.scanCommand ?? 
         this.detectScanCommand(context.projectPath);
 
@@ -229,7 +232,7 @@ export class SecurityGate implements Gate {
   /**
    * 获取配置
    */
-  getConfig(): Required<SecurityGateConfig> {
+  getConfig(): SecurityGateConfig {
     return { ...this.config };
   }
 }

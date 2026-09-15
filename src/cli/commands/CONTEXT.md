@@ -15,7 +15,7 @@ H5（#44）起：
 - knowledge 投影面（`src/cli/commands/knowledge-view.ts`）— 11 个 knowledge 子操作的**display model** 渲染与出口：`emitKnowledgeView`（json/人读唯一分派 + 退出码）、`announce`（取数期进度行，`--json` 下静默）、`TONE_STYLES` 角色→样式单表、维度/规则 label 与 `toneForMaturity`/`toneForScore`/`toneForSeverity` 三张映射、`resolveKnowledgeBaseDir` + `openKnowledgeStore`（路径兜底与 store 构造单点）（harness#133）
 - 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / constraints / spec-baseline-check
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）；**判定一律穿过统一接口 `evaluate()`**，成败与措辞由共享面映射。`command` 只复用映射、保留自己的单行 ✓/✗ 输出（已对外的机器友好形状）；`security audit` / `acceptance list` / `contract validate-schema` / `review status` / `command --list/--level` 是只展示不判断的子命令，直读报告面（`scan()` 等），不套骨架
-- `command` 命令的两个分支共用同一台 gate 实例（#135/ADR-0024）：默认分支经 `evaluate()` 取裁决、`--level` 经同一实例的 `getRiskLevel()` 取等级，命令侧不再引用模块级单例出口——「配置传进去却到不了判定」的那条路已封。`--strict` 旗帜随 `CommandGateConfig.strict`（零消费者、从不生效）一并删除
+- CLI 子命令 `command` 的两个分支共用同一台 gate 实例（#135/ADR-0024）：默认分支经 `evaluate()` 取裁决、`--level` 经同一实例的 `getRiskLevel()` 取等级，命令侧不再引用模块级单例出口——「配置传进去却到不了判定」的那条路已封。`--strict` 旗帜随 `CommandGateConfig.strict`（零消费者、从不生效）一并删除
 
 `constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康 + 注入漂移，`--export` 脱敏）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；内置落 config.yml retired 元数据，custom 落 custom-constraints.yml 条目 retired 段（studio#82 D6 一处真相）+ KnowledgeStore 沉淀 + 治理注入段同步）。
 
@@ -29,6 +29,7 @@ H5（#44）起：
 
 ## 约定
 - 每个命令一个实现文件，命名与命令名一致（sync-docs 为模块族目录）
+- **CONTEXT.md 内容判定的采集侧住本层（harness#142 / ADR-0025）**：`sync-docs/context-syncer.ts` 的 `collectContextExportSurface(dirPath, projectPath)` 负责目录遍历（`findTsSourceFiles`，排 `__tests__/`、`*.d.ts`）、`export *` 与具名再导出的仓内目标解析（越出 projectPath、命中 `node_modules`/跳过目录即不并入）并按正本声明剔除类型-only；判定本体是 `core/constraints/context-reconcile.ts` 的纯函数，本层不写判定规则。`sync-docs` 的 4b 段对每个含 CONTEXT.md 的目录跑一次对撞：**内容漂移 → `--check` 判 fail 且 reason 点名文件与符号**；mtime 差异自此只是本地提示（`process.env.CI` 置位时连提示都不给，因全新 checkout 的时序无意义）。写入模式**不改写 CONTEXT.md**（散文不可机械生成），退出码面不变；`--json` 侧新增 `contentDrift` 与 `summary.contextContentDrift`
 - **新增命令 = 命令实现文件 + definitions.ts 一条定义（含 CLI 元数据与实现引用）+ 测试**，不再改 bin/harness.js
 - **definitions.ts 是纯数据模块（ADR-0010 后零闭包）**：禁止 import 任何命令实现/运行时依赖（保 --help/--version 懒加载）；子命令别名是数据（条目 `aliases: string[]`，不复印整块），实参编组（缺参闸门/强转/兜底）归各命令模块的具名导出（如 `knowledgeSearchCommand`/`coverageCheck`）；实现引用可解析性由 `__tests__/registry.test.ts` 构建/测试期断言
 - 命令选项类型命名规范：XxxOptions

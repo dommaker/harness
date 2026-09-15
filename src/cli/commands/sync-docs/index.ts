@@ -7,7 +7,7 @@
  * 实现拆分：
  * - project-reader.ts       项目信息读取（package.json/config.yml/源码扫描）
  * - capabilities-syncer.ts  CAPABILITIES.md 文件表格格式的对比与维护（能力清单格式解析/计数走 core/constraints/capabilities-parser）
- * - context-syncer.ts       CONTEXT.md 模板生成/发现/过时判定
+ * - context-syncer.ts       CONTEXT.md 模板生成/发现/过时判定 + 目录导出面采集（harness#142）
  * - agents-syncer.ts        AGENTS.md 生成
  * - preserve-block.ts       PRESERVE 标记块提取与组合
  */
@@ -25,6 +25,7 @@ import {
 import { COMMAND_DEFINITIONS } from '../definitions';
 import { GATE_DEFINITIONS } from '../../../gates/definitions';
 import { reconcileCapabilities } from '../../../core/constraints/capabilities-reconcile';
+import { reconcileContext } from '../../../core/constraints/context-reconcile';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getCapabilitiesMode } from '../../../core/project-config-loader';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
@@ -34,7 +35,12 @@ import {
   updateCapabilitiesFile,
   compactCapabilitiesContent,
 } from './capabilities-syncer';
-import { createContextMd, findExistingContextFiles, getLatestTsMtime } from './context-syncer';
+import {
+  createContextMd,
+  findExistingContextFiles,
+  getLatestTsMtime,
+  collectContextExportSurface,
+} from './context-syncer';
 import { buildAgentsMd } from './agents-syncer';
 import { extractPreserveBlocks, composeAgentsMd } from './preserve-block';
 import { log, processIO, type CommandIO, type CommandResult } from '../../command-contract';
@@ -111,6 +117,7 @@ export async function syncDocs(
     removed: [],
     contextMissing: [],
     contextStale: [],
+    contextContentDrift: [],
   };
 
   // 1. 扫描源码模块（从 governance config 读取目录列表，默认 src/）
@@ -176,7 +183,11 @@ export async function syncDocs(
     result.removed = verdict.deadEntries;
   }
 
-  // 4. 检查 CONTEXT.md（缺失 + 过时）
+  // 4. 检查 CONTEXT.md（缺失 + 内容漂移 + mtime 提示）
+  // CI 标志：CI runner 上是全新 checkout，mtime 由 clone 顺序决定（同目录 CONTEXT.md 排序
+  // 恒先于 .ts），比出来的「过时」是假灯（harness#142 实测证据）→ 连提示都不给。
+  const isCi = Boolean(process.env.CI) && process.env.CI !== 'false';
+
   // 4a. 配置中要求的目录：检查缺失
   const contextDirs = await getRequiredContextDirs(projectPath);
   for (const dir of contextDirs) {
@@ -188,16 +199,35 @@ export async function syncDocs(
     }
   }
 
-  // 4b. 自动发现已有的 CONTEXT.md：检查过时
+  // 4b. 自动发现已有的 CONTEXT.md：内容判定（漂移 = 判定面）+ mtime（仅本地提示）
   const existingContextFiles = await findExistingContextFiles(projectPath, srcDirs);
   for (const dir of existingContextFiles) {
     const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
     try {
-      const contextStat = await fs.stat(contextPath);
-      const dirPath = path.join(projectPath, dir);
-      const latestTsMtime = await getLatestTsMtime(dirPath);
-      if (latestTsMtime && latestTsMtime > contextStat.mtimeMs) {
-        result.contextStale.push(dir);
+      const contextMd = await fs.readFile(contextPath, 'utf-8');
+      const { surface, barrelExports } = await collectContextExportSurface(
+        path.join(projectPath, dir),
+        projectPath
+      );
+      const verdict = reconcileContext({
+        contextMdContent: contextMd,
+        exportSurface: surface,
+        barrelExports,
+      });
+      if (verdict.ghosts.length > 0 || verdict.unlistedBarrelExports.length > 0) {
+        result.contextContentDrift.push({
+          dir,
+          ghosts: verdict.ghosts,
+          unlisted: verdict.unlistedBarrelExports,
+        });
+      }
+
+      if (!isCi) {
+        const contextStat = await fs.stat(contextPath);
+        const latestTsMtime = await getLatestTsMtime(path.join(projectPath, dir));
+        if (latestTsMtime && latestTsMtime > contextStat.mtimeMs) {
+          result.contextStale.push(dir);
+        }
       }
     } catch {
       // 目录不存在或无法访问，跳过
@@ -231,8 +261,14 @@ export async function syncDocs(
 
   const hasTableIssues = result.added.length > 0 || result.removed.length > 0;
   const hasCapIssues = capCountMismatches.length > 0;
-  const hasContextIssues = result.contextMissing.length > 0 || result.contextStale.length > 0;
+  // mtime 只作提示，不参与判定（harness#142）：判定面是内容漂移与缺失
+  const hasContextIssues = result.contextMissing.length > 0 || result.contextContentDrift.length > 0;
   const hasIssues = hasTableIssues || hasCapIssues || hasContextIssues || hasAgentsIssues;
+  const contextDriftReason = result.contextContentDrift
+    .map((d) =>
+      `${d.dir}/CONTEXT.md（幽灵符号: ${d.ghosts.join(', ') || '无'}；` +
+      `barrel 未登记: ${d.unlisted.join(', ') || '无'}）`)
+    .join('、');
 
   // 5. JSON 输出模式：结构化输出供 LLM 消费
   if (isJson) {
@@ -245,6 +281,7 @@ export async function syncDocs(
         capCountMismatches: capCountMismatches.length,
         contextMissing: result.contextMissing.length,
         contextStale: result.contextStale.length,
+        contextContentDrift: result.contextContentDrift.length,
       },
       contextMissing: result.contextMissing.map(d => ({
         dir: d,
@@ -253,6 +290,12 @@ export async function syncDocs(
       contextStale: result.contextStale.map(d => ({
         dir: d,
         file: `${d}/CONTEXT.md`,
+      })),
+      contentDrift: result.contextContentDrift.map((d) => ({
+        dir: d.dir,
+        file: `${d.dir}/CONTEXT.md`,
+        ghosts: d.ghosts,
+        unlisted: d.unlisted,
       })),
       resolution: [] as Array<Record<string, unknown>>,
     };
@@ -297,6 +340,15 @@ export async function syncDocs(
       (jsonOutput.resolution as Array<Record<string, unknown>>).push(
         ...(result.contextMissing.length > 0
           ? [{ action: 'create-context-md', command: 'harness sync-docs', dirs: result.contextMissing }]
+          : []),
+        ...(result.contextContentDrift.length > 0
+          ? [{
+              action: 'fix-context-content-drift',
+              details:
+                'CONTEXT.md「核心导出」节与目录导出面不一致：要么按实现改文档，要么在票面记录'
+                + '「文档正确、代码待改」；散文不可机械生成，sync-docs 不改写 CONTEXT.md',
+              drift: result.contextContentDrift,
+            }]
           : []),
         ...(result.contextStale.length > 0
           ? [{ action: 'update-context-md', command: 'harness sync-docs', dirs: result.contextStale }]
@@ -348,8 +400,22 @@ export async function syncDocs(
     result.contextMissing.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
+  if (result.contextContentDrift.length > 0) {
+    log(io, chalk.yellow(`\n📋 CONTEXT.md 与实现漂移（「核心导出」节 vs 目录导出面）:`));
+    result.contextContentDrift.forEach((d) => {
+      log(io, chalk.gray(`  - ${d.dir}/CONTEXT.md`));
+      if (d.ghosts.length > 0) {
+        log(io, chalk.gray(`      幽灵符号（文档声明、导出面已无）: ${d.ghosts.join(', ')}`));
+      }
+      if (d.unlisted.length > 0) {
+        log(io, chalk.gray(`      barrel 未登记（公开值符号未进「核心导出」节）: ${d.unlisted.join(', ')}`));
+      }
+    });
+    log(io, chalk.gray('  散文不可机械生成：按实现改文档，或在票面记录「文档正确、代码待改」'));
+  }
+
   if (result.contextStale.length > 0) {
-    log(io, chalk.yellow(`\n📋 CONTEXT.md 可能过时（源码比文档新）:`));
+    log(io, chalk.gray(`\n💡 提示：以下 CONTEXT.md 的源码比文档新（仅提示，不判失败）:`));
     result.contextStale.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
   }
 
@@ -378,7 +444,12 @@ export async function syncDocs(
   // 7. 检查模式：只报告，不修改
   if (isCheck) {
     log(io, chalk.red('\n❌ 文档不是最新的，请运行 harness sync-docs 更新'));
-    return drift('文档不是最新的，请运行 harness sync-docs 更新');
+    // reason 必须可定位（harness#142）：CI 判红时要直接拿到文件与符号，不靠翻 stdout
+    return drift(
+      contextDriftReason
+        ? `文档不是最新的（CONTEXT.md 与实现漂移：${contextDriftReason}）`
+        : '文档不是最新的，请运行 harness sync-docs 更新'
+    );
   }
 
   // 8. 写入模式：更新文档

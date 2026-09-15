@@ -15,11 +15,25 @@ export interface ModuleInfo {
   description: string;
 }
 
+/**
+ * CONTEXT.md「核心导出」节与目录导出面的内容漂移（harness#142 / ADR-0025）。
+ * 两清单任一非空即漂移；判定本体在 core/constraints/context-reconcile。
+ */
+export interface ContextContentDrift {
+  dir: string;
+  /** 幽灵：文档声明、导出面已无 */
+  ghosts: string[];
+  /** 未登记：barrel 公开值符号未进「核心导出」节 */
+  unlisted: string[];
+}
+
 export interface SyncResult {
   added: string[];
   removed: string[];
   contextMissing: string[];
+  /** mtime 提示（源码比文档新）：不参与判定，只在本地给提示 */
   contextStale: string[];
+  contextContentDrift: ContextContentDrift[];
 }
 
 export interface PackageJsonLite {

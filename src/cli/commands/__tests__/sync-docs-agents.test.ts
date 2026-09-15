@@ -489,11 +489,11 @@ describe('sync-docs --agents', () => {
     expect(parsed.resolution.some((r: { action: string }) => r.action === 'update-context-md')).toBe(true);
     expect(parsed.agentsMd).toEqual({ file: 'AGENTS.md', exists: false, stale: true });
 
-    // 人读模式：输出过时提示
+    // 人读模式：mtime 差异只给提示（harness#142 降级），判失败的是缺失
     io = captureIO();
     const humanResult = await syncDocs({ projectPath: testDir, agents: true, check: true }, io);
     expect(humanResult).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
-    expect(io.outText()).toContain('可能过时');
+    expect(io.outText()).toContain('源码比文档新');
     expect(io.outText()).toContain('缺少 CONTEXT.md');
 
     fs.rmSync(testDir, { recursive: true, force: true });

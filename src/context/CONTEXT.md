@@ -5,6 +5,7 @@
 
 ## 核心导出
 - `TokenBudget` — 多级 token 预算(system/user/tool/reserve)
+- `TokenEstimator` — 快速 token 估算静态类（`estimateText`：英文按 1 token≈4 字符、中文≈1.5 字符，非精确 tokenizer；仓内消费方是 `KnowledgeInjector` 的截断取数）
 - `SessionManager` — 会话管理
 - `KnowledgeInjector` — 知识注入引擎
 

@@ -63,8 +63,9 @@ describe('init 真落盘（无 IO mock）', () => {
 
     expect(await init({ ...INIT_OPTIONS, projectPath: root }, io)).toEqual({ kind: 'ok' });
 
-    // 治理正本 writer（AGENTS.md/CLAUDE.md 段）按既有契约不接 io，那两行落在 process.stdout，
-    // 不在捕获面——本票只冻结 scaffold 站的输出（#132 决议：标记化幂等写不纳入 scaffold）
+    // 冻结的整屏 = scaffold 8 站点 + 治理段 writer 的落盘提示。#149 前 io 在
+    // setupGovernance 两个调用点被丢，治理 writer 的提示逃到 process.stdout、不进捕获面
+    // （本文件因此曾缺这一行）；io 贯通后它回到捕获面，真机输出的字节不变。
     expect(normalize(io.outText(), root)).toBe(`🚀 初始化 harness 配置...
 配置目录: <P>/.harness
 预设: standard
@@ -78,6 +79,7 @@ describe('init 真落盘（无 IO mock）', () => {
 
 📋 设置治理文件...
 ✅ 已创建 CHANGELOG.md
+✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v*)
 ✅ 已创建 src/CONTEXT.md
 治理检查已由 harness-check.yml 覆盖，跳过创建 harness-governance.yml
 

@@ -424,7 +424,7 @@ function renderOutputStyleSection(): string {
  * - 无标记且 `## Output Style` 段为用户自写（特征串不匹配）：跳过并提示，不重复追加
  * - 完全没有该段：在文件顶部插入标记版
  */
-export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandIO = processIO): Promise<void> {
+export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
   let content: string;
   try {
@@ -497,7 +497,7 @@ const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
  * - 无该段：在文件末尾追加
  * - 段标记残缺（外层或段内 HARNESS_CONSTRAINTS 单边/乱序）：不写入，告警交由人工修复（防二次损坏）
  */
-export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
+export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO): Promise<void> {
   const agentsMdPath = path.join(projectPath, 'AGENTS.md');
   const version = getHarnessPackageVersion();
 
@@ -574,7 +574,7 @@ export async function setupAgentsMdConstraints(projectPath: string, io: CommandI
  * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
  * - 如果不存在标记，在文件末尾追加约束段
  */
-export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
+export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
 
   const version = getHarnessPackageVersion();
@@ -625,11 +625,11 @@ export async function setupClaudeMdConstraints(projectPath: string, io: CommandI
  *   继续写 CLAUDE.md——init 幂等重跑不破坏既有仓，不制造双份约束正本
  * - 其余（新仓初始化）：写 AGENTS.md PRESERVE:governance 段（入库公共面正本）
  */
-export async function setupGovernanceConstraints(projectPath: string): Promise<void> {
+export async function setupGovernanceConstraints(projectPath: string, io: CommandIO): Promise<void> {
   const { target } = resolveGovernanceLanding(projectPath);
   return target === 'claude-md'
-    ? setupClaudeMdConstraints(projectPath)
-    : setupAgentsMdConstraints(projectPath);
+    ? setupClaudeMdConstraints(projectPath, io)
+    : setupAgentsMdConstraints(projectPath, io);
 }
 
 /**
@@ -651,11 +651,11 @@ async function setupGovernance(
   await runPlan([changelogFile(projectPath, governance.changelog?.format || 'keep-a-changelog')], io);
 
   // 2. 在 CLAUDE.md 中写入 Output Style 段（仅在不存在时创建）
-  await setupClaudeMdOutputStyle(projectPath);
+  await setupClaudeMdOutputStyle(projectPath, io);
 
   // 3. 写入/更新 Governance Rules 约束段（新仓 → AGENTS.md PRESERVE:governance；
   //    旧模型仓 → CLAUDE.md，落点路由见 setupGovernanceConstraints）
-  await setupGovernanceConstraints(projectPath);
+  await setupGovernanceConstraints(projectPath, io);
 
   // 4. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
   await runPlan(await contextDocPlan(projectPath, governance, io), io);

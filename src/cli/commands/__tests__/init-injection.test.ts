@@ -422,7 +422,7 @@ describe('setupGovernanceConstraints（落点路由）', () => {
   });
 
   it('新仓（无 CLAUDE.md）：治理契约写向 AGENTS.md，不创建 CLAUDE.md', async () => {
-    await setupGovernanceConstraints(tempDir);
+    await setupGovernanceConstraints(tempDir, io);
 
     expect(fs.existsSync(path.join(tempDir, 'AGENTS.md'))).toBe(true);
     expect(fs.existsSync(path.join(tempDir, 'CLAUDE.md'))).toBe(false);
@@ -444,7 +444,7 @@ describe('setupGovernanceConstraints（落点路由）', () => {
     ].join('\n'));
     fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), '# AGENTS.md\n\n既有导读\n');
 
-    await setupGovernanceConstraints(tempDir);
+    await setupGovernanceConstraints(tempDir, io);
 
     const claude = fs.readFileSync(path.join(tempDir, 'CLAUDE.md'), 'utf-8');
     expect(claude).not.toContain('旧约束');
@@ -456,7 +456,7 @@ describe('setupGovernanceConstraints（落点路由）', () => {
   it('旧模型仓（CLAUDE.md 有无标记 Governance Rules 块）：路由到 CLAUDE.md', async () => {
     fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n手写条款\n');
 
-    await setupGovernanceConstraints(tempDir);
+    await setupGovernanceConstraints(tempDir, io);
 
     const claude = fs.readFileSync(path.join(tempDir, 'CLAUDE.md'), 'utf-8');
     expect(claude).toContain('手写条款');

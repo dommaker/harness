@@ -77,7 +77,7 @@ describe('飞轮指标三处同源', () => {
     const projectRoot = setupKnowledgeBase();
     const baseDir = path.join(projectRoot, '.harness', 'knowledge');
 
-    const report = new KnowledgeAudit({ baseDir }).run();
+    const report = new KnowledgeAudit(new FileKnowledgeStore({ baseDir })).run();
     const auditDetails = report.dimensions.flywheel.details;
     await knowledgeStats({ projectPath: projectRoot, json: true }, io);
     const statsFlywheel = lastJsonOutput<any>(io).flywheel;

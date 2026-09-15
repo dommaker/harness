@@ -71,7 +71,7 @@ export class KnowledgeIngest {
     const entry = this.buildEntry(partial, options);
 
     // Quality gate: audit before saving
-    const audit = new KnowledgeAudit({ baseDir: this.store.getBaseDir() });
+    const audit = new KnowledgeAudit(this.store);
     let issues = audit.validate(entry);
     const critical = issues.filter(i => i.action === 'reject');
     if (critical.length > 0) {

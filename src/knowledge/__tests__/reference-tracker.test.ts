@@ -116,6 +116,26 @@ describe('ReferenceTracker', () => {
       expect(e1!.referencedBy).toContain('decision-2');
       expect(e2!.referencedBy).toEqual(['decision-2']);
     });
+
+    it('K 条 referencedBy 更新只重写一次 index.json（harness#134 走 applyAll）', () => {
+      for (const id of ['entry-1', 'entry-2', 'entry-3']) {
+        store.save(makeEntry({ id }));
+      }
+      tracker.record('decision-1', ['entry-1', 'entry-2', 'entry-3']);
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        tracker.updateReferencedBy();
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+
+      // 正对照：3 条真写入，否则「1 次重写」是空跑出来的
+      for (const id of ['entry-1', 'entry-2', 'entry-3']) {
+        expect(store.get(id)!.referencedBy).toEqual(['decision-1']);
+      }
+    });
   });
 
   describe('edge cases', () => {

@@ -10,9 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitFrontmatter } from '../utils/frontmatter';
-
-const EXCLUDED_DIRS = ['.archive', 'archived', '.snapshots', 'resolutions'];
-const INDEX_FILENAME = '_index.md';
+import { INDEX_MD_FILE, isEntryFile, isInfraDir } from './tree-walker';
 
 interface IndexEntry {
   filename: string;
@@ -37,7 +35,7 @@ export class KnowledgeIndexGenerator {
   regenerate(): string {
     const output = this.generate();
     fs.mkdirSync(this.baseDir, { recursive: true });
-    fs.writeFileSync(path.join(this.baseDir, INDEX_FILENAME), output, 'utf-8');
+    fs.writeFileSync(path.join(this.baseDir, INDEX_MD_FILE), output, 'utf-8');
     return output;
   }
 
@@ -112,10 +110,10 @@ export class KnowledgeIndexGenerator {
       const relPath = relative ? path.join(relative, name) : name;
 
       if (item.isDirectory()) {
-        if (EXCLUDED_DIRS.includes(name)) continue;
+        if (isInfraDir(name)) continue;
         if (name.startsWith('.')) continue;
         results.push(...this.scanFiles(fullPath, relPath));
-      } else if (name.endsWith('.md') && name !== INDEX_FILENAME) {
+      } else if (isEntryFile(name)) {
         results.push(fullPath);
       }
     }

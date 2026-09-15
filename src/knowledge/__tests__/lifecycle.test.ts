@@ -396,6 +396,27 @@ describe('KnowledgeLifecycle', () => {
       expect(changes[0].from).toBe('proven');
       expect(changes[0].to).toBe('verified');
     });
+
+    it('一次 cycle 的 K 条衰减只重写一次 index.json（harness#134 走 applyAll）', () => {
+      const oldDate = new Date();
+      oldDate.setMonth(oldDate.getMonth() - 4);
+      for (const id of ['DEC-001', 'DEC-002', 'DEC-003']) {
+        store.save(makeEntry({ id, maturity: 'draft', lastReferenced: oldDate.toISOString() }));
+      }
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        const changes = lifecycle.runDecayCycle();
+        // 正对照：3 条真衰减，否则「1 次重写」是空跑出来的
+        expect(changes.map(c => c.entryId)).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      for (const id of ['DEC-001', 'DEC-002', 'DEC-003']) {
+        expect(store.get(id)!.maturity).toBe('archived');
+      }
+    });
   });
 
   describe('tryPromote', () => {

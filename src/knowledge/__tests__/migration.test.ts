@@ -107,6 +107,31 @@ describe('migrateKnowledgeEntries', () => {
     expect(second.skipped).toBe(1);
   });
 
+  describe('知识树生成物豁免（harness#134 walker 口径单点化）', () => {
+    it('_index.md 既不计入 total 也不计入 errors（修此前的假阳性）', () => {
+      // 真实组合：knowledge index 把生成物落在同一个 baseDir，无 frontmatter
+      fs.writeFileSync(
+        path.join(tempDir, '_index.md'),
+        '# Knowledge Base Index\n# Auto-generated\n\n# filename|id|type\n',
+        'utf-8'
+      );
+      writeEntry('DEC-010.md', {
+        id: 'DEC-010', type: 'decision', title: 'Test', maturity: 'draft',
+        layer: 'project', created: '2026-05-01', lastReferenced: '',
+        contributors: [], projects: [], tags: [], applicablePhases: [],
+        sourceReferences: [], referencedBy: [], executionResults: [],
+      });
+
+      const result = migrateKnowledgeEntries(tempDir);
+      expect(result.total).toBe(1);
+      expect(result.errors).toEqual([]);
+      expect(result.migrated).toBe(1);
+      // 生成物不被改写
+      expect(fs.readFileSync(path.join(tempDir, '_index.md'), 'utf-8'))
+        .toContain('# Auto-generated');
+    });
+  });
+
   describe('frontmatter 收口（harness#89）', () => {
     it('缺 frontmatter：errors 记 no frontmatter（原文案不变），不算损坏', () => {
       fs.writeFileSync(path.join(tempDir, 'PLAIN.md'), '# 只是普通 markdown\n\n正文\n', 'utf-8');

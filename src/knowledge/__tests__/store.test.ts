@@ -585,6 +585,149 @@ describe('KnowledgeStore', () => {
     });
   });
 
+  describe('applyAll 按 id 部分更新的批量出口（harness#134）', () => {
+    it('K 条部分更新只重写一次 index.json', () => {
+      store.saveAll([
+        makeEntry({ id: 'DEC-001' }),
+        makeEntry({ id: 'DEC-002', title: 'Second' }),
+        makeEntry({ id: 'DEC-003', title: 'Third' }),
+      ]);
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        store.applyAll([
+          { id: 'DEC-001', partial: { maturity: 'archived' } },
+          { id: 'DEC-002', partial: { maturity: 'draft' } },
+          { id: 'DEC-003', partial: { tags: ['low_quality'] } },
+        ]);
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+    });
+
+    it('只改给到的字段，其余字段原样保留（与 update() 同语义）', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'Keep Me', contributors: ['a'], tags: ['t1'] }));
+
+      store.applyAll([{ id: 'DEC-001', partial: { maturity: 'archived' } }]);
+
+      const after = store.get('DEC-001')!;
+      expect(after.maturity).toBe('archived');
+      expect(after.title).toBe('Keep Me');
+      expect(after.contributors).toEqual(['a']);
+      expect(after.tags).toEqual(['t1']);
+      expect(after.content).toBe('This is a test decision.');
+    });
+
+    it('id 不可被 partial 改写（与 update() 同语义）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      store.applyAll([{ id: 'DEC-001', partial: { id: 'HACKED' as never } }]);
+
+      expect(store.get('DEC-001')!.id).toBe('DEC-001');
+      expect(store.get('HACKED')).toBeUndefined();
+      expect(store.readIndex().map(e => e.id)).toEqual(['DEC-001']);
+    });
+
+    it('未知 id 跳过：不写文件、索引不增项，其余条目照常落盘', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+
+      store.applyAll([
+        { id: 'GHOST', partial: { maturity: 'archived' } },
+        { id: 'DEC-001', partial: { maturity: 'archived' } },
+      ]);
+
+      expect(fs.existsSync(path.join(tempDir, 'decision-GHOST.md'))).toBe(false);
+      expect(store.readIndex().map(e => e.id)).toEqual(['DEC-001']);
+      expect(store.get('DEC-001')!.maturity).toBe('archived');
+    });
+
+    it('批内同 id 多条：按顺序累积合并（后者不覆盖前者已改的字段）', () => {
+      store.save(makeEntry({ id: 'DEC-001', tags: ['t1'] }));
+
+      store.applyAll([
+        { id: 'DEC-001', partial: { maturity: 'archived' } },
+        { id: 'DEC-001', partial: { tags: ['t1', 'low_quality'] } },
+      ]);
+
+      const after = store.get('DEC-001')!;
+      expect(after.maturity).toBe('archived');
+      expect(after.tags).toEqual(['t1', 'low_quality']);
+      expect(store.readIndex()).toHaveLength(1);
+    });
+
+    it('空批零读写，不创建 index.json', () => {
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        store.applyAll([]);
+        expect(stringifySpy).not.toHaveBeenCalled();
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(fs.existsSync(path.join(tempDir, 'index.json'))).toBe(false);
+    });
+
+    it('applyAll 后 list() 立即可见（缓存指纹失效）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      expect(store.list()).toHaveLength(1); // 预热缓存
+
+      store.applyAll([{ id: 'DEC-001', partial: { maturity: 'archived' } }]);
+
+      expect(store.list({ excludeArchived: false })[0].maturity).toBe('archived');
+    });
+
+    it('与逐条 update() 的落盘结果逐字节相同（只是少重写索引）', () => {
+      const updates = [
+        { id: 'DEC-001', partial: { maturity: 'archived' as const } },
+        { id: 'DEC-002', partial: { tags: ['x'] } },
+      ];
+      store.save(makeEntry({ id: 'DEC-001' }));
+      store.save(makeEntry({ id: 'DEC-002' }));
+      for (const u of updates) store.update(u.id, u.partial);
+      const perEntry = {
+        md1: fs.readFileSync(path.join(tempDir, 'decision-DEC-001.md'), 'utf-8'),
+        md2: fs.readFileSync(path.join(tempDir, 'decision-DEC-002.md'), 'utf-8'),
+        index: fs.readFileSync(path.join(tempDir, 'index.json'), 'utf-8'),
+      };
+
+      const fresh = new KnowledgeStore({ baseDir: tempDir });
+      fresh.save(makeEntry({ id: 'DEC-001' }));
+      fresh.save(makeEntry({ id: 'DEC-002' }));
+      fresh.applyAll(updates);
+      expect({
+        md1: fs.readFileSync(path.join(tempDir, 'decision-DEC-001.md'), 'utf-8'),
+        md2: fs.readFileSync(path.join(tempDir, 'decision-DEC-002.md'), 'utf-8'),
+        index: fs.readFileSync(path.join(tempDir, 'index.json'), 'utf-8'),
+      }).toEqual(perEntry);
+    });
+  });
+
+  describe('getConsumptionStats（harness#134：打分核心的 IO 归 store 供给）', () => {
+    const statsPath = (): string => path.join(tempDir, '.consumption-stats.json');
+
+    it('文件不存在 → undefined（未提供即无消费数据，不是 0 条记录）', () => {
+      expect(store.getConsumptionStats()).toBeUndefined();
+    });
+
+    it('读出 dailyEvents 供 D6 打分', () => {
+      fs.writeFileSync(
+        statsPath(),
+        JSON.stringify({ date: '2026-09-15', dailyEvents: 12, searchHits: 5 }),
+        'utf-8'
+      );
+      expect(store.getConsumptionStats()).toEqual({ dailyEvents: 12 });
+    });
+
+    it('坏 JSON → undefined，不抛（沿用直读侧 best-effort 语义）', () => {
+      fs.writeFileSync(statsPath(), 'NOT VALID JSON{{{', 'utf-8');
+      expect(store.getConsumptionStats()).toBeUndefined();
+    });
+
+    it('缺 dailyEvents 字段 → 0（有文件但无该计数）', () => {
+      fs.writeFileSync(statsPath(), JSON.stringify({ date: '2026-09-15' }), 'utf-8');
+      expect(store.getConsumptionStats()).toEqual({ dailyEvents: 0 });
+    });
+  });
+
   describe('frontmatter 收口（harness#89）', () => {
     const entryPath = (id: string): string => path.join(tempDir, `decision-${id}.md`);
     let errorSpy: jest.SpyInstance;

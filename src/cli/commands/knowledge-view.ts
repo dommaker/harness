@@ -17,8 +17,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { FileKnowledgeStore } from '../../knowledge/store';
-import { AUDIT_RULE_LABELS } from '../../knowledge/audit';
-import type { AuditIssue, AuditReport, AuditRuleName } from '../../knowledge/audit';
+import { AUDIT_RULE_LABELS } from '../../knowledge/audit-scoring';
+import type { AuditIssue, AuditReport, AuditRuleName } from '../../knowledge/audit-scoring';
 import type { MaturityLevel } from '../../knowledge/types';
 import { log, logError, type CommandIO, type CommandResult } from '../command-contract';
 

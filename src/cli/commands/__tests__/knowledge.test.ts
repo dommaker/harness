@@ -4,7 +4,7 @@
 
 import { knowledgeAudit, knowledgeStats, knowledgeHealth, knowledgeSearch } from '../knowledge';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import type { AuditReport } from '../../../knowledge/audit';
+import type { AuditReport } from '../../../knowledge/audit-scoring';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -23,8 +23,6 @@ jest.mock('../../../knowledge/audit', () => ({
   KnowledgeAudit: jest.fn().mockImplementation(() => ({
     run: mockRun,
   })),
-  // label 正本在 audit.ts 规则定义上，CLI 直接消费（#109）
-  AUDIT_RULE_LABELS: jest.requireActual('../../../knowledge/audit').AUDIT_RULE_LABELS,
 }));
 
 // Mock KnowledgeIndexGenerator (avoids real fs writes in CLI tests)
@@ -160,10 +158,22 @@ describe('getKnowledgeDir', () => {
 });
 
 describe('knowledgeAudit CLI', () => {
+  // 引擎改收 store（#134）后，视图层会真构造 FileKnowledgeStore（构造即 mkdir），
+  // 本 describe 判定的是接线，不落真目录：把 store 构造点换成替身
+  let storeCtorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockRun.mockReturnValue(MOCK_REPORT);
+    storeCtorSpy = jest.spyOn(require('../../../knowledge/store'), 'FileKnowledgeStore').mockImplementation(() => ({
+      list: jest.fn().mockReturnValue([]),
+      get: jest.fn(),
+      getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
+    }));
+  });
+
+  afterEach(() => {
+    storeCtorSpy.mockRestore();
   });
 
   it('should output JSON when --json is set', async () => {
@@ -209,12 +219,12 @@ describe('knowledgeAudit CLI', () => {
     expect(output).toContain('修复后: 95/100');
   });
 
-  it('should pass custom dir to KnowledgeAudit', async () => {
+  it('引擎收 store：目录解析落 openKnowledgeStore，阈值走第二形参（#134）', async () => {
     const { KnowledgeAudit } = require('../../../knowledge/audit');
-    await knowledgeAudit({ dir: '/custom/path' }, io);
-    expect(KnowledgeAudit).toHaveBeenCalledWith(expect.objectContaining({
-      baseDir: '/custom/path',
-    }));
+    await knowledgeAudit({ dir: '/custom/path', threshold: '30' }, io);
+    expect(storeCtorSpy).toHaveBeenCalledWith({ baseDir: '/custom/path' });
+    const store = storeCtorSpy.mock.results[0].value;
+    expect(KnowledgeAudit).toHaveBeenCalledWith(store, { shortContentThreshold: 30 });
   });
 
   it('规则 label 闭环：event-noise / deprecated-domain 显示中文 label，不回落英文键名（#109）', async () => {

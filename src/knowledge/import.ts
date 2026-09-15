@@ -269,6 +269,8 @@ export class ColdStartImporter {
 
         if (stat.isDirectory()) {
           // 扫描目录下的 markdown 文件
+          // 口径记名（harness#134）：本 walker 吃的是**项目文档树**（README/docs/），不是知识库树，
+          // 故不适用 tree-walker 的条目排除口径——知识树的 `_index.md`/`.snapshots` 在这里没有对应物。
           const files = fs.readdirSync(fullPath)
             .filter(f => f.endsWith('.md'))
             .slice(0, 10); // 最多 10 个

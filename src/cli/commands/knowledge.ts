@@ -13,7 +13,7 @@ import { KnowledgeQuery } from '../../knowledge/query';
 import { KnowledgeLifecycle } from '../../knowledge/lifecycle';
 import { ColdStartImporter } from '../../knowledge/import';
 import { KnowledgeAudit } from '../../knowledge/audit';
-import type { AuditReport, AuditRuleName, DimensionMetrics } from '../../knowledge/audit';
+import type { AuditReport, AuditRuleName, DimensionMetrics } from '../../knowledge/audit-scoring';
 import { evaluateFlywheel } from '../../knowledge/flywheel-metrics';
 import { migrateKnowledgeEntries } from '../../knowledge/migration';
 import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
@@ -447,8 +447,7 @@ function assembleShortContentThreshold(raw: string | undefined): ThresholdAssemb
 }
 
 export function knowledgeAuditView(options: KnowledgeAuditViewOptions, io: CommandIO) {
-  const audit = new KnowledgeAudit({
-    baseDir: resolveKnowledgeBaseDir(options, io),
+  const audit = new KnowledgeAudit(openKnowledgeStore(options, io), {
     shortContentThreshold: options.threshold,
   });
   const isDryRun = options.dryRun && !options.fix;

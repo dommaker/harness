@@ -7,7 +7,7 @@
 
 import * as path from 'path';
 import { appendJsonl, readJsonl } from '../utils/jsonl';
-import type { ReferenceRecord } from './types';
+import type { ReferenceRecord, StoreUpdate } from './types';
 import type { KnowledgeStore } from './store';
 
 const REFERENCES_FILE = 'references.jsonl';
@@ -63,6 +63,7 @@ export class ReferenceTracker {
   updateReferencedBy(): void {
     const records = this.readAll();
     const entryToDecisions = new Map<string, Set<string>>();
+    const updates: StoreUpdate[] = [];
 
     for (const record of records) {
       for (const entryId of record.entryIds) {
@@ -74,13 +75,10 @@ export class ReferenceTracker {
     }
 
     for (const [entryId, decisions] of entryToDecisions) {
-      const entry = this.store.get(entryId);
-      if (entry) {
-        this.store.update(entryId, {
-          referencedBy: [...decisions],
-        });
-      }
+      updates.push({ id: entryId, partial: { referencedBy: [...decisions] } });
     }
+    // 未知 id 由 applyAll 逐条跳过（与原先的 store.get 存在性判定同语义）
+    this.store.applyAll(updates);
   }
 
   // ── Internal ───────────────────────────────────────────────

@@ -22,8 +22,11 @@ jest.mock('../../../core/constraints/checker', () => ({
   }),
 }));
 
+// 命令 per-run 锚根构造收集器（harness#139）：构造替身即拦截 trace 落盘
 jest.mock('../../../monitoring/traces', () => ({
-  getTraceCollector: jest.fn(() => ({ record: jest.fn() })),
+  TraceCollector: jest.fn(function () {
+    return { record: jest.fn() };
+  }),
 }));
 
 jest.mock('../../../utils/exec', () => ({

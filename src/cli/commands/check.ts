@@ -5,7 +5,7 @@
  * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder
  * ADR-0001：约束集统一走 getMergedConstraintsConfig 生效集链路（preset/config 禁用/custom/scenes）
  * harness#88：本命令是 trace 记录器的组合根——core 不上行依赖 monitoring，
- * 真实收集器在此经构造参数接线
+ * 真实收集器在此经构造参数接线；#139：收集器锚根构造，trace 落点跟 --project-path 走
  */
 
 import chalk from 'chalk';
@@ -19,7 +19,7 @@ import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-
 import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
-import { getTraceCollector } from '../../monitoring/traces';
+import { TraceCollector } from '../../monitoring/traces';
 import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 import type { ConstraintResult, ConstraintTrigger } from '../../types/constraint';
@@ -126,7 +126,8 @@ export async function check(
 
     // 执行三层检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
     // trace 记录器经构造参数接线（harness#88）：一次命令一个 checker 实例
-    const checker = new ConstraintChecker(getTraceCollector());
+    // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
+    const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
     const result = await checker.checkConstraints(context, merged, evidence, runEnv);
 
     // 输出结果

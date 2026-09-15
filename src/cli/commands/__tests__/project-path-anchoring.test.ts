@@ -1,22 +1,30 @@
 /**
  * -p/--project-path 锚定回归（harness#95）
  *
- * 两条门禁命令都接受 -p，但真正执行/IO 的一侧过去取 process.cwd()：不 cd 到目标工程调用，
+ * 各站点的命令都接受 -p，但真正执行/IO 的一侧过去取 process.cwd()：不 cd 到目标工程调用，
  * 就会拿 A 工程的命令、在 B 目录跑、把证据写进 B；acceptance 的「无 tasks.yml 即跳过」
  * 本身是 passed:true，于是 -p 失效直接表现为假绿。
  *
  * 既有单测全部 mock fs/exec + 假 projectPath，恰好抹平两种取径的差异。本文件不 mock 任何 IO，
  * 前提统一为 **cwd ≠ projectPath**（cwd = A，-p = B），断言读写位置落在 B。
  * 站点 2 从两面各断言一次：CLI 命令面（`acceptance -p`）与门禁实例面（默认构造 = 注册表单例形状）。
+ *
+ * 站点 3（harness#139）是 trace 落点：`check --project-path B` 的约束评估真跑了 B，
+ * 但 trace 写进了 A——写侧不锚，按 projectPath 直读的读侧（`status`）就读不到刚写的记录，
+ * 即 #95 点名的假绿族。故本站点从写、读两面各断言一次。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import { createProjectFixture } from '../../../test-setup/project-fixture';
 import { SpecAcceptanceGate } from '../../../gates/acceptance';
+import { DEFAULT_TRACE_FILE } from '../../../types/trace';
 import { captureIO } from '../../command-contract';
 import { runPassesGate } from '../passes-gate';
 import { acceptance } from '../acceptance';
+import { check } from '../check';
+import { status } from '../status';
 
 /** 在自身 cwd 落标记文件：哪一侧被真正调用，标记就出现在哪一侧的目录里 */
 function markScript(marker: string): string {
@@ -152,6 +160,91 @@ describe('-p 锚定：执行与 IO 必须落在 projectPath（cwd ≠ projectPat
         kind: 'fail',
         reason: expect.stringContaining('1 unchecked acceptance criteria'),
       });
+    });
+  });
+
+  describe('check / status（站点 3：trace 落点与读-写闭环）', () => {
+    /** 在 fixture 里跑 git（argv 数组，不经 shell） */
+    function git(dir: string, ...args: string[]): void {
+      execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
+    }
+
+    /** check 能真跑完的项目：已提交基线 + staged 改动 + 一条 pass trace（验证证据） */
+    function checkProject(name: string): string {
+      const dir = createProjectFixture({
+        name,
+        files: { 'README.md': '# fixture\n', 'src/existing.ts': 'export const a = 1;\n' },
+        traces: [{ constraintId: 'fixture', result: 'pass' }],
+      });
+      git(dir, 'init', '-q');
+      git(dir, 'config', 'user.email', 'fixture@example.com');
+      git(dir, 'config', 'user.name', 'Fixture');
+      git(dir, 'add', '.');
+      git(dir, 'commit', '-q', '-m', 'baseline');
+      fs.writeFileSync(path.join(dir, 'src/existing.ts'), 'export const a = 2;\n', 'utf-8');
+      git(dir, 'add', '--', 'src/existing.ts');
+      return dir;
+    }
+
+    /** trace 正本的行（按生产落点 DEFAULT_TRACE_FILE 解析，不另立路径口径） */
+    function traceLinesOf(projectRoot: string): string[] {
+      return fs
+        .readFileSync(path.join(projectRoot, DEFAULT_TRACE_FILE), 'utf-8')
+        .split('\n')
+        .filter(Boolean);
+    }
+
+    it('--project-path B → trace 落 B/.harness/logs/traces.log，A 侧不长出文件', async () => {
+      const cwdSide = createProjectFixture({ name: 'traceanchor-cwd' });
+      const projectSide = checkProject('traceanchor-project');
+      process.chdir(cwdSide);
+      const seeded = traceLinesOf(projectSide).length;
+
+      const result = await check(
+        { staged: true, projectPath: projectSide, trigger: 'code_implementation' },
+        captureIO()
+      );
+      expect(result).toEqual({ kind: 'ok' });
+
+      const written = traceLinesOf(projectSide)
+        .slice(seeded)
+        .map(l => JSON.parse(l) as { constraintId: string; projectPath?: string });
+      expect(written.map(t => t.constraintId)).toEqual(
+        expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+      );
+      expect(written.every(t => t.projectPath === projectSide)).toBe(true);
+      // 病灶：修复前这一支落在调用方 cwd（A），B 侧 mtime 不动
+      expect(fs.existsSync(path.join(cwdSide, DEFAULT_TRACE_FILE))).toBe(false);
+    });
+
+    it('读-写闭环：status --project-path B 读得到上一步 check 刚写的 trace', async () => {
+      const cwdSide = createProjectFixture({ name: 'traceanchor-rw-cwd' });
+      const projectSide = checkProject('traceanchor-rw-project');
+      process.chdir(cwdSide);
+
+      await check(
+        { staged: true, projectPath: projectSide, trigger: 'code_implementation' },
+        captureIO()
+      );
+
+      const io = captureIO();
+      expect(await status({ projectPath: projectSide }, io)).toEqual({ kind: 'ok' });
+      // 记录数取自 B 的正本行数：写侧漏到 A 就必然对不上（假绿），读到 A 也读不到 check 的落点
+      expect(io.outText()).toContain(`记录数: ${traceLinesOf(projectSide).length} 条`);
+      expect(io.outText()).toContain('no_implementation_without_requirement');
+    });
+
+    it('不带 --project-path 的项目内使用：落点仍是当下 cwd（存量使用者无感）', async () => {
+      const projectSide = checkProject('traceanchor-nop');
+      process.chdir(projectSide);
+      const seeded = traceLinesOf(projectSide).length;
+
+      const result = await check(
+        { staged: true, trigger: 'code_implementation' },
+        captureIO()
+      );
+      expect(result).toEqual({ kind: 'ok' });
+      expect(traceLinesOf(projectSide).length).toBeGreaterThan(seeded);
     });
   });
 });

@@ -5,19 +5,23 @@
  * 兜底，之后必须传到每个 IO/执行点**——下游禁止再取一次 cwd，也禁止用相对路径默认值
  * （两者都会让 `-p` 半失效：读写/执行位置悄悄回到调用方的 cwd）。
  *
- * 本文件是这条约定的机器可检面，三道闸：
+ * 本文件是这条约定的机器可检面，四道闸：
  * 1. CLI 入口层：cwd 只能以 `xxx || process.cwd()` 的兜底形状出现，例外逐个点名并记理由
  * 2. 下游层（= src 减 cli，含 core / gates / context / monitoring / hooks 等）：cwd 站点**逐行**冻结
  *    （harness#98，不再只冻文件键集——豁免文件内新增站点/行变形同样失败），
  *    要么把根传下去，要么在此记下豁免理由
  * 3. 相对路径默认值同理冻结（harness#98 收紧：对象字面量 `xxxPath: '相对'` 之外，
- *    参数默认值形 `xxxPath = '相对'`（含类型标注）与模板字面量同罪；扫描域 = 整个下游层）
+ *    参数默认值形 `xxxPath = '相对'`（含类型标注）与模板字面量同罪；harness#139 再扩两形：
+ *    键名后缀 `Path` → `Path|File|Log`，以及引用常量的 `xxxFile: SOME_CONST` 臂；扫描域 = 整个下游层）
+ * 4. 组合根自己锚根构造，不再消费 cwd 锚定的全局单例（harness#139：src/cli、src/hooks 生产代码
+ *    对 `getTraceCollector()` 零消费——单例是留给跨仓消费者的兼容面，不是本仓的取用口）
  *
  * 冻结集合还要求**每条豁免仍然成立**（站点消失却不删条目 → 同样失败），豁免不会烂成化石。
  * 「根参数已传入却又取 cwd」这类静态看不出的漂移，由 project-path-anchoring.test.ts 的真实 IO 行为用例守。
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 const SRC_ROOT = path.join(__dirname, '..', '..', '..', '..', 'src');
@@ -57,6 +61,15 @@ function cwdSites(files: string[]): Map<string, string[]> {
     if (lines.length > 0) sites.set(repoPath(file), lines);
   }
   return sites;
+}
+
+/** 闸 3 的取站点本体（反证用例与冻结表用例共用同一判据） */
+function relativePathDefaultSites(files: string[]): Set<string> {
+  const hits = new Set<string>();
+  for (const file of files) {
+    if (codeLines(file).some(line => RELATIVE_PATH_DEFAULT.test(line))) hits.add(repoPath(file));
+  }
+  return hits;
 }
 
 // ========================================
@@ -167,18 +180,38 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
 // ========================================
 
 /**
- * key 必须 camelCase 以 Path 结尾，值为相对字面量——这类默认值按 cwd 解析，即 #95 的病根形状。
+ * 键名必须是 camelCase 且以 Path/File/Log 结尾，值为相对字面量或引用常量——这类默认值按 cwd 解析，
+ * 即 #95 的病根形状。
+ *
  * harness#98 收紧匹配形状（原为只认对象字面量 `xxxPath: '相对'`）：
  * 参数默认值形 `xxxPath = '相对'`、带类型标注的 `xxxPath: string = '相对'`、模板字面量、
  * 双引号形同罪（仓内 lint 不强制引号风格，三种引号都得认）。
+ *
+ * harness#139 再扩两形（traceFile 病灶的形状是「键名不带 Path + 值引用常量」，原闸两头都不认）：
+ * - 臂 1 的键名后缀 `Path` → `Path|File|Log`（落点类键名的全集，Log 覆盖 `xxxLog` 一族）
+ * - 臂 2 新增常量引用形 `xxxFile: SOME_CONSTANT`（值不在本行，是相对片段正本的另一半）
+ *
+ * 只扫**使用点**，不冻结常量定义本体（`export const DEFAULT_TRACE_FILE = '.harness/…'` 是正本，
+ * 锚定责任在消费点）。扩形后下游层新增命中恰好 2 处（本票病灶 traces.ts + trace-analyzer.ts 的
+ * summaryFile），连同既有的 validator 豁免共 3 条，零假阳性——见下方豁免表。
  */
-const RELATIVE_PATH_DEFAULT = /\b\w+Path\s*(?::\s*[^=,)]+?)?[:=]\s*['"`](?!\/)/;
+const RELATIVE_PATH_DEFAULT =
+  /\b\w+(?:Path|File|Log)\s*(?::\s*[^=,)]+?)?[:=]\s*['"`](?!\/)|\b\w+(?:Path|File|Log)\s*[:=]\s*[A-Z][A-Z0-9_]+\b/;
 
 const RELATIVE_PATH_DEFAULT_EXEMPTIONS: Record<string, string> = {
   'src/core/spec/validator.ts':
     'schemaPath: "./specs/schemas" 确实按 cwd 解析（同型病灶）。不随 #95 修：validateFile()/loadSchema() ' +
     '签名里没有根，补齐要把根穿透整个 spec 域（属 spec 重构，非本票两门禁）。CLI 侧 `spec -s` 已 ' +
     'path.resolve(projectPath, schema)，给了 -s 时口径正确。留待 spec 域单票收口。',
+  'src/monitoring/traces.ts':
+    'DEFAULT_CONFIG.traceFile 引用的是**项目相对片段**正本（#139 明确其语义），锚定在构造函数里做：' +
+    '给了 projectPath → path.resolve(projectPath, traceFile)，没给 → 保持 cwd 解析（跨仓消费者的兼容面）。' +
+    '本行是「相对片段」的声明处，不是「按 cwd 打开」的执行处；锚定行为由 monitoring/__tests__/' +
+    'trace-file-anchoring.test.ts 与 cli/commands/__tests__/project-path-anchoring.test.ts 站点 3 钉。',
+  'src/monitoring/trace-analyzer.ts':
+    'summaryFile: ".harness/logs/traces-summary.json" 同型病灶（#139 实测的第二处命中）。不在本票修：' +
+    'harness 侧无生产写点（`status` 自 ADR-0020 起直调纯函数，不构造 analyzer），修它等于给无人消费的面' +
+    '新增根参数。与 trace 的 failure/summary 三件套同型病灶一并由 studio 侧迁移票带走（#139 Out of scope）。',
 };
 
 describe('projectPath 传递约定（harness#95）', () => {
@@ -219,13 +252,10 @@ describe('projectPath 传递约定（harness#95）', () => {
   });
 
   describe('闸 3：相对路径默认值不再按 cwd 解析', () => {
-    it('下游层（= src 减 cli）的相对字面量路径默认值 = 冻结豁免表', () => {
-      const hits = new Set<string>();
-      for (const file of downstreamFiles) {
-        if (codeLines(file).some(line => RELATIVE_PATH_DEFAULT.test(line))) hits.add(repoPath(file));
-      }
-
-      expect([...hits].sort()).toEqual(Object.keys(RELATIVE_PATH_DEFAULT_EXEMPTIONS).sort());
+    it('下游层（= src 减 cli）的相对字面量/常量引用路径默认值 = 冻结豁免表', () => {
+      expect([...relativePathDefaultSites(downstreamFiles)].sort()).toEqual(
+        Object.keys(RELATIVE_PATH_DEFAULT_EXEMPTIONS).sort()
+      );
     });
 
     it('acceptance 的 tasks.yml 默认不再有相对路径常量（站点 2 的收口形状）', () => {
@@ -234,6 +264,46 @@ describe('projectPath 传递约定（harness#95）', () => {
 
       expect(body).not.toMatch(/tasksPath\s*:\s*'/);
       expect(body).toMatch(/path\.resolve\(\s*context\.projectPath\s*,\s*[^)]*'tasks\.yml'/);
+    });
+
+    it('反证（#139）：未锚的 xxxFile 相对默认值顶闸，锚定与绝对形状不误报', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate3probe-'));
+      const write = (name: string, body: string): string => {
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, body, 'utf-8');
+        return file;
+      };
+
+      // 臂 2（常量引用）与臂 1（File/Log 后缀的相对字面量）各自要真打得中，冻结表才不是空转
+      expect([
+        write('unanchored-const.ts', 'export const cfg = { traceFile: DEFAULT_TRACE_FILE };\n'),
+        write('unanchored-literal.ts', "export const cfg = { errorLog: 'logs/error.log' };\n"),
+        write('unanchored-param.ts', "function f({ summaryPath = './x/y.json' }: { summaryPath?: string }) {}\n"),
+      ].map(f => relativePathDefaultSites([f]).size)).toEqual([1, 1, 1]);
+
+      // 锚定动作、绝对值、值非大写常量、键名不在后缀集内 → 都不算站点
+      expect([
+        write('anchored.ts', 'export const cfg = { traceFile: path.resolve(projectPath, DEFAULT_TRACE_FILE) };\n'),
+        write('absolute.ts', "export const cfg = { traceFile: '/abs/traces.log' };\n"),
+        write('lowercase-value.ts', 'export const cfg = { traceFile: resolvedFile };\n'),
+        write('other-suffix.ts', 'export const cfg = { maxFileSize: 10 * 1024 * 1024 };\n'),
+      ].map(f => relativePathDefaultSites([f]).size)).toEqual([0, 0, 0, 0]);
+    });
+  });
+
+  describe('闸 4：组合根锚根构造，不消费 cwd 锚定的单例（harness#139）', () => {
+    it('src/cli 与 src/hooks 的生产代码对 getTraceCollector() 零消费', () => {
+      const offenders: string[] = [];
+      for (const dir of ['cli', 'hooks']) {
+        for (const file of listTsFiles(path.join(SRC_ROOT, dir))) {
+          const lines = codeLines(file).filter(line => /getTraceCollector\s*\(/.test(line));
+          if (lines.length > 0) offenders.push(`${repoPath(file)}: ${lines.join(' | ')}`);
+        }
+      }
+
+      // 单例保留是给跨仓消费者的兼容面（#139 裁决：公共面不摘除）；本仓四个组合根各自
+      // new TraceCollector({ projectPath })，取用口一旦复活，-p 就又半失效一次
+      expect(offenders).toEqual([]);
     });
   });
 });

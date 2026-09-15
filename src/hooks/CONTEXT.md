@@ -13,7 +13,7 @@ H5（#44）起增加两个机制（G2/G7）：
 - `assertHookRegistryClosed` — 注册表闭环双向校验（构建/测试期）
 - `HookConfig`（type）— per-hook 配置声明（归一后形状）
 - `toErrorStrategy` — blocking → errorStrategy 无损映射（G7）
-- `bootstrapHarness` / `bootstrapHarnessSync` — Harness 启动引导；也是 trace 记录器的组合根：`new ConstraintChecker(getTraceCollector())`（harness#88，core 不上行依赖 monitoring，故由本层接线）
+- `bootstrapHarness` / `bootstrapHarnessSync` — Harness 启动引导；也是 trace 记录器的组合根：`new ConstraintChecker(new TraceCollector({ projectPath }))`（harness#88 接线，core 不上行依赖 monitoring，故由本层接线；#139 收根：两个入口本就收 projectPath，落点随之锚定，不再取 cwd 锚定的 `getTraceCollector()` 单例）
 
 ## 依赖关系
 - 依赖 `src/types/` Hook 相关类型

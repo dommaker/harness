@@ -21,6 +21,9 @@ import {
 
 /**
  * 默认配置
+ *
+ * `traceFile` 这里是**未锚定的项目相对片段**（#95 病根形状），故本文件在
+ * `project-path-convention.test.ts` 闸 3 的豁免表里点名带理由；锚定动作在构造函数里做。
  */
 const DEFAULT_CONFIG: TraceCollectorConfig = {
   traceFile: DEFAULT_TRACE_FILE,
@@ -33,7 +36,7 @@ const DEFAULT_CONFIG: TraceCollectorConfig = {
  *
  * 使用方式：
  * ```typescript
- * const collector = new TraceCollector();
+ * const collector = new TraceCollector({ projectPath: '/path/to/project' });
  * collector.record({
  *   constraintId: 'no_fix_without_root_cause',
  *   level: 'iron_law',
@@ -48,7 +51,11 @@ export class TraceCollector {
 
   constructor(config?: Partial<TraceCollectorConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.traceFile = this.config.traceFile!;
+    // 收根则相对落点按项目解析（harness#139：否则 -p 半失效——评估跑在 B、trace 写进 cwd）；
+    // 没收根则保持 cwd 解析，这是跨仓消费者（studio）依赖的兼容面，不是遗漏
+    this.traceFile = this.config.projectPath
+      ? path.resolve(this.config.projectPath, this.config.traceFile!)
+      : this.config.traceFile!;
     this.ensureDirectory();
   }
 
@@ -304,12 +311,17 @@ export class TraceCollector {
 }
 
 /**
- * 全局单例（可选）
+ * 全局单例（**cwd 锚定**的兼容面）
+ *
+ * harness#139 起本仓生产代码不再消费它：CLI check/report 与 bootstrap 四个组合根
+ * 各自 `new TraceCollector({ projectPath })` 锚根构造（守卫见 project-path-convention
+ * 闸 4）。保留是给跨仓调用方（studio）的既有形状——它依赖「API 进程 cwd 恰好是项目」。
+ * 传 `projectPath` 是它的锚根出口；不传则落点按 cwd 解析（行为逐字不变）。
  */
 let globalCollector: TraceCollector | null = null;
 
 /**
- * 获取全局收集器
+ * 获取全局收集器（cwd 锚定，兼容语义见上）
  */
 export function getTraceCollector(): TraceCollector {
   if (!globalCollector) {
@@ -319,7 +331,9 @@ export function getTraceCollector(): TraceCollector {
 }
 
 /**
- * 配置全局收集器
+ * 配置全局收集器（cwd 锚定，兼容语义见 `getTraceCollector()`）
+ *
+ * 需要把 trace 落进指定项目的调用方直接构造实例：`new TraceCollector({ projectPath })`。
  */
 export function configureTraceCollector(config: Partial<TraceCollectorConfig>): void {
   globalCollector = new TraceCollector(config);

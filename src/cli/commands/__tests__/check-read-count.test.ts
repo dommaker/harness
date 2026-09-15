@@ -15,7 +15,6 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { check } from '../check';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { configureTraceCollector } from '../../../monitoring/traces';
 
 type ReadCall = { file: string; via: 'readFileSync' | 'open' };
 
@@ -102,7 +101,6 @@ function fixtureRepo(): string {
 describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () => {
   let io: CapturingIO;
   let dir: string;
-  let traceFile: string;
 
   /** 相对项目根的文件名 → 读取次数（只读语义的 readFileSync 与只读 open 都算一次） */
   function readCounts(): Map<string, number> {
@@ -120,15 +118,11 @@ describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () 
     reads().length = 0;
     io = captureIO();
     dir = fixtureRepo();
-    // trace 写入重定向到项目外：本闸只关心理顺后的读取，不数写入
-    traceFile = path.join(os.tmpdir(), `harness-read-count-trace-${Date.now()}.log`);
-    configureTraceCollector({ traceFile });
+    // trace 自 #139 起锚在 projectPath 上写入（本夹具内），写入不经读取计数器
   });
 
   afterEach(() => {
-    configureTraceCollector({});
     fs.rmSync(dir, { recursive: true, force: true });
-    fs.rmSync(traceFile, { force: true });
   });
 
   it('整张读取表如实冻结：本次运行读了哪些项目文件、各读几次', async () => {

@@ -5,10 +5,11 @@
  */
 
 /**
- * 默认 trace 文件路径（相对项目根目录）
+ * 默认 trace 文件路径（项目相对片段——**不是**可直接打开的路径）
  *
- * 读写双方必须统一引用此常量；
- * 需要自定义路径时使用 configureTraceCollector / TraceCollectorConfig.traceFile
+ * 读写双方都必须把它锚到项目根（`path.resolve(projectPath, DEFAULT_TRACE_FILE)`，
+ * harness#139）。采集器侧的锚定在 `TraceCollector` 构造内完成（传 `projectPath` 即可）；
+ * 需要自定义路径时使用 `TraceCollectorConfig.traceFile`（相对值同样按 projectPath 解析）。
  */
 export const DEFAULT_TRACE_FILE = '.harness/logs/traces.log';
 
@@ -197,7 +198,16 @@ export interface TraceFilter {
  * Trace 收集器配置
  */
 export interface TraceCollectorConfig {
-  /** Trace 文件路径 */
+  /**
+   * 项目根（harness#139，#95 约定的落地形状）
+   *
+   * 给了 → 缺省/相对的 `traceFile` 按它解析（`path.resolve(projectPath, traceFile)`），
+   * 从别处带 `--project-path` 跑时 trace 落进目标项目；
+   * 不给 → 保持 cwd 解析现状（跨仓消费者的兼容面，不是遗漏）。
+   */
+  projectPath?: string;
+
+  /** Trace 文件路径（绝对值原样；相对值按 projectPath 解析，无 projectPath 时按 cwd） */
   traceFile?: string;
 
   /** 最大文件大小（字节），超出则滚动 */

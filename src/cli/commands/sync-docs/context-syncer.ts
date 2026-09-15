@@ -5,39 +5,30 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
+import type { CommandIO } from '../../command-contract';
+import {
+  contextDocFile,
+  nodeScaffoldFs,
+  runPlan,
+  type ScaffoldFileSystem,
+  type ScaffoldOutcome,
+} from '../scaffold';
 
 /**
- * 创建 CONTEXT.md 模板
+ * 创建 CONTEXT.md 模板：走 scaffold 正本站点（contextDocFile + runPlan），
+ * 与 init 的 CONTEXT.md 落点共用同一份模板正文（harness#150，#132 口径外的第 9 处）。
+ *
+ * 只在 `contextMissing` 的目录上被调用，故正常只走 `created`；若落到 `exists`
+ * 说明 sync-docs 的缺失判定与 scaffold 的在场判定口径不一致（不静默兜，交由调用方感知）。
  */
-export async function createContextMd(projectPath: string, dir: string): Promise<void> {
-  const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
-  const dirName = path.basename(dir);
-
-  const content = `# ${dirName}
-
-> 此文件描述 ${dir} 目录的职责和上下文。
-> 请阅读本目录的源代码，然后填写以下各节。
-> 如果使用 AI 编码助手，将本文件内容作为 prompt 请求它分析并填写。
-
-## 职责
-
-本目录的核心职责是？
-
-## 核心导出
-
-本目录对外暴露的主要模块/函数：
-
-## 依赖关系
-
-本目录依赖哪些其他模块，谁依赖本目录？
-
-## 注意事项
-
-开发时需要注意的约束或约定：
-`;
-
-  await fs.mkdir(path.join(projectPath, dir), { recursive: true });
-  await fs.writeFile(contextPath, content, 'utf-8');
+export async function createContextMd(
+  projectPath: string,
+  dir: string,
+  io: CommandIO,
+  scaffoldFs: ScaffoldFileSystem = nodeScaffoldFs,
+): Promise<ScaffoldOutcome> {
+  const [outcome] = await runPlan([contextDocFile(projectPath, dir)], io, scaffoldFs);
+  return outcome;
 }
 
 /**

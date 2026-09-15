@@ -394,8 +394,7 @@ export async function syncDocs(
   }
 
   for (const dir of result.contextMissing) {
-    await createContextMd(projectPath, dir);
-    log(io, chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+    await createContextMd(projectPath, dir, io);
   }
 
   if (hasAgentsIssues && agentsMdExpected !== null) {

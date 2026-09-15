@@ -282,6 +282,8 @@ export function renderContextDoc(dir: string): string {
   return `# ${dirName}
 
 > 此文件描述 ${dir} 目录的职责和上下文
+> 请阅读本目录的源代码，然后填写以下各节。
+> 如果使用 AI 编码助手，将本文件内容作为 prompt 请求它分析并填写。
 
 ## 职责
 

@@ -5,8 +5,20 @@
  * 不包含业务逻辑
  */
 
-// 类型
-export * from './types';
+// 类型与分类数据（正本 src/types/failure.ts；harness#137 删掉 ./types 兼容 shim，
+// 本 barrel 直连正本并把星号改成显式清单——ADR-0003 的「对外给了什么」按名字可答）
+export {
+  DEFAULT_FAILURE_LOG_FILE,
+  ErrorType,
+  FailureLevel,
+  DEFAULT_CLASSIFICATION_RULES,
+  DEFAULT_LEVEL_MAPPING,
+} from '../types/failure';
+export type {
+  ErrorClassificationRule,
+  FailureRecord,
+  ClassificationResult,
+} from '../types/failure';
 
 // 分类器
 export {

@@ -12,7 +12,7 @@
  */
 
 import type { ConstraintLevel, ConstraintTrigger } from '../../types/constraint';
-import { matchesTrigger } from '../../utils/exec';
+import { matchesTrigger } from './triggers';
 import { getEffectiveConstraints } from '../effective-constraints';
 
 /**

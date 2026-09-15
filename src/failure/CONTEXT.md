@@ -6,7 +6,7 @@
 ## 核心导出
 - `ErrorClassifier` — 错误分类器(可配置规则)
 - `FailureRecorder` — 失败记录器(文件存储)
-- `types.ts` — 错误分类/记录类型定义
+- `index.ts` 直连类型正本 `src/types/failure.ts`（ErrorType/FailureLevel/FailureRecord/分类规则数据）
 
 ## 依赖关系
 - 依赖 `src/types/` 错误分类/记录类型

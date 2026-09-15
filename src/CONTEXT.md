@@ -4,7 +4,7 @@
 通用工程约束框架的 TypeScript 核心代码。定义约束系统、检查点验证、质量门控、知识基础设施。
 
 ## 核心导出 (dist/)
-- `index.ts`: 显式公共导出清单（ADR-0003，禁 export *）
+- `index.ts`: 显式公共导出清单（ADR-0003，禁 export *；harness#137 起该禁令由 `src/__tests__/sub-barrels-explicit.test.ts` 扩到 src 下全部目录 barrel，豁免逐文件记名）
 - `core/index.ts`: 核心约束引擎
 - `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理

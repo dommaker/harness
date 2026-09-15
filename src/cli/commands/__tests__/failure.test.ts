@@ -6,8 +6,8 @@ import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import { FailureRecorder } from '../../../failure/recorder';
-import { ErrorType, FailureLevel } from '../../../failure/types';
-import type { FailureRecord } from '../../../failure/types';
+import { ErrorType, FailureLevel } from '../../../types/failure';
+import type { FailureRecord } from '../../../types/failure';
 
 // Mock FailureRecorder
 jest.mock('../../../failure/recorder');

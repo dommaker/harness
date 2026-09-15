@@ -4,10 +4,10 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { FailureRecorder, createFailureRecorder } from '../failure/recorder';
-import { ErrorType, FailureLevel } from '../failure/types';
+import { ErrorType, FailureLevel } from '../types/failure';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { FailureRecord } from '../failure/types';
+import type { FailureRecord } from '../types/failure';
 
 describe('FailureRecorder', () => {
   const tempDir = path.join(process.cwd(), 'temp-test-recorder');

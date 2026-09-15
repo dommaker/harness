@@ -9,13 +9,13 @@ import type {
   FailureLevel,
   ErrorClassificationRule,
   ClassificationResult,
-} from './types';
+} from '../types/failure';
 import {
   ErrorType as ErrorTypeEnum,
   FailureLevel as FailureLevelEnum,
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
-} from './types';
+} from '../types/failure';
 
 /**
  * 错误分类器配置

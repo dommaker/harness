@@ -18,7 +18,7 @@ import {
 import type { ExecutionTrace } from '../../types/trace';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
-import { matchesTrigger } from '../../utils/exec';
+import { matchesTrigger } from './triggers';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';

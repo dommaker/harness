@@ -104,6 +104,25 @@ export function getCapabilitiesMode(target: RunTarget): CapabilitiesMode {
 }
 
 /**
+ * 退役判定单点（studio#82 D6 一处真相）
+ *
+ * 两个落点合成一条规则：禁用（config.yml `constraints.<id>.enabled: false`，内置约束的
+ * 退役落点）或 custom 条目自带 `retired` 元数据（custom 约束的退役落点，不拆 config.yml
+ * 第二处）。`mergeConstraints` 的 custom 追加跳过与 `harness constraints retire` 的
+ * already_retired 检查共用本函数——后者此前是这条规则的手写复印（harness#137 收口）。
+ *
+ * `disabled` 由调用方给：mergeConstraints 传的是含 preset 裁剪的完整禁用集，
+ * retire 传的是 config.yml 单点（退役落点只有这一处，preset 语义不掺进退役判定）。
+ * `retired` 按 truthiness 判，与 mergeConstraints 历史口径逐字一致。
+ */
+export function isConstraintRetired(
+  customDef: { retired?: unknown } | undefined,
+  disabled: boolean
+): boolean {
+  return disabled || Boolean(customDef?.retired);
+}
+
+/**
  * 项目配置加载器
  */
 export class ProjectConfigLoader {
@@ -235,7 +254,7 @@ export class ProjectConfigLoader {
     // 收集进 disabled，custom 在 step 1 时尚未入桶，须在此兜底跳过；
     // 条目带 retired 元数据的同样不追加——studio#82 D6 退役落点在条目自身）
     for (const [id, customDef] of Object.entries(this.customConstraints)) {
-      if (result.disabled.includes(id) || customDef.retired) {
+      if (isConstraintRetired(customDef, result.disabled.includes(id))) {
         continue;
       }
       const constraint = this.toConstraint(customDef, id);
@@ -308,36 +327,6 @@ export class ProjectConfigLoader {
    */
   getCustomConstraints(): Record<string, CustomConstraintDefinition> {
     return this.customConstraints;
-  }
-
-  /**
-   * 检查约束是否启用
-   */
-  isConstraintEnabled(constraintId: string): boolean {
-    // 1. 检查是否在禁用列表
-    if (this.config.constraints?.[constraintId]?.enabled === false) {
-      return false;
-    }
-
-    // 2. 检查自定义约束是否禁用
-    if (this.customConstraints[constraintId]?.enabled === false) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 获取约束来源
-   */
-  getConstraintSource(constraintId: string): 'built-in' | 'custom' | 'disabled' {
-    if (this.config.constraints?.[constraintId]?.enabled === false) {
-      return 'disabled';
-    }
-    if (this.customConstraints[constraintId]) {
-      return 'custom';
-    }
-    return 'built-in';
   }
 
   /**

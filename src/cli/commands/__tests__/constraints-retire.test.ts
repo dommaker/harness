@@ -313,6 +313,58 @@ describe('retireConstraint 执行逻辑', () => {
   });
 });
 
+describe('落盘字节与装载次数冻结（harness#137）', () => {
+  /**
+   * YAML 读-改-写两段合并成 `setYamlEntry` 属内部重构：对外产物逐字不得漂移
+   * （票验收 6）。故此处钉的是**字节**而非 yaml.load 后的对象——键序、缩进、
+   * 行宽 120 的折叠口径、注释丢弃后的形态都在断言范围内。
+   */
+  it('内置退役落 config.yml：逐字节冻结', () => {
+    const root = createProjectFixture({
+      name: 'harness-retire-test',
+      config: '# 项目配置\npreset: standard\nscenes:\n  - llm-app\n',
+    });
+
+    retireConstraint(root, 'capability_sync', { reason: '逐字节冻结', now: FIXED_NOW });
+
+    expect(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8')).toBe(
+      'preset: standard\nscenes:\n  - llm-app\nconstraints:\n  capability_sync:\n    enabled: false\n' +
+        "    retired:\n      at: '2026-08-08T12:00:00.000Z'\n      reason: 逐字节冻结\n" +
+        '      stats:\n        total: 0\n        fail: 0\n        failRate: 0\n'
+    );
+  });
+
+  it('custom 退役落 custom-constraints.yml：逐字节冻结（规则原文保留、retired 段追加在末尾）', () => {
+    const root = createProjectFixture({ name: 'harness-retire-test' });
+    writeCustom(root, `# 自定义约束\n${CUSTOM_YML}`);
+
+    retireConstraint(root, 'my_custom_rule', { reason: '逐字节冻结', now: FIXED_NOW });
+
+    expect(fs.readFileSync(path.join(root, '.harness', 'custom-constraints.yml'), 'utf-8')).toBe(
+      'custom_constraints:\n  my_custom_rule:\n    level: iron_law\n    rule: 禁止引入 X\n' +
+        '    message: X 已由平台能力替代\n    promptInjection: 禁止引入 X\n' +
+        "    retired:\n      at: '2026-08-08T12:00:00.000Z'\n      reason: 逐字节冻结\n" +
+        '      stats:\n        total: 0\n        fail: 0\n        failRate: 0\n'
+    );
+  });
+
+  it('一次 retireConstraint 只装载一次项目配置（此前 custom 路径走 3 次 load）', async () => {
+    const { ProjectConfigLoader } = await import('../../../core/project-config-loader');
+    const loadSpy = jest.spyOn(ProjectConfigLoader.prototype, 'load');
+    const root = createProjectFixture({ name: 'harness-retire-test' });
+    writeCustom(root, CUSTOM_YML);
+    loadSpy.mockClear();
+
+    retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+
+    loadSpy.mockClear();
+    retireConstraint(root, 'my_custom_rule', { now: new Date('2026-08-09T00:00:00.000Z') });
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    loadSpy.mockRestore();
+  });
+});
+
 describe('constraintsRetire 非交互直达', () => {
   it('无 --yes 直达：报错 + 非零退出码 + 不落盘任何文件（#24 人确认闸门）', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });

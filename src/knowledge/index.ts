@@ -4,7 +4,32 @@
  * Re-exports all knowledge module components.
  */
 
-export * from './types';
+export { DEFAULT_DECAY_CONFIG } from './types';
+export type {
+  KnowledgeSubsystem,
+  MaturityLevel,
+  StorageLayer,
+  ConsumptionMode,
+  KnowledgeOrigin,
+  KnowledgeEntry,
+  SourceRef,
+  ExecutionResult,
+  KnowledgeReference,
+  QueryBudget,
+  QueryResult,
+  QueryFilter,
+  LintIssueType,
+  LintIssue,
+  IngestOptions,
+  MaturityChange,
+  DecayConfig,
+  DecisionRecord,
+  ReferenceRecord,
+  IndexEntry,
+  SnapshotSurvival,
+  ConsumptionStats,
+  StoreUpdate,
+} from './types';
 export type { KnowledgeStore } from './store';
 export { FileKnowledgeStore } from './store';
 export { KnowledgeQuery } from './query';

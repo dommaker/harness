@@ -1,7 +1,9 @@
 /**
  * 通用工具模块
  *
- * 提供命令执行、数组规范化、延迟等公共函数，减少各子系统重复代码。
+ * 提供命令执行的公共函数，减少各子系统重复代码。
+ * 约束域谓词不在本模块（harness#137：`normalizeTriggers`/`matchesTrigger` 已迁
+ * `core/constraints/triggers.ts`；`isCommandAvailable`/`delay` 双仓零生产消费者，已删）。
  */
 
 import { exec } from 'child_process';
@@ -25,52 +27,4 @@ export async function runCommand(command: string, cwd?: string): Promise<string>
   } catch {
     return '';
   }
-}
-
-/**
- * 检查命令是否可用
- */
-export async function isCommandAvailable(command: string): Promise<boolean> {
-  try {
-    // 使用 execFile 避免命令注入（不通过 shell 解析）
-    const { execFile: execFileCb } = await import('child_process');
-    const execFileAsync = promisify(execFileCb);
-    await execFileAsync('which', [command]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 将单值或数组统一为数组（用于 trigger 等字段）
- */
-export function normalizeTriggers<T>(
-  value: T | T[] | undefined,
-  fallback: T[] = []
-): T[] {
-  if (value === undefined || value === null) return fallback;
-  return Array.isArray(value) ? value : [value];
-}
-
-/**
- * 判断约束是否匹配当前操作集合（#105：trigger 匹配语义单一来源）
- *
- * 语义 = normalizeTriggers（undefined → [] 不匹配任何操作）+ 交集判定，
- * 任一 operation 命中任一 trigger 即匹配。checker 与 prompt 渲染共用本函数，
- * 禁止就地重写。
- */
-export function matchesTrigger<T>(
-  constraint: { trigger: T | T[] | undefined },
-  operations: T[]
-): boolean {
-  const triggers = normalizeTriggers(constraint.trigger);
-  return operations.some(op => triggers.includes(op));
-}
-
-/**
- * 异步延迟
- */
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

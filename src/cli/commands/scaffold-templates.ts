@@ -1,0 +1,296 @@
+/**
+ * 脚手架模板数据（harness#132）
+ *
+ * 受管文件的正文正本，纯数据 + 纯渲染，零 IO、零上色——落盘语义与文案在
+ * `scaffold.ts` 的 plan 里，本模块只回答「这个文件的内容是什么」。
+ *
+ * 刻意留在代码内而不落 `templates/` 目录：`templates/` 无运行时消费者
+ * （harness 自身不读它），发布完整性清单（`release/integrity.ts`）也不覆盖它。
+ */
+
+import * as path from 'path';
+import * as yaml from 'js-yaml';
+import type { Checkpoint } from '../../types/checkpoint';
+
+/** Git pre-commit 片段（#103：打印片段与落盘 hook 的唯一正本） */
+export const PRE_COMMIT_SNIPPET = `
+echo "🔍 Running harness checks..."
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+
+# Harness 约束检查
+npx @dommaker/harness check --staged
+if [ $? -ne 0 ]; then
+  echo "❌ Iron law check failed"
+  exit 1
+fi
+
+# Plan coverage check (via PostEval)
+if command -v npx > /dev/null 2>&1; then
+  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
+  if [ -n "$PLAN_FILES" ]; then
+    echo "📋 Checking plan coverage..."
+    for plan in $PLAN_FILES; do
+      npx @dommaker/harness posteval-plan "$plan" || {
+        echo "🛑 Plan coverage incomplete. See above for missed items."
+        exit 1
+      }
+    done
+  fi
+fi
+
+echo "✅ All checks passed"
+`;
+
+/** 落盘的 pre-commit hook = shebang + 说明行 + 共享片段 */
+export function renderPreCommitHook(): string {
+  return `#!/bin/sh
+# Harness pre-commit hook
+${PRE_COMMIT_SNIPPET}`;
+}
+
+/** GitHub Actions 代码片段（`init --print-snippets` 的 job 片段视图） */
+export const GITHUB_ACTIONS_SNIPPET = `
+  harness-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npx @dommaker/harness check
+`;
+
+/** harness-check.yml 全文（落盘正文，冲突时打印的也是这一份） */
+export const HARNESS_CHECK_WORKFLOW = `name: Harness Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  harness-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run harness check
+        run: npx @dommaker/harness check
+
+      - name: Run harness validate
+        run: npx @dommaker/harness validate
+
+      - name: Run harness passes-gate
+        run: npx @dommaker/harness passes-gate
+`;
+
+/**
+ * 治理 CI workflow 全文
+ *
+ * `minimal` 档不带 docs 新鲜度检查（其余档位带，且失败不阻断）。
+ */
+export function renderGovernanceWorkflow(level: string): string {
+  const docsCheckStep = level !== 'minimal'
+    ? `
+      - name: Check docs freshness
+        run: npx @dommaker/harness sync-docs --check
+        continue-on-error: true`
+    : '';
+
+  return `name: Harness Governance
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Constraint check
+        run: npx @dommaker/harness check
+
+      - name: Quality gate
+        run: npx @dommaker/harness passes-gate
+${docsCheckStep}
+`;
+}
+
+/** custom-constraints.yml 示例正文 */
+export const CUSTOM_CONSTRAINTS_TEMPLATE = `# 自定义约束配置
+#
+# 此文件定义项目特定的约束，扩展或覆盖 harness 内置约束
+
+# ========================================
+# 自定义约束示例
+# ========================================
+
+custom_constraints:
+  # 示例 1：禁止 console.log
+  # my_project_no_console_log:
+  #   id: my_project_no_console_log
+  #   level: guideline
+  #   rule: "NO CONSOLE.LOG IN PRODUCTION CODE"
+  #   message: "生产代码禁止使用 console.log，请使用 logger 模块"
+  #   trigger: ["code_implementation"]
+  #   description: "使用项目统一的 logger 模块代替 console.log"
+
+  # 示例 2：禁止特定的导入
+  # my_project_no_moment_js:
+  #   id: my_project_no_moment_js
+  #   level: guideline
+  #   rule: "NO MOMENT.JS IMPORTS"
+  #   message: "禁止使用 moment.js，请使用 date-fns 或 dayjs"
+  #   trigger: ["code_implementation"]
+
+  # 示例 3：要求特定的文件命名
+  # my_project_component_naming:
+  #   id: my_project_component_naming
+  #   level: tip
+  #   rule: "REACT COMPONENTS SHOULD BE PASCAL CASE"
+  #   message: "React 组件文件名应使用 PascalCase"
+  #   trigger: ["file_creation"]
+`;
+
+/** CHANGELOG.md 正文（`format` 来自治理配置的 changelog.format） */
+export function renderChangelog(format: string): string {
+  return format === 'keep-a-changelog'
+    ? `# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup with harness governance
+
+---
+
+> 此文件可由 \`harness sync-docs\` 辅助维护
+`
+    : `# Changelog
+
+## [Unreleased]
+
+- Initial project setup with harness governance
+
+---
+
+> 此文件可由 \`harness sync-docs\` 辅助维护
+`;
+}
+
+/** 目录 CONTEXT.md 骨架正文（`dir` 是相对项目根的目录路径） */
+export function renderContextDoc(dir: string): string {
+  const dirName = path.basename(dir);
+  return `# ${dirName}
+
+> 此文件描述 ${dir} 目录的职责和上下文
+
+## 职责
+
+<!-- 本目录的核心职责是什么 -->
+
+## 核心导出
+
+<!-- 本目录对外暴露的主要模块/函数 -->
+
+## 依赖关系
+
+<!-- 本目录依赖哪些其他模块，谁依赖本目录 -->
+
+## 注意事项
+
+<!-- 开发时需要注意的约束或约定 -->
+`;
+}
+
+/**
+ * 默认检查点列表
+ *
+ * 注：no-console 检查点已移除（工单 23/24）——CLI 产品 src/ 必然有合法 console 输出，
+ * 且旧配置 expected:'' 语义恒错；output_* 族修复为真正执行 config.command 后该检查会恒失败。
+ */
+export const DEFAULT_CHECKPOINTS: Checkpoint[] = [
+  {
+    id: 'build-success',
+    name: '构建成功',
+    checks: [
+      {
+        id: 'build-command',
+        type: 'command_success',
+        config: { command: 'npm run build' },
+        message: '构建命令必须成功执行',
+      },
+    ],
+  },
+  {
+    id: 'test-pass',
+    name: '测试通过',
+    checks: [
+      {
+        id: 'test-command',
+        type: 'command_success',
+        config: { command: 'npm test' },
+        message: '测试命令必须成功执行',
+      },
+    ],
+  },
+];
+
+/** 检查点文件的相对路径约定（validate 的缺省读取面与 init 的落盘面同一处） */
+export const DEFAULT_CHECKPOINT_FILE = '.harness/checkpoints.yml';
+
+/** checkpoints.yml 正文 */
+export function renderCheckpoints(): string {
+  return yaml.dump({ checkpoints: DEFAULT_CHECKPOINTS }, { indent: 2 });
+}
+
+/** 默认 Resolutions（RKB — 约束 → 已知解法映射） */
+const DEFAULT_RESOLUTIONS = {
+  no_fuzzy_completion_claim: {
+    title: 'commit message 缺少验证证据',
+    fix: '在 commit message body 中附上验证输出:\n`npx @dommaker/harness check --staged` | `npx @dommaker/harness validate` | `npm test -- --coverage`\n确认全部通过后重新 commit。',
+  },
+  capability_sync: {
+    title: '缺少 CAPABILITIES.md',
+    fix: '在项目根目录创建 CAPABILITIES.md，列出所有模块能力清单。运行 `npx @dommaker/harness sync-docs` 可自动生成模板。',
+  },
+  context_doc_sync: {
+    title: '关键目录缺少 CONTEXT.md',
+    fix: '在 required_dirs 目录下创建 CONTEXT.md。运行 `npx @dommaker/harness sync-docs` 可自动生成模板。',
+  },
+};
+
+/** resolutions.json 正文 */
+export function renderResolutions(): string {
+  return JSON.stringify(DEFAULT_RESOLUTIONS, null, 2);
+}

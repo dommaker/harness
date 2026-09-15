@@ -145,7 +145,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     options: [
       { flags: '-p, --preset <preset>', description: '预设名称 (strict/standard/relaxed)', defaultValue: 'standard' },
       { flags: '-g, --governance <level>', description: '治理级别 (minimal/standard/strict)' },
-      { flags: '-t, --type <type>', description: '项目类型 (node-api/nextjs-app/python-api/custom)' },
       { flags: '--project-path <path>', description: '项目路径' },
       { flags: '--no-git-hooks', description: '不创建 Git hooks' },
       { flags: '--no-github-actions', description: '不创建 GitHub Actions' },

@@ -50,12 +50,6 @@ jest.mock('chalk', () => ({
   bold: jest.fn((str: string) => str),
 }));
 
-// Mock validate module
-jest.mock('../validate', () => ({
-  createExampleCheckpoint: jest.fn(),
-  createExampleResolutions: jest.fn(),
-}));
-
 const mockFs = fs as jest.Mocked<typeof fs>;
 
 // Use explicit projectPath to avoid CI path mismatch
@@ -218,6 +212,33 @@ describe('init command', () => {
       expect(workflowCall![1]).toContain('npx @dommaker/harness validate');
       expect(workflowCall![1]).toContain('npx @dommaker/harness passes-gate');
       expect(workflowCall![1]).not.toMatch(/npx harness /);
+    });
+  });
+
+  describe('跳过旗帜 → plan 里没有这些站点（scaffold 不持有覆盖/跳过策略）', () => {
+    it('--no-git-hooks 与 --no-github-actions 不落任何 hook / workflow', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+
+      await init({ preset: 'standard', gitHooks: false, githubActions: false, projectPath: PROJECT }, io);
+      const writes = mockFs.writeFile.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(writes.some((w: string) => w.includes('pre-commit'))).toBe(false);
+      expect(writes.some((w: string) => w.includes('.github/workflows'))).toBe(false);
+      expect(io.outText()).not.toContain('未检测到 Git 仓库');
+    });
+
+    it('未带跳过旗帜时两站点照常进 plan', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+
+      await init({ preset: 'standard', projectPath: PROJECT }, io);
+      const writes = mockFs.writeFile.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(writes.some((w: string) => w.includes('pre-commit'))).toBe(true);
+      expect(writes.some((w: string) => w.includes('harness-check.yml'))).toBe(true);
     });
   });
 

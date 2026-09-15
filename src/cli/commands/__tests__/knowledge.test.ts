@@ -4,6 +4,7 @@
 
 import { knowledgeAudit, knowledgeStats, knowledgeHealth, knowledgeSearch } from '../knowledge';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import type { AuditReport } from '../../../knowledge/audit';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -13,6 +14,7 @@ jest.mock('chalk', () => ({
   yellow: jest.fn((str: string) => str),
   red: jest.fn((str: string) => str),
   gray: jest.fn((str: string) => str),
+  cyan: jest.fn((str: string) => str),
 }));
 
 // Mock KnowledgeAudit
@@ -32,7 +34,11 @@ jest.mock('../../../knowledge/index-generator', () => ({
   })),
 }));
 
-const MOCK_REPORT = {
+/**
+ * 审计报告的 mock 与真实类型同源（harness#133 验收 3）：标注成 AuditReport 后，
+ * 7 个维度、14 条规则键由编译期穷尽性管住——缺键补偿（原先手写 6 键再 splice incremental）写不出来。
+ */
+const MOCK_REPORT: AuditReport = {
   timestamp: '2026-06-02T00:00:00.000Z',
   totalEntries: 100,
   issues: [
@@ -49,14 +55,17 @@ const MOCK_REPORT = {
     'frontmatter-missing': 0,
     'test-data-pollution': 0,
     'daily-audit-noise': 0,
+    'event-noise': 0,
     'zero-content-proven': 0,
     'short-content': 1,
     'maturity-inflation': 0,
     'title-duplicate': 0,
     'source-refs-bloat': 0,
+    'fragment-cluster': 0,
     'promotion-blocked': 0,
     'orphan-draft': 0,
     'stale-entry': 0,
+    'deprecated-domain': 0,
   },
   dimensions: {
     structure: { score: 100, issues: 0, details: {} },
@@ -65,16 +74,20 @@ const MOCK_REPORT = {
     maturity: { score: 100, issues: 0, details: {} },
     freshness: { score: 100, issues: 0, details: {} },
     flywheel: { score: 50, issues: 0, details: {} },
+    incremental: { score: 80, issues: 0, details: {} },
   },
   autoFixed: 0,
   healthScore: { before: 95, after: 95 },
 };
+
 
 let io: CapturingIO;
 beforeEach(() => {
   io = captureIO();
 });
 
+// 解析函数本体自 #133 起住 knowledge-view.ts（resolveKnowledgeBaseDir），行为面不变：
+// 这里经 knowledgeStats 观测 `-p` / KNOWLEDGE_BASE_DIR / 旧目录兜底三条路径的解析结果
 describe('getKnowledgeDir', () => {
   const fs = require('fs');
   const os = require('os');
@@ -223,13 +236,8 @@ describe('knowledgeAudit CLI', () => {
   });
 
   it('维度 label 闭环：incremental 维度显示中文 label，不回落英文键名（#109）', async () => {
-    mockRun.mockReturnValue({
-      ...MOCK_REPORT,
-      dimensions: {
-        ...MOCK_REPORT.dimensions,
-        incremental: { score: 80, issues: 0, details: {} },
-      },
-    });
+    // mock 与 AuditReport 同源后不必再补 incremental 键（#133 验收 3）
+    mockRun.mockReturnValue(MOCK_REPORT);
     await knowledgeAudit({}, io);
     const output = io.outText();
     expect(output).toContain('D7 增量存活');

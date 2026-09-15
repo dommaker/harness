@@ -252,12 +252,11 @@ export interface CommandBlacklistRule {
 
 /**
  * 命令门禁配置
+ *
+ * `strict`（从不被判定读取）与 `customBlacklist`（零生产注入者，运行时扩展点是
+ * `CommandGate.addRule()`）两个配置位已删除，裁决见 ADR-0024（#135）。
  */
 export interface CommandGateConfig {
-  /** 严格模式（warn 也阻止） */
-  strict?: boolean;
-  /** 自定义黑名单规则 */
-  customBlacklist?: CommandBlacklistRule[];
   /** 忽略的类别 */
   ignoreCategories?: string[];
 }

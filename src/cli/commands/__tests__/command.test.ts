@@ -6,13 +6,12 @@
  */
 
 import { executeCommand } from '../command';
-import { createCommandGate, getCommandRiskLevel } from '../../../gates';
+import { createCommandGate } from '../../../gates';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import { decide, fakeGate } from './gate-decision';
 
 jest.mock('../../../gates', () => ({
   createCommandGate: jest.fn(),
-  getCommandRiskLevel: jest.fn(),
   DEFAULT_COMMAND_BLACKLIST: [
     { id: 'rule-1', level: 'block', message: 'No rm -rf', category: 'destructive', pattern: 'rm -rf' },
     { id: 'rule-2', level: 'warn', message: 'No DROP TABLE', category: 'database', pattern: 'DROP TABLE' },
@@ -28,13 +27,21 @@ jest.mock('chalk', () => ({
 }));
 
 const mockCreateGate = createCommandGate as jest.MockedFunction<typeof createCommandGate>;
-const mockGetRisk = getCommandRiskLevel as jest.MockedFunction<typeof getCommandRiskLevel>;
 
-/** 替身工厂：命令穿过统一接口，替身产决策而非裸报告 */
-function mockGate(report: { passed: boolean; message: string; details?: Record<string, any> }): void {
-  mockCreateGate.mockReturnValue(
-    fakeGate(decide('command', report.passed, report.message, report.details)) as any
-  );
+/**
+ * 替身工厂：命令穿过统一接口，替身产决策而非裸报告。
+ * `--level` 与默认分支共用这一台实例（#135），故等级也从替身上取。
+ */
+function mockGate(
+  report: { passed: boolean; message: string; details?: Record<string, any> },
+  level: 'high' | 'medium' | 'low' = 'low',
+): { evaluate: jest.Mock; getRiskLevel: jest.Mock } {
+  const gate = {
+    ...fakeGate(decide('command', report.passed, report.message, report.details)),
+    getRiskLevel: jest.fn().mockReturnValue(level),
+  };
+  mockCreateGate.mockReturnValue(gate as any);
+  return gate;
 }
 
 /** 从捕获输出里取第一条可解析为该形状的 JSON 行 */
@@ -123,8 +130,7 @@ describe('command command', () => {
 
   describe('--level', () => {
     it('low：ok，打印等级', async () => {
-      mockGetRisk.mockReturnValue('low');
-      mockGate({ passed: true, message: 'OK' });
+      mockGate({ passed: true, message: 'OK' }, 'low');
 
       const result = await executeCommand('safe-cmd', { level: true }, io);
 
@@ -133,8 +139,7 @@ describe('command command', () => {
     });
 
     it('high：fail + 等级原因（严重级条件式译成 kind）', async () => {
-      mockGetRisk.mockReturnValue('high');
-      mockGate({ passed: true, message: 'OK' });
+      mockGate({ passed: true, message: 'OK' }, 'high');
 
       const result = await executeCommand('rm -rf /', { level: true }, io);
 
@@ -142,8 +147,7 @@ describe('command command', () => {
     });
 
     it('high 等级不再执行黑名单裁决分支', async () => {
-      mockGetRisk.mockReturnValue('high');
-      mockGate({ passed: true, message: 'OK' });
+      mockGate({ passed: true, message: 'OK' }, 'high');
 
       const result = await executeCommand('rm -rf /', { level: true }, io);
 
@@ -153,8 +157,7 @@ describe('command command', () => {
     });
 
     it('--json 输出等级', async () => {
-      mockGetRisk.mockReturnValue('medium');
-      mockGate({ passed: true, message: 'OK' });
+      mockGate({ passed: true, message: 'OK' }, 'medium');
 
       await executeCommand('cmd', { level: true, json: true }, io);
 
@@ -162,6 +165,16 @@ describe('command command', () => {
         level: 'medium',
         command: 'cmd',
       });
+    });
+
+    it('#135：等级取自本命令创建的那台实例，全程只创建一次', async () => {
+      const gate = mockGate({ passed: false, message: 'Blocked' }, 'high');
+
+      const result = await executeCommand('danger-cmd', { level: true }, io);
+
+      expect(gate.getRiskLevel).toHaveBeenCalledWith('danger-cmd');
+      expect(mockCreateGate).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('risk level is high') });
     });
   });
 });

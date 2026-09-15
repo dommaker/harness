@@ -195,6 +195,17 @@ export const DEFAULT_COMMAND_BLACKLIST: CommandBlacklistRule[] = [
 ];
 
 /**
+ * 三投影共用的裁决（模块内类型，不入公共面）
+ */
+interface CommandVerdict {
+  allowed: boolean;
+  blocked: CommandBlacklistRule[];
+  warnings: CommandBlacklistRule[];
+  audits: CommandBlacklistRule[];
+  riskLevel: 'high' | 'medium' | 'low';
+}
+
+/**
  * 命令门禁
  */
 export class CommandGate implements Gate {
@@ -205,16 +216,10 @@ export class CommandGate implements Gate {
 
   constructor(config: Partial<CommandGateConfig> = {}) {
     this.config = {
-      strict: config.strict ?? false,
-      customBlacklist: config.customBlacklist ?? [],
       ignoreCategories: config.ignoreCategories ?? [],
     };
 
-    // 合并默认黑名单和自定义黑名单
-    this.blacklist = [
-      ...DEFAULT_COMMAND_BLACKLIST,
-      ...this.config.customBlacklist,
-    ];
+    this.blacklist = [...DEFAULT_COMMAND_BLACKLIST];
   }
 
   /**
@@ -231,36 +236,30 @@ export class CommandGate implements Gate {
   async check(command: string): Promise<GateResult> {
     const startTime = Date.now();
 
-    const result = this.checkBlacklist(command);
+    const verdict = this.judge(command);
 
     return gateResult(
       'command',
-      result.allowed,
-      result.allowed
-        ? this.formatSuccessMessage(result)
-        : this.formatBlockMessage(result),
+      verdict.allowed,
+      verdict.allowed
+        ? this.formatSuccessMessage(verdict)
+        : this.formatBlockMessage(verdict),
       startTime,
       {
-        blocked: result.blocked,
-        warnings: result.warnings,
-        audits: result.audits,
+        blocked: verdict.blocked,
+        warnings: verdict.warnings,
+        audits: verdict.audits,
         command,
       }
     );
   }
 
   /**
-   * 检查黑名单
+   * 唯一匹配谓词（#135）：类别忽略与规则模式测试只在此处发生。
+   * 三个入口一律经 judge() 取它的投影，不再各写一遍匹配循环。
    */
-  private checkBlacklist(command: string): {
-    allowed: boolean;
-    blocked: CommandBlacklistRule[];
-    warnings: CommandBlacklistRule[];
-    audits: CommandBlacklistRule[];
-  } {
-    const blocked: CommandBlacklistRule[] = [];
-    const warnings: CommandBlacklistRule[] = [];
-    const audits: CommandBlacklistRule[] = [];
+  private matchCommand(command: string): CommandBlacklistRule[] {
+    const hits: CommandBlacklistRule[] = [];
 
     for (const rule of this.blacklist) {
       // 跳过忽略的类别
@@ -269,18 +268,28 @@ export class CommandGate implements Gate {
       }
 
       if (rule.pattern.test(command)) {
-        switch (rule.level) {
-          case 'block':
-            blocked.push(rule);
-            break;
-          case 'warn':
-            warnings.push(rule);
-            break;
-          case 'audit':
-            audits.push(rule);
-            break;
-        }
+        hits.push(rule);
       }
+    }
+
+    return hits;
+  }
+
+  /**
+   * 命中集合 → 裁决：级别（block/warn/audit）语义只在此处解释一次，
+   * 三投影因此对同一输入不可能互相矛盾。
+   */
+  private judge(command: string): CommandVerdict {
+    const hits = this.matchCommand(command);
+    const blocked = hits.filter(rule => rule.level === 'block');
+    const warnings = hits.filter(rule => rule.level === 'warn');
+    const audits = hits.filter(rule => rule.level === 'audit');
+
+    let riskLevel: 'high' | 'medium' | 'low' = 'low';
+    if (blocked.length > 0) {
+      riskLevel = 'high';
+    } else if (warnings.length > 0) {
+      riskLevel = 'medium';
     }
 
     return {
@@ -288,6 +297,7 @@ export class CommandGate implements Gate {
       blocked,
       warnings,
       audits,
+      riskLevel,
     };
   }
 
@@ -330,41 +340,17 @@ export class CommandGate implements Gate {
   }
 
   /**
-   * 快速检查（不生成完整 GateResult）
+   * 快速检查（不生成完整 GateResult）——谓词裁决的布尔投影，hook 侧入口
    */
   isAllowed(command: string): boolean {
-    for (const rule of this.blacklist) {
-      if (this.config.ignoreCategories.includes(rule.category)) {
-        continue;
-      }
-
-      if (rule.level === 'block' && rule.pattern.test(command)) {
-        return false;
-      }
-    }
-
-    return true;
+    return this.judge(command).allowed;
   }
 
   /**
-   * 获取命令风险等级
+   * 获取命令风险等级——谓词裁决的等级投影：命中集合里的最高档
    */
   getRiskLevel(command: string): 'high' | 'medium' | 'low' {
-    for (const rule of this.blacklist) {
-      if (this.config.ignoreCategories.includes(rule.category)) {
-        continue;
-      }
-
-      if (rule.pattern.test(command)) {
-        switch (rule.level) {
-          case 'block': return 'high';
-          case 'warn': return 'medium';
-          case 'audit': return 'low';
-        }
-      }
-    }
-
-    return 'low';
+    return this.judge(command).riskLevel;
   }
 
   /**

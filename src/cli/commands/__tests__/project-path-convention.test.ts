@@ -72,7 +72,7 @@ const CLI_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: string }> = 
     lines: ['const decision = await gate.evaluate({ projectPath: process.cwd(), command: cmd });'],
     reason:
       '统一门禁接口的 GateContext 要求项目根，而 CommandGate 只做命令串的正则判定、零文件读写；' +
-      '本命令定义表里没有 -p/--project-path（只有 --level/--list/--json/--strict），' +
+      '本命令定义表里没有 -p/--project-path（只有 --level/--list/--json），' +
       '取真实 cwd 仅为满足上下文形状，不存在「给了 -p 却被 IO 绕回 cwd」的半失效路径。' +
       '架构评审候选1 步骤 2：六个门禁的判定统一穿过 evaluate()。',
   },

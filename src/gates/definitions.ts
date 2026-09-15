@@ -70,7 +70,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '-l, --level', description: '显示风险等级' },
         { flags: '--list', description: '列出所有黑名单规则' },
         { flags: '--json', description: 'JSON 格式输出' },
-        { flags: '--strict', description: '严格模式（warn 也阻止）' },
       ],
       action: { module: 'command', export: 'executeCommand' },
       mapActionArgs: (positionals, options) => [positionals[0], options],

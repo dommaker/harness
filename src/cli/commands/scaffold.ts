@@ -17,6 +17,7 @@
 import * as path from 'path';
 import chalk from 'chalk';
 import * as nodeFs from 'fs/promises';
+import type { CiPlatform } from '../../types/project-config';
 import { log, type CommandIO } from '../command-contract';
 import {
   CUSTOM_CONSTRAINTS_TEMPLATE,
@@ -26,6 +27,8 @@ import {
   renderChangelog,
   renderCheckpoints,
   renderContextDoc,
+  renderGitLabCiFile,
+  renderGitLabCiJobs,
   renderGovernanceWorkflow,
   renderPreCommitHook,
   renderResolutions,
@@ -161,12 +164,38 @@ export function preCommitHookFile(projectPath: string): ManagedFile {
 }
 
 /**
- * .github/workflows/harness-check.yml
+ * 服务端 CI 门禁站点（平台维度，harness#143）
  *
- * 冲突判定宽于 target 自身：工作流目录里已有任何 CI 配置就算冲突，
- * 并把清单逐行列出；片段是完整 workflow 正文（打印的即落盘的，#103 判据）。
+ * - `github` → `.github/workflows/harness-check.yml`；冲突判定宽于 target 自身：
+ *   工作流目录里已有任何 CI 配置就算冲突，片段是完整 workflow 正文（打印的即落盘的，#103 判据）
+ * - `gitlab` → `.gitlab-ci.yml`；冲突面就是该文件自身在场，片段是 harness 拥有的任务正文。
+ *   GitLab 没有「第二个 CI 文件位」，所以 `-g` 档的治理任务并入同一份正文
+ *   ——这也是 `governanceLevel` 只对 gitlab 形有意义的原因（GH 侧治理站是独立的
+ *   `governanceWorkflowFile`）。
+ *
+ * `none`（不接线）不进来：那是命令层的 plan 里没有这个站点，scaffold 不持有跳过策略。
  */
-export function harnessCheckWorkflowFile(projectPath: string, existingCiWorkflows: string[]): ManagedFile {
+export function harnessCheckCiFile(
+  projectPath: string,
+  platform: CiPlatform,
+  existingCiWorkflows: string[],
+  governanceLevel?: string,
+): ManagedFile {
+  if (platform === 'gitlab') {
+    const content = renderGitLabCiFile(governanceLevel);
+    return {
+      target: path.join(projectPath, '.gitlab-ci.yml'),
+      content,
+      created: '✅ 已创建 .gitlab-ci.yml',
+      onPresent: {
+        outcome: 'merge',
+        notice: '⚠️  .gitlab-ci.yml 已存在',
+        instruction: '💡 请手动添加以下内容到文件中：',
+        snippet: renderGitLabCiJobs(governanceLevel),
+      },
+    };
+  }
+
   const target = path.join(projectPath, '.github', 'workflows', 'harness-check.yml');
   return {
     target,
@@ -235,11 +264,15 @@ export function contextDocFile(projectPath: string, dir: string): ManagedFile {
   };
 }
 
-/** .github/workflows/harness-governance.yml（治理 CI 面） */
+/**
+ * .github/workflows/harness-governance.yml（治理 CI 面，仅 github 形）
+ *
+ * gitlab 形的治理任务并入 `.gitlab-ci.yml`（见 `harnessCheckCiFile`），无本站点。
+ */
 export function governanceWorkflowFile(projectPath: string, level: string): ManagedFile {
   return {
     target: path.join(projectPath, '.github', 'workflows', 'harness-governance.yml'),
-    content: renderGovernanceWorkflow(level),
+    content: renderGovernanceWorkflow(level, 'github'),
     created: '✅ 已创建 .github/workflows/harness-governance.yml',
     onPresent: { outcome: 'skip', notice: 'harness-governance.yml 已存在' },
   };

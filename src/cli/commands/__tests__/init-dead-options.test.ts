@@ -23,6 +23,7 @@ describe('init 的 -t/--type 已删除（#132）', () => {
       '-g, --governance <level>',
       '--project-path <path>',
       '--no-git-hooks',
+      '--ci <platform>',
       '--no-github-actions',
       '--print-snippets',
     ]);
@@ -41,8 +42,9 @@ describe('init 的 -t/--type 已删除（#132）', () => {
       projectPath: '/tmp/p',
       gitHooks: false,
       githubActions: false,
+      ci: 'gitlab',
       printSnippets: true,
     };
-    expect(Object.keys(live)).toHaveLength(6);
+    expect(Object.keys(live)).toHaveLength(7);
   });
 });

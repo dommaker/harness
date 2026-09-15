@@ -10,7 +10,7 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { init } from '../init';
+import { init, type InitOptions } from '../init';
 import { captureIO } from '../../command-contract';
 
 jest.mock('chalk', () => ({
@@ -199,3 +199,204 @@ describe('init 真落盘（无 IO mock）', () => {
     expect(io2.outText()).not.toContain('不存在，跳过 CONTEXT.md');
   });
 });
+
+// ── CI 平台维度（harness#143）：落盘正文的字节级正本 ─────────────────────
+
+const RULES = `  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+`;
+
+const GITLAB_PLAIN = `# 由 harness init 生成 —— 以下 harness-* 任务是 harness 的 CI 接线
+# 门禁真正生效还需在 GitLab 侧开分支保护：pipeline 成功才允许合并
+
+image: node:20
+
+stages:
+  - test
+
+harness-check:
+  stage: test
+  script:
+    - npm ci
+    - npx @dommaker/harness check
+    - npx @dommaker/harness validate
+    - npx @dommaker/harness passes-gate
+${RULES}`;
+
+const GITLAB_GOVERNED = GITLAB_PLAIN + `
+harness-governance:
+  stage: test
+  script:
+    - npm ci
+    - npx @dommaker/harness check
+    - npx @dommaker/harness passes-gate
+${RULES}
+harness-docs-freshness:
+  stage: test
+  script:
+    - npm ci
+    - npx @dommaker/harness sync-docs --check
+${RULES}  allow_failure: true
+`;
+
+/** GitLab 站点的 harness-check 任务正文（冲突分支打印的 job 片段即此份） */
+const GITLAB_CHECK_JOB = GITLAB_PLAIN.slice(GITLAB_PLAIN.indexOf('harness-check:'));
+
+const CI_OPTIONS = { preset: 'standard' as const };
+
+async function exists(rel: string): Promise<boolean> {
+  try {
+    await fs.access(rel);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+describe('init --ci 平台维度（harness#143，真落盘）', () => {
+  const roots: string[] = [];
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => fs.rm(root, { recursive: true, force: true })));
+  });
+
+  it('--ci gitlab：逐字节落盘 .gitlab-ci.yml，不写 GH workflow，平台持久化进 config.yml', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    const io = captureIO();
+
+    expect(await init({ ...CI_OPTIONS, ci: 'gitlab', projectPath: root }, io)).toEqual({ kind: 'ok' });
+
+    expect(await fs.readFile(path.join(root, '.gitlab-ci.yml'), 'utf-8')).toBe(GITLAB_PLAIN);
+    expect(await exists(path.join(root, '.github'))).toBe(false);
+    expect(io.outLines()).toContain('✅ 已创建 .gitlab-ci.yml');
+    expect(io.outLines()).toContain('CI 平台: gitlab');
+    expect(await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8')).toContain(
+      'ci:\n  platform: gitlab',
+    );
+  });
+
+  it('第二趟（.gitlab-ci.yml 已在场）：manual 态，用户内容一字节不动，打印的 job 片段即落盘正文的一部分', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    await init({ ...CI_OPTIONS, ci: 'gitlab', projectPath: root }, captureIO());
+    const gitlabFile = path.join(root, '.gitlab-ci.yml');
+    const userContent = '# 我自己的流水线\n\ntest:\n  script:\n    - echo hi\n';
+    await fs.writeFile(gitlabFile, userContent);
+
+    const io = captureIO();
+    await init({ ...CI_OPTIONS, ci: 'gitlab', projectPath: root }, io);
+
+    expect(io.outLines()).toContain('⚠️  .gitlab-ci.yml 已存在');
+    expect(io.outLines()).toContain('💡 请手动添加以下内容到文件中：');
+    expect(io.outText()).toContain(GITLAB_CHECK_JOB);
+    expect(await fs.readFile(gitlabFile, 'utf-8')).toBe(userContent);
+    expect(await exists(path.join(root, '.github'))).toBe(false);
+  });
+
+  it('--ci gitlab -g standard：治理任务并入同一份 .gitlab-ci.yml，docs 新鲜度 allow_failure: true', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    const io = captureIO();
+
+    await init({ ...INIT_OPTIONS, ci: 'gitlab', projectPath: root }, io);
+
+    expect(await fs.readFile(path.join(root, '.gitlab-ci.yml'), 'utf-8')).toBe(GITLAB_GOVERNED);
+    expect(await exists(path.join(root, '.github'))).toBe(false);
+    expect(io.outText()).not.toContain('harness-governance.yml');
+  });
+
+  it('平台持久化：裸 init 与 --print-snippets 都按 config.yml 的 ci.platform 出面', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    await init({ ...CI_OPTIONS, ci: 'gitlab', projectPath: root }, captureIO());
+    await fs.rm(path.join(root, '.gitlab-ci.yml'));
+
+    const bare = captureIO();
+    await init({ ...CI_OPTIONS, projectPath: root }, bare);
+    expect(bare.outLines()).toContain('✅ 已创建 .gitlab-ci.yml');
+    expect(bare.outText()).not.toContain('harness-check.yml');
+    expect(await fs.readFile(path.join(root, '.gitlab-ci.yml'), 'utf-8')).toBe(GITLAB_PLAIN);
+    // 裸 init 重写 config.yml 时不得丢掉已持久化的平台
+    expect(await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8')).toContain(
+      'ci:\n  platform: gitlab',
+    );
+
+    const snippets = captureIO();
+    await init({ ...CI_OPTIONS, printSnippets: true, projectPath: root }, snippets);
+    expect(snippets.outLines()).toContain('GitLab CI:');
+    expect(snippets.outText()).toContain(GITLAB_CHECK_JOB);
+    expect(snippets.outText()).not.toContain('GitHub Actions:');
+  });
+
+  it('--ci none 不落任何 CI 文件；--no-github-actions 与之等价并打 deprecation warning', async () => {
+    const noneRoot = await makeProject();
+    roots.push(noneRoot);
+    const none = captureIO();
+    await init({ ...CI_OPTIONS, ci: 'none', projectPath: noneRoot }, none);
+    expect(await exists(path.join(noneRoot, '.github'))).toBe(false);
+    expect(await exists(path.join(noneRoot, '.gitlab-ci.yml'))).toBe(false);
+    expect(none.outText()).not.toContain('已废弃');
+    expect(await fs.readFile(path.join(noneRoot, '.harness', 'config.yml'), 'utf-8')).toContain(
+      'ci:\n  platform: none',
+    );
+
+    const legacyRoot = await makeProject();
+    roots.push(legacyRoot);
+    const legacy = captureIO();
+    await init({ ...CI_OPTIONS, githubActions: false, projectPath: legacyRoot }, legacy);
+    expect(legacy.outLines()).toContain('⚠️  --no-github-actions 已废弃，请改用 --ci none');
+    expect(await exists(path.join(legacyRoot, '.github'))).toBe(false);
+    expect(await fs.readFile(path.join(legacyRoot, '.harness', 'config.yml'), 'utf-8')).toContain(
+      'ci:\n  platform: none',
+    );
+  });
+
+  it('--ci gitlab 与 --no-github-actions 同时给出：用法错误且什么都不落盘', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    const io = captureIO();
+
+    const result = await init({ ...CI_OPTIONS, ci: 'gitlab', githubActions: false, projectPath: root }, io);
+
+    expect(result).toEqual({
+      kind: 'usage-error',
+      reason: expect.stringContaining('--no-github-actions'),
+    });
+    expect(io.errText()).toContain('用法错误');
+    expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
+    expect(await exists(path.join(root, '.harness', 'config.yml'))).toBe(false);
+  });
+
+  it('--ci 非法值：用法错误并列出可取值', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    // CLI 边界：commander 把用户敲的字符串原样递进来，合法域由命令层校验
+    const dirty = { ci: 'bitbucket' as unknown as InitOptions['ci'] };
+
+    const result = await init({ ...CI_OPTIONS, ...dirty, projectPath: root }, captureIO());
+
+    expect(result).toEqual({
+      kind: 'usage-error',
+      reason: expect.stringContaining('github | gitlab | none'),
+    });
+    expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
+  });
+
+  it('config.yml 的 ci 段读不动（YAML 解析失败）时回落 github，不炸 init', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    await fs.mkdir(path.join(root, '.harness'), { recursive: true });
+    await fs.writeFile(path.join(root, '.harness', 'config.yml'), 'preset: standard\nci:\n  platform: [\n');
+
+    const io = captureIO();
+    expect(await init({ ...CI_OPTIONS, projectPath: root }, io)).toEqual({ kind: 'ok' });
+
+    expect(io.outText()).not.toContain('CI 平台');
+    expect(await exists(path.join(root, '.github/workflows/harness-check.yml'))).toBe(true);
+    expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
+  });
+});
+

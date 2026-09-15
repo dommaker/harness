@@ -11,7 +11,8 @@ import * as yaml from 'js-yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { getHarnessPackageVersion } from '../../utils/package-version';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
-import type { GovernanceConfig } from '../../types/project-config';
+import { loadRawProjectConfig } from '../../core/project-config-loader';
+import type { CiConfig, CiPlatform, GovernanceConfig } from '../../types/project-config';
 import {
   CONSTRAINTS_START_MARKER,
   CONSTRAINTS_END_MARKER,
@@ -24,12 +25,12 @@ import {
   resolveGovernanceLanding,
   GOVERNANCE_HEADING,
 } from '../../core/constraints/injection-writer';
-import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import {
   runPlan,
   nodeScaffoldFs,
   preCommitHookFile,
-  harnessCheckWorkflowFile,
+  harnessCheckCiFile,
   customConstraintsFile,
   changelogFile,
   contextDocFile,
@@ -38,7 +39,7 @@ import {
   resolutionsFile,
   type ManagedFile,
 } from './scaffold';
-import { GITHUB_ACTIONS_SNIPPET, PRE_COMMIT_SNIPPET } from './scaffold-templates';
+import { GITHUB_ACTIONS_SNIPPET, GITLAB_CI_SNIPPET, PRE_COMMIT_SNIPPET } from './scaffold-templates';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -49,10 +50,78 @@ export interface InitOptions {
   governance?: 'minimal' | 'standard' | 'strict';
   /** 是否创建 Git hooks */
   gitHooks?: boolean;
-  /** 是否创建 GitHub Actions */
+  /** 是否创建 GitHub Actions（`--no-github-actions`：已废弃，`--ci none` 的别名） */
   githubActions?: boolean;
+  /**
+   * 服务端 CI 接线平台（`--ci`，harness#143）
+   *
+   * 值域校验在命令层（bin 把用户敲的字符串原样递进来）；缺省时回落 config.yml
+   * 的 `ci.platform`，再缺省即 `github`。
+   */
+  ci?: CiPlatform | 'none';
   /** 只输出代码片段，不创建文件 */
   printSnippets?: boolean;
+}
+
+/** `--ci` 的可取值域（`none` = 不做服务端 CI 接线，即旧 `--no-github-actions`） */
+const CI_FLAG_VALUES: Array<CiPlatform | 'none'> = ['github', 'gitlab', 'none'];
+
+/** CI 平台解析结果（`error` 属用法错误，命令层直接非零退出，不落任何文件） */
+type CiResolution =
+  | { kind: 'ok'; platform: CiPlatform | 'none'; warning?: string }
+  | { kind: 'error'; reason: string };
+
+/**
+ * 解析 CI 平台（harness#143 决议 ①④）：flag > config.yml 的 `ci.platform` > `github`
+ *
+ * 不做 remote URL 自动检测：init 常跑在首次 push 之前无 remote 可测，而检测错的代价是
+ * 静默写错文件。`--no-github-actions` 保留为 `--ci none` 的废弃别名；它与显式
+ * `--ci <非 none>` 同时出现时不猜用户意图，判用法错误。
+ */
+function resolveCiPlatform(
+  options: InitOptions,
+  configured: CiPlatform | 'none' | undefined,
+): CiResolution {
+  const flag = options.ci;
+  if (flag !== undefined && !CI_FLAG_VALUES.includes(flag)) {
+    return {
+      kind: 'error',
+      reason: `--ci 取值非法: ${String(flag)}（可取 ${CI_FLAG_VALUES.join(' | ')}）`,
+    };
+  }
+  if (options.githubActions === false) {
+    if (flag !== undefined && flag !== 'none') {
+      return {
+        kind: 'error',
+        reason: `--ci ${flag} 与 --no-github-actions（即 --ci none 的废弃别名）冲突，二选一`,
+      };
+    }
+    return {
+      kind: 'ok',
+      platform: 'none',
+      warning: '⚠️  --no-github-actions 已废弃，请改用 --ci none',
+    };
+  }
+  return { kind: 'ok', platform: flag ?? configured ?? 'github' };
+}
+
+/**
+ * 读 config.yml 已持久化的 `ci.platform`（解析链第二级）
+ *
+ * 缺失 / 解析失败 / 形状不符一律按未配置处理（与 `getGovernanceConfig` 同一口径：
+ * 脏配置不替调用方做决定）。
+ */
+function readConfiguredCiPlatform(projectPath: string): CiPlatform | 'none' | undefined {
+  let raw: Record<string, unknown> | undefined;
+  try {
+    raw = loadRawProjectConfig(projectPath);
+  } catch {
+    return undefined;
+  }
+  const ci = raw?.ci;
+  if (ci === null || typeof ci !== 'object') return undefined;
+  const platform = (ci as CiConfig).platform;
+  return platform !== undefined && CI_FLAG_VALUES.includes(platform) ? platform : undefined;
 }
 
 /**
@@ -156,15 +225,24 @@ const GOVERNANCE_PRESETS: Record<string, GovernanceConfig> = {
  * 初始化项目
  */
 export async function init(options: InitOptions, io: CommandIO = processIO): Promise<CommandResult> {
+  const projectPath = options.projectPath || process.cwd();
+
+  // CI 平台先解析：用法错误不落任何盘，且 `--print-snippets` 也要按解析出的平台出形
+  const ci = resolveCiPlatform(options, readConfiguredCiPlatform(projectPath));
+  if (ci.kind === 'error') {
+    logError(io, chalk.red(`❌ 用法错误: ${ci.reason}`));
+    return { kind: 'usage-error', reason: ci.reason };
+  }
+  if (ci.warning) log(io, chalk.yellow(ci.warning));
+
   // 只输出代码片段
   if (options.printSnippets) {
-    printSnippets(io);
+    printSnippets(io, ci.platform);
     return { kind: 'ok' };
   }
 
   log(io, chalk.blue('🚀 初始化 harness 配置...'));
 
-  const projectPath = options.projectPath || process.cwd();
   const configDir = path.join(projectPath, '.harness');
 
   // 创建配置目录
@@ -180,6 +258,13 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   if (options.governance) {
     configData.governance = GOVERNANCE_PRESETS[options.governance];
     log(io, chalk.gray(`治理级别: ${options.governance}`));
+  }
+
+  // 非默认平台才持久化：缺省即 github（旧配置零迁移），裸 init 重写 config.yml 时
+  // 也因此不会丢掉已选定的平台
+  if (ci.platform !== 'github') {
+    configData.ci = { platform: ci.platform };
+    log(io, chalk.gray(`CI 平台: ${ci.platform}`));
   }
 
   // 写入 harness 版本
@@ -205,14 +290,14 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
     await setupGitHooks(projectPath, io);
   }
 
-  // 创建 GitHub Actions
-  if (options.githubActions !== false) {
-    await setupGitHubActions(projectPath, io);
+  // 服务端 CI 门禁接线（平台维度）：`none` = CI 站点干脆不进 plan
+  if (ci.platform !== 'none') {
+    await setupCiWiring(projectPath, ci.platform, options.governance, io);
   }
 
   // 治理相关文件生成
   if (options.governance) {
-    await setupGovernance(projectPath, options.governance, io);
+    await setupGovernance(projectPath, options.governance, io, ci.platform);
   }
 
   log(io);
@@ -229,22 +314,29 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
 }
 
 /**
- * 输出代码片段
+ * 输出代码片段（CI 片段按解析出的平台出形，harness#143）
  */
-function printSnippets(io: CommandIO): void {
+function printSnippets(io: CommandIO, platform: CiPlatform | 'none'): void {
   log(io, chalk.blue('📄 Harness 配置代码片段'));
   log(io);
-  
+
   log(io, chalk.yellow('Git pre-commit hook:'));
   log(io, chalk.gray('添加到 .git/hooks/pre-commit'));
   log(io);
   log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
-  
-  log(io, chalk.yellow('GitHub Actions:'));
-  log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 中'));
-  log(io);
-  log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
-  
+
+  if (platform === 'gitlab') {
+    log(io, chalk.yellow('GitLab CI:'));
+    log(io, chalk.gray('添加到 .gitlab-ci.yml'));
+    log(io);
+    log(io, chalk.cyan(GITLAB_CI_SNIPPET));
+  } else {
+    log(io, chalk.yellow('GitHub Actions:'));
+    log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 中'));
+    log(io);
+    log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
+  }
+
   log(io, chalk.blue('💡 提示: 运行 npx @dommaker/harness init 自动创建配置文件'));
 }
 
@@ -261,11 +353,26 @@ async function setupGitHooks(projectPath: string, io: CommandIO): Promise<void> 
 }
 
 /**
- * 设置 GitHub Actions（工作流目录里已有任何 CI 配置即算冲突）
+ * 设置服务端 CI 接线（站点形状与冲突面由 scaffold 按平台给）
+ *
+ * gitlab 只有一个 `.gitlab-ci.yml`，治理任务已在正文里（`governanceLevel` 传给工厂）；
+ * github 的冲突判定宽到整个 workflows 目录，需先扫一遍。
  */
-async function setupGitHubActions(projectPath: string, io: CommandIO): Promise<void> {
+async function setupCiWiring(
+  projectPath: string,
+  platform: CiPlatform,
+  governanceLevel: string | undefined,
+  io: CommandIO,
+): Promise<void> {
+  if (platform === 'gitlab') {
+    await runPlan([harnessCheckCiFile(projectPath, 'gitlab', [], governanceLevel)], io);
+    return;
+  }
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
-  await runPlan([harnessCheckWorkflowFile(projectPath, await findCiWorkflows(workflowsDir))], io);
+  await runPlan(
+    [harnessCheckCiFile(projectPath, 'github', await findCiWorkflows(workflowsDir))],
+    io,
+  );
 }
 
 /**
@@ -528,7 +635,12 @@ export async function setupGovernanceConstraints(projectPath: string): Promise<v
 /**
  * 设置治理相关文件
  */
-async function setupGovernance(projectPath: string, level: string, io: CommandIO): Promise<void> {
+async function setupGovernance(
+  projectPath: string,
+  level: string,
+  io: CommandIO,
+  platform: CiPlatform | 'none',
+): Promise<void> {
   const governance = GOVERNANCE_PRESETS[level];
   if (!governance) return;
 
@@ -548,8 +660,8 @@ async function setupGovernance(projectPath: string, level: string, io: CommandIO
   // 4. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
   await runPlan(await contextDocPlan(projectPath, governance, io), io);
 
-  // 5. 生成治理 CI workflow
-  await setupGovernanceWorkflow(projectPath, level, io);
+  // 5. 生成治理 CI 面（gitlab 已在 .gitlab-ci.yml 的正文里，见 setupCiWiring）
+  await setupGovernanceWorkflow(projectPath, level, io, platform);
 }
 
 /**
@@ -602,8 +714,18 @@ async function findGovernanceCoverage(workflowsDir: string): Promise<string | un
 
 /**
  * 设置治理 CI workflow（目标已在场，或已有 workflow 覆盖治理命令时不新建 CI 面）
+ *
+ * 仅 github 形有本站点：gitlab 的治理任务已并入 `.gitlab-ci.yml` 正文（一个平台一份
+ * CI 文件，harness#143）。
  */
-async function setupGovernanceWorkflow(projectPath: string, level: string, io: CommandIO): Promise<void> {
+async function setupGovernanceWorkflow(
+  projectPath: string,
+  level: string,
+  io: CommandIO,
+  platform: CiPlatform | 'none',
+): Promise<void> {
+  if (platform === 'gitlab') return;
+
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
   const file = governanceWorkflowFile(projectPath, level);
 

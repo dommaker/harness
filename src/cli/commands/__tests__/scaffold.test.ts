@@ -7,16 +7,20 @@
  * 2. 8 站点（init 6 + validate 2）的对外文案逐字冻结：改造前后用户看到的每一行
  *    都一样，差异只在内部形状。
  * 3. 「打印给用户的片段 == 真正落盘的内容」同源不变量（#103 判据）的单点断言。
+ * 4. CI 站点的平台维度（harness#143）：同一站点在 github / gitlab 两形下各自的
+ *    目标路径、三态文案与冲突片段。
  */
 
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { GITLAB_CI_SNIPPET } from '../scaffold-templates';
 import {
   writeManagedFile,
   runPlan,
   preCommitHookFile,
-  harnessCheckWorkflowFile,
+  harnessCheckCiFile,
   customConstraintsFile,
   changelogFile,
   contextDocFile,
@@ -70,7 +74,7 @@ function allSites(): ManagedFile[] {
     resolutionsFile(PROJECT),
     customConstraintsFile(PROJECT),
     preCommitHookFile(PROJECT),
-    harnessCheckWorkflowFile(PROJECT, ['ci.yml']),
+    harnessCheckCiFile(PROJECT, 'github', ['ci.yml']),
     changelogFile(PROJECT, 'keep-a-changelog'),
     contextDocFile(PROJECT, 'src'),
     governanceWorkflowFile(PROJECT, 'standard'),
@@ -151,7 +155,7 @@ describe('writeManagedFile：三态判定', () => {
   });
 
   it('present 覆写：冲突判定可以不落在 target 自身（GH Actions 站点按同目录既有 CI 判）', async () => {
-    const withCi = harnessCheckWorkflowFile(PROJECT, ['ci.yml']);
+    const withCi = harnessCheckCiFile(PROJECT, 'github', ['ci.yml']);
     fs.seed(path.join(PROJECT, '.github/workflows/ci.yml'), 'name: CI\n');
 
     expect(await writeManagedFile(withCi, io, fs)).toBe('manual');
@@ -159,7 +163,7 @@ describe('writeManagedFile：三态判定', () => {
     expect(printed(io)[1]).toBe('  - .github/workflows/ci.yml');
 
     io = captureIO();
-    expect(await writeManagedFile(harnessCheckWorkflowFile(PROJECT, []), io, fs)).toBe('created');
+    expect(await writeManagedFile(harnessCheckCiFile(PROJECT, 'github', []), io, fs)).toBe('created');
     expect(fs.files.get(withCi.target)).toBe(withCi.content);
   });
 
@@ -207,6 +211,94 @@ describe('init 的脚手架 plan 站点面', () => {
   });
 });
 
+describe('CI 站点的平台维度（harness#143）', () => {
+  /** governanceLevel 入参 = init 的 `-g` 档；gitlab 形下治理任务并入同一文件 */
+  const gitlabCi = (governanceLevel?: string) =>
+    harnessCheckCiFile(PROJECT, 'gitlab', [], governanceLevel);
+
+  it('目标路径按平台给：gitlab → .gitlab-ci.yml，github → workflow 文件', () => {
+    expect(gitlabCi().target).toBe(`${PROJECT}/.gitlab-ci.yml`);
+    expect(harnessCheckCiFile(PROJECT, 'github', []).target).toBe(
+      `${PROJECT}/.github/workflows/harness-check.yml`,
+    );
+  });
+
+  it('三态文案逐字冻结：落盘态绿字 / 在场态提示 + 指引 + 空行 + 片段', async () => {
+    const memoryFs = new MemoryFs();
+    expect(await writeManagedFile(gitlabCi(), io, memoryFs)).toBe('created');
+    expect(printed(io)).toEqual(['✅ 已创建 .gitlab-ci.yml']);
+
+    io = captureIO();
+    const file = gitlabCi('standard');
+    memoryFs.seed(file.target, USER_CONTENT);
+    expect(await writeManagedFile(file, io, memoryFs)).toBe('manual');
+    expect(printed(io).slice(0, 2)).toEqual([
+      '⚠️  .gitlab-ci.yml 已存在',
+      '💡 请手动添加以下内容到文件中：',
+    ]);
+    expect(printed(io)[2]).toBe('');
+    expect(memoryFs.files.get(file.target)).toBe(USER_CONTENT);
+  });
+
+  it('冲突面 = target 自身（gitlab 没有「同目录任何 CI 配置即冲突」那一条，GH 侧判定不变）', async () => {
+    const memoryFs = new MemoryFs();
+    memoryFs.seed(`${PROJECT}/.gitlab/ci/other.yml`, 'x\n');
+    expect(await writeManagedFile(gitlabCi(), io, memoryFs)).toBe('created');
+
+    io = captureIO();
+    expect(await writeManagedFile(harnessCheckCiFile(PROJECT, 'github', ['ci.yml']), io, memoryFs)).toBe(
+      'manual',
+    );
+  });
+
+  it('落盘正文与 GH 版对仗：同三条命令、image: node:20、stage: test、rules 触发、无缓存', () => {
+    const content = gitlabCi().content;
+    for (const cmd of ['check', 'validate', 'passes-gate']) {
+      expect(content).toContain(`npx @dommaker/harness ${cmd}`);
+    }
+    expect(content).toContain('image: node:20');
+    expect(content).toContain('stage: test');
+    expect(content).toContain('- if: $CI_PIPELINE_SOURCE == "merge_request_event"');
+    expect(content).toContain('- if: $CI_COMMIT_BRANCH == "main"');
+    expect(content).toContain('- if: $CI_COMMIT_BRANCH == "master"');
+    expect(content).not.toMatch(/(^|\n)only:/);
+    expect(content).not.toMatch(/(^|\n)cache:/);
+  });
+
+  it('治理档并入同一文件，docs 新鲜度检查非阻断 = allow_failure: true', () => {
+    const standard = gitlabCi('standard').content;
+    expect(standard).toContain('harness-governance:');
+    expect(standard).toContain('harness-docs-freshness:');
+    expect(standard).toContain('npx @dommaker/harness sync-docs --check');
+    expect(standard).toContain('allow_failure: true');
+    expect(gitlabCi('minimal').content).toContain('harness-governance:');
+    expect(gitlabCi('minimal').content).not.toContain('sync-docs');
+    expect(gitlabCi().content).not.toContain('harness-governance:');
+  });
+
+  it('落盘正文是合法 YAML（自建的 GitLab 实例不吃坏文件）', () => {
+    for (const level of [undefined, 'minimal', 'strict']) {
+      const doc = yaml.load(gitlabCi(level).content) as Record<string, unknown>;
+      expect(doc).toHaveProperty('image', 'node:20');
+      expect(doc).toHaveProperty('stages', ['test']);
+      expect(Object.keys(doc).filter(k => k.startsWith('harness-'))).toEqual(
+        level === undefined ? ['harness-check'] : level === 'minimal'
+          ? ['harness-check', 'harness-governance']
+          : ['harness-check', 'harness-governance', 'harness-docs-freshness'],
+      );
+      const docs = doc['harness-docs-freshness'] as { allow_failure?: boolean } | undefined;
+      if (docs) expect(docs.allow_failure).toBe(true);
+    }
+  });
+
+  it('github 形不受平台参数影响：治理站仍是独立 workflow 文件', () => {
+    expect(governanceWorkflowFile(PROJECT, 'standard').target).toBe(
+      `${PROJECT}/.github/workflows/harness-governance.yml`,
+    );
+    expect(governanceWorkflowFile(PROJECT, 'standard').content).toContain('name: Harness Governance');
+  });
+});
+
 describe('对外文案逐字冻结（8 站点 × 落盘态 / 在场态）', () => {
   /** build 入参 = 该站点运行期发现的既有 CI 配置清单（只有 GH Actions 站点用它判冲突） */
   type SiteBuilder = (existingCiWorkflows: string[]) => ManagedFile;
@@ -222,7 +314,7 @@ describe('对外文案逐字冻结（8 站点 × 落盘态 / 在场态）', () =
     ],
     [
       'harness-check.yml',
-      ci => harnessCheckWorkflowFile(PROJECT, ci),
+      ci => harnessCheckCiFile(PROJECT, 'github', ci),
       '✅ 已创建 .github/workflows/harness-check.yml',
       [
         '⚠️  检测到已存在的 CI 配置：',
@@ -315,8 +407,29 @@ describe('打印片段与落盘内容同源（#103 判据）', () => {
     expect(allSites().map(snippetDrift).filter(Boolean)).toEqual([]);
   });
 
+  it('CI 站点的两种平台形全部同源（gitlab 三档治理形一并入闸）', () => {
+    const ciSites = [
+      harnessCheckCiFile(PROJECT, 'github', ['ci.yml']),
+      harnessCheckCiFile(PROJECT, 'gitlab', []),
+      harnessCheckCiFile(PROJECT, 'gitlab', [], 'minimal'),
+      harnessCheckCiFile(PROJECT, 'gitlab', [], 'standard'),
+    ];
+    expect(ciSites.map(snippetDrift).filter(Boolean)).toEqual([]);
+  });
+
+  it('GitLab 站点冲突分支打印 job 片段，且片段是落盘全文正本的一部分', () => {
+    const plain = mergeOf(harnessCheckCiFile(PROJECT, 'gitlab', [])).snippet;
+    const governed = mergeOf(harnessCheckCiFile(PROJECT, 'gitlab', [], 'standard')).snippet;
+
+    expect(plain).toBe(GITLAB_CI_SNIPPET);
+    expect(plain).toContain('harness-check:');
+    expect(plain).not.toContain('image:');
+    expect(governed.startsWith(plain)).toBe(true);
+    expect(governed).toContain('harness-docs-freshness:');
+  });
+
   it('GH Actions 站点冲突分支打印完整 workflow 正文（不再是 job 片段）', () => {
-    const file = harnessCheckWorkflowFile(PROJECT, ['ci.yml']);
+    const file = harnessCheckCiFile(PROJECT, 'github', ['ci.yml']);
     const snippet = mergeOf(file).snippet;
 
     expect(snippet).toBe(file.content);

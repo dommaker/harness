@@ -11,6 +11,7 @@
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { Checkpoint } from '../../types/checkpoint';
+import type { CiPlatform } from '../../types/project-config';
 
 /** Git pre-commit 片段（#103：打印片段与落盘 hook 的唯一正本） */
 export const PRE_COMMIT_SNIPPET = `
@@ -62,6 +63,53 @@ export const GITHUB_ACTIONS_SNIPPET = `
       - run: npx @dommaker/harness check
 `;
 
+// ── GitLab CI（harness#143）：与 GH 版对仗的接线形状 ──────────────────────
+
+/**
+ * GitLab 任务的触发条件（决议 ⑥：用 `rules:` 不用过时的 `only:`）
+ *
+ * MR 事件 + main/master 分支 push，与 GH 版 `on:` 段一一对应。三个任务各自带一份
+ * ——GitLab 的 `default:` 不支持 `rules`，自建实例版本参差，不赌语法糖。
+ */
+const GITLAB_RULES = `  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+`;
+
+/** `.gitlab-ci.yml` 文件头：harness 只拥有其下的 `harness-*` 任务 */
+const GITLAB_CI_HEADER = `# 由 harness init 生成 —— 以下 harness-* 任务是 harness 的 CI 接线
+# 门禁真正生效还需在 GitLab 侧开分支保护：pipeline 成功才允许合并
+
+image: node:20
+
+stages:
+  - test
+
+`;
+
+/** GitLab harness-check 任务（`--print-snippets` 打印的 job 片段即此份） */
+export const GITLAB_CI_SNIPPET = `harness-check:
+  stage: test
+  script:
+    - npm ci
+    - npx @dommaker/harness check
+    - npx @dommaker/harness validate
+    - npx @dommaker/harness passes-gate
+${GITLAB_RULES}`;
+
+/** harness 拥有的 GitLab 任务全集（治理档在场时含治理任务）——落盘正文与冲突片段共用 */
+export function renderGitLabCiJobs(governanceLevel?: string): string {
+  return governanceLevel
+    ? `${GITLAB_CI_SNIPPET}\n${renderGovernanceWorkflow(governanceLevel, 'gitlab')}`
+    : GITLAB_CI_SNIPPET;
+}
+
+/** `.gitlab-ci.yml` 落盘全文正本（= 文件头 + harness 拥有的任务） */
+export function renderGitLabCiFile(governanceLevel?: string): string {
+  return `${GITLAB_CI_HEADER}${renderGitLabCiJobs(governanceLevel)}`;
+}
+
 /** harness-check.yml 全文（落盘正文，冲突时打印的也是这一份） */
 export const HARNESS_CHECK_WORKFLOW = `name: Harness Check
 
@@ -97,11 +145,33 @@ jobs:
 `;
 
 /**
- * 治理 CI workflow 全文
+ * 治理 CI 面正文
  *
- * `minimal` 档不带 docs 新鲜度检查（其余档位带，且失败不阻断）。
+ * `minimal` 档不带 docs 新鲜度检查（其余档位带，且失败不阻断）。平台只改变接线形状，
+ * 三条命令与档位语义一致（harness#143）：GitLab 侧的「失败不阻断」= `allow_failure: true`，
+ * 且因每个任务都是全新容器，docs 检查单列一个任务而非 GH 的一个 step。
  */
-export function renderGovernanceWorkflow(level: string): string {
+export function renderGovernanceWorkflow(level: string, platform: CiPlatform): string {
+  if (platform === 'gitlab') {
+    const docsJob = level === 'minimal'
+      ? ''
+      : `
+harness-docs-freshness:
+  stage: test
+  script:
+    - npm ci
+    - npx @dommaker/harness sync-docs --check
+${GITLAB_RULES}  allow_failure: true
+`;
+    return `harness-governance:
+  stage: test
+  script:
+    - npm ci
+    - npx @dommaker/harness check
+    - npx @dommaker/harness passes-gate
+${GITLAB_RULES}${docsJob}`;
+  }
+
   const docsCheckStep = level !== 'minimal'
     ? `
       - name: Check docs freshness

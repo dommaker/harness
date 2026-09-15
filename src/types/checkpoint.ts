@@ -171,4 +171,10 @@ export interface CheckpointContext {
   
   /** 自定义检查处理器 */
   customHandlers?: Map<string, (config: CheckConfig) => Promise<CheckResult>>;
+  
+  /**
+   * 重试退避的等待注入（http_* 检查族消费）
+   * 缺省 = 真定时器；测试可注入零等待替身，据此断言重试语义而不必真等
+   */
+  sleep?: (ms: number) => Promise<void>;
 }

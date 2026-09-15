@@ -50,19 +50,6 @@ export function renderPreCommitHook(): string {
 ${PRE_COMMIT_SNIPPET}`;
 }
 
-/** GitHub Actions 代码片段（`init --print-snippets` 的 job 片段视图） */
-export const GITHUB_ACTIONS_SNIPPET = `
-  harness-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npx @dommaker/harness check
-`;
-
 // ── GitLab CI（harness#143）：与 GH 版对仗的接线形状 ──────────────────────
 
 /**
@@ -143,6 +130,17 @@ jobs:
       - name: Run harness passes-gate
         run: npx @dommaker/harness passes-gate
 `;
+
+/**
+ * GitHub Actions job 片段（`init --print-snippets` 的片段视图，harness#153）
+ *
+ * 由上面的落盘正本裁出 `jobs:` 段之后的一切，**不是第二份手抄文本**——它曾独立存在并
+ * 少掉 `validate` / `passes-gate` 两道门禁，照抄的用户拿到比同版本 `harness init` 弱一半
+ * 的 CI（#103 判据的第三种形态）。形状与 GitLab 侧对仗：打印的是正本的 job 段。
+ */
+export const GITHUB_ACTIONS_SNIPPET = HARNESS_CHECK_WORKFLOW.slice(
+  HARNESS_CHECK_WORKFLOW.indexOf('  harness-check:'),
+);
 
 /**
  * 治理 CI 面正文

@@ -332,7 +332,7 @@ function printSnippets(io: CommandIO, platform: CiPlatform | 'none'): void {
     log(io, chalk.cyan(GITLAB_CI_SNIPPET));
   } else {
     log(io, chalk.yellow('GitHub Actions:'));
-    log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 中'));
+    log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 下（以下正文取自 harness-check.yml 的 job 段）'));
     log(io);
     log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
   }

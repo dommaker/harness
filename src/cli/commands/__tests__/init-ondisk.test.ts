@@ -10,8 +10,9 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { init, type InitOptions } from '../init';
-import { captureIO } from '../../command-contract';
+import { captureIO, type CapturingIO } from '../../command-contract';
 
 jest.mock('chalk', () => ({
   blue: jest.fn((s: string) => s),
@@ -397,6 +398,113 @@ describe('init --ci 平台维度（harness#143，真落盘）', () => {
     expect(io.outText()).not.toContain('CI 平台');
     expect(await exists(path.join(root, '.github/workflows/harness-check.yml'))).toBe(true);
     expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
+  });
+});
+
+// ── --print-snippets 的 CI 片段视图（harness#153）：打印的 job 正文 == 落盘正本的一段 ──
+
+/**
+ * harness-check.yml 的字节级冻结基线（正本：`scaffold-templates.HARNESS_CHECK_WORKFLOW`）。
+ * 与 `GITLAB_PLAIN` 同族：改模板必须同步改这份基线，而「同步」这个动作正是拦住门禁被削弱的地方。
+ */
+const HARNESS_CHECK_BYTES = `name: Harness Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  harness-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run harness check
+        run: npx @dommaker/harness check
+
+      - name: Run harness validate
+        run: npx @dommaker/harness validate
+
+      - name: Run harness passes-gate
+        run: npx @dommaker/harness passes-gate
+`;
+
+/** 打印面里那份 job 正文（一次 log 调用 = 一条记录；片段自带的首尾换行按基线口径归一） */
+function printedJob(io: CapturingIO): string {
+  const record = io.outRecords().find(chunk => chunk.includes('harness-check:'));
+  if (!record) throw new Error('--print-snippets 没有打印 harness-check 的 job 正文');
+  return record.replace(/^\n+/, '').replace(/\n$/, '');
+}
+
+/** job 正文（含两空格缩进）的 run 命令清单：按 YAML 解析枚举 steps，不靠子串碰运气 */
+function runCommands(jobBody: string): string[] {
+  const doc = yaml.load(`jobs:\n${jobBody}`) as {
+    jobs: Record<string, { steps?: Array<{ run?: string }> }>;
+  };
+  return (doc.jobs['harness-check'].steps ?? [])
+    .map(step => step.run)
+    .filter((run): run is string => run !== undefined);
+}
+
+const GH_GUIDANCE_LINE = '添加到 .github/workflows/*.yml 的 jobs 下（以下正文取自 harness-check.yml 的 job 段）';
+
+describe('init --print-snippets 的 GitHub Actions 片段视图（harness#153）', () => {
+  const roots: string[] = [];
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => fs.rm(root, { recursive: true, force: true })));
+  });
+
+  async function snippetsOfCiView(): Promise<CapturingIO> {
+    const root = await makeProject();
+    roots.push(root);
+    const io = captureIO();
+    await init({ ...CI_OPTIONS, printSnippets: true, projectPath: root }, io);
+    return io;
+  }
+
+  it('同源闸：打印的 job 正文逐字等于落盘正本的 jobs: 段之后（抄回去的就是 init 写出的那一段）', async () => {
+    const printed = await snippetsOfCiView();
+    const job = printedJob(printed);
+
+    expect(job).toBe(HARNESS_CHECK_BYTES.slice(HARNESS_CHECK_BYTES.indexOf('  harness-check:')));
+
+    const root = await makeProject();
+    roots.push(root);
+    await init({ ...CI_OPTIONS, projectPath: root }, captureIO());
+    const written = await fs.readFile(path.join(root, '.github/workflows/harness-check.yml'), 'utf-8');
+    expect(written.includes(job)).toBe(true);
+    expect(runCommands(written.slice(written.indexOf('  harness-check:')))).toEqual(runCommands(job));
+  });
+
+  it('steps 集合闸：打印的 job 覆盖 check / validate / passes-gate 三道门禁，一道不缺', async () => {
+    const printed = await snippetsOfCiView();
+
+    expect(runCommands(printedJob(printed))).toEqual(
+      expect.arrayContaining([
+        'npx @dommaker/harness check',
+        'npx @dommaker/harness validate',
+        'npx @dommaker/harness passes-gate',
+      ]),
+    );
+  });
+
+  it('引导语逐字冻结：说清打印的是完整 workflow 的 job 段', async () => {
+    const lines = (await snippetsOfCiView()).outLines();
+
+    expect(lines[lines.indexOf('GitHub Actions:') + 1]).toBe(GH_GUIDANCE_LINE);
+    expect(lines).not.toContain('添加到 .github/workflows/*.yml 的 jobs 中');
   });
 });
 

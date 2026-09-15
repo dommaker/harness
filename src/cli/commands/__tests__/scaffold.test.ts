@@ -15,7 +15,11 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { GITLAB_CI_SNIPPET } from '../scaffold-templates';
+import {
+  GITHUB_ACTIONS_SNIPPET,
+  GITLAB_CI_SNIPPET,
+  HARNESS_CHECK_WORKFLOW,
+} from '../scaffold-templates';
 import {
   writeManagedFile,
   runPlan,
@@ -435,6 +439,10 @@ describe('打印片段与落盘内容同源（#103 判据）', () => {
     expect(snippet).toBe(file.content);
     expect(snippet).toContain('name: Harness Check');
     expect(snippet).toContain('npx @dommaker/harness passes-gate');
+  });
+
+  it('GH 片段视图是落盘正本裁出来的一段，不是第二份手抄文本（#153）', () => {
+    expect(HARNESS_CHECK_WORKFLOW.includes(GITHUB_ACTIONS_SNIPPET)).toBe(true);
   });
 
   it('pre-commit 站点落盘正文 = 打印片段 + shebang 头', () => {

@@ -3,8 +3,8 @@
  *
  * init.test.ts 把 fs/promises 整体 mock 掉，只能看到「调过 writeFile」，看不到
  * 真写出了什么内容。本文件不 mock 任何 IO：在临时目录里真跑两遍 init——
- * 第一遍断言 8 个受管文件的落盘字节，第二遍（文件已在场且被用户改过）断言
- * 8 站点各自的第三态、用户内容一字节不动、以及「打印片段 == 真正落盘的内容」。
+ * 第一遍断言 9 个受管文件的落盘字节，第二遍（文件已在场且被用户改过）断言
+ * 9 站点各自的第三态、用户内容一字节不动、以及「打印片段 == 真正落盘的内容」。
  */
 
 import * as fs from 'fs/promises';
@@ -49,6 +49,35 @@ function expectOrderedSubsequence(lines: string[], expected: string[]): void {
   }
 }
 
+/**
+ * .git/hooks/pre-push 的字节级冻结基线（harness#144；正本：`scaffold-templates.renderPrePushHook`）。
+ * 三道决定都在这里被钉住：整仓全量（`check` 不带 `--staged`）+ validate、任一失败 exit 1、
+ * 无增量解析/无逃生机制。改模板必须同步改这份基线——「同步」这个动作正是拦住门禁被削弱的地方。
+ */
+const PRE_PUSH_HOOK_BYTES = `#!/bin/sh
+# Harness pre-push hook
+
+echo "🔍 Running harness pre-push checks (whole repo)..."
+
+# 分工：pre-commit 查暂存的（增量、快反馈），pre-push 查整仓的（全量、兜底）。
+# 同一次改动跑两遍是设计使然——这道拦的是 git commit --no-verify 绕出去的内容。
+# 本地 hook 只是自检与提醒，真正的门禁在服务端 CI；逃生口只有 git 原生 push --no-verify。
+# 不解析 pre-push 从 stdin 收到的 ref 清单，子进程一律不给它读（< /dev/null）。
+npx @dommaker/harness check < /dev/null
+if [ $? -ne 0 ]; then
+  echo "❌ Iron law check failed"
+  exit 1
+fi
+
+npx @dommaker/harness validate < /dev/null
+if [ $? -ne 0 ]; then
+  echo "❌ Validate failed"
+  exit 1
+fi
+
+echo "✅ All pre-push checks passed"
+`;
+
 describe('init 真落盘（无 IO mock）', () => {
   const roots: string[] = [];
 
@@ -56,14 +85,14 @@ describe('init 真落盘（无 IO mock）', () => {
     await Promise.all(roots.map(root => fs.rm(root, { recursive: true, force: true })));
   });
 
-  it('第一遍：受管文件逐字节落盘，输出与改造前逐字一致', async () => {
+  it('第一遍：受管文件逐字节落盘，整屏输出逐字冻结', async () => {
     const root = await makeProject();
     roots.push(root);
     const io = captureIO();
 
     expect(await init({ ...INIT_OPTIONS, projectPath: root }, io)).toEqual({ kind: 'ok' });
 
-    // 冻结的整屏 = scaffold 8 站点 + 治理段 writer 的落盘提示。#149 前 io 在
+    // 冻结的整屏 = scaffold 9 站点 + 治理段 writer 的落盘提示。#149 前 io 在
     // setupGovernance 两个调用点被丢，治理 writer 的提示逃到 process.stdout、不进捕获面
     // （本文件因此曾缺这一行）；io 贯通后它回到捕获面，真机输出的字节不变。
     expect(normalize(io.outText(), root)).toBe(`🚀 初始化 harness 配置...
@@ -75,6 +104,7 @@ describe('init 真落盘（无 IO mock）', () => {
 ✅ 已创建 Resolutions 文件: <P>/.harness/resolutions.json
 ✅ 已创建自定义约束示例: custom-constraints.yml
 ✅ 已创建 .git/hooks/pre-commit
+✅ 已创建 .git/hooks/pre-push
 ✅ 已创建 .github/workflows/harness-check.yml
 
 📋 设置治理文件...
@@ -88,7 +118,7 @@ describe('init 真落盘（无 IO mock）', () => {
 下一步:
   1. 编辑 .harness/config.yml 自定义配置
   2. 编辑 .harness/custom-constraints.yml 添加项目约束
-  3. 正常开发，每次 git commit 会自动检查约束
+  3. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然
   4. 运行 harness status 查看状态
 
 💡 提示: 使用 harness init --print-snippets 查看配置代码片段
@@ -101,6 +131,10 @@ describe('init 真落盘（无 IO mock）', () => {
     expect(hook).toContain('echo "🔍 Running harness checks..."');
     expect(hook).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
     expect(hook.endsWith('echo "✅ All checks passed"\n')).toBe(true);
+
+    // 第 9 站点（#144）：字节级冻结，改模板必须同步改这份基线（同 GITLAB_PLAIN 手法）
+    expect(await read('.git/hooks/pre-push')).toBe(PRE_PUSH_HOOK_BYTES);
+
     expect(await read('.github/workflows/harness-check.yml')).toContain('name: Harness Check');
     expect(await read('.harness/custom-constraints.yml')).toContain('custom_constraints:');
     expect(await read('.harness/checkpoints.yml')).toContain('id: build-success');
@@ -108,11 +142,13 @@ describe('init 真落盘（无 IO mock）', () => {
     expect(await read('CHANGELOG.md')).toContain('Keep a Changelog');
     expect(await read('src/CONTEXT.md')).toContain('# src');
 
-    const stat = await fs.stat(path.join(root, '.git/hooks/pre-commit'));
-    expect(stat.mode & 0o111).toBeTruthy();
+    for (const hookFile of ['.git/hooks/pre-commit', '.git/hooks/pre-push']) {
+      const stat = await fs.stat(path.join(root, hookFile));
+      expect(stat.mode & 0o111).toBeTruthy();
+    }
   });
 
-  it('第二遍（harness 自己的文件在场）：7 站点走冲突分支，打印片段即磁盘正文', async () => {
+  it('第二遍（harness 自己的文件在场）：8 站点走冲突分支，打印片段即磁盘正文', async () => {
     const root = await makeProject();
     roots.push(root);
     await init({ ...INIT_OPTIONS, projectPath: root }, captureIO());
@@ -121,12 +157,14 @@ describe('init 真落盘（无 IO mock）', () => {
     await init({ ...INIT_OPTIONS, projectPath: root }, io);
     const lines = io.outLines();
 
-    // 顺序 = init 的落盘顺序；harness-governance.yml（第八站）因既有 workflow 覆盖而跳过
+    // 顺序 = init 的落盘顺序；harness-governance.yml（第九站）因既有 workflow 覆盖而跳过
     expectOrderedSubsequence(lines, [
       'checkpoints.yml 已存在，跳过',
       'resolutions.json 已存在，跳过',
       'custom-constraints.yml 已存在',
       '⚠️  .git/hooks/pre-commit 已存在',
+      '💡 请手动添加以下内容到文件末尾：',
+      '⚠️  .git/hooks/pre-push 已存在',
       '💡 请手动添加以下内容到文件末尾：',
       '⚠️  检测到已存在的 CI 配置：',
       '  - .github/workflows/harness-check.yml',
@@ -140,6 +178,9 @@ describe('init 真落盘（无 IO mock）', () => {
     const hook = await fs.readFile(path.join(root, '.git/hooks/pre-commit'), 'utf-8');
     expect(hook.startsWith('#!/bin/sh\n# Harness pre-commit hook\n')).toBe(true);
     expect(io.outText()).toContain(hook.replace('#!/bin/sh\n# Harness pre-commit hook\n', ''));
+    const prePush = await fs.readFile(path.join(root, '.git/hooks/pre-push'), 'utf-8');
+    expect(prePush).toBe(PRE_PUSH_HOOK_BYTES);
+    expect(io.outText()).toContain(prePush.replace('#!/bin/sh\n# Harness pre-push hook\n', ''));
     const workflow = await fs.readFile(path.join(root, '.github/workflows/harness-check.yml'), 'utf-8');
     expect(io.outText()).toContain(workflow);
   });
@@ -151,6 +192,7 @@ describe('init 真落盘（无 IO mock）', () => {
 
     const userFiles = {
       '.git/hooks/pre-commit': '#!/bin/sh\n# 我自己的钩子\n',
+      '.git/hooks/pre-push': '#!/bin/sh\n# 我自己的推送钩子\n',
       '.github/workflows/harness-check.yml': 'name: 我自己的流水线\n',
       '.harness/custom-constraints.yml': 'custom_constraints: {}\n',
       '.harness/checkpoints.yml': 'checkpoints: []\n',

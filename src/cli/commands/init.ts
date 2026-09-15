@@ -30,6 +30,7 @@ import {
   runPlan,
   nodeScaffoldFs,
   preCommitHookFile,
+  prePushHookFile,
   harnessCheckCiFile,
   customConstraintsFile,
   changelogFile,
@@ -39,7 +40,12 @@ import {
   resolutionsFile,
   type ManagedFile,
 } from './scaffold';
-import { GITHUB_ACTIONS_SNIPPET, GITLAB_CI_SNIPPET, PRE_COMMIT_SNIPPET } from './scaffold-templates';
+import {
+  GITHUB_ACTIONS_SNIPPET,
+  GITLAB_CI_SNIPPET,
+  PRE_COMMIT_SNIPPET,
+  PRE_PUSH_SNIPPET,
+} from './scaffold-templates';
 
 export interface InitOptions {
   /** 项目路径 */
@@ -306,7 +312,7 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   log(io, chalk.gray('下一步:'));
   log(io, chalk.gray('  1. 编辑 .harness/config.yml 自定义配置'));
   log(io, chalk.gray('  2. 编辑 .harness/custom-constraints.yml 添加项目约束'));
-  log(io, chalk.gray('  3. 正常开发，每次 git commit 会自动检查约束'));
+  log(io, chalk.gray('  3. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然'));
   log(io, chalk.gray('  4. 运行 harness status 查看状态'));
   log(io);
   log(io, chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
@@ -325,6 +331,11 @@ function printSnippets(io: CommandIO, platform: CiPlatform | 'none'): void {
   log(io);
   log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
 
+  log(io, chalk.yellow('Git pre-push hook:'));
+  log(io, chalk.gray('添加到 .git/hooks/pre-push（pre-commit 查暂存的、快反馈，这道查整仓的、全量兜底——重复是设计使然）'));
+  log(io);
+  log(io, chalk.cyan(PRE_PUSH_SNIPPET));
+
   if (platform === 'gitlab') {
     log(io, chalk.yellow('GitLab CI:'));
     log(io, chalk.gray('添加到 .gitlab-ci.yml'));
@@ -342,6 +353,9 @@ function printSnippets(io: CommandIO, platform: CiPlatform | 'none'): void {
 
 /**
  * 设置 Git hooks（无 .git 即整站跳过；落盘语义在 scaffold plan）
+ *
+ * 两道：pre-commit 查暂存的（增量、快反馈），pre-push 查整仓的（全量、兜底，
+ * harness#144）。跳过旗帜 `--no-git-hooks` 在命令层翻成「本站点不进 plan」。
  */
 async function setupGitHooks(projectPath: string, io: CommandIO): Promise<void> {
   if (!(await nodeScaffoldFs.exists(path.join(projectPath, '.git')))) {
@@ -349,7 +363,7 @@ async function setupGitHooks(projectPath: string, io: CommandIO): Promise<void> 
     log(io, chalk.gray('💡 初始化 Git 后可运行 npx @dommaker/harness init --print-snippets 查看配置'));
     return;
   }
-  await runPlan([preCommitHookFile(projectPath)], io);
+  await runPlan([preCommitHookFile(projectPath), prePushHookFile(projectPath)], io);
 }
 
 /**

@@ -187,6 +187,59 @@ describe('init command', () => {
         expect(io2.outText()).toContain(line);
       }
     });
+
+    it('应该创建 pre-push hook（第 9 站点，#144）并带可执行位', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.chmod.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+
+      await init({ preset: 'standard', projectPath: PROJECT }, io);
+
+      expect(io.outText()).toContain('已创建 .git/hooks/pre-push');
+      expect(mockFs.chmod).toHaveBeenCalledWith(
+        `${PROJECT}/.git/hooks/pre-push`,
+        0o755,
+      );
+    });
+
+    it('pre-push 落盘正文 = 整仓全量兜底：check 不带 --staged + validate，scoped 包名（#144/#36）', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+
+      await init({ preset: 'standard', projectPath: PROJECT }, io);
+      const call = mockFs.writeFile.mock.calls.find((c: any[]) => String(c[0]).includes('pre-push'));
+      expect(call).toBeDefined();
+      const body = String(call![1]);
+
+      expect(body).toContain('npx @dommaker/harness check');
+      expect(body).not.toContain('check --staged');
+      expect(body).toContain('npx @dommaker/harness validate');
+      expect(body).not.toMatch(/npx harness /);
+      // 任一失败即非零退出挡住 push
+      expect(body.match(/\n {2}exit 1\n/g)?.length).toBe(2);
+    });
+
+    it('pre-push 已存在时告知并打印同源片段（#144 + #103）', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      existingFiles.add(`${PROJECT}/.git`);
+      existingFiles.add(`${PROJECT}/.git/hooks`);
+      existingFiles.add(`${PROJECT}/.git/hooks/pre-push`);
+
+      await init({ preset: 'standard', projectPath: PROJECT }, io);
+      expect(io.outText()).toContain('pre-push 已存在');
+
+      const written = mockFs.writeFile.mock.calls.find((c: any[]) => String(c[0]).includes('pre-push'));
+      expect(written).toBeUndefined();
+
+      const io2 = captureIO();
+      await init({ preset: 'standard', printSnippets: true }, io2);
+      expect(io2.outText()).toContain('echo "🔍 Running harness pre-push checks (whole repo)..."');
+    });
   });
 
   describe('GitHub Actions', () => {
@@ -225,6 +278,7 @@ describe('init command', () => {
       await init({ preset: 'standard', gitHooks: false, githubActions: false, projectPath: PROJECT }, io);
       const writes = mockFs.writeFile.mock.calls.map((c: unknown[]) => String(c[0]));
       expect(writes.some((w: string) => w.includes('pre-commit'))).toBe(false);
+      expect(writes.some((w: string) => w.includes('pre-push'))).toBe(false);
       expect(writes.some((w: string) => w.includes('.github/workflows'))).toBe(false);
       expect(io.outText()).not.toContain('未检测到 Git 仓库');
     });
@@ -238,6 +292,7 @@ describe('init command', () => {
       await init({ preset: 'standard', projectPath: PROJECT }, io);
       const writes = mockFs.writeFile.mock.calls.map((c: unknown[]) => String(c[0]));
       expect(writes.some((w: string) => w.includes('pre-commit'))).toBe(true);
+      expect(writes.some((w: string) => w.includes('pre-push'))).toBe(true);
       expect(writes.some((w: string) => w.includes('harness-check.yml'))).toBe(true);
     });
   });

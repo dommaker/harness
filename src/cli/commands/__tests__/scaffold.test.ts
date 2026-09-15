@@ -4,8 +4,8 @@
  * 覆盖三件事：
  * 1. 三态判定（created / exists / manual）的形状——判定、建目录、上色、片段打印
  *    全在实现内，测试注入内存 fs 替身，零真实文件系统。
- * 2. 8 站点（init 6 + validate 2）的对外文案逐字冻结：改造前后用户看到的每一行
- *    都一样，差异只在内部形状。
+ * 2. 9 站点（init 7 + validate 2）的对外文案逐字冻结：新增站点的每一行按同一形状
+ *    冻结（pre-push 是 harness#144 加的第 9 处），其余站点改前后用户看到的都一样。
  * 3. 「打印给用户的片段 == 真正落盘的内容」同源不变量（#103 判据）的单点断言。
  * 4. CI 站点的平台维度（harness#143）：同一站点在 github / gitlab 两形下各自的
  *    目标路径、三态文案与冲突片段。
@@ -24,6 +24,7 @@ import {
   writeManagedFile,
   runPlan,
   preCommitHookFile,
+  prePushHookFile,
   harnessCheckCiFile,
   customConstraintsFile,
   changelogFile,
@@ -71,13 +72,14 @@ class MemoryFs implements ScaffoldFileSystem {
 const PROJECT = '/srv/project';
 const USER_CONTENT = '用户自己的内容，不许覆盖\n';
 
-/** 全部 8 站点，顺序 = init 的落盘顺序 */
+/** 全部 9 站点，顺序 = init 的落盘顺序 */
 function allSites(): ManagedFile[] {
   return [
     checkpointsFile(PROJECT),
     resolutionsFile(PROJECT),
     customConstraintsFile(PROJECT),
     preCommitHookFile(PROJECT),
+    prePushHookFile(PROJECT),
     harnessCheckCiFile(PROJECT, 'github', ['ci.yml']),
     changelogFile(PROJECT, 'keep-a-changelog'),
     contextDocFile(PROJECT, 'src'),
@@ -124,6 +126,11 @@ describe('writeManagedFile：三态判定', () => {
   it('声明 mode 才 chmod，缺省不动权限位', async () => {
     expect(await writeManagedFile(preCommitHookFile(PROJECT), io, fs)).toBe('created');
     expect(fs.modes.get(path.join(PROJECT, '.git/hooks/pre-commit'))).toBe(0o755);
+
+    fs = new MemoryFs();
+    io = captureIO();
+    expect(await writeManagedFile(prePushHookFile(PROJECT), io, fs)).toBe('created');
+    expect(fs.modes.get(path.join(PROJECT, '.git/hooks/pre-push'))).toBe(0o755);
 
     fs = new MemoryFs();
     io = captureIO();
@@ -181,12 +188,13 @@ describe('writeManagedFile：三态判定', () => {
 });
 
 describe('init 的脚手架 plan 站点面', () => {
-  it('8 站点齐备且目标路径逐字冻结（init 6 + validate 2 同源收口）', () => {
+  it('9 站点齐备且目标路径逐字冻结（init 7 + validate 2 同源收口）', () => {
     expect(allSites().map(f => f.target)).toEqual([
       `${PROJECT}/.harness/checkpoints.yml`,
       `${PROJECT}/.harness/resolutions.json`,
       `${PROJECT}/.harness/custom-constraints.yml`,
       `${PROJECT}/.git/hooks/pre-commit`,
+      `${PROJECT}/.git/hooks/pre-push`,
       `${PROJECT}/.github/workflows/harness-check.yml`,
       `${PROJECT}/CHANGELOG.md`,
       `${PROJECT}/src/CONTEXT.md`,
@@ -303,7 +311,7 @@ describe('CI 站点的平台维度（harness#143）', () => {
   });
 });
 
-describe('对外文案逐字冻结（8 站点 × 落盘态 / 在场态）', () => {
+describe('对外文案逐字冻结（9 站点 × 落盘态 / 在场态）', () => {
   /** build 入参 = 该站点运行期发现的既有 CI 配置清单（只有 GH Actions 站点用它判冲突） */
   type SiteBuilder = (existingCiWorkflows: string[]) => ManagedFile;
 
@@ -315,6 +323,13 @@ describe('对外文案逐字冻结（8 站点 × 落盘态 / 在场态）', () =
       '✅ 已创建 .git/hooks/pre-commit',
       ['⚠️  .git/hooks/pre-commit 已存在', '💡 请手动添加以下内容到文件末尾：'],
       'echo "🔍 Running harness checks..."',
+    ],
+    [
+      'pre-push',
+      () => prePushHookFile(PROJECT),
+      '✅ 已创建 .git/hooks/pre-push',
+      ['⚠️  .git/hooks/pre-push 已存在', '💡 请手动添加以下内容到文件末尾：'],
+      'echo "🔍 Running harness pre-push checks (whole repo)..."',
     ],
     [
       'harness-check.yml',
@@ -451,11 +466,40 @@ describe('打印片段与落盘内容同源（#103 判据）', () => {
     expect(file.content.endsWith(mergeOf(file).snippet)).toBe(true);
   });
 
-  it('闸非空洞：落盘正文被改动而片段未跟进 → 报出该站点', () => {
-    const drifted: ManagedFile = {
-      ...preCommitHookFile(PROJECT),
-      content: '#!/bin/sh\n# 悄悄改了这里\n',
-    };
-    expect(snippetDrift(drifted)).toContain('pre-commit');
+  it('pre-push 站点落盘正文 = 打印片段 + shebang 头（#103 判据）', () => {
+    const file = prePushHookFile(PROJECT);
+    expect(file.content.startsWith('#!/bin/sh\n# Harness pre-push hook\n')).toBe(true);
+    expect(file.content.endsWith(mergeOf(file).snippet)).toBe(true);
   });
+
+  it('pre-push 跑整仓全量兜底：check 不带 --staged + validate，恰好这两道', () => {
+    const body = prePushHookFile(PROJECT).content;
+
+    expect(body).toContain('npx @dommaker/harness check');
+    expect(body).not.toContain('check --staged');
+    expect(body).toContain('npx @dommaker/harness validate');
+    expect(body.match(/npx @dommaker\/harness/g)).toHaveLength(2);
+  });
+
+  it('pre-push 不做增量、不内建逃生机制（决议：唯一逃生口是 git 原生 --no-verify）', () => {
+    const body = prePushHookFile(PROJECT).content;
+
+    // 不解析 pre-push 从 stdin 收到的 <local_ref> <local_oid> <remote_ref> <remote_oid> 清单
+    expect(body).not.toMatch(/\bwhile read\b|local_ref|remote_ref/);
+    // 无环境变量开关、无超时、无「慢则降级」
+    expect(body).not.toMatch(/\$\{?[A-Z][A-Z0-9_]*\}?/);
+    expect(body).not.toMatch(/\btimeout\b/);
+  });
+
+  it.each(['pre-commit', 'pre-push'] as const)(
+    '闸非空洞：%s 落盘正文被改动而片段未跟进 → 报出该站点',
+    which => {
+      const build = which === 'pre-commit' ? preCommitHookFile : prePushHookFile;
+      const drifted: ManagedFile = {
+        ...build(PROJECT),
+        content: '#!/bin/sh\n# 悄悄改了这里\n',
+      };
+      expect(snippetDrift(drifted)).toContain(which);
+    },
+  );
 });

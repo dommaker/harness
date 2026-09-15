@@ -24,6 +24,7 @@ import {
   DEFAULT_CHECKPOINT_FILE,
   HARNESS_CHECK_WORKFLOW,
   PRE_COMMIT_SNIPPET,
+  PRE_PUSH_SNIPPET,
   renderChangelog,
   renderCheckpoints,
   renderContextDoc,
@@ -31,6 +32,7 @@ import {
   renderGitLabCiJobs,
   renderGovernanceWorkflow,
   renderPreCommitHook,
+  renderPrePushHook,
   renderResolutions,
 } from './scaffold-templates';
 
@@ -145,7 +147,7 @@ export async function runPlan(
   return outcomes;
 }
 
-// ── 站点：init 的 6 处 + 原住 validate 的 2 处 ──────────────────────────
+// ── 站点：init 的 7 处 + 原住 validate 的 2 处 ──────────────────────────
 
 /** .git/hooks/pre-commit（冲突片段 = 落盘正文去掉 shebang 头，逐字同源） */
 export function preCommitHookFile(projectPath: string): ManagedFile {
@@ -159,6 +161,27 @@ export function preCommitHookFile(projectPath: string): ManagedFile {
       notice: '⚠️  .git/hooks/pre-commit 已存在',
       instruction: '💡 请手动添加以下内容到文件末尾：',
       snippet: PRE_COMMIT_SNIPPET,
+    },
+  };
+}
+
+/**
+ * .git/hooks/pre-push（harness#144 的第 9 站点，冲突片段与落盘正文逐字同源）
+ *
+ * 与 pre-commit 的分工：那道查暂存的（增量、快反馈），这道查整仓的（全量、兜底）。
+ * 本地 hook 是自检与提醒，门禁真正的落点仍是服务端 CI。
+ */
+export function prePushHookFile(projectPath: string): ManagedFile {
+  return {
+    target: path.join(projectPath, '.git', 'hooks', 'pre-push'),
+    content: renderPrePushHook(),
+    created: '✅ 已创建 .git/hooks/pre-push',
+    mode: 0o755,
+    onPresent: {
+      outcome: 'merge',
+      notice: '⚠️  .git/hooks/pre-push 已存在',
+      instruction: '💡 请手动添加以下内容到文件末尾：',
+      snippet: PRE_PUSH_SNIPPET,
     },
   };
 }

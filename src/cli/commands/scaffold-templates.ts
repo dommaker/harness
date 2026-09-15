@@ -50,6 +50,46 @@ export function renderPreCommitHook(): string {
 ${PRE_COMMIT_SNIPPET}`;
 }
 
+/**
+ * Git pre-push 片段（harness#144；#103：打印片段与落盘 hook 的唯一正本）
+ *
+ * 三道决定都写在这段正文里，不再由代码补：
+ * - **整仓全量**：`check` 不带 `--staged`，加一道 `validate`——它拦的是
+ *   `git commit --no-verify` 绕过 pre-commit 的内容，重复是设计使然；
+ * - **不做增量**：不解析 pre-push 从 stdin 收到的 `<local_ref> <local_oid>
+ *   <remote_ref> <remote_oid>` 清单，无论推什么整仓过一遍；子进程也不给它读；
+ * - **不内建逃生机制**：没有环境变量开关、没有超时、没有「慢则降级」，
+ *   唯一的口子是 git 原生 `git push --no-verify`。
+ */
+export const PRE_PUSH_SNIPPET = `
+echo "🔍 Running harness pre-push checks (whole repo)..."
+
+# 分工：pre-commit 查暂存的（增量、快反馈），pre-push 查整仓的（全量、兜底）。
+# 同一次改动跑两遍是设计使然——这道拦的是 git commit --no-verify 绕出去的内容。
+# 本地 hook 只是自检与提醒，真正的门禁在服务端 CI；逃生口只有 git 原生 push --no-verify。
+# 不解析 pre-push 从 stdin 收到的 ref 清单，子进程一律不给它读（< /dev/null）。
+npx @dommaker/harness check < /dev/null
+if [ $? -ne 0 ]; then
+  echo "❌ Iron law check failed"
+  exit 1
+fi
+
+npx @dommaker/harness validate < /dev/null
+if [ $? -ne 0 ]; then
+  echo "❌ Validate failed"
+  exit 1
+fi
+
+echo "✅ All pre-push checks passed"
+`;
+
+/** 落盘的 pre-push hook = shebang + 说明行 + 共享片段 */
+export function renderPrePushHook(): string {
+  return `#!/bin/sh
+# Harness pre-push hook
+${PRE_PUSH_SNIPPET}`;
+}
+
 // ── GitLab CI（harness#143）：与 GH 版对仗的接线形状 ──────────────────────
 
 /**

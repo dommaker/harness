@@ -731,3 +731,78 @@ describe('闸 4b：空知识库态逐行冻结', () => {
     }
   });
 });
+
+/**
+ * 同一子命令的第二空态（harness#151 补 #133 闸 4b 的判据）。
+ *
+ * `emptyRoot()` 是裸的 mkdtemp 目录，天然没有 `.harness/knowledge-docs/` 子目录，于是
+ * `syncRagRows`（`knowledge.ts:394`）的两个空态分支里只有第一个 `!docsPresent` 进过基线；
+ * 第二个分支（目录在场、里面没有 `.md`）在测试里**走不到**——按 #133 自己立的判据，
+ * 「fixture 走不到的分支不进基线，有基线就是假象」。json 面两分支恒同形
+ * （`data = {directory, files}`），所以 `--json` 那条断言也钉不住人读第二行。
+ *
+ * 数据结构：既有 `EMPTY_HUMAN_BASELINE: Record<SubName, string[]>` 一个子命令只装得下
+ * 一种形状，故另立一张平行表按 case 登记，不动既有用例。每个 case 自带建形函数——
+ * 多空态不共用一个根。
+ */
+interface EmptyShapeCase {
+  sub: SubName;
+  /** 分支说明，进用例标题 */
+  branch: string;
+  /** 该分支的建形方式（与 emptyRoot() 的区别就是要建的那个形） */
+  makeRoot(): string;
+  baseline: string[];
+  /** 该形状下 --json 的形状（两投影一致性在此分支的第二形） */
+  json: (root: string) => unknown;
+}
+
+/** `knowledge-docs/` 在场但目录里没有 `.md` → syncRagRows 第二分支 */
+function emptyDocsRoot(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-kview-emptydocs-'));
+  fs.mkdirSync(path.join(root, '.harness', 'knowledge-docs'), { recursive: true });
+  return root;
+}
+
+const EXTRA_EMPTY_HUMAN_CASES: EmptyShapeCase[] = [
+  {
+    sub: 'sync-rag',
+    branch: 'knowledge-docs/ 在场但目录里没有 .md',
+    makeRoot: emptyDocsRoot,
+    baseline: ['No knowledge docs found'],
+    json: root => ({ directory: `${root}/.harness/knowledge-docs`, files: [] }),
+  },
+];
+
+describe('闸 4c：同一子命令的第二空态逐行冻结（#151 补 #133 判据）', () => {
+  for (const testCase of EXTRA_EMPTY_HUMAN_CASES) {
+    const driver = SUBS.find(s => s.name === testCase.sub);
+    if (!driver) throw new Error(`case 登记的子命令不在驱动面里: ${testCase.sub}`);
+
+    it(`${testCase.sub} 的「${testCase.branch}」人读输出逐行不变`, async () => {
+      const root = testCase.makeRoot();
+      const humanIo = captureIO();
+      try {
+        await driver.run(root, humanIo, false);
+        expect(humanIo.outLines().map(l => normalize(root, l))).toEqual(testCase.baseline);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it(`${testCase.sub} 的「${testCase.branch}」在 --json 下仍是两分支同形的那份 data`, async () => {
+      const root = testCase.makeRoot();
+      try {
+        await driver.run(root, io, true);
+        expect(lastJsonOutput(io)).toEqual(testCase.json(root));
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it('第二形登记的子命令确有独立基线（不借 闸 4b 的第一形蒙过去）', () => {
+    for (const testCase of EXTRA_EMPTY_HUMAN_CASES) {
+      expect(EMPTY_HUMAN_BASELINE[testCase.sub]).not.toEqual(testCase.baseline);
+    }
+  });
+});

@@ -21,11 +21,25 @@ import {
 } from './audit-scoring';
 import type { AuditEnv, AuditIssue, AuditOptions, AuditReport } from './audit-scoring';
 
+/** 数值槽清单（harness#163）：显式传入的脏值（NaN/±Infinity/负数）构造期抛 TypeError，不放行到打分层静默关判定 */
+const NUMERIC_OPTION_SLOTS = ['shortContentThreshold', 'staleDays', 'promotionBlockDays'] as const;
+
+/** 守卫在 `resolveThresholds` 上游（构造期）：`??` 语义不动，两处不重复兜；未传/显式 undefined 跳过，显式 0 合法 */
+function assertValidThresholds(options: AuditOptions): void {
+  for (const slot of NUMERIC_OPTION_SLOTS) {
+    const value = options[slot];
+    if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
+      throw new TypeError(`KnowledgeAudit: ${slot} 需为非负有限数，实参 ${value}`);
+    }
+  }
+}
+
 export class KnowledgeAudit {
   private store: KnowledgeStore;
   private options: AuditOptions;
 
   constructor(store: KnowledgeStore, options?: AuditOptions) {
+    if (options) assertValidThresholds(options);
     this.store = store;
     this.options = options ?? {};
   }

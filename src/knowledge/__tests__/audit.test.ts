@@ -684,3 +684,54 @@ describe('run() report', () => {
     expect(totalFromSummary).toBe(report.issues.length);
   });
 });
+
+// ── 构造器数值槽守卫（harness#163）─────────────────────────
+//
+// 三个数值槽显式传入 NaN / ±Infinity / 负数时构造期抛 TypeError（含槽名与实参），
+// 不再放行到打分层静默关掉 short-content / stale-entry / promotion-blocked 三条判定。
+// 未传 / 显式 undefined → 缺省；显式 0 → 合法且按 0 生效（不被兜成缺省）。
+
+describe('构造器数值槽守卫（harness#163）', () => {
+  const slots = ['shortContentThreshold', 'staleDays', 'promotionBlockDays'] as const;
+  const dirtyValues = [NaN, Infinity, -Infinity, -1];
+
+  for (const slot of slots) {
+    for (const value of dirtyValues) {
+      it(`${slot} 显式传 ${String(value)} → 构造抛 TypeError，message 含槽名与实参`, () => {
+        expect(() => memoryAudit([], { [slot]: value })).toThrow(TypeError);
+        expect(() => memoryAudit([], { [slot]: value })).toThrow(new RegExp(`${slot}.*${String(value).replace(/[+-]/g, '\\$&')}`));
+      });
+    }
+  }
+
+  it('不传 options → 缺省生效（短内容阈值 50）', () => {
+    const { audit } = memoryAudit([]);
+    const entry = makeEntry({ content: 'a'.repeat(25), maturity: 'draft' });
+    expect(audit.validate(entry).some(i => i.rule === 'short-content')).toBe(true);
+  });
+
+  it('显式 undefined → 与未传同果，走缺省', () => {
+    const { audit } = memoryAudit([], { shortContentThreshold: undefined, staleDays: undefined, promotionBlockDays: undefined });
+    const entry = makeEntry({ content: 'a'.repeat(25), maturity: 'draft' });
+    expect(audit.validate(entry).some(i => i.rule === 'short-content')).toBe(true);
+  });
+
+  it('显式 0 → 合法且按 0 生效：short-content 不触发（不被兜回 50）', () => {
+    const { audit } = memoryAudit([], { shortContentThreshold: 0 });
+    const entry = makeEntry({ content: 'a'.repeat(25), maturity: 'draft' });
+    expect(audit.validate(entry).some(i => i.rule === 'short-content')).toBe(false);
+  });
+
+  it('staleDays 显式 0 → 按 0 生效（昨天引用的条目即判 stale，不被兜回 90）', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { audit } = memoryAudit([], { staleDays: 0 });
+    const entry = makeEntry({ lastReferenced: yesterday, maturity: 'proven' });
+    expect(audit.validate(entry).some(i => i.rule === 'stale-entry')).toBe(true);
+  });
+
+  it('合法正有限值（含非整数）→ 行为不变', () => {
+    const { audit } = memoryAudit([], { shortContentThreshold: 30.5 });
+    expect(audit.validate(makeEntry({ content: 'a'.repeat(30), maturity: 'draft' })).some(i => i.rule === 'short-content')).toBe(true);
+    expect(audit.validate(makeEntry({ content: 'a'.repeat(40), maturity: 'draft' })).some(i => i.rule === 'short-content')).toBe(false);
+  });
+});

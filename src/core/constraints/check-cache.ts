@@ -14,7 +14,7 @@
  * ```typescript
  * const cache = new CheckCache({ ttlMs: 5000 });
  * // 普通 TTL 缓存
- * const diff = await cache.get('git_diff', projectPath, () => collectDiff(projectPath));
+ * const diff = await cache.get('git_diff', projectPath, () => createGitEvidence(projectPath).stagedDiff());
  * // 计数采样：每 3 次调用执行 1 次完整检查
  * const ok = await cache.get('goal_check', key, check, { sampleRate: 3, defaultValueOnMiss: true });
  * ```

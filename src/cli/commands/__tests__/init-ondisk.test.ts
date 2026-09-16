@@ -627,6 +627,27 @@ harness:
     }
   });
 
+  it.each(['constructor', 'toString'])(
+    '-g %s 不穿透原型链：usage-error、零落盘（harness#164：`in` 走原型链可拿到 Object 构造函数的反证）',
+    async dirty => {
+      const root = await makeProject();
+      roots.push(root);
+      const io = captureIO();
+
+      const result = await init(
+        { ...CI_OPTIONS, governance: dirty as unknown as InitOptions['governance'], projectPath: root },
+        io,
+      );
+
+      expect(result).toEqual({
+        kind: 'usage-error',
+        reason: expect.stringContaining('minimal | standard | strict'),
+      });
+      expect(io.errText()).toContain('用法错误');
+      expect(await listProjectFiles(root)).toEqual(['src/index.ts']);
+    },
+  );
+
   it.each(['minimal', 'standard', 'strict'] as const)(
     '-g 合法值 %s 行为不变：ok 且治理级别写进 config.yml',
     async level => {

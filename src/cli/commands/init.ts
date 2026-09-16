@@ -243,8 +243,10 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
 
   // `-g` 值域校验在命令入口（harness#156 裁决 F2，与 #152 脏输入 fail-loud 同判据）：
   // 非法值 usage-error、先于任何落盘；合法值域与装配共用同一份 GOVERNANCE_PRESETS 表，
-  // github / gitlab / none 三平台同判（bin 把用户敲的字符串原样递进来）
-  if (options.governance !== undefined && !(options.governance in GOVERNANCE_PRESETS)) {
+  // github / gitlab / none 三平台同判（bin 把用户敲的字符串原样递进来）。
+  // 用 Object.hasOwn 而非 `in`（harness#164）：`in` 走原型链，`-g constructor`/`toString`
+  // 会穿透校验、把 Object 构造函数写进 configData 并在 yaml.dump 炸成 YAMLException。
+  if (options.governance !== undefined && !Object.hasOwn(GOVERNANCE_PRESETS, options.governance)) {
     const reason = `-g/--governance 取值非法: ${String(options.governance)}（可取 ${Object.keys(GOVERNANCE_PRESETS).join(' | ')}）`;
     logError(io, chalk.red(`❌ 用法错误: ${reason}`));
     return { kind: 'usage-error', reason };

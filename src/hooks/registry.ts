@@ -4,7 +4,7 @@
  * 纯簿记，无执行逻辑。线程不安全（Node.js 单线程）。
  */
 
-import type { HookConfig, HookDefinition, HookPhase } from './types';
+import type { EffectiveHook, HookConfig, HookDefinition, HookPhase } from './types';
 
 /**
  * 注册表闭环双向校验（H5，复制 checker 闭环模式）
@@ -66,21 +66,40 @@ export function assertHookRegistryClosed<C = unknown, R = unknown>(
 }
 
 export class HookRegistry<C = unknown, R = unknown> {
-  private hooks: Map<string, HookDefinition<C, R>> = new Map();
+  private hooks: Map<string, EffectiveHook<C, R>> = new Map();
 
   /**
    * 注册 hook（同名覆盖）
+   *
+   * 有效 `enabled` / `errorStrategy` 由 HookConfig 填充——配置表是这两个
+   * 语义的唯一声明点（#159），定义与配置名称不一致即抛错。
    */
-  register(hook: HookDefinition<C, R>): void {
-    this.hooks.set(hook.name, { ...hook });
+  register(hook: HookDefinition<C, R>, config: HookConfig): void {
+    if (hook.name !== config.name) {
+      throw new Error(
+        `[harness] hook 注册失败：定义 "${hook.name}" 与配置 "${config.name}" 名称不一致。`
+      );
+    }
+    this.hooks.set(hook.name, {
+      ...hook,
+      enabled: config.enabled,
+      errorStrategy: config.errorStrategy,
+    });
   }
 
   /**
-   * 批量注册
+   * 批量注册（按 name 配对配置；有实现缺配置声明即抛错）
    */
-  registerAll(hooks: HookDefinition<C, R>[]): void {
+  registerAll(hooks: HookDefinition<C, R>[], configs: readonly HookConfig[]): void {
+    const configByName = new Map(configs.map(c => [c.name, c]));
     for (const hook of hooks) {
-      this.register(hook);
+      const config = configByName.get(hook.name);
+      if (!config) {
+        throw new Error(
+          `[harness] hook 注册失败：hook "${hook.name}" 没有对应的 HookConfig 声明。`
+        );
+      }
+      this.register(hook, config);
     }
   }
 
@@ -92,18 +111,18 @@ export class HookRegistry<C = unknown, R = unknown> {
   }
 
   /**
-   * 获取单个 hook
+   * 获取单个 hook（含有效 enabled / errorStrategy）
    */
-  get(name: string): HookDefinition<C, R> | undefined {
+  get(name: string): EffectiveHook<C, R> | undefined {
     return this.hooks.get(name);
   }
 
   /**
    * 获取指定时机、已启用的 hook，按优先级排序
    */
-  getEnabled(phase: HookPhase): HookDefinition<C, R>[] {
+  getEnabled(phase: HookPhase): EffectiveHook<C, R>[] {
     return Array.from(this.hooks.values())
-      .filter(h => h.phase === phase && h.enabled !== false)
+      .filter(h => h.phase === phase && h.enabled)
       .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
   }
 
@@ -117,7 +136,7 @@ export class HookRegistry<C = unknown, R = unknown> {
   /**
    * 列出所有 hook（含禁用）
    */
-  listAll(): HookDefinition<C, R>[] {
+  listAll(): EffectiveHook<C, R>[] {
     return Array.from(this.hooks.values());
   }
 

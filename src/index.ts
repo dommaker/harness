@@ -355,6 +355,7 @@ export {
 export type {
   HookDefinition,
   HookConfig,
+  EffectiveHook,
   HookErrorStrategy,
   HookExecutionRecord,
   HookPhase,

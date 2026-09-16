@@ -22,7 +22,7 @@ import { TraceCollector } from '../monitoring/traces';
 import { HookRegistry } from './registry';
 import { HookPipeline } from './pipeline';
 import type { MergedConstraintsConfig } from '../types/project-config';
-import type { HookDefinition } from './types';
+import type { HookConfig, HookDefinition } from './types';
 
 /**
  * 异步加载项目配置（S9：异步 I/O）
@@ -61,14 +61,35 @@ export interface HarnessBootstrap {
 }
 
 /**
+ * 注册初始 hook（定义必须配对配置声明表——#159 起 HookConfig 是
+ * enabled / errorStrategy 的唯一声明点，缺表即抛错）
+ */
+function registerInitialHooks(
+  hooks: HookRegistry,
+  hookDefinitions: HookDefinition[] | undefined,
+  hookConfigs: HookConfig[] | undefined
+): void {
+  if (!hookDefinitions || hookDefinitions.length === 0) return;
+  if (!hookConfigs) {
+    throw new Error(
+      '[harness] bootstrap 失败：注册 hook 定义必须同时提供 HookConfig 声明表' +
+      '（enabled / errorStrategy 的唯一声明点）。'
+    );
+  }
+  hooks.registerAll(hookDefinitions, hookConfigs);
+}
+
+/**
  * 初始化 harness 运行环境（异步，不阻塞事件循环）
  *
  * @param projectPath 项目根路径
  * @param hookDefinitions 可选，初始化时注册的 hook
+ * @param hookConfigs 可选，与 hookDefinitions 配对的配置声明表（注册定义时必填）
  */
 export async function bootstrapHarness(
   projectPath?: string,
-  hookDefinitions?: HookDefinition[]
+  hookDefinitions?: HookDefinition[],
+  hookConfigs?: HookConfig[]
 ): Promise<HarnessBootstrap> {
   const resolvedPath = projectPath || process.cwd();
 
@@ -84,9 +105,7 @@ export async function bootstrapHarness(
   const pipeline = new HookPipeline(hooks);
 
   // 3. 注册初始 hook
-  if (hookDefinitions) {
-    hooks.registerAll(hookDefinitions);
-  }
+  registerInitialHooks(hooks, hookDefinitions, hookConfigs);
 
   return {
     checker,
@@ -105,7 +124,8 @@ export async function bootstrapHarness(
  */
 export function bootstrapHarnessSync(
   projectPath?: string,
-  hookDefinitions?: HookDefinition[]
+  hookDefinitions?: HookDefinition[],
+  hookConfigs?: HookConfig[]
 ): HarnessBootstrap {
   const resolvedPath = projectPath || process.cwd();
 
@@ -119,9 +139,7 @@ export function bootstrapHarnessSync(
   const hooks = new HookRegistry();
   const pipeline = new HookPipeline(hooks);
 
-  if (hookDefinitions) {
-    hooks.registerAll(hookDefinitions);
-  }
+  registerInitialHooks(hooks, hookDefinitions, hookConfigs);
 
   return {
     checker,

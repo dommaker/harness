@@ -170,6 +170,7 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'DocRegexCountCheck',
     'DocsSyncConfig',
     'EffectiveConfigLint',
+    'EffectiveHook',
     'ErrorClassificationRule',
     'ErrorClassifierConfig',
     'EventHandler',

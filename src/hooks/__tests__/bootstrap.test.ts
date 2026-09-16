@@ -11,7 +11,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { bootstrapHarnessSync, bootstrapHarness } from '../bootstrap';
-import type { HookDefinition } from '../types';
+import type { HookConfig, HookDefinition } from '../types';
+
+function makeHookConfig(name: string, overrides: Partial<HookConfig> = {}): HookConfig {
+  return { name, enabled: true, errorStrategy: 'warn', ...overrides };
+}
 
 function setupTempDir(dir: string): string {
   const harnessDir = path.join(dir, '.harness');
@@ -51,14 +55,24 @@ describe('bootstrapHarness', () => {
     expect(result.projectPath).toBe(tempDir);
   });
 
-  it('registers hook definitions when provided', async () => {
+  it('registers hook definitions when provided (with configs)', async () => {
     const hookDef: HookDefinition = {
       name: 'async-hook',
       phase: 'before',
       execute: async () => ({ passed: true }),
     };
-    const result = await bootstrapHarness(tempDir, [hookDef]);
+    const result = await bootstrapHarness(tempDir, [hookDef], [makeHookConfig('async-hook')]);
     expect(result.hooks.listNames()).toContain('async-hook');
+    expect(result.hooks.get('async-hook')?.errorStrategy).toBe('warn');
+  });
+
+  it('throws when definitions are provided without configs (#159)', async () => {
+    const hookDef: HookDefinition = {
+      name: 'async-hook',
+      phase: 'before',
+      execute: async () => ({ passed: true }),
+    };
+    await expect(bootstrapHarness(tempDir, [hookDef])).rejects.toThrow(/HookConfig/);
   });
 
   it('does not register hooks when no definitions provided', async () => {
@@ -126,14 +140,23 @@ describe('bootstrapHarnessSync', () => {
     expect(result.mergedConstraints).toHaveProperty('guidelines');
   });
 
-  it('registers hook definitions when provided', () => {
+  it('registers hook definitions when provided (with configs)', () => {
     const hookDef: HookDefinition = {
       name: 'test-hook',
       phase: 'before',
       execute: async () => ({ passed: true }),
     };
-    const result = bootstrapHarnessSync(tempDir, [hookDef]);
+    const result = bootstrapHarnessSync(tempDir, [hookDef], [makeHookConfig('test-hook')]);
     expect(result.hooks.listNames()).toContain('test-hook');
+  });
+
+  it('throws when definitions are provided without configs (#159)', () => {
+    const hookDef: HookDefinition = {
+      name: 'test-hook',
+      phase: 'before',
+      execute: async () => ({ passed: true }),
+    };
+    expect(() => bootstrapHarnessSync(tempDir, [hookDef])).toThrow(/HookConfig/);
   });
 
   it('does not register hooks when no definitions provided', () => {
@@ -165,7 +188,7 @@ describe('bootstrapHarnessSync', () => {
       phase: 'after',
       execute: async () => ({ passed: true, data: 'ok' }),
     };
-    const result = bootstrapHarnessSync(tempDir, [hookDef]);
+    const result = bootstrapHarnessSync(tempDir, [hookDef], [makeHookConfig('pipeline-hook')]);
     expect(result.pipeline).toBeDefined();
   });
 

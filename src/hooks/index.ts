@@ -10,6 +10,7 @@ export type {
   HookErrorStrategy,
   HookConfig,
   HookDefinition,
+  EffectiveHook,
   HookResult,
   HookExecutionRecord,
   PipelineResult,

@@ -42,7 +42,7 @@ import {
 } from './scaffold';
 import {
   GITHUB_ACTIONS_SNIPPET,
-  GITLAB_CI_SNIPPET,
+  renderGitLabCiJobs,
   PRE_COMMIT_SNIPPET,
   PRE_PUSH_SNIPPET,
 } from './scaffold-templates';
@@ -252,7 +252,7 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
 
   // 只输出代码片段
   if (options.printSnippets) {
-    printSnippets(io, ci.platform);
+    printSnippets(io, ci.platform, options.governance);
     return { kind: 'ok' };
   }
 
@@ -330,8 +330,16 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
 
 /**
  * 输出代码片段（CI 片段按解析出的平台出形，harness#143）
+ *
+ * gitlab 形打 `renderGitLabCiJobs(governanceLevel)`——与落盘 / 冲突分支同一个函数
+ * 的正本（harness#157：曾打无 level 的 GITLAB_CI_SNIPPET，`-g` 档照抄的用户少拿
+ * 治理与 docs 新鲜度两个任务）。
  */
-function printSnippets(io: CommandIO, platform: CiPlatform | 'none'): void {
+function printSnippets(
+  io: CommandIO,
+  platform: CiPlatform | 'none',
+  governanceLevel: string | undefined,
+): void {
   log(io, chalk.blue('📄 Harness 配置代码片段'));
   log(io);
 
@@ -349,7 +357,7 @@ function printSnippets(io: CommandIO, platform: CiPlatform | 'none'): void {
     log(io, chalk.yellow('GitLab CI:'));
     log(io, chalk.gray('添加到 .gitlab-ci.yml'));
     log(io);
-    log(io, chalk.cyan(GITLAB_CI_SNIPPET));
+    log(io, chalk.cyan(renderGitLabCiJobs(governanceLevel)));
   } else {
     log(io, chalk.yellow('GitHub Actions:'));
     log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 下（以下正文取自 harness-check.yml 的 job 段）'));

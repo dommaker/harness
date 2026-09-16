@@ -749,3 +749,98 @@ describe('init --print-snippets 的 GitHub Actions 片段视图（harness#153）
   });
 });
 
+// ── --print-snippets 的 GitLab CI 片段视图（harness#157）：打印的任务正文 == 落盘正本的一段 ──
+
+/** 打印面里 GitLab 那份任务正文（一次 log 调用 = 一条记录；归一化口径同 printedJob） */
+function printedGitLabJobs(io: CapturingIO): string {
+  const record = io.outRecords().find(chunk => chunk.includes('harness-check:'));
+  if (!record) throw new Error('--print-snippets 没有打印 harness-check 的任务正文');
+  return record.replace(/^\n+/, '').replace(/\n$/, '');
+}
+
+/** .gitlab-ci.yml 文本里 harness 拥有的任务名（顶层键中 harness-* 的那些），排序后比对 */
+function harnessJobNames(gitlabCiText: string): string[] {
+  const doc = yaml.load(gitlabCiText) as Record<string, unknown>;
+  return Object.keys(doc).filter(key => key.startsWith('harness-')).sort();
+}
+
+/** GitLab 任务正文里某任务的 script 命令清单：按 YAML 解析枚举，不靠子串碰运气 */
+function gitLabScriptCommands(jobsBody: string, job: string): string[] {
+  const doc = yaml.load(jobsBody) as Record<string, { script?: string[] }>;
+  return doc[job]?.script ?? [];
+}
+
+describe('init --print-snippets 的 GitLab CI 片段视图（harness#157）', () => {
+  const roots: string[] = [];
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => fs.rm(root, { recursive: true, force: true })));
+  });
+
+  async function gitlabSnippets(options: Partial<InitOptions> = {}) {
+    const root = await makeProject();
+    roots.push(root);
+    const io = captureIO();
+    const result = await init(
+      { ...CI_OPTIONS, ci: 'gitlab', printSnippets: true, ...options, projectPath: root },
+      io,
+    );
+    return { io, result };
+  }
+
+  it('同源闸（-g standard）：打印的任务正文逐字等于落盘正本的任务段，任务集合与真落盘文件一致', async () => {
+    const { io } = await gitlabSnippets({ governance: 'standard' });
+    const printed = printedGitLabJobs(io);
+
+    // 逐字等于字节级冻结基线的任务段（改模板必须同步改 GITLAB_GOVERNED——同步动作正是闸）
+    expect(printed).toBe(
+      GITLAB_GOVERNED.slice(GITLAB_GOVERNED.indexOf('harness-check:')),
+    );
+
+    // 与真落盘对撞：任务集合按 YAML 解析比对（非子串）——给落盘正本删一个任务，
+    // 集合即不等，本闸必红（harness#157 验收 2 的反证）
+    const root = await makeProject();
+    roots.push(root);
+    await init({ ...INIT_OPTIONS, ci: 'gitlab', projectPath: root }, captureIO());
+    const written = await fs.readFile(path.join(root, '.gitlab-ci.yml'), 'utf-8');
+    expect(harnessJobNames(written)).toEqual(harnessJobNames(printed));
+    expect(written).toContain(printed);
+  });
+
+  it('script 集合闸：打印的 harness-check 覆盖 check / validate / passes-gate 三道门禁，一道不缺', async () => {
+    const { io } = await gitlabSnippets({ governance: 'standard' });
+
+    expect(gitLabScriptCommands(printedGitLabJobs(io), 'harness-check')).toEqual(
+      expect.arrayContaining([
+        'npx @dommaker/harness check',
+        'npx @dommaker/harness validate',
+        'npx @dommaker/harness passes-gate',
+      ]),
+    );
+  });
+
+  it('不传 -g：只打 harness-check 一个任务，与无治理档的落盘正本一致', async () => {
+    const { io } = await gitlabSnippets();
+    const printed = printedGitLabJobs(io);
+
+    expect(printed).toBe(
+      GITLAB_PLAIN.slice(GITLAB_PLAIN.indexOf('harness-check:')),
+    );
+    expect(harnessJobNames(printed)).toEqual(['harness-check']);
+  });
+
+  it('-g 非法值：usage-error（harness#156 裁决 F2 同判），不打印任何 CI 片段', async () => {
+    // CLI 边界：commander 把用户敲的字符串原样递进来，合法域由命令入口校验
+    const dirty = { governance: 'bogus' as unknown as InitOptions['governance'] };
+
+    const { io, result } = await gitlabSnippets(dirty);
+
+    expect(result).toEqual({
+      kind: 'usage-error',
+      reason: expect.stringContaining('minimal | standard | strict'),
+    });
+    expect(io.outText()).not.toContain('GitLab CI:');
+    expect(io.outText()).not.toContain('harness-check:');
+  });
+});
+

@@ -465,6 +465,9 @@ describe('闸 1：源形状——投影分派与上色只有一处', () => {
   it('knowledge.ts 的退出码返回值只余冻结的豁免行（投影出口由 emit 单点给）', () => {
     expect(code(knowledgeSource).filter(l => l.includes('kind:'))).toEqual([
       "return { kind: 'usage-error', reason: 'knowledge search 缺少关键词位置参数' };",
+      // #154：search --limit 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 被 `|| 20`
+      // 静默兜成缺省量）。豁免理由同上——入参闸门而非投影出口。
+      "return { kind: 'usage-error', reason: `knowledge search --limit 非法限制: \"${limit.raw}\"` };",
       // #152：--threshold 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 静默关掉短内容判定）。
       // 豁免理由同 search 那条——入参闸门而非投影出口，取值/排版仍只在 emit 一处。
       "return { kind: 'usage-error', reason: `knowledge audit --threshold 非法阈值: \"${threshold.raw}\"` };",

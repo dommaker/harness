@@ -10,7 +10,8 @@ import * as path from 'path';
 import { execAsync } from '../../utils/exec';
 import { PassesGate, detectTestCommand } from '../../core/validators/passes-gate';
 import type { PassesGateConfig } from '../../types/passes-gate';
-import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { numericFlagMessage, parseNumericFlag } from '../../utils/numeric-flag';
 
 export interface PassesGateOptions {
   /** 测试命令 */
@@ -92,16 +93,24 @@ export async function runPassesGate(
 }
 
 /**
- * --coverage 路由入口（候选7）：projectPath 兜底 + 阈值强转编组，
+ * --coverage 路由入口（候选7）：projectPath 兜底 + 阈值装配窄化，
  * 自 definitions.ts 的 optionRoutes args 闭包移回命令模块。
+ * `--coverage-threshold` 给到的恒是字符串（缺省 '80' 也是），脏输入 fail-loud
+ * （harness#154，原先 parseInt 出 NaN → `totalCoverage >= NaN` 恒 false →
+ * 打出自证异常的「覆盖率不足 (x% < NaN%)」），且先于任何覆盖率执行。
  */
 export async function coverageCheck(
   options: Record<string, unknown>,
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
+  const threshold = parseNumericFlag(options.coverageThreshold as string | undefined, 'int');
+  if (!threshold.ok) {
+    logError(io, numericFlagMessage('--coverage-threshold', threshold.raw, 'int'));
+    return { kind: 'usage-error', reason: `passes-gate --coverage-threshold 非法阈值: "${threshold.raw}"` };
+  }
   return checkCoverage(
     (options.projectPath as string) || process.cwd(),
-    parseInt(String(options.coverageThreshold), 10),
+    threshold.value,
     io,
   );
 }

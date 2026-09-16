@@ -164,7 +164,23 @@ async function runDefinition(command, def, positionals, options) {
     command.help();
     return;
   }
-  applyResult(await callImpl(def.action, def.mapActionArgs ? def.mapActionArgs(positionals, options) : [options]));
+  // mapActionArgs 装配失败的唯一失败通道（harness#154）：数值旗帜脏输入由
+  // requireNumericFlag 抛 NumericFlagError，此处就地映射 usage-error——
+  // 定义表是纯数据模块返回不了 CommandResult，退出码映射只在 bin 这一处。
+  let actionArgs;
+  try {
+    actionArgs = def.mapActionArgs ? def.mapActionArgs(positionals, options) : [options];
+  } catch (err) {
+    // 懒 require：仅装配抛错时加载（纯函数模块，不破坏 --help/--version 零实现加载）
+    const { NumericFlagError } = require('../dist/utils/numeric-flag');
+    if (err instanceof NumericFlagError) {
+      console.error(err.message);
+      applyResult({ kind: 'usage-error', reason: err.message });
+      return;
+    }
+    throw err;
+  }
+  applyResult(await callImpl(def.action, actionArgs));
 }
 
 /**

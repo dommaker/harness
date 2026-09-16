@@ -11,10 +11,12 @@
  *   bareRunsAction:true（无位置参数时跑默认 action 而非显示帮助）。
  * - 本模块禁止 import 任何门禁/命令实现（仅 type import，运行时零依赖）——
  *   bin 启动期只加载本纯数据模块（保持 --help/--version 懒加载，
- *   闭环校验在 registry 加载期执行）。
+ *   闭环校验在 registry 加载期执行）。唯一例外 import：`utils/numeric-flag`
+ *   纯函数解析器（harness#154 口径条目指名的数值旗帜唯一解析器）。
  */
 
 import type { CommandDefinition } from '../cli/commands/definitions';
+import { requireNumericFlag } from '../utils/numeric-flag';
 
 /**
  * 门禁定义
@@ -116,9 +118,9 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         {
           projectPath: options.projectPath,
           coverage: options.coverage,
-          coverageThreshold: parseInt(String(options.coverageThreshold), 10),
+          coverageThreshold: requireNumericFlag('--coverage-threshold', options.coverageThreshold as string | undefined, 'int'),
           bundle: options.bundle,
-          bundleThreshold: parseInt(String(options.bundleThreshold), 10),
+          bundleThreshold: requireNumericFlag('--bundle-threshold', options.bundleThreshold as string | undefined, 'int'),
         },
       ],
     },
@@ -145,7 +147,7 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
       mapActionArgs: (_positionals, options) => [
         {
           projectPath: options.projectPath,
-          minReviewers: parseInt(String(options.minReviewers), 10),
+          minReviewers: requireNumericFlag('--min-reviewers', options.minReviewers as string | undefined, 'int'),
           requireApproval: options.requireApproval,
           blockOnChangesRequested: options.blockOnChanges,
           allowedReviewers: options.allowedReviewers,

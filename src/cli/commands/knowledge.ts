@@ -19,6 +19,7 @@ import { migrateKnowledgeEntries } from '../../knowledge/migration';
 import { KnowledgeIndexGenerator } from '../../knowledge/index-generator';
 import type { KnowledgeEntry, KnowledgeSubsystem, MaturityChange, MaturityLevel, QueryFilter } from '../../knowledge/types';
 import { logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { numericFlagMessage, parseNumericFlag } from '../../utils/numeric-flag';
 import {
   announce,
   blankLine,
@@ -114,7 +115,7 @@ export function knowledgeSearchView(
   io: CommandIO,
 ) {
   const store = openKnowledgeStore(options, io);
-  const matched = new KnowledgeQuery(store).search(query, { limit: options.limit || 20 });
+  const matched = new KnowledgeQuery(store).search(query, { limit: options.limit ?? 20 });
   const data = { query, total: matched.length, entries: matched };
 
   return { data, human: (): DisplayModel => ({ sections: [{ rows: searchRows(query, matched) }] }) };
@@ -154,8 +155,10 @@ export async function knowledgeSearch(
 }
 
 /**
- * knowledge search 子命令入口（候选7）：缺参闸门 + limit 强转编组，
+ * knowledge search 子命令入口（候选7）：缺参闸门 + limit 装配窄化，
  * 自 definitions.ts 的 args 复印块移回命令模块（interface/测试面所在）。
+ * `--limit` 给到的恒是字符串（缺省 '20' 也是），脏输入 fail-loud（harness#154，
+ * 原先 parseInt 出 NaN 被下游 `|| 20` 静默兜成缺省量）。
  */
 export async function knowledgeSearchCommand(
   positionals: (string | undefined)[],
@@ -167,11 +170,16 @@ export async function knowledgeSearchCommand(
     logError(io, '请提供搜索关键词');
     return { kind: 'usage-error', reason: 'knowledge search 缺少关键词位置参数' };
   }
+  const limit = parseNumericFlag(options.limit as string | undefined, 'int');
+  if (!limit.ok) {
+    logError(io, numericFlagMessage('--limit', limit.raw, 'int'));
+    return { kind: 'usage-error', reason: `knowledge search --limit 非法限制: "${limit.raw}"` };
+  }
   return knowledgeSearch(String(query), {
     projectPath: options.projectPath as string | undefined,
     json: options.json as boolean | undefined,
-    limit: parseInt(String(options.limit), 10),
-  });
+    limit: limit.value,
+  }, io);
 }
 
 // ========================================
@@ -437,13 +445,11 @@ type ThresholdAssembly = { ok: true; value?: number } | { ok: false; raw: string
 /**
  * `--threshold` 的装配点窄化（harness#152）：非负整数字符串 → 数值，转不出来即脏输入。
  * `undefined` = 未传，落引擎缺省（50）；`'0'` 是显式零值，不当「未传」兜掉。
+ * 判定规则正本是 `parseNumericFlag`（harness#154 统一解析器），此处保留 #152 的
+ * 函数面与报错文案（冻结测试钉死），只做委派。
  */
 function assembleShortContentThreshold(raw: string | undefined): ThresholdAssembly {
-  if (raw === undefined) return { ok: true };
-  const digits = raw.trim();
-  return /^\d+$/.test(digits)
-    ? { ok: true, value: Number(digits) }
-    : { ok: false, raw };
+  return parseNumericFlag(raw, 'int');
 }
 
 export function knowledgeAuditView(options: KnowledgeAuditViewOptions, io: CommandIO) {

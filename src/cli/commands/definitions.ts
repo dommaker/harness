@@ -11,7 +11,11 @@
  *   子命令别名是数据（aliases），实参编组归各命令模块的具名导出
  *   （那才是它的 interface/测试面）；保证 --help/--version 懒加载不被破坏；
  *   注册表完整性断言（引用实现可解析）在 __tests__/registry.test.ts 构建/测试期校验。
+ * - 唯一例外 import：`utils/numeric-flag` 纯函数解析器（harness#154 口径条目指名的
+ *   数值旗帜唯一解析器）——非命令实现、零 IO，不破坏懒加载。
  */
+
+import { requireNumericFlag } from '../../utils/numeric-flag';
 
 /**
  * 命令 CLI 选项元数据（直接映射 commander `.option()`）
@@ -333,9 +337,9 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
           projectPath: options.projectPath,
           export: options.export,
           json: options.json,
-          zeroInterceptMin: parseInt(String(options.zeroInterceptMin), 10),
-          noiseFailRate: parseFloat(String(options.noiseFailRate)),
-          noiseMinTotal: parseInt(String(options.noiseMinTotal), 10),
+          zeroInterceptMin: requireNumericFlag('--zero-intercept-min', options.zeroInterceptMin as string | undefined, 'int'),
+          noiseFailRate: requireNumericFlag('--noise-fail-rate', options.noiseFailRate as string | undefined, 'float'),
+          noiseMinTotal: requireNumericFlag('--noise-min-total', options.noiseMinTotal as string | undefined, 'int'),
         }],
       },
       {

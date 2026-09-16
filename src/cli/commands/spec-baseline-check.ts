@@ -89,6 +89,22 @@ export function extractBaselineSection(content: string): string[] {
 type DependencySnapshot = { ok: true; deps: Record<string, string> } | { ok: false };
 
 /**
+ * 共享索引的驻留上限（#162，统一复审遗留项 3）：
+ * #146 把全仓源文件内容常驻一个 Map，排除面只有 node_modules/dist/隐藏目录与后缀，
+ * 无任何容量上限——峰值内存由 O(单文件) 变 O(全仓源码)，大 monorepo 会承担这个峰值。
+ * 超出任一上限即放弃驻留、回落逐文件流式读（峰值回到 O(单文件)），
+ * 正常规模仓仍保留「一次遍历」收益。
+ */
+export const SOURCE_INDEX_MAX_ENTRIES = 5000;
+export const SOURCE_INDEX_MAX_BYTES = 64 * 1024 * 1024;
+
+/** 驻留上限（测试可注入小值走回落路径；生产一律缺省常量） */
+export interface SourceIndexLimits {
+  maxEntries: number;
+  maxBytes: number;
+}
+
+/**
  * 一次 spec-baseline-check 运行内的取数面（工单 #146，母票 #140 A 票）：
  * 全仓内容扫描、`package.json` 解析、同一落点的存在性探测各至多一遍，
  * 逐条前置只在索引上重放判定——此前是「前置条件数 × 关键词数 × 源文件数」的逐条重扫。
@@ -97,38 +113,73 @@ type DependencySnapshot = { ok: true; deps: Record<string, string> } | { ok: fal
  * 运行结束即弃，不跨命令、不扩 `RunEnv` 公共面（#140 triage 裁决 5）。
  */
 interface BaselineIndex {
-  /** 全仓源文件路径 → 内容；读失败的文件不入表（与改前逐文件 try/catch 跳过同义） */
-  sourceContents(): Map<string, string>;
+  /**
+   * 内容含 keyword 的源文件数。上限内走驻留索引重放（一次运行全仓至多读一遍）；
+   * 超 SOURCE_INDEX_MAX_ENTRIES / SOURCE_INDEX_MAX_BYTES 即放弃驻留，
+   * 每个关键词回落逐文件流式读（#162：驻留条目数有上界，峰值 O(单文件)）。
+   */
+  countFilesContaining(keyword: string): number;
   /** package.json 的 dependencies + devDependencies 合并面 */
   dependencies(): DependencySnapshot;
   /** 绝对路径是否在世（同一落点一次运行内只 stat 一次） */
   exists(fullPath: string): boolean;
 }
 
-function createBaselineIndex(projectPath: string): BaselineIndex {
-  let sources: Map<string, string> | undefined;
+export function createBaselineIndex(
+  projectPath: string,
+  limits: SourceIndexLimits = { maxEntries: SOURCE_INDEX_MAX_ENTRIES, maxBytes: SOURCE_INDEX_MAX_BYTES }
+): BaselineIndex {
+  /** undefined = 未建（懒建）；null = 超上限放弃驻留（回落流式读） */
+  let sources: Map<string, string> | null | undefined;
   let dependencySnapshot: DependencySnapshot | undefined;
   const stats = new Map<string, boolean>();
 
-  return {
-    sourceContents() {
-      if (!sources) {
-        const map = new Map<string, string>();
-        // 遍历与内容读取各一次，供所有前置与关键词复用（工单 19 只收敛了遍历）
-        for (const fullPath of walkFiles(projectPath, {
-          skipDirs: ['node_modules', 'dist'],
-          skipHidden: true,
-          filter: (_name, filePath) => filePath.endsWith('.ts') || filePath.endsWith('.js'),
-        })) {
-          try {
-            map.set(fullPath, fs.readFileSync(fullPath, 'utf-8'));
-          } catch {
-            /* skip */
-          }
+  const walkSourceFiles = () =>
+    walkFiles(projectPath, {
+      skipDirs: ['node_modules', 'dist'],
+      skipHidden: true,
+      filter: (_name, filePath) => filePath.endsWith('.ts') || filePath.endsWith('.js'),
+    });
+
+  /** 遍历与内容读取各一次建驻留索引；超任一上限即弃表返回 null（#162 驻留上界） */
+  function buildIndex(): Map<string, string> | null {
+    const map = new Map<string, string>();
+    let totalBytes = 0;
+    for (const fullPath of walkSourceFiles()) {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        map.set(fullPath, content);
+        totalBytes += Buffer.byteLength(content);
+        if (map.size > limits.maxEntries || totalBytes > limits.maxBytes) {
+          return null; // 已读内容随 map 一起弃，驻留峰值 ≤ 上限
         }
-        sources = map;
+      } catch {
+        /* skip：读失败的文件不入表（与改前逐文件 try/catch 跳过同义） */
       }
-      return sources;
+    }
+    return map;
+  }
+
+  return {
+    countFilesContaining(keyword) {
+      if (sources === undefined) sources = buildIndex();
+      if (sources !== null) {
+        let count = 0;
+        for (const content of sources.values()) {
+          if (content.includes(keyword)) count++;
+        }
+        return count;
+      }
+      // 回落：逐文件流式读、读完即弃，驻留 O(单文件)（改前逐关键词重读同形）
+      let count = 0;
+      for (const fullPath of walkSourceFiles()) {
+        try {
+          if (fs.readFileSync(fullPath, 'utf-8').includes(keyword)) count++;
+        } catch {
+          /* skip */
+        }
+      }
+      return count;
     },
     dependencies() {
       if (!dependencySnapshot) {
@@ -242,14 +293,9 @@ function checkCodePattern(pattern: string, index: BaselineIndex): { exists: bool
   const found: string[] = [];
   const notFound: string[] = [];
 
-  // 一次运行一份索引：全仓扫描与内容读取已在索引里发生一遍，这里只做匹配
-  const sourceContents = index.sourceContents();
-
+  // 一次运行一份索引：全仓扫描与内容读取已在索引里发生一遍（超上限则回落流式），这里只做匹配
   for (const kw of keywords) {
-    let count = 0;
-    for (const content of sourceContents.values()) {
-      if (content.includes(kw)) count++;
-    }
+    const count = index.countFilesContaining(kw);
     if (count > 0) {
       found.push(`${kw} (${count} files)`);
     } else {

@@ -43,7 +43,7 @@ export interface GitEvidence {
   headDirs(): Set<string> | null;
 }
 
-/** 与 utils/exec.runCommand 同一缓冲上限（大 diff 不 ENOBUFS） */
+/** 大 diff 不 ENOBUFS 的缓冲上限（1MB） */
 const GIT_MAX_BUFFER = 1024 * 1024;
 
 /**

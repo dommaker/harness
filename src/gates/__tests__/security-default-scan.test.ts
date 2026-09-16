@@ -16,7 +16,7 @@
 import { execAsync } from '../../utils/exec';
 import { SecurityGate } from '../security';
 
-// 缝替身：只替换 execAsync，其余导出（runCommand）保持真实
+// 缝替身：只替换 execAsync，模块其余导出保持真实
 jest.mock('../../utils/exec', () => {
   const actual = jest.requireActual('../../utils/exec');
   return { ...actual, execAsync: jest.fn() };

@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
+import * as os from 'os';
 
 let io: CapturingIO;
 beforeEach(() => {
@@ -13,13 +14,14 @@ beforeEach(() => {
 
 describe('postevalPlan', () => {
   jest.setTimeout(30000); // Retry-based tests with exponential backoff need longer timeout
-  const tempDir = path.join(process.cwd(), 'temp-test-posteval');
-  const planPath = path.join(tempDir, 'plan.md');
+  let tempDir: string;
+  let planPath: string;
   let originalFetch: typeof fetch;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-posteval-'));
+    planPath = path.join(tempDir, 'plan.md');
     fs.writeFileSync(planPath, '# Test plan\n- [AC-001] Task 1\n- [AC-002] Task 2');
   });
 

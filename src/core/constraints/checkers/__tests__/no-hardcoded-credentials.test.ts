@@ -12,11 +12,12 @@ import {
   containsHardcodedCredential,
 } from '../no-hardcoded-credentials';
 import type { CheckEnv } from '../types';
+import { createRunEnv } from '../../run-env';
 
 function makeEnv(stagedDiff: string): CheckEnv {
   return {
+    ...createRunEnv('/nonexistent'),
     context: { operation: 'commit', projectPath: '/nonexistent' },
-    projectPath: '/nonexistent',
     stagedDiff: async () => stagedDiff,
     stagedDiffNames: async () => '',
     srcScan: () => [],

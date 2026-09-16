@@ -6,15 +6,17 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/glo
 import { TraceCollector } from '../monitoring/traces';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import type { ExecutionTrace } from '../types/trace';
 
 describe('TraceCollector', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-traces');
-  const traceFile = path.join(tempDir, 'traces.log');
+  let tempDir: string;
+  let traceFile: string;
   let collector: TraceCollector;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-traces-'));
+    traceFile = path.join(tempDir, 'traces.log');
   });
 
   afterAll(() => {

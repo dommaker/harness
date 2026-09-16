@@ -23,7 +23,6 @@ export class ContractGate implements Gate {
 
   constructor(config: Partial<ContractGateConfig> = {}) {
     this.config = {
-      enabled: config.enabled ?? true,
       strict: config.strict ?? true,
       allowBreakingChanges: config.allowBreakingChanges ?? false,
       contractPath: config.contractPath ?? 'openapi.yaml',
@@ -42,10 +41,6 @@ export class ContractGate implements Gate {
    */
   async check(context: GateContext): Promise<GateResult> {
     const startTime = Date.now();
-
-    if (!this.config.enabled) {
-      return pass('contract', '契约门禁已禁用', startTime);
-    }
 
     try {
       const contractPath = context.newContractPath ?? 

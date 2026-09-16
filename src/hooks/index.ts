@@ -5,7 +5,16 @@
  * 无业务逻辑，consumer 自行定义 hook 名称和语义。
  */
 
-export * from './types';
+export type {
+  HookPhase,
+  HookErrorStrategy,
+  HookConfig,
+  HookDefinition,
+  EffectiveHook,
+  HookResult,
+  HookExecutionRecord,
+  PipelineResult,
+} from './types';
 export { HookRegistry, assertHookRegistryClosed } from './registry';
 export { HookPipeline } from './pipeline';
 export { toErrorStrategy } from './config';

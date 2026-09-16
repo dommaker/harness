@@ -4,7 +4,8 @@
  * 把已注册的 ConstraintCheck 适配为统一 Gate，供守卫链（如 studio
  * runCompletionGuards）复用 runGates 的 deny 单调 / ask fail-closed 语义。
  *
- * env 经 buildCheckEnv(..., 'none') 构造（显式不接证据），语义见工厂 doc。
+ * env 经 buildCheckEnv(..., 'none') 构造（显式不接证据），语义见工厂 doc；
+ * `ctx.runEnv` 传入即与本 run 其余消费方共用同一份上行数据读取（ADR-0023）。
  */
 
 import type { ConstraintCheck } from '../core/constraints/checkers';
@@ -29,7 +30,7 @@ export function createCheckerGate(check: ConstraintCheck, order = 0): Gate {
     async evaluate(ctx: GateContext): Promise<GateDecision> {
       const startTime = Date.now();
       const projectPath = ctx.projectPath || process.cwd();
-      const env = buildCheckEnv({ operation: 'manual', projectPath }, 'none');
+      const env = buildCheckEnv({ operation: 'manual', projectPath }, 'none', ctx.runEnv);
       const outcome = normalizeCheckOutcome(await check.evaluate(env));
       const evidence = outcome.evidence.map((e) => `\n  - ${e}`).join('');
       const reason = outcome.skipped

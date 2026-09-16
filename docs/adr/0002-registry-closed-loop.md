@@ -1,7 +1,7 @@
 # ADR-0002: 注册型能力一律「定义即注册 + 构建期闭环」
 
 - 日期：2026-08-16
-- 状态：已接受
+- 状态：已接受（2026-09-15 部分失效：门禁侧「声明式生效集」面已收缩——`getEffectiveGates` 与 config.yml `gates.order` / `gates.<id>.enabled` 删除；注册表闭环与统一接口本身不动。判据与影响面见文末「后续变更」）
 - 影响版本：1.0.0
 
 ## 背景
@@ -64,3 +64,25 @@ harness 有 4 类「注册型能力」——能力以「id → 实现」的方�
 - 档 2 依赖解析/拓扑排序：现状无能力间依赖拓扑需求，纯预留，不建 `deps[]` 解析。
 - 档 3 dispose 链 / 可卸载生命周期：harness 无常驻进程、副作用是 yml 落盘（git 兜底），无运行时资源承载面；若未来需要，承载面在 studio 侧进程内回路。
 - 引 cordis / dsh 运行时依赖：既定结论不引，全部自研落地。
+
+## 后续变更（2026-09-15，架构评审 2026-09-14 候选 1）
+
+**本 ADR 的门禁执行半收缩一项，其余照旧生效。**
+
+失效内容：`effective-gates.ts`（`getEffectiveGates` + `GatesConfig`）与 config.yml 的 `gates.order` / `gates.<id>.enabled` 声明式面，连带四个门禁配置接口里的 `enabled` 字段及各自「禁用即放行」分支。`package.json` 的 `./gates` 子路径入口不动。
+
+判据是三条事实叠在一起，不是审美：
+
+1. **零调用方**——`runGates` / `getEffectiveGates` / `getGate` 在 harness 与 studio 两仓的生产路径均无消费者（CLI 当时逐命令直调 `check()`）。
+2. **零配置数据**——harness 自身没有 `.harness/config.yml`；studio 与 studio-prod 两份配置文件各 43 字节（只有 `preset` 与 `harness.version`），`harness init` 生成的模板也不写 `gates:` 段。
+3. **无文档承诺 + 无纠错能力**——README 无该段示例；加载器只做 `{...DEFAULT_CONFIG, ...raw}` 不校验顶层键，`ProjectConfig` 类型里也没有 `gates` 字段，`getEffectiveGates` 自己钻 `raw.gates`。也就是说把 `gates:` 拼错不会有任何提示——一条对外配置面在没有任何执法的情况下存在了一个多月。
+
+`enabled` 单独说明：它与生效集是**从未接上的两半**。`getEffectiveGates` 的裁剪方式是「从数组里移除门禁」，从不往实例写 `enabled:false`；CLI 也不传该字段。于是四段 `if (!this.config.enabled) return pass(...)` 没有任何代码路径能触发，只有它们自己的单元测试在供养。
+
+保留部分及理由：
+
+- **注册表闭环**（`assertGateRegistryClosed` + `getGate` 引用未注册抛错）——这是本 ADR 真正值钱的东西，它消灭的故障类「定义了但没登记」与执行方式无关。消费者是 `gates/registry.ts` 加载期与 `cli/__tests__/registry.test.ts`。
+- **统一接口 `Gate{id, order, evaluate(ctx)}` 与 `GateDecision`**——不但没删，反而第一次拿到生产消费者：六个门禁 CLI 命令的判定自本车起一律穿过 `evaluate()`，`GateDecision → CommandResult` 的映射与失败措辞收在 `src/cli/gate-command.ts` 一处（此前是「`<id>` gate denied」6 份、「`<id>` gate error」4 份）。`GateContext` 同批瘦身：删 `projectId` 及 5 个与构造器平行的零读取字段，此后「只带运行信息、配置走构造器」写进 `gates/CONTEXT.md`。
+- **`runGates` 与 `order` 字段**——链语义（deny 单调 / ask fail-closed / 决策浅冻结）是判定层里唯一一处真逻辑，57 行、6 条测试。它的消费者仍然只有测试，但 #115 的裁决已把复开条件写明：「若未来出现真实门禁链消费方，可重开」。故留 `order` 与本执行器作该复开点，删掉的只是「用户可声明式改写顺序/开关」这一层。
+
+定级：`GateContext`、`Gate`、`getEffectiveGates`、`GatesConfig` 与四个 `*GateConfig` 属包根公开导出，删必填字段与删导出符号对下游是编译级变更。按 ADR-0022 口径走 minor（2026-09-09 人类裁决：breaking 内容按 minor 号发布）。studio 侧受影响面一处：`apps/api/tests/review-gate.test.ts` 按类型构造 `GateContext` 时填了 `projectId`，随动单独开票。

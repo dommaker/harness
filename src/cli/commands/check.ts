@@ -5,7 +5,7 @@
  * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder
  * ADR-0001：约束集统一走 getMergedConstraintsConfig 生效集链路（preset/config 禁用/custom/scenes）
  * harness#88：本命令是 trace 记录器的组合根——core 不上行依赖 monitoring，
- * 真实收集器在此经构造参数接线
+ * 真实收集器在此经构造参数接线；#139：收集器锚根构造，trace 落点跟 --project-path 走
  */
 
 import chalk from 'chalk';
@@ -13,14 +13,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
-import { getMergedConstraintsConfig } from '../../core/effective-constraints';
+import { getMergedConstraintsConfig, constraintsFromMerged } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
+import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
 import { detectInjectionDrift } from '../../core/constraints/injection-drift';
 import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
-import { getTraceCollector } from '../../monitoring/traces';
-import { countJsonlLines } from '../../utils/jsonl';
-import { DEFAULT_TRACE_FILE } from '../../types/trace';
+import { TraceCollector } from '../../monitoring/traces';
+import { readJsonl } from '../../utils/jsonl';
+import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 import type { ConstraintResult, ConstraintTrigger } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -51,8 +52,8 @@ function logEvidence(
 }
 
 export interface CheckOptions {
-  /** 预设名称 */
-  preset: string;
+  /** 预设名称；**不传 = 按项目 `.harness/config.yml` 的 preset**（CLI 不给缺省值，见 commands/definitions.ts） */
+  preset?: string;
   /** 是否只检查暂存文件 */
   staged: boolean;
   /** 触发条件 */
@@ -66,6 +67,13 @@ export interface CheckOptions {
    * 测试据此断言"同一 run 内每条 git 命令至多执行一次"。
    */
   evidence?: GitEvidence;
+  /**
+   * 运行级观察面（非 CLI flag；ADR-0023）
+   *
+   * 缺省 = 本 run 独占一份。注入则与调用方共用同一份上行数据读取，
+   * 测试据此断言「同一次运行内同一项目文件至多读一次」。
+   */
+  runEnv?: RunEnv;
 }
 
 /**
@@ -76,15 +84,19 @@ export async function check(
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
   log(io, chalk.blue('🔍 检查约束...'));
-  log(io, chalk.gray(`预设: ${options.preset}`));
+  log(io, chalk.gray(`预设: ${options.preset ?? '（按 config.yml，缺省 standard）'}`));
 
   try {
     const projectPath = options.projectPath || process.cwd();
+    // 一次 run 一份证据与观察面（#87 / ADR-0023）：入口构造，沿生效集、context、checker 向下传
+    const evidence = options.evidence ?? createGitEvidence(projectPath);
+    const runEnv = options.runEnv ?? createRunEnv(projectPath);
 
     // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
     // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（工单 23 语义：
     // 项目自定义配置优先于 CLI 预设），优先级规则收在 getMergedConstraintsConfig 一处。
-    const merged = getMergedConstraintsConfig(projectPath, { preset: options.preset });
+    // CLI 不给 -p 缺省值：没传 = 尊重 config.yml（ADR-0023 步骤 4.5，缺省值曾让两者不可区分）
+    const merged = getMergedConstraintsConfig(runEnv, { preset: options.preset });
     if (merged.custom.length > 0) {
       log(io, chalk.gray(`自定义约束: ${merged.custom.length} 条`));
     }
@@ -98,12 +110,13 @@ export async function check(
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
     // #87：一次 run 一份 git 证据——context-builder 与 checker 层共用同一实例
-    const evidence = options.evidence ?? createGitEvidence(projectPath);
+    // ADR-0023：一次 run 一份运行级观察面——配置、源根探测、trace 证据探测全部共用同一份读取
     const context = await buildConstraintContext({
       projectPath: options.projectPath,
       staged: options.staged,
       trigger: options.trigger,
       evidence,
+      runEnv,
     });
     const changedFiles = context.changedFiles ?? [];
     if (changedFiles.length > 0) {
@@ -113,8 +126,9 @@ export async function check(
 
     // 执行三层检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
     // trace 记录器经构造参数接线（harness#88）：一次命令一个 checker 实例
-    const checker = new ConstraintChecker(getTraceCollector());
-    const result = await checker.checkConstraints(context, merged, evidence);
+    // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
+    const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
+    const result = await checker.checkConstraints(context, merged, evidence, runEnv);
 
     // 输出结果
     log(io);
@@ -183,7 +197,8 @@ export async function check(
     // 注入漂移校验（ADR-0001 决策 7）：黄色警告块，不改 exit code、不影响门禁结果。
     // 无漂移/未注入零输出；漂移检测自身异常静默吞掉，绝不影响 check。
     try {
-      const drift = detectInjectionDrift(projectPath);
+      // 生效集直接用本 run 那一份：一遍算完，且比对对象就是本次实际执法的规则集（ADR-0023 步骤 4.5）
+      const drift = detectInjectionDrift(runEnv, undefined, constraintsFromMerged(merged));
       if (drift.hasDrift) {
         log(io);
         log(io, chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));
@@ -221,6 +236,9 @@ export async function check(
   }
 }
 
+/** 智能提示阈值：trace 累计条数首次达到此数才提示跑 status（判定只要「够不够」，不要总数） */
+const TRACE_HINT_THRESHOLD = 50;
+
 /**
  * 智能提示：检查是否需要提示用户下一步操作
  */
@@ -228,8 +246,13 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
   const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
   const statePath = path.join(projectPath, '.harness', '.state.json');
 
-  // 只数非空行数（含坏行），零 parse——原语义不变，走 jsonl 正本（harness#82）
-  const traceCount = countJsonlLines(tracesPath);
+  // 只读够 TRACE_HINT_THRESHOLD 行即停（坏行照旧占位，条数口径与改前的纯计数逐字一致）——
+  // traces.log 是 append-only 无上限文件，为一个比较符整读不成立
+  // 计数去向：豁免（harness#100）——本消费面只输出「够不够」的提示行，没有可挂坏行计数的输出位
+  const { records, skippedLines } = readJsonl<ExecutionTrace>(tracesPath, 'skip', {
+    head: TRACE_HINT_THRESHOLD,
+  });
+  const traceCount = records.length + skippedLines;
   if (traceCount === 0) {
     return null;
   }
@@ -246,8 +269,8 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
   
   const hints: string[] = [];
   
-  // 条件 1: 记录数首次达到 50
-  if (traceCount >= 50 && !state.shownHints.includes('trace_50')) {
+  // 条件 1: 记录数首次达到阈值
+  if (traceCount >= TRACE_HINT_THRESHOLD && !state.shownHints.includes('trace_50')) {
     hints.push('📊 记录已足够，运行 harness status 查看统计');
     state.shownHints.push('trace_50');
   }

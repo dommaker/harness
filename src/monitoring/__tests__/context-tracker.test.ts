@@ -6,14 +6,22 @@ import { ContextTracker } from '../context-tracker';
 import * as fs from 'fs';
 import type { ContextUsageSnapshot } from '../../context/types';
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn().mockReturnValue(true),
-  mkdirSync: jest.fn(),
-  readFileSync: jest.fn().mockReturnValue(''),
-  appendFileSync: jest.fn(),
-  statSync: jest.fn().mockReturnValue({ size: 0 }),
-  renameSync: jest.fn(),
-}));
+jest.mock('fs', () => {
+  // 两条读入口必须同源：utils/jsonl 的 tail 走倒读分块（openSync/fstatSync/readSync，
+  // ADR-0023 决策 3），head 与全文走 readFileSync。假件收在 test-setup/jsonl-fake-fs
+  // 承接两处消费（jest.mock 工厂被提升，只能 require）。
+  const { jsonlBoundedReadChain } = require('../../test-setup/jsonl-fake-fs');
+  const readFileSync = jest.fn().mockReturnValue('');
+  return {
+    existsSync: jest.fn().mockReturnValue(true),
+    mkdirSync: jest.fn(),
+    readFileSync,
+    appendFileSync: jest.fn(),
+    statSync: jest.fn().mockReturnValue({ size: 0 }),
+    renameSync: jest.fn(),
+    ...jsonlBoundedReadChain((p: string) => readFileSync(p, 'utf-8')),
+  };
+});
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 

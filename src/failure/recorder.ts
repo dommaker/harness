@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, appendJsonl } from '../utils/jsonl';
-import type { FailureRecord } from './types';
+import type { FailureRecord } from '../types/failure';
 
 /**
  * 失败记录器配置

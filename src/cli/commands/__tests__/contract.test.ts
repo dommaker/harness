@@ -4,6 +4,7 @@
 
 import { contract, validateSchema } from '../contract';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { decide, fakeGate, throwingGate } from './gate-decision';
 import * as fs from 'fs/promises';
 import { ContractGate } from '../../../gates/contract';
 
@@ -14,7 +15,7 @@ jest.mock('fs/promises', () => ({
 
 jest.mock('../../../gates/contract', () => ({
   ContractGate: jest.fn().mockImplementation(() => ({
-    check: jest.fn(),
+    evaluate: jest.fn(),
   })),
 }));
 
@@ -46,16 +47,15 @@ describe('contract command', () => {
   describe('contract', () => {
     it('should print success when check passes', async () => {
       mockFs.access.mockResolvedValue(undefined);
-      const mockCheck = jest.fn().mockResolvedValue({
-        passed: true,
-        message: 'ok',
-        details: { endpoints: 10, breakingChanges: false },
-      });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(decide('contract', true, 'ok', { endpoints: 10, breakingChanges: false })) as any
+      );
 
       const result = await contract({}, io);
 
       expect(io.outText()).toContain('契约门控检查通过');
+      expect(io.outText()).toContain('   端点数: 10');
+      expect(io.outText()).toContain('   破坏性变更: 无');
       expect(result.kind).toBe('ok');
     });
 
@@ -70,31 +70,31 @@ describe('contract command', () => {
 
     it('should print failure and exit 1 when check fails', async () => {
       mockFs.access.mockResolvedValue(undefined);
-      const mockCheck = jest.fn().mockResolvedValue({
-        passed: false,
-        message: 'validation errors',
-        details: {
-          errors: ['missing field X', 'invalid type Y'],
-          breakingChanges: [{ type: 'removed', path: '/api/v1/users' }],
-        },
-      });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(
+          decide('contract', false, 'validation errors', {
+            errors: ['missing field X', 'invalid type Y'],
+            breakingChanges: [{ type: 'removed', path: '/api/v1/users' }],
+          })
+        ) as any
+      );
 
       const result = await contract({}, io);
 
       expect(io.outText()).toContain('契约门控检查失败');
-      expect(result.kind).toBe('fail');
+      expect(io.outText()).toContain('  - missing field X');
+      expect(io.outText()).toContain('  - removed: /api/v1/users');
+      expect(result).toEqual({ kind: 'fail', reason: 'contract gate denied: validation errors' });
     });
 
     it('should handle thrown errors and exit 1', async () => {
       mockFs.access.mockResolvedValue(undefined);
-      const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() => throwingGate(new Error('gate error')) as any);
 
       const result = await contract({}, io);
 
       expect(io.outText()).toContain('契约门控检查出错');
-      expect(result.kind).toBe('fail');
+      expect(result).toEqual({ kind: 'fail', reason: 'contract gate error: gate error' });
     });
   });
 

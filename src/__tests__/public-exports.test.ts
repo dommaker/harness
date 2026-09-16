@@ -100,7 +100,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'getConstraint',
   'getCriticalArtifacts',
   'getEffectiveConstraints',
-  'getEffectiveGates',
   'getFailureLevel',
   'getGate',
   'getRegistryPath',

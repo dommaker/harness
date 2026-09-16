@@ -15,11 +15,28 @@ export interface ModuleInfo {
   description: string;
 }
 
+/** 描述提取的并发上限（#147 固定缺省，按票下裁决不做成配置面） */
+const DESCRIPTION_CONCURRENCY = 16;
+
+/**
+ * CONTEXT.md「核心导出」节与目录导出面的内容漂移（harness#142 / ADR-0025）。
+ * 两清单任一非空即漂移；判定本体在 core/constraints/context-reconcile。
+ */
+export interface ContextContentDrift {
+  dir: string;
+  /** 幽灵：文档声明、导出面已无 */
+  ghosts: string[];
+  /** 未登记：barrel 公开值符号未进「核心导出」节 */
+  unlisted: string[];
+}
+
 export interface SyncResult {
   added: string[];
   removed: string[];
   contextMissing: string[];
+  /** mtime 提示（源码比文档新）：不参与判定，只在本地给提示 */
   contextStale: string[];
+  contextContentDrift: ContextContentDrift[];
 }
 
 export interface PackageJsonLite {
@@ -94,10 +111,13 @@ export async function getSourceDirs(projectPath: string): Promise<string[]> {
 }
 
 /**
- * 扫描源码目录，提取模块信息
+ * 扫描源码目录，提取模块信息（harness#147：路径与描述分两步取）
+ *
+ * 第一步定清单（目录遍历序，逐字保持改造前口径），第二步并发取描述并按**原索引**回填
+ * ——清单顺序是对外可见面（`--check` 逐行比对生成的表格），不随读取完成先后漂移。
  */
 export async function scanSourceModules(srcDir: string, projectPath: string): Promise<ModuleInfo[]> {
-  const modules: ModuleInfo[] = [];
+  const found: { absPath: string; name: string; file: string }[] = [];
 
   let entries: string[];
   try {
@@ -119,22 +139,46 @@ export async function scanSourceModules(srcDir: string, projectPath: string): Pr
       // 与 .ts 同口径属预期，一次性补登记即可）
       const subFiles = findTsSourceFiles(entryPath, { skipIndex: true, includeTsx: true });
       for (const f of subFiles) {
-        modules.push({
+        found.push({
+          absPath: f,
           name: path.basename(f, path.extname(f)),
           file: path.relative(projectPath, f),
-          description: await extractFileDescription(f),
         });
       }
     } else if (isTsSourceFile(entry, { skipIndex: true, includeTsx: true })) {
-      modules.push({
+      found.push({
+        absPath: entryPath,
         name: path.basename(entry, path.extname(entry)),
         file: path.relative(projectPath, entryPath),
-        description: await extractFileDescription(entryPath),
       });
     }
   }
 
-  return modules;
+  const descriptions = await extractFileDescriptions(found.map((m) => m.absPath));
+  return found.map((m, i) => ({ name: m.name, file: m.file, description: descriptions[i] }));
+}
+
+/**
+ * 批量提取首行注释描述：并发取数、按索引回填（harness#147）
+ *
+ * 返回数组与入参同序同长，故调用方拿到的是「问哪份文件答哪份文件」。
+ * 上限是固定缺省（不是配置面）：描述提取是几百次小文件读，再放大并发只会压线程池。
+ */
+export async function extractFileDescriptions(filePaths: string[]): Promise<string[]> {
+  const descriptions = new Array<string>(filePaths.length);
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < filePaths.length) {
+      const index = cursor++;
+      descriptions[index] = await extractFileDescription(filePaths[index]);
+    }
+  }
+
+  const workers = Math.min(DESCRIPTION_CONCURRENCY, filePaths.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+
+  return descriptions;
 }
 
 /**

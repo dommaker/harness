@@ -18,7 +18,9 @@
  */
 
 import * as path from 'path';
+import type { Constraint } from '../../types/constraint';
 import { getEffectiveConstraints } from '../effective-constraints';
+import { resolveRunEnv, type RunTarget } from './run-env';
 import { getHarnessPackageVersion } from '../../utils/package-version';
 import { CONSTRAINTS_END_MARKER, renderConstraintsSection } from './injection-renderer';
 import {
@@ -72,13 +74,19 @@ function significantLines(section: string): string[] {
 /**
  * 检测约束注入段漂移
  *
- * @param projectRoot 项目根路径
+ * @param target 项目根路径，或本 run 的运行级观察面（CLI check 传入即与本 run 共用
+ *   同一份 config.yml 读取，漂移侧的生效集计算不再重读文件——ADR-0023 决策 2）
  * @param currentVersion 当前 harness 版本（缺省经 getHarnessPackageVersion 正本读取；测试可显式传入）
+ * @param expectedConstraints 本 run 已算好的生效集（CLI check 传入 → 生效集链路一次运行只算
+ *   一遍，且比对用的就是本 run 实际执法的那份）。不传则按 target 自取，行为与改前逐字一致
  */
 export function detectInjectionDrift(
-  projectRoot: string,
-  currentVersion: string = getHarnessPackageVersion()
+  target: RunTarget,
+  currentVersion: string = getHarnessPackageVersion(),
+  expectedConstraints?: Constraint[]
 ): InjectionDrift {
+  const env = resolveRunEnv(target);
+  const projectRoot = env.projectPath;
   const result: InjectionDrift = {
     hasDrift: false,
     notInjected: false,
@@ -86,8 +94,8 @@ export function detectInjectionDrift(
     fixHint: INJECTION_DRIFT_FIX_HINT,
   };
 
-  const target = resolveInjectionTarget(projectRoot);
-  if (!target) {
+  const injected = resolveInjectionTarget(projectRoot);
+  if (!injected) {
     // 两处均无标记段 = 未注入，不算漂移（check 不警告）。
     // 重复章节仍如实记录供 report 提示：旧落点 CLAUDE.md 优先，其次 AGENTS.md。
     const legacy =
@@ -100,8 +108,8 @@ export function detectInjectionDrift(
     return result;
   }
 
-  result.injectionFile = target.file;
-  const { content, startIdx, endIdx } = target;
+  result.injectionFile = injected.file;
+  const { content, startIdx, endIdx } = injected;
 
   // 重复章节：全文统计治理标题数（严格计数 injection-writer.countGovernanceHeadings，#83）
   const headingCount = countGovernanceHeadings(content);
@@ -117,7 +125,10 @@ export function detectInjectionDrift(
   }
 
   // 2. 内容漂移（条目级：期望渲染 vs 实际段）
-  const expectedSection = renderConstraintsSection(getEffectiveConstraints(projectRoot), currentVersion);
+  const expectedSection = renderConstraintsSection(
+    expectedConstraints ?? getEffectiveConstraints(env),
+    currentVersion
+  );
   const expectedLines = new Set(significantLines(expectedSection));
   const actualLines = new Set(significantLines(actualSection));
   const missing = [...expectedLines].filter(l => !actualLines.has(l));

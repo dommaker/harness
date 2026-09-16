@@ -4,11 +4,12 @@
 
 import { performance } from '../performance';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { decide, fakeGate, throwingGate } from './gate-decision';
 import { PerformanceGate } from '../../../gates/performance';
 
 jest.mock('../../../gates/performance', () => ({
   PerformanceGate: jest.fn().mockImplementation(() => ({
-    check: jest.fn(),
+    evaluate: jest.fn(),
   })),
 }));
 
@@ -31,14 +32,13 @@ describe('performance command', () => {
   });
 
   it('should print success when check passes', async () => {
-    const mockCheck = jest.fn().mockResolvedValue({
-      passed: true,
-      message: 'ok',
-      details: {
-        metrics: { coverage: 85.5, bundleSize: 204800 },
-      },
-    });
-    MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+    MockGate.mockImplementation(() =>
+      fakeGate(
+        decide('performance', true, 'ok', {
+          metrics: { coverage: 85.5, bundleSize: 204800 },
+        })
+      ) as any
+    );
 
     const result = await performance({}, io);
 
@@ -47,12 +47,13 @@ describe('performance command', () => {
   });
 
   it('should print failure and exit 1 when check fails', async () => {
-    const mockCheck = jest.fn().mockResolvedValue({
-      passed: false,
-      message: 'threshold exceeded',
-      details: { failures: ['coverage below 80%', 'bundle too large'] },
-    });
-    MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+    MockGate.mockImplementation(() =>
+      fakeGate(
+        decide('performance', false, 'threshold exceeded', {
+          failures: ['coverage below 80%', 'bundle too large'],
+        })
+      ) as any
+    );
 
     const result = await performance({}, io);
 
@@ -64,8 +65,7 @@ describe('performance command', () => {
   });
 
   it('should handle errors and exit 1', async () => {
-    const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
-    MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+    MockGate.mockImplementation(() => throwingGate(new Error('gate error')) as any);
 
     const result = await performance({}, io);
 
@@ -77,8 +77,7 @@ describe('performance command', () => {
   });
 
   it('bundleThreshold 直传 KB 到 maxBundleSize（不再按字节错位换算）', async () => {
-    const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-    MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+    MockGate.mockImplementation(() => fakeGate(decide('performance', true, 'ok')) as any);
 
     await performance({ bundleThreshold: 500 }, io);
 
@@ -90,8 +89,7 @@ describe('performance command', () => {
   });
 
   it('coverage 旗帜对齐 minCoverage 字段（原 coverage 错位键名恒不生效）', async () => {
-    const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-    MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+    MockGate.mockImplementation(() => fakeGate(decide('performance', true, 'ok')) as any);
 
     await performance({ coverage: true, coverageThreshold: 90 }, io);
 

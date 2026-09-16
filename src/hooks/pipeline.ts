@@ -6,7 +6,7 @@
  */
 
 import type {
-  HookDefinition,
+  EffectiveHook,
   HookPhase,
   HookExecutionRecord,
   PipelineResult,
@@ -47,10 +47,8 @@ export class HookPipeline<C = unknown> {
           blockedBy.push(hook.name);
           break; // blocking hook 失败，停止执行后续 hook
         }
-        if (hook.errorStrategy === 'warn') {
-          warnings.push(hook.name);
-        }
-        // 'ignore' 策略静默跳过
+        // 'warn'：记录警告继续（有效集合仅 block/warn，策略由 HookConfig 必填声明）
+        warnings.push(hook.name);
       }
     }
 
@@ -111,7 +109,7 @@ export class HookPipeline<C = unknown> {
    * 执行单个 hook（带采样和错误隔离）
    */
   private async executeOne(
-    hook: HookDefinition<C, unknown>,
+    hook: EffectiveHook<C, unknown>,
     context: C
   ): Promise<HookExecutionRecord> {
     const startedAt = Date.now();

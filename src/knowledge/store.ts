@@ -9,10 +9,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
-import type { KnowledgeEntry, IndexEntry, QueryFilter } from './types';
+import { isEntryFile, SNAPSHOTS_DIR } from './tree-walker';
+import type {
+  KnowledgeEntry,
+  IndexEntry,
+  QueryFilter,
+  ConsumptionStats,
+  SnapshotSurvival,
+  StoreUpdate,
+} from './types';
 
 const DEFAULT_DIR = '.harness/knowledge';
 const INDEX_FILE = 'index.json';
+const CONSUMPTION_STATS_FILE = '.consumption-stats.json';
 
 interface StoreConfig {
   baseDir: string;
@@ -35,6 +44,11 @@ export interface KnowledgeStore {
    * 消除逐条 save 的 O(K·N) 全量索引重写。空批为零读写 no-op。
    */
   saveAll(entries: KnowledgeEntry[]): void;
+  /**
+   * 按 id 批量部分更新（harness#134）：`update(id, partial)` 的批量形，语义与逐条一致
+   * （读不到该 id 即跳过），循环内只更新内存索引、结束一次 writeIndex。空批零读写。
+   */
+  applyAll(updates: StoreUpdate[]): void;
   delete(id: string): boolean;
   update(id: string, partial: Partial<KnowledgeEntry>): KnowledgeEntry | undefined;
   rebuildIndex(): void;
@@ -42,7 +56,12 @@ export interface KnowledgeStore {
   readEntriesFromDisk(): KnowledgeEntry[];
   snapshot(): string;
   getSnapshot(date: string): IndexEntry[] | undefined;
-  getSurvivalRate(daysAgo: number): { rate: number; survived: number; total: number; snapshotDate: string } | undefined;
+  getSurvivalRate(daysAgo: number): SnapshotSurvival | undefined;
+  /**
+   * 读 `.consumption-stats.json` 的当日消费计数（harness#134：打分核心的 IO 归 store 供给）；
+   * 文件缺失或损坏 = undefined（无数据，不是零消费）
+   */
+  getConsumptionStats(): ConsumptionStats | undefined;
 }
 
 /**
@@ -55,8 +74,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
   /**
    * index.json 解析结果的实例级缓存（harness#106）
    *
-   * mtimeMs+size 指纹（先例：project-config-loader.ts rawConfigCache）：
-   * 文件未变则复用解析结果，消除 list() 一次调用内 N+1 次全量重读；
+   * mtimeMs+size 指纹（实例级，作用域限于本 store 的一次 list()）：
+   * 文件未变则复用解析结果，消除一次调用内 N+1 次全量重读；
    * 文件变更（含外部进程改写、删除）自动失效。
    */
   private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;
@@ -90,9 +109,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   save(entry: KnowledgeEntry): void {
-    const filePath = this.entryPath(entry);
-    const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
-    fs.writeFileSync(filePath, content, 'utf-8');
+    this.writeEntryFile(entry);
     this.updateIndexEntry(entry);
   }
 
@@ -101,9 +118,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     const index = this.readIndex();
     const position = new Map(index.map((e, i) => [e.id, i]));
     for (const entry of entries) {
-      const filePath = this.entryPath(entry);
-      const content = joinFrontmatter(this.toFrontmatter(entry), entry.content);
-      fs.writeFileSync(filePath, content, 'utf-8');
+      this.writeEntryFile(entry);
       const indexEntry = this.toIndexEntry(entry);
       const idx = position.get(entry.id);
       if (idx !== undefined) {
@@ -113,6 +128,30 @@ export class FileKnowledgeStore implements KnowledgeStore {
         index.push(indexEntry);
       }
     }
+    this.writeIndex(index);
+  }
+
+  applyAll(updates: StoreUpdate[]): void {
+    if (updates.length === 0) return;
+    const index = this.readIndex();
+    const position = new Map(index.map((e, i) => [e.id, i]));
+    let applied = 0;
+    for (const { id, partial } of updates) {
+      const existing = this.get(id);
+      if (!existing) continue;
+      const updated: KnowledgeEntry = { ...existing, ...partial, id };
+      this.writeEntryFile(updated);
+      const indexEntry = this.toIndexEntry(updated);
+      const idx = position.get(id);
+      if (idx !== undefined) {
+        index[idx] = indexEntry;
+      } else {
+        position.set(id, index.length);
+        index.push(indexEntry);
+      }
+      applied++;
+    }
+    if (applied === 0) return;
     this.writeIndex(index);
   }
 
@@ -176,6 +215,15 @@ export class FileKnowledgeStore implements KnowledgeStore {
     return path.join(this.baseDir, `${safeType}-${safeId}.md`);
   }
 
+  /** 条目文件正文的唯一落盘写法（save / saveAll / applyAll 三条路径共用，#134） */
+  private writeEntryFile(entry: KnowledgeEntry): void {
+    fs.writeFileSync(
+      this.entryPath(entry),
+      joinFrontmatter(this.toFrontmatter(entry), entry.content),
+      'utf-8'
+    );
+  }
+
   private findFile(id: string): string | undefined {
     // 1. Fast path: index has id→type mapping, construct exact filename
     const index = this.readIndex();
@@ -197,7 +245,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
   private listFiles(): string[] {
     if (!fs.existsSync(this.baseDir)) return [];
     return fs.readdirSync(this.baseDir)
-      .filter(f => f.endsWith('.md'))
+      .filter(isEntryFile)
       .map(f => path.join(this.baseDir, f));
   }
 
@@ -324,13 +372,11 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   // ── Snapshots ────────────────────────────────────────────
 
-  private static readonly SNAPSHOTS_DIR = '.snapshots';
-
   /**
    * 保存当日 index.json 快照
    */
   snapshot(): string {
-    const snapDir = path.join(this.baseDir, FileKnowledgeStore.SNAPSHOTS_DIR);
+    const snapDir = path.join(this.baseDir, SNAPSHOTS_DIR);
     if (!fs.existsSync(snapDir)) {
       fs.mkdirSync(snapDir, { recursive: true });
     }
@@ -347,7 +393,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
    * 读取指定日期的快照
    */
   getSnapshot(date: string): IndexEntry[] | undefined {
-    const snapPath = path.join(this.baseDir, FileKnowledgeStore.SNAPSHOTS_DIR, `index-${date}.json`);
+    const snapPath = path.join(this.baseDir, SNAPSHOTS_DIR, `index-${date}.json`);
     if (!fs.existsSync(snapPath)) return undefined;
     try {
       return JSON.parse(fs.readFileSync(snapPath, 'utf-8')) as IndexEntry[];
@@ -360,7 +406,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
    * 计算 N 天前快照中条目的存活率
    * 存活 = 当前 index 中存在且 maturity !== 'archived'
    */
-  getSurvivalRate(daysAgo: number): { rate: number; survived: number; total: number; snapshotDate: string } | undefined {
+  getSurvivalRate(daysAgo: number): SnapshotSurvival | undefined {
     const target = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const snapshot = this.getSnapshot(target);
     if (!snapshot || snapshot.length === 0) return undefined;
@@ -380,6 +426,19 @@ export class FileKnowledgeStore implements KnowledgeStore {
       total: snapshot.length,
       snapshotDate: target,
     };
+  }
+
+  /**
+   * 读 `.consumption-stats.json` 的当日消费计数（打分核心唯一的消费统计取数口，harness#134）
+   */
+  getConsumptionStats(): ConsumptionStats | undefined {
+    const statsPath = path.join(this.baseDir, CONSUMPTION_STATS_FILE);
+    try {
+      const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8')) as { dailyEvents?: number };
+      return { dailyEvents: stats.dailyEvents ?? 0 };
+    } catch {
+      return undefined;
+    }
   }
 
   // ── Index I/O ────────────────────────────────────────────

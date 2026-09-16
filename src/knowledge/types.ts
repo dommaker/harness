@@ -188,3 +188,22 @@ export interface IndexEntry {
   consumptionMode: ConsumptionMode;
   origin: KnowledgeOrigin;
 }
+
+/** `getSurvivalRate()` 的返回面：N 天前快照条目在当前索引里的存活计数 */
+export interface SnapshotSurvival {
+  rate: number;
+  survived: number;
+  total: number;
+  snapshotDate: string;
+}
+
+/** `getConsumptionStats()` 的返回面：`.consumption-stats.json` 里打分要用的计数（harness#134） */
+export interface ConsumptionStats {
+  dailyEvents: number;
+}
+
+/** `applyAll()` 的一条按 id 部分更新（harness#134：`update(id, partial)` 的批量形） */
+export interface StoreUpdate {
+  id: string;
+  partial: Partial<KnowledgeEntry>;
+}

@@ -41,6 +41,12 @@ interface RunContext {
   projectPath: string;
   /** 外部提供的 required_dirs（来自 governance.context_files，用于 context_docs 检查的默认 dirs） */
   requiredDirs?: string[];
+  /**
+   * 源码根的**懒取**提供者（ADR-0023 决策 4）：只在 doc_dir_check 从文档目录
+   * 推断不出根时用到。调用方传 `() => env.sourceRoots()` 即与本 run 其余消费方
+   * 共用一次探测；不传（sync-docs 等一次性调用方）则本模块自探一次。
+   */
+  sourceRoots?: () => string[];
   /** 外部提供的约束计数（用于内置 harner harness 的 doc_regex_count） */
   constraintCounts?: {
     ironLaws?: number;
@@ -58,7 +64,11 @@ export class FreshnessRunner {
   runAll(
     config: DocFreshnessConfig,
     projectPath: string,
-    ctx?: { requiredDirs?: string[]; constraintCounts?: { ironLaws?: number; guidelines?: number } }
+    ctx?: {
+      requiredDirs?: string[];
+      sourceRoots?: () => string[];
+      constraintCounts?: { ironLaws?: number; guidelines?: number };
+    }
   ): FreshnessCheckResult[] {
     if (config.enabled === false) return [];
     if (!config.checks || config.checks.length === 0) return [];
@@ -66,6 +76,7 @@ export class FreshnessRunner {
     const context: RunContext = {
       projectPath,
       requiredDirs: ctx?.requiredDirs,
+      sourceRoots: ctx?.sourceRoots,
       constraintCounts: ctx?.constraintCounts,
     };
 
@@ -238,7 +249,7 @@ export class FreshnessRunner {
       // 2. fs → doc: 每个实际目录必须在文档中被覆盖
       if (!check.skip_reverse_check) {
         // 从文档目录中推断要扫描的根目录集
-        const rootDirs = this.inferRootDirs(docDirs, ctx.projectPath);
+        const rootDirs = this.inferRootDirs(docDirs, ctx);
         const excludeSet = new Set(check.exclude || DEFAULT_SKIP_DIRS);
 
         for (const rootDir of rootDirs) {
@@ -287,7 +298,7 @@ export class FreshnessRunner {
    * 从文档目录集合推断要扫描的根目录
    * 例如 ["src/core", "src/cli/commands"] → ["src"]
    */
-  private inferRootDirs(docDirs: Set<string>, projectPath: string): string[] {
+  private inferRootDirs(docDirs: Set<string>, ctx: RunContext): string[] {
     const roots = new Set<string>();
 
     for (const dir of docDirs) {
@@ -315,7 +326,10 @@ export class FreshnessRunner {
       }
     }
 
-    return merged.size > 0 ? [...merged] : detectSourceRoots(projectPath);
+    if (merged.size > 0) return [...merged];
+    // 兜底 = 文档一个目录条目都没登记：按项目实际源码根全量比对（删掉它等于静默放行空文档）。
+    // 取根优先用调用方注入的懒取 provider（与本 run 其余消费方共用一次探测，ADR-0023 决策 4）
+    return ctx.sourceRoots ? ctx.sourceRoots() : detectSourceRoots(ctx.projectPath);
   }
 
   // ── doc_regex_count ──────────────────────────────────────────────

@@ -48,11 +48,6 @@ export { getGate, listRegisteredGates, registeredGateCount, assertGateRegistryCl
 export { runGates, type GateRunResult } from './runner';
 
 /**
- * 生效门禁集：config.yml gates.order / gates.<id>.enabled 声明式裁剪
- */
-export { getEffectiveGates, type GatesConfig } from './effective-gates';
-
-/**
  * checker-as-guard 接线点：ConstraintCheck → Gate（studio #129 随动）
  */
 export { createCheckerGate } from './checker-gate';

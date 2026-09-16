@@ -8,9 +8,10 @@ import { KnowledgeLifecycle } from '../lifecycle';
 import type { KnowledgeEntry } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('KnowledgeLifecycle', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-lifecycle');
+  let tempDir: string;
   let store: KnowledgeStore;
   let lifecycle: KnowledgeLifecycle;
 
@@ -36,7 +37,7 @@ describe('KnowledgeLifecycle', () => {
   });
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-lifecycle-'));
   });
 
   afterAll(() => {
@@ -396,6 +397,27 @@ describe('KnowledgeLifecycle', () => {
       expect(changes[0].from).toBe('proven');
       expect(changes[0].to).toBe('verified');
     });
+
+    it('一次 cycle 的 K 条衰减只重写一次 index.json（harness#134 走 applyAll）', () => {
+      const oldDate = new Date();
+      oldDate.setMonth(oldDate.getMonth() - 4);
+      for (const id of ['DEC-001', 'DEC-002', 'DEC-003']) {
+        store.save(makeEntry({ id, maturity: 'draft', lastReferenced: oldDate.toISOString() }));
+      }
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        const changes = lifecycle.runDecayCycle();
+        // 正对照：3 条真衰减，否则「1 次重写」是空跑出来的
+        expect(changes.map(c => c.entryId)).toEqual(['DEC-001', 'DEC-002', 'DEC-003']);
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      for (const id of ['DEC-001', 'DEC-002', 'DEC-003']) {
+        expect(store.get(id)!.maturity).toBe('archived');
+      }
+    });
   });
 
   describe('tryPromote', () => {
@@ -730,6 +752,39 @@ describe('KnowledgeLifecycle', () => {
         ],
       }));
       expect(lifecycle.checkEntryDecay('RULE-001')).toBe('deprecated');
+    });
+
+    it('边界钉：成功率恰 0.5（失败率恰 50%）即降级（harness#161 修边界差一）', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01T00:00:00.000Z' },
+          { contributor: 'bob', success: false, timestamp: '2026-05-02T00:00:00.000Z' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03T00:00:00.000Z' },
+          { contributor: 'dave', success: false, timestamp: '2026-05-04T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBe('deprecated');
+    });
+
+    it('成功率略高于 0.5（3 成 2 败）不降级', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01T00:00:00.000Z' },
+          { contributor: 'bob', success: true, timestamp: '2026-05-02T00:00:00.000Z' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03T00:00:00.000Z' },
+          { contributor: 'dave', success: false, timestamp: '2026-05-04T00:00:00.000Z' },
+          { contributor: 'erin', success: false, timestamp: '2026-05-05T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBeUndefined();
     });
 
     it('should NOT decay active→deprecated when fail rate < 50%', () => {

@@ -81,6 +81,8 @@ export {
   getCapabilitiesMode,
 } from './project-config-loader';
 export type { CapabilitiesMode, ContextFilesResolution } from './project-config-loader';
+// 运行级观察面（ADR-0023 决策 1/2）：上面两组访问器与 ProjectConfigLoader 的入参形状
+export type { RunEnv, RunTarget } from './constraints/run-env';
 
 // 生效约束集（ADR-0001：唯一生效集来源）
 export {

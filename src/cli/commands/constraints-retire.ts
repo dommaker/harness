@@ -40,7 +40,7 @@ import { getConstraint } from '../../core/constraints/definitions';
 import { renderConstraintsSection, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
 import { replaceStandaloneRange, resolveInjectionTarget } from '../../core/constraints/injection-writer';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
-import { loadRawProjectConfig, ProjectConfigLoader } from '../../core/project-config-loader';
+import { isConstraintRetired, ProjectConfigLoader } from '../../core/project-config-loader';
 import { getHarnessPackageVersion } from '../../utils/package-version';
 import { FileKnowledgeStore } from '../../knowledge/store';
 import type { KnowledgeEntry } from '../../knowledge/types';
@@ -97,8 +97,14 @@ interface RetireTargetInfo {
 
 /**
  * 查找约束定义（内置 definitions + 项目 custom-constraints）
+ *
+ * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
+ * 不再自造 ProjectConfigLoader。
  */
-function findRetireTarget(projectRoot: string, id: string): RetireTargetInfo | undefined {
+function findRetireTarget(
+  loader: ProjectConfigLoader,
+  id: string
+): RetireTargetInfo | undefined {
   const builtIn = getConstraint(id);
   if (builtIn) {
     return {
@@ -112,8 +118,6 @@ function findRetireTarget(projectRoot: string, id: string): RetireTargetInfo | u
     };
   }
 
-  const loader = new ProjectConfigLoader(projectRoot);
-  loader.load();
   const custom = loader.getCustomConstraints()[id];
   if (custom) {
     const level = custom.level || 'guideline';
@@ -132,52 +136,20 @@ function findRetireTarget(projectRoot: string, id: string): RetireTargetInfo | u
 }
 
 /**
- * 写 config.yml 退役段（ADR-0001 决策 5）
+ * YAML 条目的读-改-写单点（harness#137）
  *
- * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明。
+ * 内置与 custom 两处退役落点原本是两段同型的读-改-写，只差键路径与 patch 内容。
+ * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
+ * 文件名，与合并前两处逐字一致）。落盘字节由 `__tests__/constraints-retire.test.ts`
+ * 的逐字节冻结用例钉住——合并属内部重构，对外产物不得漂移。
  */
-function writeRetireConfig(
-  projectRoot: string,
+function setYamlEntry(
+  filePath: string,
+  label: string,
+  section: string,
   id: string,
-  retiredMeta: { at: string; reason: string; stats: { total: number; fail: number; failRate: number } }
+  patch: Record<string, unknown>
 ): void {
-  const configPath = path.join(projectRoot, '.harness', 'config.yml');
-
-  let raw: Record<string, unknown> = {};
-  let hadComments = false;
-  if (fs.existsSync(configPath)) {
-    const original = fs.readFileSync(configPath, 'utf-8');
-    hadComments = original.split('\n').some(l => l.trimStart().startsWith('#'));
-    raw = (yaml.load(original) as Record<string, unknown>) ?? {};
-  }
-
-  const constraints = (raw.constraints ?? {}) as Record<string, unknown>;
-  const prev = (constraints[id] ?? {}) as Record<string, unknown>;
-  constraints[id] = { ...prev, enabled: false, retired: retiredMeta };
-  raw.constraints = constraints;
-
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, yaml.dump(raw, { lineWidth: 120 }), 'utf-8');
-
-  if (hadComments) {
-    console.log(chalk.yellow('   ⚠️  config.yml 已重写：js-yaml 不保留原文件注释'));
-  }
-}
-
-/**
- * 写 custom-constraints.yml 退役段（studio#82 D6 统一落点）
- *
- * 在 custom_constraints.<id> 条目内追加 retired 元数据，保留规则原文。
- * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明。
- */
-function writeCustomRetireYml(
-  projectRoot: string,
-  fileName: string,
-  id: string,
-  retiredMeta: { at: string; reason: string; stats: { total: number; fail: number; failRate: number } }
-): void {
-  const filePath = path.join(projectRoot, '.harness', fileName);
-
   let raw: Record<string, unknown> = {};
   let hadComments = false;
   if (fs.existsSync(filePath)) {
@@ -186,16 +158,16 @@ function writeCustomRetireYml(
     raw = (yaml.load(original) as Record<string, unknown>) ?? {};
   }
 
-  const customs = (raw.custom_constraints ?? {}) as Record<string, Record<string, unknown>>;
-  const prev = customs[id] ?? {};
-  customs[id] = { ...prev, retired: retiredMeta };
-  raw.custom_constraints = customs;
+  const entries = (raw[section] ?? {}) as Record<string, unknown>;
+  const prev = (entries[id] ?? {}) as Record<string, unknown>;
+  entries[id] = { ...prev, ...patch };
+  raw[section] = entries;
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, yaml.dump(raw, { lineWidth: 120 }), 'utf-8');
 
   if (hadComments) {
-    console.log(chalk.yellow('   ⚠️  custom-constraints.yml 已重写：js-yaml 不保留原文件注释'));
+    console.log(chalk.yellow(`   ⚠️  ${label} 已重写：js-yaml 不保留原文件注释`));
   }
 }
 
@@ -293,7 +265,13 @@ export function retireConstraint(
   const iso = now.toISOString();
   const reason = options.reason ?? '';
 
-  const target = findRetireTarget(projectRoot, id);
+  // 一次退役一份观察面（ADR-0023 决策 2）：定义查找、already_retired 判定与 custom 文件名
+  // 解析共用这一份装载结果。此前同一次调用 new 了 2–3 枚加载器、各带一次 load()（harness#137）。
+  // 只覆盖写盘**之前**的读取：写盘后 syncGovernanceInjection 必须读到新状态，另起观察面。
+  const loader = new ProjectConfigLoader(projectRoot);
+  loader.load();
+
+  const target = findRetireTarget(loader, id);
   const emptyStats = { total: 0, fail: 0, failRate: 0 };
   const landing: RetireResult['landing'] =
     target?.source === 'custom' ? 'custom-constraints.yml' : 'config.yml';
@@ -301,17 +279,12 @@ export function retireConstraint(
     return { id, status: 'unknown_id', isIronLaw: false, landing, stats: emptyStats, injectionSynced: false };
   }
 
-  // 已退役保护：内置看 config.yml constraints.<id>.enabled === false；
-  // custom 看 yml 条目 retired 元数据（历史落点 config.yml enabled:false 同样保护）
-  const rawConfig = loadRawProjectConfig(projectRoot);
-  const existing = (rawConfig?.constraints as Record<string, { enabled?: boolean; retired?: unknown }> | undefined)?.[id];
-  if (target.source === 'custom') {
-    const loader = new ProjectConfigLoader(projectRoot);
-    loader.load();
-    if (loader.getCustomConstraints()[id]?.retired || existing?.enabled === false) {
-      return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, injectionSynced: false };
-    }
-  } else if (existing?.enabled === false) {
+  // 已退役保护：判定单点在 core/project-config-loader isConstraintRetired
+  // （内置看 config.yml enabled:false；custom 看 yml 条目 retired 元数据，
+  // 历史落点 config.yml enabled:false 同样保护）
+  const disabledInConfig = loader.getConfig().constraints?.[id]?.enabled === false;
+  const customDef = target.source === 'custom' ? loader.getCustomConstraints()[id] : undefined;
+  if (isConstraintRetired(customDef, disabledInConfig)) {
     return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, injectionSynced: false };
   }
 
@@ -327,14 +300,26 @@ export function retireConstraint(
     failRate: evaluated > 0 ? (usage!.fail / evaluated) : 0,
   };
 
-  // 1. 落盘退役（custom → yml 条目 retired 段；内置 → config.yml，原文均保留）
+  // 1. 落盘退役（custom → yml 条目 retired 段；内置 → config.yml enabled:false + retired 段，
+  // 两处原文均保留）
+  const retiredMeta = { at: iso, reason, stats };
   if (target.source === 'custom') {
-    const loader = new ProjectConfigLoader(projectRoot);
-    loader.load();
     const customFile = loader.getConfig().custom_constraints_file ?? 'custom-constraints.yml';
-    writeCustomRetireYml(projectRoot, customFile, id, { at: iso, reason, stats });
+    setYamlEntry(
+      path.join(projectRoot, '.harness', customFile),
+      'custom-constraints.yml',
+      'custom_constraints',
+      id,
+      { retired: retiredMeta }
+    );
   } else {
-    writeRetireConfig(projectRoot, id, { at: iso, reason, stats });
+    setYamlEntry(
+      path.join(projectRoot, '.harness', 'config.yml'),
+      'config.yml',
+      'constraints',
+      id,
+      { enabled: false, retired: retiredMeta }
+    );
   }
 
   // 2. KnowledgeStore
@@ -454,10 +439,12 @@ export async function runRetireInteractive(
       selectedIds = [...new Set(selectedIds)];
     }
 
-    // 逐条收集 reason + iron 二次确认
+    // 逐条收集 reason + iron 二次确认（一次交互一份装载结果：候选到确认之间不写盘）
+    const planLoader = new ProjectConfigLoader(projectRoot);
+    planLoader.load();
     const plan: { id: string; reason: string; source: RetireTargetInfo['source'] }[] = [];
     for (const id of selectedIds) {
-      const target = findRetireTarget(projectRoot, id);
+      const target = findRetireTarget(planLoader, id);
       if (!target) {
         console.log(chalk.red(`❌ ${id}: 约束不存在，跳过`));
         continue;

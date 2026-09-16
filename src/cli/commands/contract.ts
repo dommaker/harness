@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ContractGate } from '../../gates/contract';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { reportGateDecision, reportGateError } from '../gate-command';
 
 export interface ContractOptions {
   /** 项目路径 */
@@ -52,55 +53,51 @@ export async function contract(
   });
 
   try {
-    const result = await gate.check({
-      projectPath,
-    } as any);
+    const decision = await gate.evaluate({ projectPath });
 
-    if (result.passed) {
-      log(io);
-      log(io, chalk.green('✅ 契约门控检查通过'));
-
-      if (result.details) {
-        log(io, chalk.gray(`   Schema 有效: ✅`));
-        if (result.details.endpoints) {
-          log(io, chalk.gray(`   端点数: ${result.details.endpoints}`));
-        }
-        if (result.details.breakingChanges === false) {
-          log(io, chalk.gray(`   破坏性变更: 无`));
-        }
-      }
-    } else {
-      log(io);
-      log(io, chalk.red('❌ 契约门控检查失败'));
-      log(io, chalk.red(`   ${result.message}`));
-
-      if (result.details?.errors) {
-        log(io);
-        log(io, chalk.red('验证错误:'));
-        (result.details.errors as string[]).forEach((error: string) => {
-          log(io, chalk.red(`  - ${error}`));
-        });
-      }
-
-      if (result.details?.breakingChanges) {
-        log(io);
-        log(io, chalk.red('破坏性变更:'));
-        (result.details.breakingChanges as any[]).forEach((change: any) => {
-          log(io, chalk.red(`  - ${change.type}: ${change.path}`));
-          if (change.description) {
-            log(io, chalk.gray(`    ${change.description}`));
+    return reportGateDecision(
+      io,
+      {
+        gateId: 'contract',
+        label: '契约门控',
+        onPass: (r) => {
+          if (!r.details) return [];
+          const lines = [chalk.gray(`   Schema 有效: ✅`)];
+          if (r.details.endpoints) {
+            lines.push(chalk.gray(`   端点数: ${r.details.endpoints}`));
           }
-        });
-      }
+          if (r.details.breakingChanges === false) {
+            lines.push(chalk.gray(`   破坏性变更: 无`));
+          }
+          return lines;
+        },
+        onFail: (r) => {
+          const lines: string[] = [];
 
-      return { kind: 'fail', reason: `contract gate denied: ${result.message}` };
-    }
-    return { kind: 'ok' };
-  } catch (error: any) {
-    log(io);
-    log(io, chalk.red('❌ 契约门控检查出错'));
-    log(io, chalk.red(`   ${error.message}`));
-    return { kind: 'fail', reason: `contract gate error: ${error.message}` };
+          if (r.details?.errors) {
+            lines.push('', chalk.red('验证错误:'));
+            (r.details.errors as string[]).forEach((issue: string) => {
+              lines.push(chalk.red(`  - ${issue}`));
+            });
+          }
+
+          if (r.details?.breakingChanges) {
+            lines.push('', chalk.red('破坏性变更:'));
+            (r.details.breakingChanges as any[]).forEach((change: any) => {
+              lines.push(chalk.red(`  - ${change.type}: ${change.path}`));
+              if (change.description) {
+                lines.push(chalk.gray(`    ${change.description}`));
+              }
+            });
+          }
+
+          return lines;
+        },
+      },
+      decision
+    );
+  } catch (error) {
+    return reportGateError(io, 'contract', '契约门控', error);
   }
 }
 

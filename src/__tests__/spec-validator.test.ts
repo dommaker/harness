@@ -6,13 +6,14 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { SpecValidator } from '../core/spec/validator';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('SpecValidator', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-spec');
+  let tempDir: string;
   let validator: SpecValidator;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-spec-'));
     validator = SpecValidator.getInstance();
   });
 

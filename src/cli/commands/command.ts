@@ -10,14 +10,14 @@
  * 退出码映射收敛在 bin 一处。
  */
 
-import { createCommandGate, getCommandRiskLevel, DEFAULT_COMMAND_BLACKLIST, type CommandBlacklistRule } from '../../gates';
+import { createCommandGate, DEFAULT_COMMAND_BLACKLIST, type CommandBlacklistRule } from '../../gates';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { gateCommandResult } from '../gate-command';
 
 export interface CommandCheckOptions {
   level?: boolean;
   list?: boolean;
   json?: boolean;
-  strict?: boolean;
 }
 
 /**
@@ -65,11 +65,14 @@ export async function executeCommand(
     return { kind: 'usage-error', reason: '缺少要检查的命令参数' };
   }
 
-  const gate = createCommandGate({ strict: options.strict });
-  const result = await gate.check(cmd);
+  const gate = createCommandGate();
+  // 命令门禁只判命令串、不读项目根；GateContext 仍要求项目根——本命令无 -p 旗帜，取真实 cwd
+  const decision = await gate.evaluate({ projectPath: process.cwd(), command: cmd });
+  const result = decision.result;
 
   if (options.level) {
-    const level = getCommandRiskLevel(cmd);
+    // 等级取自本命令创建的这台实例：与默认分支同一来源，配置不再中途丢失（#135）
+    const level = gate.getRiskLevel(cmd);
     if (options.json) {
       log(io, JSON.stringify({ level, command: cmd }));
     } else {
@@ -97,7 +100,5 @@ export async function executeCommand(
     log(io, result.passed ? `\x1b[32m✓\x1b[0m ${result.message}` : `\x1b[31m✗\x1b[0m ${result.message}`);
   }
 
-  return result.passed
-    ? { kind: 'ok' }
-    : { kind: 'fail', reason: `command gate denied: ${result.message}` };
+  return gateCommandResult('command', decision);
 }

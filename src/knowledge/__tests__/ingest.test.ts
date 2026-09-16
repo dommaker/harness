@@ -7,14 +7,15 @@ import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeIngest } from '../ingest';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('KnowledgeIngest', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-ingest');
+  let tempDir: string;
   let store: KnowledgeStore;
   let ingest: KnowledgeIngest;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-ingest-'));
   });
 
   afterAll(() => {

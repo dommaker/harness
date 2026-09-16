@@ -8,7 +8,8 @@ import chalk from 'chalk';
 import * as path from 'path';
 import { FailureRecorder } from '../../failure/recorder';
 import { DEFAULT_FAILURE_LOG_FILE } from '../../types/failure';
-import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { numericFlagMessage, parseNumericFlag } from '../../utils/numeric-flag';
 
 export interface FailureOptions {
   /** 项目路径 */
@@ -34,6 +35,20 @@ export async function failureList(
   options: FailureOptions & { limit?: number | string; type?: string; level?: string },
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
+  // CLI 直传时 limit 为 commander 字符串值；程序内调用传 number（候选7：编组在命令函数）。
+  // 字符串形先过装配窄化（harness#154）：脏输入 fail-loud 且不构造 recorder（零落盘），
+  // 原先 parseInt 出 NaN → falsy → 静默不截断。
+  let limit: number | undefined;
+  if (typeof options.limit === 'string') {
+    const parsed = parseNumericFlag(options.limit, 'int');
+    if (!parsed.ok) {
+      logError(io, numericFlagMessage('--limit', parsed.raw, 'int'));
+      return { kind: 'usage-error', reason: `failure list --limit 非法限制: "${parsed.raw}"` };
+    }
+    limit = parsed.value;
+  } else {
+    limit = options.limit;
+  }
   const recorder = getRecorder(options.projectPath);
 
   let records = await recorder.getHistory();
@@ -44,8 +59,6 @@ export async function failureList(
   if (options.level) {
     records = records.filter(r => r.level === options.level);
   }
-  // CLI 直传时 limit 为 commander 字符串值；程序内调用传 number（候选7：编组在命令函数）
-  const limit = typeof options.limit === 'string' ? parseInt(options.limit, 10) : options.limit;
   if (limit && limit > 0) {
     records = records.slice(-limit);
   }

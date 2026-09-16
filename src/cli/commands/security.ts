@@ -7,6 +7,7 @@
 import chalk from 'chalk';
 import { SecurityGate } from '../../gates/security';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { reportGateDecision } from '../gate-command';
 
 export interface SecurityOptions {
   /** 项目路径 */
@@ -40,29 +41,32 @@ export async function security(
       ignoreDevDependencies: options.ignoreDevDeps,
     });
 
-    const result = await gate.scan({ projectPath, projectId: 'default' });
+    const decision = await gate.evaluate({ projectPath });
 
-    log(io);
-    if (result.passed) {
-      log(io, chalk.green('✅ 安全门控检查通过'));
-      if (result.details) {
-        log(io, chalk.gray(`   critical: ${result.details.critical}, high: ${result.details.high}, moderate: ${result.details.moderate}, low: ${result.details.low}`));
-      }
-    } else {
-      log(io, chalk.red('❌ 安全门控检查失败'));
-      log(io, chalk.red(`   ${result.message}`));
-      if (result.details?.vulnerabilities) {
-        log(io);
-        (result.details.vulnerabilities as Array<{ name: string; severity: string; via: string }>).forEach((v, i) => {
-          const severityColor = getSeverityColor(v.severity);
-          log(io, severityColor(`  ${i + 1}. [${v.severity.toUpperCase()}] ${v.name}`));
-          log(io, chalk.gray(`     via: ${v.via}`));
-        });
-      }
-      log(io, chalk.gray('\n   运行 harness security audit 查看详情'));
-      return { kind: 'fail', reason: `security gate denied (threshold ${options.severity || 'high'}): ${result.message}` };
-    }
-    return { kind: 'ok' };
+    return reportGateDecision(
+      io,
+      {
+        gateId: 'security',
+        label: '安全门控',
+        onPass: (r) =>
+          r.details
+            ? [chalk.gray(`   critical: ${r.details.critical}, high: ${r.details.high}, moderate: ${r.details.moderate}, low: ${r.details.low}`)]
+            : [],
+        onFail: (r) => {
+          const lines = [chalk.gray(`   阈值: ${options.severity || 'high'}`)];
+          if (r.details?.vulnerabilities) {
+            lines.push('');
+            (r.details.vulnerabilities as Array<{ name: string; severity: string; via: string }>).forEach((v, i) => {
+              lines.push(getSeverityColor(v.severity)(`  ${i + 1}. [${v.severity.toUpperCase()}] ${v.name}`));
+              lines.push(chalk.gray(`     via: ${v.via}`));
+            });
+          }
+          lines.push(chalk.gray('\n   运行 harness security audit 查看详情'));
+          return lines;
+        },
+      },
+      decision
+    );
   } catch (error) {
     log(io);
     log(io, chalk.red(`❌ 安全检查异常: ${error instanceof Error ? error.message : String(error)}`));
@@ -105,7 +109,7 @@ export async function auditDetails(
       scanCommand: options.scanCommand,
     });
 
-    const result = await gate.scan({ projectPath, projectId: 'default' });
+    const result = await gate.scan({ projectPath });
 
     if (result.passed && !result.details?.total) {
       log(io, chalk.green('✅ 未发现安全漏洞'));

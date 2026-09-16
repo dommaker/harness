@@ -26,7 +26,7 @@ export interface GateRunResult {
 /**
  * 依次执行门禁链（按 order 升序，稳定排序）
  *
- * @param gates 参与执行的门禁（通常来自 getEffectiveGates）
+ * @param gates 参与执行的门禁（顺序由本函数按 order 排定，调用方不必预排）
  * @param ctx 门禁上下文
  */
 export async function runGates(

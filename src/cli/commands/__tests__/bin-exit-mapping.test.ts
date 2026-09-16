@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 
@@ -103,5 +104,19 @@ smoke('端到端：真实命令经 bin 映射后的对外退出码', () => {
     const r = run(['knowledge', 'bogus']);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('未知子命令: bogus');
+  });
+
+  // harness#152：数值旗帜的脏输入此前静默 NaN 穿透（退出码 0、少一道判定），现 fail-loud
+  it('audit 脏阈值 → 1（返回 usage-error，stdout 不出报告）', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-k152-bin-'));
+    try {
+      const r = run(['kb', 'audit', '--dir', dir, '--threshold', 'abc']);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('阈值');
+      expect(r.stdout).not.toContain('阈值 NaN');
+      expect(r.stdout).toBe('');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

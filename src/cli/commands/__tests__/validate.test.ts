@@ -2,7 +2,7 @@
  * validate 命令测试
  */
 
-import { validate, createExampleCheckpoint, createExampleResolutions } from '../validate';
+import { validate } from '../validate';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs/promises';
 import { CheckpointValidator } from '../../../core/validators/checkpoint';
@@ -124,53 +124,6 @@ describe('validate command', () => {
 
       // 工单 23 语义：--strict 与否都是 fail；退出码映射在 bin
       expect(result).toEqual({ kind: 'fail', reason: '1 个检查点未通过: test-1' });
-    });
-  });
-
-  describe('createExampleCheckpoint', () => {
-    it('应该创建示例检查点文件', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-      mockYaml.dump.mockReturnValue('yaml content');
-
-      await createExampleCheckpoint('/project', io);
-      
-      expect(mockFs.mkdir).toHaveBeenCalled();
-      expect(mockFs.writeFile).toHaveBeenCalled();
-      expect(io.outText()).toContain('已创建示例检查点');
-    });
-
-    it('已存在时不覆盖', async () => {
-      mockFs.access.mockResolvedValue(undefined);
-
-      await createExampleCheckpoint('/project', io);
-
-      expect(mockFs.writeFile).not.toHaveBeenCalled();
-      expect(io.outText()).toContain('checkpoints.yml 已存在，跳过');
-    });
-  });
-
-  describe('createExampleResolutions', () => {
-    it('应该创建 Resolutions 文件', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-
-      await createExampleResolutions('/project', io);
-
-      expect(mockFs.mkdir).toHaveBeenCalled();
-      expect(mockFs.writeFile).toHaveBeenCalled();
-      expect(io.outText()).toContain('已创建 Resolutions 文件');
-    });
-
-    it('已存在时不覆盖', async () => {
-      mockFs.access.mockResolvedValue(undefined);
-
-      await createExampleResolutions('/project', io);
-
-      expect(mockFs.writeFile).not.toHaveBeenCalled();
-      expect(io.outText()).toContain('resolutions.json 已存在，跳过');
     });
   });
 });

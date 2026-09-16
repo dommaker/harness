@@ -3,15 +3,18 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
-import { ProjectConfigLoader } from '../core/project-config-loader';
+import { ProjectConfigLoader, isConstraintRetired } from '../core/project-config-loader';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('ProjectConfigLoader - 补充覆盖', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-config-extra');
-  const harnessDir = path.join(tempDir, '.harness');
+  let tempDir: string;
+  let harnessDir: string;
 
   beforeAll(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-config-extra-'));
+    harnessDir = path.join(tempDir, '.harness');
     fs.mkdirSync(harnessDir, { recursive: true });
   });
 
@@ -123,71 +126,42 @@ custom_constraints:
     });
   });
 
-  describe('isConstraintEnabled', () => {
-    it('启用的约束应该返回 true', () => {
+  describe('零消费者收缩（harness#137）', () => {
+    /**
+     * `isConstraintEnabled` / `getConstraintSource` 属 ADR-0022 型漏收：
+     * 除本文件与自身测试外双仓零消费者，生效集判定唯一来源是
+     * `mergeConstraints` → `getEffectiveConstraints`（ADR-0001），这两个查询函数是它的平行复印。
+     */
+    it('isConstraintEnabled / getConstraintSource 已从类面删除', () => {
       const loader = new ProjectConfigLoader(tempDir);
       loader.load();
 
-      expect(loader.isConstraintEnabled('no_bypass_checkpoint')).toBe(true);
-    });
-
-    it('禁用的约束应该返回 false', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'config.yml'),
-        `
-constraints:
-  test_disabled:
-    enabled: false
-`
-      );
-
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-
-      expect(loader.isConstraintEnabled('test_disabled')).toBe(false);
+      // @ts-expect-error isConstraintEnabled 零消费者，随 harness#137 删除
+      expect(loader.isConstraintEnabled).toBeUndefined();
+      // @ts-expect-error getConstraintSource 零消费者，随 harness#137 删除
+      expect(loader.getConstraintSource).toBeUndefined();
+      expect(ProjectConfigLoader.prototype).not.toHaveProperty('isConstraintEnabled');
+      expect(ProjectConfigLoader.prototype).not.toHaveProperty('getConstraintSource');
     });
   });
 
-  describe('getConstraintSource', () => {
-    it('内置约束应该返回 built-in', () => {
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-
-      expect(loader.getConstraintSource('no_bypass_checkpoint')).toBe('built-in');
+  describe('isConstraintRetired（退役判定单点，harness#137）', () => {
+    it('config.yml enabled:false 即已退役，与 custom 条目无关', () => {
+      expect(isConstraintRetired(undefined, true)).toBe(true);
     });
 
-    it('自定义约束应该返回 custom', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'config.yml'),
-        `
-custom_constraints:
-  custom_source_test:
-    rule: CUSTOM
-    message: Custom
-    trigger: commit
-`
-      );
-
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-
-      expect(loader.getConstraintSource('custom_source_test')).toBe('custom');
+    it('custom 条目带 retired 元数据即已退役（studio#82 D6 落点在条目自身）', () => {
+      expect(isConstraintRetired({ retired: { at: '2026-08-08T12:00:00.000Z' } }, false)).toBe(true);
     });
 
-    it('禁用约束应该返回 disabled', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'config.yml'),
-        `
-constraints:
-  source_disabled:
-    enabled: false
-`
-      );
+    it('两个落点都没命中 → 未退役', () => {
+      expect(isConstraintRetired(undefined, false)).toBe(false);
+      expect(isConstraintRetired({ retired: undefined }, false)).toBe(false);
+    });
 
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-
-      expect(loader.getConstraintSource('source_disabled')).toBe('disabled');
+    it('retired 段的假值（null / 空串）不算退役——mergeConstraints 用的是 truthiness', () => {
+      expect(isConstraintRetired({ retired: null }, false)).toBe(false);
+      expect(isConstraintRetired({ retired: '' }, false)).toBe(false);
     });
   });
 

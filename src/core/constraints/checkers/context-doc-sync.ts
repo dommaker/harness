@@ -10,22 +10,24 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { resolveContextFiles } from '../../project-config-loader';
-import type { ConstraintCheck } from './types';
+import { formatEvidence, type ConstraintCheck } from './types';
 
 export const contextDocSync: ConstraintCheck = {
   id: 'context_doc_sync',
   async evaluate(env) {
     const projectPath = env.projectPath;
-    const resolution = resolveContextFiles(projectPath);
+    const resolution = resolveContextFiles(env);
     if (resolution.state !== 'enabled') {
       return 'skip'; // 未配置或约定已立但无目标，跳过评估
     }
 
-    for (const dir of resolution.dirs) {
-      const contextPath = join(projectPath, dir, 'CONTEXT.md');
-      if (!existsSync(contextPath)) {
-        return false;
-      }
+    // 证据随判定一并返回（ADR-0016 补迁）：此前只回裸 false，
+    // 多个 required_dirs 里到底哪个没落 CONTEXT.md，CLI 与 trace 两头都看不出来
+    const missing = resolution.dirs
+      .map(dir => join(dir, 'CONTEXT.md'))
+      .filter(rel => !existsSync(join(projectPath, rel)));
+    if (missing.length > 0) {
+      return { pass: false, evidence: formatEvidence('关键目录缺 CONTEXT.md', missing) };
     }
 
     return true;

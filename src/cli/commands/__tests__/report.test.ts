@@ -4,6 +4,10 @@
 
 import { report } from '../report';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { DEFAULT_TRACE_FILE } from '../../../types/trace';
+import * as nodeFs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as fs from 'fs/promises';
 
 // Mock fs/promises
@@ -52,9 +56,27 @@ describe('report command', () => {
       expect(io.outText()).toContain('报告已保存');
     });
 
+    // 自定义 projectPath 用例的临时目录：afterEach 兜底清理，用例失败也不留垃圾
+    let projectPath: string;
+    afterEach(() => {
+      if (projectPath) {
+        nodeFs.rmSync(projectPath, { recursive: true, force: true });
+        projectPath = '';
+      }
+    });
+
     it('应该使用自定义项目路径', async () => {
-      await report({ format: 'json', projectPath: '/custom/path' }, io);
+      // 原断言传的是假绝对路径 '/custom/path'：#139 之前 report 不在该路径落任何文件，假路径无感；
+      // #139 之后 TraceCollector 按 projectPath 锚根创建 trace 目录，这条路径变成真实写请求——
+      // 以 root 身份跑恰好 mkdir 成功（并在文件系统根下留下目录），非 root 的 CI runner 直接 EACCES。
+      // 换成现场创建的临时目录：环境无关，并把 #139 的锚根行为写成断言（原来只验「有输出」）。
+      projectPath = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'harness-report-pp-'));
+
+      await report({ format: 'json', projectPath }, io);
       expect(io.outText()).not.toBe('');
+      expect(
+        nodeFs.existsSync(path.join(projectPath, path.dirname(DEFAULT_TRACE_FILE)))
+      ).toBe(true);
     });
 
     it('Markdown 报告应包含表格结构', async () => {

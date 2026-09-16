@@ -7,16 +7,18 @@ import { TraceAnalyzer, createAnalyzer } from '../monitoring/trace-analyzer';
 import { TraceCollector } from '../monitoring/traces';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import type { ExecutionTrace } from '../types/trace';
 
 describe('TraceAnalyzer - 补充覆盖', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-analyzer-extra');
-  const logFile = path.join(tempDir, 'traces.log');
+  let tempDir: string;
+  let logFile: string;
   let collector: TraceCollector;
   let analyzer: TraceAnalyzer;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-analyzer-extra-'));
+    logFile = path.join(tempDir, 'traces.log');
     fs.writeFileSync(logFile, '');
   });
 

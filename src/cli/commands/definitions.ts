@@ -11,7 +11,11 @@
  *   子命令别名是数据（aliases），实参编组归各命令模块的具名导出
  *   （那才是它的 interface/测试面）；保证 --help/--version 懒加载不被破坏；
  *   注册表完整性断言（引用实现可解析）在 __tests__/registry.test.ts 构建/测试期校验。
+ * - 唯一例外 import：`utils/numeric-flag` 纯函数解析器（harness#154 口径条目指名的
+ *   数值旗帜唯一解析器）——非命令实现、零 IO，不破坏懒加载。
  */
+
+import { requireNumericFlag } from '../../utils/numeric-flag';
 
 /**
  * 命令 CLI 选项元数据（直接映射 commander `.option()`）
@@ -99,7 +103,9 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     command: 'check',
     description: '检查铁律是否满足',
     options: [
-      { flags: '-p, --preset <preset>', description: '预设名称', defaultValue: 'standard' },
+      // 不给缺省值：「没传 -p」与「传了 standard」必须可区分，否则生效集侧的覆盖规则恒触发、
+      // config.yml 的 preset 静默失效（漂移检测侧按 config.yml 算，两边就会稳定对不上）
+      { flags: '-p, --preset <preset>', description: '预设名称（缺省按项目 config.yml）' },
       { flags: '-s, --staged', description: '只检查暂存文件', defaultValue: false },
       { flags: '-t, --trigger <trigger>', description: '触发条件' },
       { flags: '--project-path <path>', description: '项目路径' },
@@ -143,10 +149,10 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     options: [
       { flags: '-p, --preset <preset>', description: '预设名称 (strict/standard/relaxed)', defaultValue: 'standard' },
       { flags: '-g, --governance <level>', description: '治理级别 (minimal/standard/strict)' },
-      { flags: '-t, --type <type>', description: '项目类型 (node-api/nextjs-app/python-api/custom)' },
       { flags: '--project-path <path>', description: '项目路径' },
       { flags: '--no-git-hooks', description: '不创建 Git hooks' },
-      { flags: '--no-github-actions', description: '不创建 GitHub Actions' },
+      { flags: '--ci <platform>', description: '服务端 CI 接线平台 (github/gitlab/none)；none = 不创建任何 CI 文件（治理 CI 面亦不建），缺省按 .harness/config.yml 的 ci.platform' },
+      { flags: '--no-github-actions', description: '不创建 GitHub Actions（已废弃：等价 --ci none）' },
       { flags: '--print-snippets', description: '只输出代码片段，不创建文件' },
     ],
     action: { module: 'init', export: 'init' },
@@ -331,9 +337,9 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
           projectPath: options.projectPath,
           export: options.export,
           json: options.json,
-          zeroInterceptMin: parseInt(String(options.zeroInterceptMin), 10),
-          noiseFailRate: parseFloat(String(options.noiseFailRate)),
-          noiseMinTotal: parseInt(String(options.noiseMinTotal), 10),
+          zeroInterceptMin: requireNumericFlag('--zero-intercept-min', options.zeroInterceptMin as string | undefined, 'int'),
+          noiseFailRate: requireNumericFlag('--noise-fail-rate', options.noiseFailRate as string | undefined, 'float'),
+          noiseMinTotal: requireNumericFlag('--noise-min-total', options.noiseMinTotal as string | undefined, 'int'),
         }],
       },
       {

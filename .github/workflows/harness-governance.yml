@@ -43,3 +43,9 @@ jobs:
             echo "::error::CAPABILITIES.md 已过期：上方 diff 的新增/删除行即未同步的登记变更。请本地跑 node bin/harness.js sync-docs 并提交结果。"
             exit 1
           fi
+
+      # CONTEXT.md 门（harness#142）：散文不可机械生成，走 --check 直接判红并点名文件与符号，
+      # 不套上面的「写入 + diff 门」。mtime 判定在 CI 里已抑制（全新 checkout 的时序无意义），
+      # 判红只来自「核心导出」节与目录导出面的内容漂移。
+      - name: Gate on stale CONTEXT.md
+        run: node bin/harness.js sync-docs --check

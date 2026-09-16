@@ -1,10 +1,13 @@
 /**
  * HookRegistry + HookPipeline 测试（Phase 1）
+ *
+ * #159 起 `enabled` / `errorStrategy` 由 HookConfig 唯一声明，
+ * 注册时以配置填充有效值；HookDefinition 不再携带这两个字段。
  */
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { HookRegistry } from '../hooks/registry';
 import { HookPipeline } from '../hooks/pipeline';
-import type { HookDefinition } from '../hooks/types';
+import type { HookConfig, HookDefinition } from '../hooks/types';
 
 interface TestContext {
   value: string;
@@ -19,13 +22,16 @@ function makeHook(
     name,
     phase: 'before',
     priority: 100,
-    errorStrategy: 'block',
     execute: async (ctx) => {
       ctx.calls.push(name);
       return { passed: true };
     },
     ...opts,
   };
+}
+
+function makeConfig(name: string, overrides: Partial<HookConfig> = {}): HookConfig {
+  return { name, enabled: true, errorStrategy: 'block', ...overrides };
 }
 
 describe('HookRegistry', () => {
@@ -36,34 +42,34 @@ describe('HookRegistry', () => {
   });
 
   it('应注册 hook', () => {
-    registry.register(makeHook('test'));
+    registry.register(makeHook('test'), makeConfig('test'));
     expect(registry.get('test')).toBeDefined();
   });
 
   it('同名注册应覆盖', () => {
-    registry.register(makeHook('test', { priority: 50 }));
-    registry.register(makeHook('test', { priority: 90 }));
+    registry.register(makeHook('test', { priority: 50 }), makeConfig('test'));
+    registry.register(makeHook('test', { priority: 90 }), makeConfig('test'));
     expect(registry.get('test')?.priority).toBe(90);
   });
 
   it('应获取已启用的 hook 按优先级排序', () => {
-    registry.register(makeHook('low', { priority: 200 }));
-    registry.register(makeHook('high', { priority: 10 }));
-    registry.register(makeHook('mid', { priority: 100 }));
-    registry.register(makeHook('disabled', { enabled: false }));
+    registry.register(makeHook('low', { priority: 200 }), makeConfig('low'));
+    registry.register(makeHook('high', { priority: 10 }), makeConfig('high'));
+    registry.register(makeHook('mid', { priority: 100 }), makeConfig('mid'));
+    registry.register(makeHook('disabled'), makeConfig('disabled', { enabled: false }));
 
     const enabled = registry.getEnabled('before');
     expect(enabled.map(h => h.name)).toEqual(['high', 'mid', 'low']);
   });
 
   it('应注销 hook', () => {
-    registry.register(makeHook('test'));
+    registry.register(makeHook('test'), makeConfig('test'));
     expect(registry.unregister('test')).toBe(true);
     expect(registry.get('test')).toBeUndefined();
   });
 
   it('应设置启用/禁用', () => {
-    registry.register(makeHook('test'));
+    registry.register(makeHook('test'), makeConfig('test'));
     expect(registry.setEnabled('test', false)).toBe(true);
     expect(registry.getEnabled('before').length).toBe(0);
     expect(registry.setEnabled('test', true)).toBe(true);
@@ -72,8 +78,8 @@ describe('HookRegistry', () => {
 
   it('应正确统计数量', () => {
     expect(registry.size).toBe(0);
-    registry.register(makeHook('a'));
-    registry.register(makeHook('b'));
+    registry.register(makeHook('a'), makeConfig('a'));
+    registry.register(makeHook('b'), makeConfig('b'));
     expect(registry.size).toBe(2);
   });
 });
@@ -89,8 +95,8 @@ describe('HookPipeline', () => {
 
   it('应执行所有 before hook', async () => {
     const ctx: TestContext = { value: '', calls: [] };
-    registry.register(makeHook('h1'));
-    registry.register(makeHook('h2'));
+    registry.register(makeHook('h1'), makeConfig('h1'));
+    registry.register(makeHook('h2'), makeConfig('h2'));
 
     const result = await pipeline.run('before', ctx);
 
@@ -101,12 +107,11 @@ describe('HookPipeline', () => {
 
   it('blocking hook 失败应停止后续', async () => {
     const ctx: TestContext = { value: '', calls: [] };
-    registry.register(makeHook('pass1'));
+    registry.register(makeHook('pass1'), makeConfig('pass1'));
     registry.register(makeHook('block', {
       execute: async () => ({ passed: false, error: 'blocked' }),
-      errorStrategy: 'block',
-    }));
-    registry.register(makeHook('never_runs'));
+    }), makeConfig('block', { errorStrategy: 'block' }));
+    registry.register(makeHook('never_runs'), makeConfig('never_runs'));
 
     const result = await pipeline.run('before', ctx);
 
@@ -121,9 +126,8 @@ describe('HookPipeline', () => {
     const ctx: TestContext = { value: '', calls: [] };
     registry.register(makeHook('warn_hook', {
       execute: async () => ({ passed: false, error: 'warning' }),
-      errorStrategy: 'warn',
-    }));
-    registry.register(makeHook('should_still_run'));
+    }), makeConfig('warn_hook', { errorStrategy: 'warn' }));
+    registry.register(makeHook('should_still_run'), makeConfig('should_still_run'));
 
     const result = await pipeline.run('before', ctx);
 
@@ -132,28 +136,12 @@ describe('HookPipeline', () => {
     expect(ctx.calls).toContain('should_still_run');
   });
 
-  it('ignore hook 失败应静默继续', async () => {
-    const ctx: TestContext = { value: '', calls: [] };
-    registry.register(makeHook('ignore_hook', {
-      execute: async () => ({ passed: false, error: 'ignored' }),
-      errorStrategy: 'ignore',
-    }));
-    registry.register(makeHook('still_runs'));
-
-    const result = await pipeline.run('before', ctx);
-
-    expect(result.passed).toBe(true);
-    expect(result.warnings).toEqual([]);
-    expect(ctx.calls).toContain('still_runs');
-  });
-
   it('hook 抛异常应被捕获', async () => {
     const ctx: TestContext = { value: '', calls: [] };
     registry.register(makeHook('throws', {
       execute: async () => { throw new Error('crash'); },
-      errorStrategy: 'warn',
-    }));
-    registry.register(makeHook('after_crash', { priority: 200 }));
+    }), makeConfig('throws', { errorStrategy: 'warn' }));
+    registry.register(makeHook('after_crash', { priority: 200 }), makeConfig('after_crash'));
 
     const result = await pipeline.run('before', ctx);
 
@@ -163,10 +151,10 @@ describe('HookPipeline', () => {
 
   it('runFull 应在 before/after 之间执行操作', async () => {
     const ctx: TestContext = { value: '', calls: [] };
-    registry.register(makeHook('before_hook'));
+    registry.register(makeHook('before_hook'), makeConfig('before_hook'));
 
     const afterHook = makeHook('after_hook', { phase: 'after' });
-    registry.register(afterHook);
+    registry.register(afterHook, makeConfig('after_hook'));
 
     const { pipelineResult, operationResult } = await pipeline.runFull(ctx, async () => {
       ctx.calls.push('operation');
@@ -182,8 +170,7 @@ describe('HookPipeline', () => {
     const ctx: TestContext = { value: '', calls: [] };
     registry.register(makeHook('block', {
       execute: async () => ({ passed: false }),
-      errorStrategy: 'block',
-    }));
+    }), makeConfig('block', { errorStrategy: 'block' }));
 
     const { pipelineResult, operationResult } = await pipeline.runFull(ctx, async () => {
       ctx.calls.push('should_not_run');
@@ -201,10 +188,10 @@ describe('HookPipeline', () => {
     expect(result.records).toEqual([]);
   });
 
-  it('应忽略 disabled hook', async () => {
+  it('应忽略配置禁用的 hook', async () => {
     const ctx: TestContext = { value: '', calls: [] };
-    registry.register(makeHook('enabled'));
-    registry.register(makeHook('disabled', { enabled: false }));
+    registry.register(makeHook('enabled'), makeConfig('enabled'));
+    registry.register(makeHook('disabled'), makeConfig('disabled', { enabled: false }));
 
     await pipeline.run('before', ctx);
 

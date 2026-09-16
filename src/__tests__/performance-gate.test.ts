@@ -6,12 +6,13 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { PerformanceGate } from '../gates/performance';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('PerformanceGate', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-perf-gate');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-perf-gate-'));
   });
 
   afterAll(() => {
@@ -23,27 +24,14 @@ describe('PerformanceGate', () => {
   });
 
   describe('check', () => {
-    it('禁用时应该返回通过', async () => {
-      const gate = new PerformanceGate({ enabled: false });
-
-      const result = await gate.check({
-        projectId: 'test',
-        projectPath: tempDir,
-      });
-
-      expect(result.passed).toBe(true);
-    });
-
     it('应该返回检查结果', async () => {
       const gate = new PerformanceGate({
-        enabled: true,
         thresholds: {
           maxBundleSize: 1000,
         },
       });
 
       const result = await gate.check({
-        projectId: 'test',
         projectPath: tempDir,
       });
 

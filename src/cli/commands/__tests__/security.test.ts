@@ -4,10 +4,12 @@
 
 import { security, auditDetails } from '../security';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { decide, fakeGate } from './gate-decision';
 import { SecurityGate } from '../../../gates/security';
 
 jest.mock('../../../gates/security', () => ({
   SecurityGate: jest.fn().mockImplementation(() => ({
+    evaluate: jest.fn(),
     scan: jest.fn(),
   })),
 }));
@@ -33,12 +35,9 @@ describe('security command', () => {
 
   describe('security', () => {
     it('should print success when scan passes', async () => {
-      const mockScan = jest.fn().mockResolvedValue({
-        passed: true,
-        message: 'no vulnerabilities',
-        details: { critical: 0, high: 0, moderate: 0, low: 0 },
-      });
-      MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(decide('security', true, 'no vulnerabilities', { critical: 0, high: 0, moderate: 0, low: 0 })) as any
+      );
 
       const result = await security({}, io);
 
@@ -47,34 +46,33 @@ describe('security command', () => {
     });
 
     it('should print failure and exit 1 when scan fails', async () => {
-      const mockScan = jest.fn().mockResolvedValue({
-        passed: false,
-        message: 'vulnerabilities found',
-        details: {
-          critical: 1,
-          high: 2,
-          vulnerabilities: [
-            { name: 'pkg-a', severity: 'critical', via: 'CVE-2026-0001' },
-            { name: 'pkg-b', severity: 'high', via: 'CVE-2026-0002' },
-          ],
-        },
-      });
-      MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(
+          decide('security', false, 'vulnerabilities found', {
+            critical: 1,
+            high: 2,
+            vulnerabilities: [
+              { name: 'pkg-a', severity: 'critical', via: 'CVE-2026-0001' },
+              { name: 'pkg-b', severity: 'high', via: 'CVE-2026-0002' },
+            ],
+          })
+        ) as any
+      );
 
       const result = await security({}, io);
 
       expect(io.outText()).toContain('安全门控检查失败');
+      expect(io.outText()).toContain('   阈值: high');
       expect(io.outText()).toContain('pkg-a');
       expect(io.outText()).toContain('pkg-b');
       expect(result).toEqual({
         kind: 'fail',
-        reason: 'security gate denied (threshold high): vulnerabilities found',
+        reason: 'security gate denied: vulnerabilities found',
       });
     });
 
     it('should default severity to high', async () => {
-      const mockScan = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
+      MockGate.mockImplementation(() => fakeGate(decide('security', true, 'ok')) as any);
 
       await security({}, io);
 
@@ -84,8 +82,7 @@ describe('security command', () => {
     });
 
     it('should use custom severity', async () => {
-      const mockScan = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
+      MockGate.mockImplementation(() => fakeGate(decide('security', true, 'ok')) as any);
 
       await security({ severity: 'critical' }, io);
 

@@ -5,18 +5,33 @@
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
+import * as os from 'os';
 import { syncDocs } from '../sync-docs';
+
+/**
+ * 环境固定：CONTEXT.md 的 mtime 过时判定在 CI 下被有意关掉（#142——全新 checkout 的 mtime
+ * 由 clone 顺序决定，比出来的「过时」是假灯）。本文件的夹具都是现场写的、断言的是本地行为，
+ * 所以环境必须由用例自己声明，不能跟着跑测试的机器走（否则同一份代码在开发机绿、在 CI 红）。
+ * 「CI 下关掉 mtime 判定」这条规则本身由 sync-docs-context-drift.test.ts 负责验证。
+ */
+const SAVED_CI = process.env.CI;
 
 let io: CapturingIO;
 beforeEach(() => {
   io = captureIO();
+  delete process.env.CI;
+});
+
+afterEach(() => {
+  if (SAVED_CI === undefined) delete process.env.CI;
+  else process.env.CI = SAVED_CI;
 });
 
 describe('sync-docs --agents', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-sync-docs-agents');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-sync-docs-agents-'));
   });
 
   afterAll(() => {
@@ -489,11 +504,11 @@ describe('sync-docs --agents', () => {
     expect(parsed.resolution.some((r: { action: string }) => r.action === 'update-context-md')).toBe(true);
     expect(parsed.agentsMd).toEqual({ file: 'AGENTS.md', exists: false, stale: true });
 
-    // 人读模式：输出过时提示
+    // 人读模式：mtime 差异只给提示（harness#142 降级），判失败的是缺失
     io = captureIO();
     const humanResult = await syncDocs({ projectPath: testDir, agents: true, check: true }, io);
     expect(humanResult).toEqual({ kind: 'fail', reason: expect.stringContaining('文档不是最新') });
-    expect(io.outText()).toContain('可能过时');
+    expect(io.outText()).toContain('源码比文档新');
     expect(io.outText()).toContain('缺少 CONTEXT.md');
 
     fs.rmSync(testDir, { recursive: true, force: true });

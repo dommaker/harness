@@ -6,12 +6,15 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ProjectConfigLoader, getCapabilitiesMode } from '../core/project-config-loader';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('ProjectConfigLoader', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-config');
-  const harnessDir = path.join(tempDir, '.harness');
+  let tempDir: string;
+  let harnessDir: string;
 
   beforeAll(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-config-'));
+    harnessDir = path.join(tempDir, '.harness');
     fs.mkdirSync(harnessDir, { recursive: true });
   });
 
@@ -125,7 +128,7 @@ custom_rules:
   });
 
   describe('getCapabilitiesMode', () => {
-    /** 建一个带独立 .harness/config.yml 的临时项目目录（避免进程级缓存串扰） */
+    /** 建一个带独立 .harness/config.yml 的临时项目目录（各用例独占自己的配置内容） */
     const setupConfigDir = (name: string, configYaml: string): string => {
       const dir = path.join(tempDir, name);
       fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });

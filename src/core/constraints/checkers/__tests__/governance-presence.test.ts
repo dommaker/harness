@@ -18,12 +18,13 @@ import {
 } from '../governance-presence';
 import { detectInjectionDrift } from '../../injection-drift';
 import { createProjectFixture, writeProjectConfig } from '../../../../test-setup/project-fixture';
-import type { CheckEnv } from '../types';
+import { normalizeCheckOutcome, type CheckEnv } from '../types';
+import { createRunEnv } from '../../run-env';
 
 function makeEnv(projectPath: string): CheckEnv {
   return {
+    ...createRunEnv(projectPath),
     context: { operation: 'commit', projectPath },
-    projectPath,
     stagedDiff: async () => '',
     stagedDiffNames: async () => '',
     srcScan: () => [],
@@ -87,12 +88,20 @@ describe('governance_presence checker', () => {
     expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
   });
 
-  it('两处都没有治理契约 → fail 并报警（防静默丢失）', async () => {
+  /** 判定与证据的统一读法（harness#119/ADR-0016：布尔与 CheckDetail 两种形状同一断言） */
+  const outcomeOf = async (projectPath: string) =>
+    normalizeCheckOutcome(await governancePresence.evaluate(makeEnv(projectPath)));
+
+  it('两处都没有治理契约 → fail，证据点名两处落点与修复入口（不再走 stderr 侧信道）', async () => {
     writeConfig();
     fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), '# AGENTS.md\n\n只有机器生成内容\n');
     fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n@AGENTS.md\n');
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(false);
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('治理契约缺失'));
+    const outcome = await outcomeOf(tempDir);
+    expect(outcome.satisfied).toBe(false);
+    expect(outcome.evidence.join('\n')).toContain('治理契约');
+    expect(outcome.evidence.join('\n')).toContain('harness init');
+    // ADR-0016：证据只有一个出口。侧信道留着会让 CLI 结构化输出与 trace 两头口径不一致
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('PRESERVE:governance 段为空（被掏空）且 CLAUDE.md 无治理块 → fail', async () => {
@@ -101,7 +110,7 @@ describe('governance_presence checker', () => {
       path.join(tempDir, 'AGENTS.md'),
       '# AGENTS.md\n\n<!-- PRESERVE:governance -->\n\n<!-- /PRESERVE:governance -->\n'
     );
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(false);
+    expect((await outcomeOf(tempDir)).satisfied).toBe(false);
   });
 
   it('PRESERVE:governance 标记未闭合视为不在场 → fail', async () => {
@@ -110,7 +119,7 @@ describe('governance_presence checker', () => {
       path.join(tempDir, 'AGENTS.md'),
       '# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n内容\n'
     );
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(false);
+    expect((await outcomeOf(tempDir)).satisfied).toBe(false);
   });
 });
 

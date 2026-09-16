@@ -6,7 +6,8 @@
 ## 核心导出
 - `ErrorClassifier` — 错误分类器(可配置规则)
 - `FailureRecorder` — 失败记录器(文件存储)
-- `types.ts` — 错误分类/记录类型定义
+- `index.ts` 直连类型正本 `src/types/failure.ts`（ErrorType/FailureLevel/FailureRecord/分类规则数据）
+- barrel 公开面的其余出口：`createErrorClassifier(config?)`、`classifyError(error)`（免建实例的快速分类，取 `ErrorType`）、`getFailureLevel(type)`（查 `DEFAULT_LEVEL_MAPPING`）、`createFailureRecorder(config)`（注意 config 必填，与 classifier 工厂不对称）；数据常量 `DEFAULT_FAILURE_LOG_FILE`（`.harness/logs/failures.log`）、`DEFAULT_CLASSIFICATION_RULES`、`DEFAULT_LEVEL_MAPPING` 正本同在 `src/types/failure.ts`
 
 ## 依赖关系
 - 依赖 `src/types/` 错误分类/记录类型

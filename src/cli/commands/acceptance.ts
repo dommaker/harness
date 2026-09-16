@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SpecAcceptanceGate } from '../../gates/acceptance';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { reportGateDecision, reportGateError } from '../gate-command';
 
 
 export interface AcceptanceOptions {
@@ -43,38 +44,32 @@ export async function acceptance(
   });
 
   try {
-    // 执行检查
-    const context = {
+    const decision = await gate.evaluate({
       projectPath,
       taskId: options.taskId,
-    };
+    });
 
-    const result = await gate.check(context as any);
-
-    if (result.passed) {
-      log(io);
-      log(io, chalk.green('✅ 验收标准检查通过'));
-      if (result.details) {
-        log(io, chalk.gray(`   通过项: ${result.details.checkedCriteria ?? 0}`));
-        log(io, chalk.gray(`   总项数: ${result.details.totalCriteria ?? 0}`));
-      }
-    } else {
-      log(io);
-      log(io, chalk.red('❌ 验收标准检查失败'));
-      log(io, chalk.red(`   ${result.message}`));
-      if (result.details?.uncheckedCriteria) {
-        (result.details.uncheckedCriteria as string[]).forEach((criteria: string) => {
-          log(io, chalk.red(`   - ${criteria}`));
-        });
-      }
-      return { kind: 'fail', reason: `acceptance gate denied: ${result.message}` };
-    }
-    return { kind: 'ok' };
-  } catch (error: any) {
-    log(io);
-    log(io, chalk.red('❌ 验收标准检查出错'));
-    log(io, chalk.red(`   ${error.message}`));
-    return { kind: 'fail', reason: `acceptance gate error: ${error.message}` };
+    return reportGateDecision(
+      io,
+      {
+        gateId: 'acceptance',
+        label: '验收标准',
+        onPass: (r) =>
+          r.details
+            ? [
+                chalk.gray(`   通过项: ${r.details.checkedCriteria ?? 0}`),
+                chalk.gray(`   总项数: ${r.details.totalCriteria ?? 0}`),
+              ]
+            : [],
+        onFail: (r) =>
+          r.details?.uncheckedCriteria
+            ? (r.details.uncheckedCriteria as string[]).map((criteria: string) => chalk.red(`   - ${criteria}`))
+            : [],
+      },
+      decision
+    );
+  } catch (error) {
+    return reportGateError(io, 'acceptance', '验收标准', error);
   }
 }
 

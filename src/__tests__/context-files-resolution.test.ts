@@ -2,16 +2,17 @@
  * resolveContextFiles 三态访问器测试（工单 84）
  *
  * 测试面 = project-config-loader 上的 governance.context_files 访问器：
- * 未配置 / enabled 但无目标 / enabled 且非空 三态可分辨；访问器基于
- * loadRawProjectConfig 的进程级 memoize，不触发第二次 yaml 解析。
- * 临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
+ * 未配置 / enabled 但无目标 / enabled 且非空 三态可分辨；访问器的 config.yml
+ * 读取由运行级观察面供给（ADR-0023 决策 2：同一枚 RunEnv 内不触发第二次解析，
+ * 进程级缓存已撤销）。临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
  */
 
 import { describe, it, expect, jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveContextFiles, loadRawProjectConfig } from '../core/project-config-loader';
-import { createProjectFixture } from '../test-setup/project-fixture';
+import { createRunEnv } from '../core/constraints/run-env';
+import { createProjectFixture, writeProjectConfig } from '../test-setup/project-fixture';
 
 // ts-jest 的 namespace 导入属性不可重定义（jest.spyOn 会抛），改为只包一层
 // readFileSync 的部分 mock——其余 fs 能力用真实实现，fixture 搭建不受影响。
@@ -94,23 +95,36 @@ describe('resolveContextFiles — 三态分辨率（工单 84 triage 裁决口�
   });
 });
 
-describe('resolveContextFiles — memoize 语义（工单 84：不引入第二次解析）', () => {
-  it('访问器多次调用 + 直接读 raw 共享单次 config.yml 读取', () => {
+describe('resolveContextFiles — 运行级 memoize 语义（ADR-0023 决策 2：撤销进程级缓存）', () => {
+  const configReads = () =>
+    readSpy.mock.calls.filter(call =>
+      String(call[0]).endsWith(path.join('.harness', 'config.yml'))
+    ).length;
+
+  it('同一枚观察面内多次访问共享单次 config.yml 读取', () => {
     const dir = setupProject('memo', CTX_FILES(true, ['src']));
-    const configReads = () =>
-      readSpy.mock.calls.filter(call =>
-        String(call[0]).endsWith(path.join('.harness', 'config.yml'))
-      ).length;
+    const env = createRunEnv(dir);
 
     readSpy.mockClear();
     expect(configReads()).toBe(0); // 探针有效：fixture 搭建不读 config
 
-    resolveContextFiles(dir);
+    resolveContextFiles(env);
     expect(configReads()).toBe(1); // 首次真读取+解析
 
-    resolveContextFiles(dir);
-    resolveContextFiles(dir);
-    loadRawProjectConfig(dir);
-    expect(configReads()).toBe(1); // 复用进程级 memoize，无第二次解析
+    resolveContextFiles(env);
+    resolveContextFiles(env);
+    loadRawProjectConfig(env);
+    expect(configReads()).toBe(1); // run 内复用同一份解析结果，无第二次解析
+  });
+
+  it('只传路径 = 一次性读取：同一路径先改后读必须读到新内容', () => {
+    const dir = setupProject('fresh', CTX_FILES(true, ['src']));
+
+    expect(resolveContextFiles(dir)).toEqual({ state: 'enabled', dirs: ['src'] });
+
+    writeProjectConfig(dir, CTX_FILES(false, ['src']));
+    // 旧进程级缓存按 mtime/size 判新鲜，同一次运行内「先改后读」照样读到老内容；
+    // 撤销缓存后每次调用自造一枚用完即弃的观察面，读到的必然是当下内容
+    expect(resolveContextFiles(dir)).toEqual({ state: 'unconfigured' });
   });
 });

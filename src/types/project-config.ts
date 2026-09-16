@@ -225,6 +225,24 @@ export interface GovernanceConfig {
 }
 
 /**
+ * CI 平台（harness#143）：服务端门禁的接线目标
+ *
+ * 本地 hook 跑在推送者控制的机器上（`--no-verify` 可绕过），只能算自检；
+ * 真正的门禁必须抢到服务端 CI 这个执行时机。取值域另含 `'none'`（不接线），
+ * 那在本类型之外——命令层据此让 CI 站点干脆不进 plan，scaffold 只见有形状的平台。
+ */
+export type CiPlatform = 'github' | 'gitlab';
+
+/**
+ * CI 接线配置（config.yml `ci` 段，harness#143）
+ *
+ * `platform` 缺省 = `github`；`'none'` = 不落任何 CI 文件。旧配置无此段即 `github`，零迁移。
+ */
+export interface CiConfig {
+  platform?: CiPlatform | 'none';
+}
+
+/**
  * 项目配置
  */
 export interface ProjectConfig {
@@ -235,6 +253,9 @@ export interface ProjectConfig {
 
   /** 使用预设 */
   preset?: 'strict' | 'standard' | 'relaxed';
+
+  /** CI 接线平台（harness#143，缺省 github） */
+  ci?: CiConfig;
 
   /**
    * 项目适用场景标签（ADR-0001，如 'agent-skill'、'llm-app'）

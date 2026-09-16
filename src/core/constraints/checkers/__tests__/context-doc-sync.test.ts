@@ -9,8 +9,9 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import { join } from 'path';
 import { contextDocSync } from '../context-doc-sync';
-import { buildCheckEnv } from '../types';
+import { buildCheckEnv, normalizeCheckOutcome } from '../types';
 import { createProjectFixture } from '../../../../test-setup/project-fixture';
 import type { ConstraintContext } from '../../../../types/constraint';
 
@@ -65,9 +66,13 @@ describe('context_doc_sync — 判定', () => {
     expect(await evaluate(dir)).toBe(true);
   });
 
-  it('任一目录缺 CONTEXT.md → fail', async () => {
+  it('任一目录缺 CONTEXT.md → fail，证据点名缺的那一个（ADR-0016 补迁）', async () => {
     const dir = setupDir('one-missing', CTX_FILES(true, ['src', 'bin']), ['src']);
-    expect(await evaluate(dir)).toBe(false);
+    const outcome = normalizeCheckOutcome(await evaluate(dir));
+    expect(outcome.satisfied).toBe(false);
+    expect(outcome.skipped).toBe(false);
+    expect(outcome.evidence.join('\n')).toContain(join('bin', 'CONTEXT.md'));
+    expect(outcome.evidence.join('\n')).not.toContain(join('src', 'CONTEXT.md'));
   });
 
   it('配置解析失败 → skip（不炸不报）', async () => {

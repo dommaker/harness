@@ -9,6 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { getHarnessPackageVersion } from '../package-version';
 
 const REAL_VERSION = JSON.parse(
@@ -21,8 +22,7 @@ describe('getHarnessPackageVersion', () => {
   });
 
   it('cwd 是消费者项目时仍读 harness 版本，不误读消费者 package.json', () => {
-    const consumerDir = path.join(process.cwd(), 'temp-test-pkg-version-consumer');
-    fs.mkdirSync(consumerDir, { recursive: true });
+    const consumerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-pkg-version-consumer-'));
     fs.writeFileSync(
       path.join(consumerDir, 'package.json'),
       JSON.stringify({ name: 'consumer-app', version: '9.9.9' })

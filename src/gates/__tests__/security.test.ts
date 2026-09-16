@@ -15,7 +15,6 @@ const mockExec = exec as unknown as jest.Mock;
 describe('SecurityGate', () => {
   let gate: SecurityGate;
   const baseContext = {
-    projectId: 'test-project',
     projectPath: '/test/project',
   };
 
@@ -28,7 +27,6 @@ describe('SecurityGate', () => {
     it('should use default config', () => {
       const defaultGate = new SecurityGate();
       const config = defaultGate.getConfig();
-      expect(config.enabled).toBe(true);
       expect(config.severityThreshold).toBe('high');
       expect(config.ignoreWarnings).toBe(false);
       expect(config.ignoreDevDependencies).toBe(false);
@@ -36,27 +34,16 @@ describe('SecurityGate', () => {
 
     it('should accept custom config', () => {
       const customGate = new SecurityGate({
-        enabled: false,
         severityThreshold: 'critical',
         ignoreWarnings: true,
       });
       const config = customGate.getConfig();
-      expect(config.enabled).toBe(false);
       expect(config.severityThreshold).toBe('critical');
       expect(config.ignoreWarnings).toBe(true);
     });
   });
 
   describe('scan()', () => {
-    it('should pass when gate is disabled', async () => {
-      const disabledGate = new SecurityGate({ enabled: false });
-
-      const result = await disabledGate.scan(baseContext);
-
-      expect(result.passed).toBe(true);
-      expect(result.message).toContain('已禁用');
-    });
-
     it('should pass when no vulnerabilities found', async () => {
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(null, { stdout: JSON.stringify({ vulnerabilities: {} }) });

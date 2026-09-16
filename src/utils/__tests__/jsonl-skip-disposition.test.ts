@@ -17,9 +17,11 @@
  * 裁决——否则「改成 throw 就免掉告知」成了原则的绕行通道。`src/utils/jsonl.ts` 本身是策略
  * 定义处，排除。
  * `readJsonlEnds`（首尾读取）同样是 skip 读点，纳入同一识别正则——否则它成为本契约的
- * 绕行通道（harness#114）。
- * `countJsonlLines` 的纯行数站点（如 `check` 的提示计数）不 parse、不产坏行计数，也不在本表内
- * ——它把损坏行算进条数的问题属口径变更，#100 明确不做。
+ * 绕行通道（harness#114）。`readJsonlWindow`（尾部窗口，ADR-0023 供一次运行内多个
+ * 尾部消费方共用一份行文本）同判据纳入。
+ * `countJsonlLines`（纯计数入口，把坏行算进条数却不 parse）已随其唯一消费点——`check` 的
+ * 提示阈值——改用有界 `head` 读而删除（ADR-0023 决策 3 推广）；该消费点因此成为本表内的
+ * skip 站点，按契约就地记名豁免。
  */
 
 import * as fs from 'fs';
@@ -41,9 +43,10 @@ const POLICY_WINDOW_LINES = 6;
  * 每个读点的去向理由在调用点注释里，此表只钉「有哪些点、各几处」。
  */
 const EXPECTED_SKIP_READ_SITES: Record<string, number> = {
+  'src/cli/commands/check.ts': 1,
   'src/cli/commands/status.ts': 1,
   'src/context/session-manager.ts': 2,
-  'src/core/constraints/context-builder.ts': 2,
+  'src/core/constraints/run-env.ts': 1,
   'src/core/constraints/usage-report.ts': 1,
   'src/failure/recorder.ts': 1,
   'src/knowledge/reference-tracker.ts': 1,
@@ -79,7 +82,7 @@ interface CallSite {
 }
 
 /**
- * 找出一个文件里所有 readJsonl 调用点并判出坏行策略。
+ * 找出一个文件里所有 readJsonl 系读点并判出坏行策略。
  * 调用参数可能换行，故从 `readJsonl` 起拼若干行再判：先遇到 `'skip'` 记 skip、
  * 先遇到 `'throw'` 记 throw，两者都不出现记 unknown。
  */
@@ -89,7 +92,8 @@ function callSites(file: string): CallSite[] {
 
   for (let i = 0; i < raw.length; i++) {
     const trimmed = raw[i].trim();
-    if (!/readJsonl(?:Ends)?\s*[<(]/.test(trimmed)) continue;
+    // Window 同纳入：否则「改用尾部窗口读」成为 skip 契约的逃逸通道（harness#114 同一手法）
+    if (!/readJsonl(?:Ends|Window)?\s*[<(]/.test(trimmed)) continue;
     // 注释行里的示例不是站点（策略定义处 src/utils/jsonl.ts 已整体排除）
     if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
 

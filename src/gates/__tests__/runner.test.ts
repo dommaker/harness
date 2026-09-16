@@ -23,7 +23,7 @@ function fakeGate(id: string, order: number, status: GateDecisionStatus): Gate {
   };
 }
 
-const ctx: GateContext = { projectId: 'p', projectPath: '/tmp/project' };
+const ctx: GateContext = {projectPath: '/tmp/project' };
 
 describe('runGates', () => {
   it('deny 单调：先 deny 后 abstain，终态 deny（下游不得改回 allow）', async () => {

@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
+import { isEntryFile } from './tree-walker';
 
 interface MigrationResult {
   total: number;
@@ -19,6 +20,9 @@ interface MigrationResult {
 /**
  * Migrate all knowledge .md files in a directory to include
  * consumptionMode and origin fields if missing.
+ *
+ * 条目人口按 `tree-walker` 的排除口径判定（harness#134）：`_index.md` 这类树生成物
+ * 既不是迁移对象，也不再计入 `total`/`errors`（此前被报成「no frontmatter found」假阳性）。
  *
  * Existing files without these fields get defaults:
  * - consumptionMode: 'reference'
@@ -33,7 +37,7 @@ export function migrateKnowledgeEntries(baseDir: string): MigrationResult {
     return result;
   }
 
-  const files = fs.readdirSync(baseDir).filter(f => f.endsWith('.md'));
+  const files = fs.readdirSync(baseDir).filter(isEntryFile);
   result.total = files.length;
 
   for (const file of files) {
@@ -42,7 +46,9 @@ export function migrateKnowledgeEntries(baseDir: string): MigrationResult {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const fm = splitFrontmatter(raw);
       if (fm.state === 'absent') {
-        result.errors.push(`${file}: no frontmatter found`);
+        // 统一口径（harness#89 裁决 2 / harness#161）：'absent' 是合法输入、不上报——
+        // 按非条目语义静默跳过，计入 skipped（非损坏、非迁移对象，仅保证 total 计数闭环）
+        result.skipped++;
         continue;
       }
       if (fm.state === 'malformed') {

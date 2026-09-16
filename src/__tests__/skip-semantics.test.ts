@@ -18,6 +18,7 @@ import type { Constraint, ConstraintContext } from '../types/constraint';
 import type { ExecutionTrace } from '../types/trace';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { execSync } from 'child_process';
 
 /** 套件共用 checker：显式 no-op 记录器（trace 断言的用例自带记录器实例） */
@@ -32,10 +33,10 @@ function makeConstraint(
 }
 
 describe('skip 三态语义（ADR-0001）', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-skip-semantics');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-skip-semantics-'));
     execSync('git init', { cwd: tempDir });
     execSync('git config user.email "test@test.com"', { cwd: tempDir });
     execSync('git config user.name "Test"', { cwd: tempDir });
@@ -227,9 +228,10 @@ describe('skip 三态语义（ADR-0001）', () => {
   });
 
   describe('detectTrigger 补 code_implementation 推断', () => {
-    const triggerDir = path.join(tempDir, 'trigger-probe');
+    let triggerDir: string;
 
     beforeAll(() => {
+      triggerDir = path.join(tempDir, 'trigger-probe');
       // src/ 下有已提交 .ts 文件 → detectSourceRoots 命中 'src'
       fs.mkdirSync(path.join(triggerDir, 'src'), { recursive: true });
       fs.writeFileSync(path.join(triggerDir, 'src', 'existing.ts'), 'export const x = 1;');

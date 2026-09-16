@@ -8,11 +8,11 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { createExampleCheckpoint, createExampleResolutions } from './validate';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { getHarnessPackageVersion } from '../../utils/package-version';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
-import type { GovernanceConfig } from '../../types/project-config';
+import { loadRawProjectConfig } from '../../core/project-config-loader';
+import type { CiConfig, CiPlatform, GovernanceConfig } from '../../types/project-config';
 import {
   CONSTRAINTS_START_MARKER,
   CONSTRAINTS_END_MARKER,
@@ -25,23 +25,109 @@ import {
   resolveGovernanceLanding,
   GOVERNANCE_HEADING,
 } from '../../core/constraints/injection-writer';
-import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import {
+  runPlan,
+  nodeScaffoldFs,
+  preCommitHookFile,
+  prePushHookFile,
+  harnessCheckCiFile,
+  customConstraintsFile,
+  changelogFile,
+  contextDocFile,
+  governanceWorkflowFile,
+  checkpointsFile,
+  resolutionsFile,
+  type ManagedFile,
+} from './scaffold';
+import {
+  GITHUB_ACTIONS_SNIPPET,
+  renderGitLabCiJobs,
+  PRE_COMMIT_SNIPPET,
+  PRE_PUSH_SNIPPET,
+} from './scaffold-templates';
 
 export interface InitOptions {
   /** 项目路径 */
   projectPath?: string;
   /** 预设名称 */
   preset: 'strict' | 'standard' | 'relaxed';
-  /** 治理级别 */
+  /** 治理级别（值域 = `GOVERNANCE_PRESETS` 键集合，非法值在命令入口判 usage-error、零落盘，harness#156） */
   governance?: 'minimal' | 'standard' | 'strict';
-  /** 项目类型 */
-  type?: 'node-api' | 'nextjs-app' | 'python-api' | 'custom';
   /** 是否创建 Git hooks */
   gitHooks?: boolean;
-  /** 是否创建 GitHub Actions */
+  /** 是否创建 GitHub Actions（`--no-github-actions`：已废弃，`--ci none` 的别名） */
   githubActions?: boolean;
+  /**
+   * 服务端 CI 接线平台（`--ci`，harness#143）
+   *
+   * 值域校验在命令层（bin 把用户敲的字符串原样递进来）；缺省时回落 config.yml
+   * 的 `ci.platform`，再缺省即 `github`。
+   */
+  ci?: CiPlatform | 'none';
   /** 只输出代码片段，不创建文件 */
   printSnippets?: boolean;
+}
+
+/** `--ci` 的可取值域（`none` = 不创建任何服务端 CI 文件，治理 CI 面亦不建，即旧 `--no-github-actions`） */
+const CI_FLAG_VALUES: Array<CiPlatform | 'none'> = ['github', 'gitlab', 'none'];
+
+/** CI 平台解析结果（`error` 属用法错误，命令层直接非零退出，不落任何文件） */
+type CiResolution =
+  | { kind: 'ok'; platform: CiPlatform | 'none'; warning?: string }
+  | { kind: 'error'; reason: string };
+
+/**
+ * 解析 CI 平台（harness#143 决议 ①④）：flag > config.yml 的 `ci.platform` > `github`
+ *
+ * 不做 remote URL 自动检测：init 常跑在首次 push 之前无 remote 可测，而检测错的代价是
+ * 静默写错文件。`--no-github-actions` 保留为 `--ci none` 的废弃别名；它与显式
+ * `--ci <非 none>` 同时出现时不猜用户意图，判用法错误。
+ */
+function resolveCiPlatform(
+  options: InitOptions,
+  configured: CiPlatform | 'none' | undefined,
+): CiResolution {
+  const flag = options.ci;
+  if (flag !== undefined && !CI_FLAG_VALUES.includes(flag)) {
+    return {
+      kind: 'error',
+      reason: `--ci 取值非法: ${String(flag)}（可取 ${CI_FLAG_VALUES.join(' | ')}）`,
+    };
+  }
+  if (options.githubActions === false) {
+    if (flag !== undefined && flag !== 'none') {
+      return {
+        kind: 'error',
+        reason: `--ci ${flag} 与 --no-github-actions（即 --ci none 的废弃别名）冲突，二选一`,
+      };
+    }
+    return {
+      kind: 'ok',
+      platform: 'none',
+      warning: '⚠️  --no-github-actions 已废弃，请改用 --ci none',
+    };
+  }
+  return { kind: 'ok', platform: flag ?? configured ?? 'github' };
+}
+
+/**
+ * 读 config.yml 已持久化的 `ci.platform`（解析链第二级）
+ *
+ * 缺失 / 解析失败 / 形状不符一律按未配置处理（与 `getGovernanceConfig` 同一口径：
+ * 脏配置不替调用方做决定）。
+ */
+function readConfiguredCiPlatform(projectPath: string): CiPlatform | 'none' | undefined {
+  let raw: Record<string, unknown> | undefined;
+  try {
+    raw = loadRawProjectConfig(projectPath);
+  } catch {
+    return undefined;
+  }
+  const ci = raw?.ci;
+  if (ci === null || typeof ci !== 'object') return undefined;
+  const platform = (ci as CiConfig).platform;
+  return platform !== undefined && CI_FLAG_VALUES.includes(platform) ? platform : undefined;
 }
 
 /**
@@ -145,15 +231,35 @@ const GOVERNANCE_PRESETS: Record<string, GovernanceConfig> = {
  * 初始化项目
  */
 export async function init(options: InitOptions, io: CommandIO = processIO): Promise<CommandResult> {
+  const projectPath = options.projectPath || process.cwd();
+
+  // CI 平台先解析：用法错误不落任何盘，且 `--print-snippets` 也要按解析出的平台出形
+  const ci = resolveCiPlatform(options, readConfiguredCiPlatform(projectPath));
+  if (ci.kind === 'error') {
+    logError(io, chalk.red(`❌ 用法错误: ${ci.reason}`));
+    return { kind: 'usage-error', reason: ci.reason };
+  }
+  if (ci.warning) log(io, chalk.yellow(ci.warning));
+
+  // `-g` 值域校验在命令入口（harness#156 裁决 F2，与 #152 脏输入 fail-loud 同判据）：
+  // 非法值 usage-error、先于任何落盘；合法值域与装配共用同一份 GOVERNANCE_PRESETS 表，
+  // github / gitlab / none 三平台同判（bin 把用户敲的字符串原样递进来）。
+  // 用 Object.hasOwn 而非 `in`（harness#164）：`in` 走原型链，`-g constructor`/`toString`
+  // 会穿透校验、把 Object 构造函数写进 configData 并在 yaml.dump 炸成 YAMLException。
+  if (options.governance !== undefined && !Object.hasOwn(GOVERNANCE_PRESETS, options.governance)) {
+    const reason = `-g/--governance 取值非法: ${String(options.governance)}（可取 ${Object.keys(GOVERNANCE_PRESETS).join(' | ')}）`;
+    logError(io, chalk.red(`❌ 用法错误: ${reason}`));
+    return { kind: 'usage-error', reason };
+  }
+
   // 只输出代码片段
   if (options.printSnippets) {
-    printSnippets(io);
+    printSnippets(io, ci.platform, options.governance);
     return { kind: 'ok' };
   }
 
   log(io, chalk.blue('🚀 初始化 harness 配置...'));
 
-  const projectPath = options.projectPath || process.cwd();
   const configDir = path.join(projectPath, '.harness');
 
   // 创建配置目录
@@ -171,6 +277,13 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
     log(io, chalk.gray(`治理级别: ${options.governance}`));
   }
 
+  // 非默认平台才持久化：缺省即 github（旧配置零迁移），裸 init 重写 config.yml 时
+  // 也因此不会丢掉已选定的平台
+  if (ci.platform !== 'github') {
+    configData.ci = { platform: ci.platform };
+    log(io, chalk.gray(`CI 平台: ${ci.platform}`));
+  }
+
   // 写入 harness 版本
   const pkgVersion = getHarnessPackageVersion();
   configData.harness = { version: pkgVersion };
@@ -181,14 +294,11 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   await fs.writeFile(configPath, configContent, 'utf-8');
   log(io, chalk.green(`✅ 已创建配置文件: ${configPath} (v${pkgVersion})`));
 
-  // 创建检查点示例
-  await createExampleCheckpoint(projectPath, io);
-
-  // 创建 Resolutions（RKB 狗粮 — 约束 → 已知解法映射）
-  await createExampleResolutions(projectPath, io);
-
-  // 创建自定义约束示例
-  await createCustomConstraintsExample(projectPath, io);
+  // 受管示例文件：检查点 / Resolutions（RKB 狗粮）/ 自定义约束
+  await runPlan(
+    [checkpointsFile(projectPath), resolutionsFile(projectPath), customConstraintsFile(projectPath)],
+    io,
+  );
 
   // CAPABILITIES.md / CHANGELOG.md 由 sync-docs（AI 治理）管理，init 不创建
 
@@ -197,14 +307,14 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
     await setupGitHooks(projectPath, io);
   }
 
-  // 创建 GitHub Actions
-  if (options.githubActions !== false) {
-    await setupGitHubActions(projectPath, io);
+  // 服务端 CI 门禁接线（平台维度）：`none` = CI 站点干脆不进 plan
+  if (ci.platform !== 'none') {
+    await setupCiWiring(projectPath, ci.platform, options.governance, io);
   }
 
   // 治理相关文件生成
   if (options.governance) {
-    await setupGovernance(projectPath, options.governance, io);
+    await setupGovernance(projectPath, options.governance, io, ci.platform);
   }
 
   log(io);
@@ -213,7 +323,7 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   log(io, chalk.gray('下一步:'));
   log(io, chalk.gray('  1. 编辑 .harness/config.yml 自定义配置'));
   log(io, chalk.gray('  2. 编辑 .harness/custom-constraints.yml 添加项目约束'));
-  log(io, chalk.gray('  3. 正常开发，每次 git commit 会自动检查约束'));
+  log(io, chalk.gray('  3. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然'));
   log(io, chalk.gray('  4. 运行 harness status 查看状态'));
   log(io);
   log(io, chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
@@ -221,169 +331,81 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
 }
 
 /**
- * 输出代码片段
+ * 输出代码片段（CI 片段按解析出的平台出形，harness#143）
+ *
+ * gitlab 形打 `renderGitLabCiJobs(governanceLevel)`——与落盘 / 冲突分支同一个函数
+ * 的正本（harness#157：曾打无 level 的 GITLAB_CI_SNIPPET，`-g` 档照抄的用户少拿
+ * 治理与 docs 新鲜度两个任务）。
  */
-function printSnippets(io: CommandIO): void {
+function printSnippets(
+  io: CommandIO,
+  platform: CiPlatform | 'none',
+  governanceLevel: string | undefined,
+): void {
   log(io, chalk.blue('📄 Harness 配置代码片段'));
   log(io);
-  
+
   log(io, chalk.yellow('Git pre-commit hook:'));
   log(io, chalk.gray('添加到 .git/hooks/pre-commit'));
   log(io);
   log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
-  
-  log(io, chalk.yellow('GitHub Actions:'));
-  log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 中'));
+
+  log(io, chalk.yellow('Git pre-push hook:'));
+  log(io, chalk.gray('添加到 .git/hooks/pre-push（pre-commit 查暂存的、快反馈，这道查整仓的、全量兜底——重复是设计使然）'));
   log(io);
-  log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
-  
+  log(io, chalk.cyan(PRE_PUSH_SNIPPET));
+
+  if (platform === 'gitlab') {
+    log(io, chalk.yellow('GitLab CI:'));
+    log(io, chalk.gray('添加到 .gitlab-ci.yml'));
+    log(io);
+    log(io, chalk.cyan(renderGitLabCiJobs(governanceLevel)));
+  } else {
+    log(io, chalk.yellow('GitHub Actions:'));
+    log(io, chalk.gray('添加到 .github/workflows/*.yml 的 jobs 下（以下正文取自 harness-check.yml 的 job 段）'));
+    log(io);
+    log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
+  }
+
   log(io, chalk.blue('💡 提示: 运行 npx @dommaker/harness init 自动创建配置文件'));
 }
 
 /**
- * Git pre-commit 代码片段（#103：打印片段与落盘 hook 的唯一正本；
- * 落盘 hook = `#!/bin/sh` 头 + 本常量，改钩子只改这里）
- */
-const PRE_COMMIT_SNIPPET = `
-echo "🔍 Running harness checks..."
-
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
-
-# Harness 约束检查
-npx @dommaker/harness check --staged
-if [ $? -ne 0 ]; then
-  echo "❌ Iron law check failed"
-  exit 1
-fi
-
-# Plan coverage check (via PostEval)
-if command -v npx > /dev/null 2>&1; then
-  PLAN_FILES=$(echo "$STAGED" | grep -E 'plans/.*\\.md$|\\.plan\\.md$' || true)
-  if [ -n "$PLAN_FILES" ]; then
-    echo "📋 Checking plan coverage..."
-    for plan in $PLAN_FILES; do
-      npx @dommaker/harness posteval-plan "$plan" || {
-        echo "🛑 Plan coverage incomplete. See above for missed items."
-        exit 1
-      }
-    done
-  fi
-fi
-
-echo "✅ All checks passed"
-`;
-
-/**
- * GitHub Actions 代码片段
- */
-const GITHUB_ACTIONS_SNIPPET = `
-  harness-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npx @dommaker/harness check
-`;
-
-/**
- * 设置 Git hooks
+ * 设置 Git hooks（无 .git 即整站跳过；落盘语义在 scaffold plan）
+ *
+ * 两道：pre-commit 查暂存的（增量、快反馈），pre-push 查整仓的（全量、兜底，
+ * harness#144）。跳过旗帜 `--no-git-hooks` 在命令层翻成「本站点不进 plan」。
  */
 async function setupGitHooks(projectPath: string, io: CommandIO): Promise<void> {
-  const gitDir = path.join(projectPath, '.git');
-  const hooksDir = path.join(gitDir, 'hooks');
-  const preCommitPath = path.join(hooksDir, 'pre-commit');
-
-  try {
-    await fs.access(gitDir);
-  } catch {
+  if (!(await nodeScaffoldFs.exists(path.join(projectPath, '.git')))) {
     log(io, chalk.yellow('⚠️  未检测到 Git 仓库，跳过 Git hooks'));
     log(io, chalk.gray('💡 初始化 Git 后可运行 npx @dommaker/harness init --print-snippets 查看配置'));
     return;
   }
-
-  await fs.mkdir(hooksDir, { recursive: true });
-
-  // 检查 pre-commit 是否已存在
-  try {
-    await fs.access(preCommitPath);
-    // 已存在，输出代码片段
-    log(io, chalk.yellow('⚠️  .git/hooks/pre-commit 已存在'));
-    log(io, chalk.gray('💡 请手动添加以下内容到文件末尾：'));
-    log(io);
-    log(io, chalk.cyan(PRE_COMMIT_SNIPPET));
-  } catch {
-    // 不存在，创建文件：shebang 头 + 共享片段（#103 同源，无第二份文本）
-    const preCommitContent = `#!/bin/sh
-# Harness pre-commit hook
-${PRE_COMMIT_SNIPPET}`;
-    await fs.writeFile(preCommitPath, preCommitContent, 'utf-8');
-    await fs.chmod(preCommitPath, 0o755);
-    log(io, chalk.green(`✅ 已创建 .git/hooks/pre-commit`));
-  }
+  await runPlan([preCommitHookFile(projectPath), prePushHookFile(projectPath)], io);
 }
 
 /**
- * 设置 GitHub Actions
+ * 设置服务端 CI 接线（站点形状与冲突面由 scaffold 按平台给）
+ *
+ * gitlab 只有一个 `.gitlab-ci.yml`，治理任务已在正文里（`governanceLevel` 传给工厂）；
+ * github 的冲突判定宽到整个 workflows 目录，需先扫一遍。
  */
-async function setupGitHubActions(projectPath: string, io: CommandIO): Promise<void> {
-  const workflowsDir = path.join(projectPath, '.github', 'workflows');
-  const workflowPath = path.join(workflowsDir, 'harness-check.yml');
-
-  // 检查是否已有 CI 配置
-  const existingFiles = await findCiWorkflows(workflowsDir);
-  
-  if (existingFiles.length > 0) {
-    // 已有 CI 配置，输出代码片段
-    log(io, chalk.yellow('⚠️  检测到已存在的 CI 配置：'));
-    existingFiles.forEach(f => {
-      log(io, chalk.gray(`  - .github/workflows/${f}`));
-    });
-    log(io, chalk.gray('💡 请手动添加以下内容到 jobs 中：'));
-    log(io);
-    log(io, chalk.cyan(GITHUB_ACTIONS_SNIPPET));
+async function setupCiWiring(
+  projectPath: string,
+  platform: CiPlatform,
+  governanceLevel: string | undefined,
+  io: CommandIO,
+): Promise<void> {
+  if (platform === 'gitlab') {
+    await runPlan([harnessCheckCiFile(projectPath, 'gitlab', [], governanceLevel)], io);
     return;
   }
-
-  // 没有现有 CI 配置，创建文件
-  await fs.mkdir(workflowsDir, { recursive: true });
-  const workflowContent = `name: Harness Check
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-
-jobs:
-  harness-check:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run harness check
-        run: npx @dommaker/harness check
-
-      - name: Run harness validate
-        run: npx @dommaker/harness validate
-
-      - name: Run harness passes-gate
-        run: npx @dommaker/harness passes-gate
-`;
-
-  await fs.writeFile(workflowPath, workflowContent, 'utf-8');
-  log(io, chalk.green(`✅ 已创建 .github/workflows/harness-check.yml`));
+  const workflowsDir = path.join(projectPath, '.github', 'workflows');
+  await runPlan(
+    [harnessCheckCiFile(projectPath, 'github', await findCiWorkflows(workflowsDir))],
+    io,
+  );
 }
 
 /**
@@ -400,61 +422,6 @@ async function findCiWorkflows(workflowsDir: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-/**
- * 创建自定义约束示例
- */
-async function createCustomConstraintsExample(projectPath: string, io: CommandIO): Promise<void> {
-  const configDir = path.join(projectPath, '.harness');
-  const customConstraintsPath = path.join(configDir, 'custom-constraints.yml');
-
-  // 如果已存在，不覆盖
-  try {
-    await fs.access(customConstraintsPath);
-    log(io, chalk.gray(`custom-constraints.yml 已存在`));
-    return;
-  } catch {
-    // 文件不存在，创建
-  }
-
-  const content = `# 自定义约束配置
-#
-# 此文件定义项目特定的约束，扩展或覆盖 harness 内置约束
-
-# ========================================
-# 自定义约束示例
-# ========================================
-
-custom_constraints:
-  # 示例 1：禁止 console.log
-  # my_project_no_console_log:
-  #   id: my_project_no_console_log
-  #   level: guideline
-  #   rule: "NO CONSOLE.LOG IN PRODUCTION CODE"
-  #   message: "生产代码禁止使用 console.log，请使用 logger 模块"
-  #   trigger: ["code_implementation"]
-  #   description: "使用项目统一的 logger 模块代替 console.log"
-
-  # 示例 2：禁止特定的导入
-  # my_project_no_moment_js:
-  #   id: my_project_no_moment_js
-  #   level: guideline
-  #   rule: "NO MOMENT.JS IMPORTS"
-  #   message: "禁止使用 moment.js，请使用 date-fns 或 dayjs"
-  #   trigger: ["code_implementation"]
-
-  # 示例 3：要求特定的文件命名
-  # my_project_component_naming:
-  #   id: my_project_component_naming
-  #   level: tip
-  #   rule: "REACT COMPONENTS SHOULD BE PASCAL CASE"
-  #   message: "React 组件文件名应使用 PascalCase"
-  #   trigger: ["file_creation"]
-`;
-
-  await fs.writeFile(customConstraintsPath, content, 'utf-8');
-  log(io, chalk.green(`✅ 已创建自定义约束示例: custom-constraints.yml`));
 }
 
 /**
@@ -490,7 +457,7 @@ function renderOutputStyleSection(): string {
  * - 无标记且 `## Output Style` 段为用户自写（特征串不匹配）：跳过并提示，不重复追加
  * - 完全没有该段：在文件顶部插入标记版
  */
-export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandIO = processIO): Promise<void> {
+export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
   let content: string;
   try {
@@ -563,7 +530,7 @@ const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
  * - 无该段：在文件末尾追加
  * - 段标记残缺（外层或段内 HARNESS_CONSTRAINTS 单边/乱序）：不写入，告警交由人工修复（防二次损坏）
  */
-export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
+export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO): Promise<void> {
   const agentsMdPath = path.join(projectPath, 'AGENTS.md');
   const version = getHarnessPackageVersion();
 
@@ -640,7 +607,7 @@ export async function setupAgentsMdConstraints(projectPath: string, io: CommandI
  * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
  * - 如果不存在标记，在文件末尾追加约束段
  */
-export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO = processIO): Promise<void> {
+export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
 
   const version = getHarnessPackageVersion();
@@ -691,17 +658,22 @@ export async function setupClaudeMdConstraints(projectPath: string, io: CommandI
  *   继续写 CLAUDE.md——init 幂等重跑不破坏既有仓，不制造双份约束正本
  * - 其余（新仓初始化）：写 AGENTS.md PRESERVE:governance 段（入库公共面正本）
  */
-export async function setupGovernanceConstraints(projectPath: string): Promise<void> {
+export async function setupGovernanceConstraints(projectPath: string, io: CommandIO): Promise<void> {
   const { target } = resolveGovernanceLanding(projectPath);
   return target === 'claude-md'
-    ? setupClaudeMdConstraints(projectPath)
-    : setupAgentsMdConstraints(projectPath);
+    ? setupClaudeMdConstraints(projectPath, io)
+    : setupAgentsMdConstraints(projectPath, io);
 }
 
 /**
  * 设置治理相关文件
  */
-async function setupGovernance(projectPath: string, level: string, io: CommandIO): Promise<void> {
+async function setupGovernance(
+  projectPath: string,
+  level: string,
+  io: CommandIO,
+  platform: CiPlatform | 'none',
+): Promise<void> {
   const governance = GOVERNANCE_PRESETS[level];
   if (!governance) return;
 
@@ -709,129 +681,48 @@ async function setupGovernance(projectPath: string, level: string, io: CommandIO
   log(io, chalk.blue('📋 设置治理文件...'));
 
   // 1. 生成 CHANGELOG.md
-  await createChangelog(projectPath, governance, io);
+  await runPlan([changelogFile(projectPath, governance.changelog?.format || 'keep-a-changelog')], io);
 
   // 2. 在 CLAUDE.md 中写入 Output Style 段（仅在不存在时创建）
-  await setupClaudeMdOutputStyle(projectPath);
+  await setupClaudeMdOutputStyle(projectPath, io);
 
   // 3. 写入/更新 Governance Rules 约束段（新仓 → AGENTS.md PRESERVE:governance；
   //    旧模型仓 → CLAUDE.md，落点路由见 setupGovernanceConstraints）
-  await setupGovernanceConstraints(projectPath);
+  await setupGovernanceConstraints(projectPath, io);
 
   // 4. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
+  await runPlan(await contextDocPlan(projectPath, governance, io), io);
+
+  // 5. 生成治理 CI 面（仅 github 形；gitlab 已并入 .gitlab-ci.yml 正文，none 不建，harness#156）
+  await setupGovernanceWorkflow(projectPath, level, io, platform);
+}
+
+/**
+ * 目录 CONTEXT.md 骨架的 plan：required_dirs 缺省时按源码根探测，
+ * 探测出来的目录不在场就不进 plan（告知由本函数负责）
+ */
+async function contextDocPlan(
+  projectPath: string,
+  governance: GovernanceConfig,
+  io: CommandIO,
+): Promise<ManagedFile[]> {
   const contextConfig = governance.context_files;
-  if (contextConfig?.enabled) {
-    let requiredDirs = contextConfig.required_dirs ?? [];
-    if (requiredDirs.length === 0) {
-      requiredDirs = detectSourceRoots(projectPath);
+  if (!contextConfig?.enabled) return [];
+
+  let requiredDirs = contextConfig.required_dirs ?? [];
+  if (requiredDirs.length === 0) {
+    requiredDirs = detectSourceRoots(projectPath);
+  }
+
+  const plan: ManagedFile[] = [];
+  for (const dir of requiredDirs) {
+    if (!(await nodeScaffoldFs.exists(path.join(projectPath, dir)))) {
+      log(io, chalk.yellow(`⚠️  目录 ${dir} 不存在，跳过 CONTEXT.md`));
+      continue;
     }
-    for (const dir of requiredDirs) {
-      await createContextMd(projectPath, dir, io);
-    }
+    plan.push(contextDocFile(projectPath, dir));
   }
-
-  // 4. 生成治理 CI workflow
-  await setupGovernanceWorkflow(projectPath, level, io);
-}
-
-/**
- * 创建 CHANGELOG.md
- */
-async function createChangelog(projectPath: string, governance: GovernanceConfig, io: CommandIO): Promise<void> {
-  const changelogPath = path.join(projectPath, 'CHANGELOG.md');
-
-  try {
-    await fs.access(changelogPath);
-    log(io, chalk.gray(`CHANGELOG.md 已存在`));
-    return;
-  } catch {
-    // 文件不存在，创建
-  }
-
-  const format = governance.changelog?.format || 'keep-a-changelog';
-
-  let content: string;
-  if (format === 'keep-a-changelog') {
-    content = `# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
-### Added
-- Initial project setup with harness governance
-
----
-
-> 此文件可由 \`harness sync-docs\` 辅助维护
-`;
-  } else {
-    content = `# Changelog
-
-## [Unreleased]
-
-- Initial project setup with harness governance
-
----
-
-> 此文件可由 \`harness sync-docs\` 辅助维护
-`;
-  }
-
-  await fs.writeFile(changelogPath, content, 'utf-8');
-  log(io, chalk.green(`✅ 已创建 CHANGELOG.md`));
-}
-
-/**
- * 在指定目录创建 CONTEXT.md
- */
-async function createContextMd(projectPath: string, dir: string, io: CommandIO): Promise<void> {
-  const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
-
-  try {
-    await fs.access(contextPath);
-    log(io, chalk.gray(`${dir}/CONTEXT.md 已存在`));
-    return;
-  } catch {
-    // 文件不存在，创建
-  }
-
-  // 检查目录是否存在
-  const dirPath = path.join(projectPath, dir);
-  try {
-    await fs.access(dirPath);
-  } catch {
-    log(io, chalk.yellow(`⚠️  目录 ${dir} 不存在，跳过 CONTEXT.md`));
-    return;
-  }
-
-  const dirName = path.basename(dir);
-  const content = `# ${dirName}
-
-> 此文件描述 ${dir} 目录的职责和上下文
-
-## 职责
-
-<!-- 本目录的核心职责是什么 -->
-
-## 核心导出
-
-<!-- 本目录对外暴露的主要模块/函数 -->
-
-## 依赖关系
-
-<!-- 本目录依赖哪些其他模块，谁依赖本目录 -->
-
-## 注意事项
-
-<!-- 开发时需要注意的约束或约定 -->
-`;
-
-  await fs.writeFile(contextPath, content, 'utf-8');
-  log(io, chalk.green(`✅ 已创建 ${dir}/CONTEXT.md`));
+  return plan;
 }
 
 /**
@@ -855,68 +746,30 @@ async function findGovernanceCoverage(workflowsDir: string): Promise<string | un
 }
 
 /**
- * 设置治理 CI workflow
+ * 设置治理 CI workflow（目标已在场，或已有 workflow 覆盖治理命令时不新建 CI 面）
+ *
+ * 仅 github 形有本站点：gitlab 的治理任务已并入 `.gitlab-ci.yml` 正文（一个平台一份
+ * CI 文件，harness#143）；`none` = 不创建任何 CI 文件，治理 CI 面随之不建
+ * （harness#156 裁决 F1；治理文档面不受影响，见 setupGovernance 1–4）。
  */
-async function setupGovernanceWorkflow(projectPath: string, level: string, io: CommandIO): Promise<void> {
+async function setupGovernanceWorkflow(
+  projectPath: string,
+  level: string,
+  io: CommandIO,
+  platform: CiPlatform | 'none',
+): Promise<void> {
+  if (platform !== 'github') return;
+
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
-  const workflowPath = path.join(workflowsDir, 'harness-governance.yml');
+  const file = governanceWorkflowFile(projectPath, level);
 
-  // 检查是否已存在
-  try {
-    await fs.access(workflowPath);
-    log(io, chalk.gray(`harness-governance.yml 已存在`));
-    return;
-  } catch {
-    // 不存在，继续创建
+  if (!(await nodeScaffoldFs.exists(file.target))) {
+    const coveredBy = await findGovernanceCoverage(workflowsDir);
+    if (coveredBy) {
+      log(io, chalk.gray(`治理检查已由 ${coveredBy} 覆盖，跳过创建 harness-governance.yml`));
+      return;
+    }
   }
 
-  // 能力检测：已有 workflow 已跑 harness 治理命令时跳过，避免重复 CI 面
-  const coveredBy = await findGovernanceCoverage(workflowsDir);
-  if (coveredBy) {
-    log(io, chalk.gray(`治理检查已由 ${coveredBy} 覆盖，跳过创建 harness-governance.yml`));
-    return;
-  }
-
-  await fs.mkdir(workflowsDir, { recursive: true });
-
-  const docsCheckStep = level !== 'minimal'
-    ? `
-      - name: Check docs freshness
-        run: npx @dommaker/harness sync-docs --check
-        continue-on-error: true`
-    : '';
-
-  const workflowContent = `name: Harness Governance
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-
-jobs:
-  governance:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Constraint check
-        run: npx @dommaker/harness check
-
-      - name: Quality gate
-        run: npx @dommaker/harness passes-gate
-${docsCheckStep}
-`;
-
-  await fs.writeFile(workflowPath, workflowContent, 'utf-8');
-  log(io, chalk.green(`✅ 已创建 .github/workflows/harness-governance.yml`));
+  await runPlan([file], io);
 }

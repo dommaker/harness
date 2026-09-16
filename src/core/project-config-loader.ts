@@ -1,13 +1,11 @@
 /**
  * 项目配置加载器
  *
- * 加载 .harness/config.yml 和 .harness/custom-constraints.yml
- * 合并内置约束和项目自定义约束
+ * 解读 `.harness/config.yml` 与自定义约束文件、合并内置与项目自定义约束。
+ * 本模块不碰文件系统：两份配置的读取口径 = 运行级观察面（`constraints/run-env.ts`，
+ * ADR-0023 决策 2），一次运行内各至多读一次。
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as yaml from 'js-yaml';
 import type { Constraint, ConstraintTrigger } from '../types/constraint';
 import type {
   ProjectConfig,
@@ -19,6 +17,7 @@ import type {
 import { IRON_LAWS, GUIDELINES, PROMPTS } from './constraints/definitions';
 import { PRESETS_BY_NAME, STANDARD_PRESET } from '../presets';
 import { filterEnabledEntries } from './effective-set';
+import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-env';
 
 /**
  * 默认配置
@@ -29,48 +28,17 @@ const DEFAULT_CONFIG: ProjectConfig = {
 };
 
 /**
- * config.yml 原始解析结果的进程级缓存（工单 16）
+ * 读取并解析 `.harness/config.yml`
  *
- * 键为解析后的项目路径，条目带 mtimeMs+size 指纹：文件未变则直接复用，
- * 避免单次 harness check 内多处读取者重复 yaml 解析；文件变更自动失效。
- */
-const rawConfigCache = new Map<string, { mtimeMs: number; size: number; raw: Record<string, unknown> }>();
-
-/**
- * 读取并解析 .harness/config.yml（进程级 memoize）
+ * 实面 = `RunEnv.rawConfig()`（ADR-0023 决策 2），本函数只是它的「只此一次」形状：
+ * 传项目根字符串即自造一枚用完即弃的观察面（每次调用都读当下内容），
+ * 传调用方那枚 RunEnv 则与本 run 的其余消费方共用同一份读取。
+ * 原进程级 `rawConfigCache` + mtime/size 指纹已撤销——见 ADR-0023 决策 2 与工单 16 的撤销记录。
  *
  * 文件不存在时返回 undefined；解析失败向上抛出（由各调用方自行兜底）。
  */
-export function loadRawProjectConfig(projectPath: string): Record<string, unknown> | undefined {
-  const key = path.resolve(projectPath);
-  const configPath = path.join(key, '.harness', 'config.yml');
-
-  let stat: fs.Stats | undefined;
-  try {
-    stat = fs.statSync(configPath);
-  } catch {
-    stat = undefined;
-  }
-  // 文件缺失，或 stat 不可用（如测试 mock）且文件不存在 → 无配置
-  if (!stat?.mtimeMs && !fs.existsSync(configPath)) {
-    rawConfigCache.delete(key);
-    return undefined;
-  }
-
-  // stat 指纹可用时走缓存;不可用则每次直读(不缓存,避免脏数据)
-  if (stat?.mtimeMs !== undefined) {
-    const cached = rawConfigCache.get(key);
-    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
-      return cached.raw;
-    }
-  }
-
-  const loaded = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
-  const raw = loaded as Record<string, unknown>;
-  if (stat?.mtimeMs !== undefined) {
-    rawConfigCache.set(key, { mtimeMs: stat.mtimeMs, size: stat.size, raw });
-  }
-  return raw;
+export function loadRawProjectConfig(target: RunTarget): Record<string, unknown> | undefined {
+  return resolveRunEnv(target).rawConfig();
 }
 
 /**
@@ -81,12 +49,12 @@ export type CapabilitiesMode = NonNullable<CapabilitiesConfig['mode']>;
 /**
  * 读取 governance 段（全仓唯一手写钻取点，工单 84）
  *
- * 基于 loadRawProjectConfig 的进程级 memoize，不引入第二次 yaml 解析。
  * 配置缺失 / 解析失败 / 形状不符时返回 undefined，由调用方按未配置处理。
+ * 入参形状见 loadRawProjectConfig：传 RunEnv 即与本 run 其余消费方共用同一份 config.yml 读取。
  */
-export function getGovernanceConfig(projectPath: string): GovernanceConfig | undefined {
+export function getGovernanceConfig(target: RunTarget): GovernanceConfig | undefined {
   try {
-    const raw = loadRawProjectConfig(projectPath);
+    const raw = loadRawProjectConfig(target);
     const governance = raw?.governance;
     if (governance === null || typeof governance !== 'object') return undefined;
     return governance as GovernanceConfig;
@@ -115,8 +83,8 @@ export type ContextFilesResolution =
  * init / 扫描类工具流的自动探测回落保留在调用方，不进本访问器。
  * 元素类型在此收口：脏配置（如 required_dirs: [1]）不得流入调用方 path.join。
  */
-export function resolveContextFiles(projectPath: string): ContextFilesResolution {
-  const contextFiles = getGovernanceConfig(projectPath)?.context_files;
+export function resolveContextFiles(target: RunTarget): ContextFilesResolution {
+  const contextFiles = getGovernanceConfig(target)?.context_files;
   if (!contextFiles?.enabled) return { state: 'unconfigured' };
   const dirs = contextFiles.required_dirs;
   if (!Array.isArray(dirs) || dirs.length === 0) return { state: 'enabled-empty' };
@@ -129,22 +97,47 @@ export function resolveContextFiles(projectPath: string): ContextFilesResolution
  *
  * 配置缺失/解析失败/取值非法时一律回落 'file'。
  */
-export function getCapabilitiesMode(projectPath: string): CapabilitiesMode {
-  const mode = getGovernanceConfig(projectPath)?.capabilities?.mode;
+export function getCapabilitiesMode(target: RunTarget): CapabilitiesMode {
+  const mode = getGovernanceConfig(target)?.capabilities?.mode;
   if (mode === 'file' || mode === 'module' || mode === 'listing') return mode;
   return 'file';
+}
+
+/**
+ * 退役判定单点（studio#82 D6 一处真相）
+ *
+ * 两个落点合成一条规则：禁用（config.yml `constraints.<id>.enabled: false`，内置约束的
+ * 退役落点）或 custom 条目自带 `retired` 元数据（custom 约束的退役落点，不拆 config.yml
+ * 第二处）。`mergeConstraints` 的 custom 追加跳过与 `harness constraints retire` 的
+ * already_retired 检查共用本函数——后者此前是这条规则的手写复印（harness#137 收口）。
+ *
+ * `disabled` 由调用方给：mergeConstraints 传的是含 preset 裁剪的完整禁用集，
+ * retire 传的是 config.yml 单点（退役落点只有这一处，preset 语义不掺进退役判定）。
+ * `retired` 按 truthiness 判，与 mergeConstraints 历史口径逐字一致。
+ */
+export function isConstraintRetired(
+  customDef: { retired?: unknown } | undefined,
+  disabled: boolean
+): boolean {
+  return disabled || Boolean(customDef?.retired);
 }
 
 /**
  * 项目配置加载器
  */
 export class ProjectConfigLoader {
+  private env: RunEnv;
   private projectPath: string;
   private config: ProjectConfig;
   private customConstraints: Record<string, CustomConstraintDefinition>;
 
-  constructor(projectPath?: string) {
-    this.projectPath = projectPath || process.cwd();
+  /**
+   * @param target 项目根路径，或本 run 已构造的运行级观察面（ADR-0023 决策 2）
+   *   传观察面时 config.yml 与本 run 其余消费方共用同一份读取；传路径 = 自造一枚一次性观察面
+   */
+  constructor(target?: RunTarget) {
+    this.env = resolveRunEnv(target);
+    this.projectPath = this.env.projectPath;
     this.config = { ...DEFAULT_CONFIG };
     this.customConstraints = {};
   }
@@ -153,8 +146,8 @@ export class ProjectConfigLoader {
    * 加载项目配置
    */
   load(): ProjectConfig {
-    // 1. 加载主配置（经进程级 memoize，避免重复 yaml 解析）
-    const raw = loadRawProjectConfig(this.projectPath);
+    // 1. 加载主配置（run 内 memo 在观察面上，同一份解析结果供全部消费方共用）
+    const raw = this.env.rawConfig();
     if (raw) {
       this.config = { ...DEFAULT_CONFIG, ...(raw as Partial<ProjectConfig>) };
     }
@@ -167,24 +160,15 @@ export class ProjectConfigLoader {
 
   /**
    * 加载自定义约束
+   *
+   * 文件读取经观察面（ADR-0023 决策 2）：同一次运行内多个加载器共用同一份内容，
+   * 「哪个文件名算数」与合并顺序仍由本函数决定（方式 1 文件 → 方式 2 主配置内联，后者覆盖）。
    */
   private loadCustomConstraints(): void {
     // 方式 1：从单独文件加载
     if (this.config.custom_constraints_file) {
-      const customPath = path.join(
-        this.projectPath,
-        '.harness',
-        this.config.custom_constraints_file
-      );
-      if (fs.existsSync(customPath)) {
-        const content = fs.readFileSync(customPath, 'utf-8');
-        const loaded = yaml.load(content) as {
-          custom_constraints?: Record<string, CustomConstraintDefinition>;
-        };
-        if (loaded.custom_constraints) {
-          this.customConstraints = { ...this.customConstraints, ...loaded.custom_constraints };
-        }
-      }
+      const defs = this.env.customConstraints(this.config.custom_constraints_file);
+      this.customConstraints = { ...this.customConstraints, ...defs };
     }
 
     // 方式 2：从主配置文件中加载
@@ -253,9 +237,7 @@ export class ProjectConfigLoader {
         ...Object.keys(PROMPTS),
         ...Object.keys(this.customConstraints),
       ]);
-      const filtered = filterEnabledEntries(knownIds, this.config.constraints, {
-        onUnknownId: 'collect',
-      });
+      const filtered = filterEnabledEntries(knownIds, this.config.constraints);
       unknownIds.push(...filtered.unknownIds);
       for (const constraintId of filtered.disabledIds) {
         result.disabled.push(constraintId);
@@ -270,7 +252,7 @@ export class ProjectConfigLoader {
     // 收集进 disabled，custom 在 step 1 时尚未入桶，须在此兜底跳过；
     // 条目带 retired 元数据的同样不追加——studio#82 D6 退役落点在条目自身）
     for (const [id, customDef] of Object.entries(this.customConstraints)) {
-      if (result.disabled.includes(id) || customDef.retired) {
+      if (isConstraintRetired(customDef, result.disabled.includes(id))) {
         continue;
       }
       const constraint = this.toConstraint(customDef, id);
@@ -343,36 +325,6 @@ export class ProjectConfigLoader {
    */
   getCustomConstraints(): Record<string, CustomConstraintDefinition> {
     return this.customConstraints;
-  }
-
-  /**
-   * 检查约束是否启用
-   */
-  isConstraintEnabled(constraintId: string): boolean {
-    // 1. 检查是否在禁用列表
-    if (this.config.constraints?.[constraintId]?.enabled === false) {
-      return false;
-    }
-
-    // 2. 检查自定义约束是否禁用
-    if (this.customConstraints[constraintId]?.enabled === false) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 获取约束来源
-   */
-  getConstraintSource(constraintId: string): 'built-in' | 'custom' | 'disabled' {
-    if (this.config.constraints?.[constraintId]?.enabled === false) {
-      return 'disabled';
-    }
-    if (this.customConstraints[constraintId]) {
-      return 'custom';
-    }
-    return 'built-in';
   }
 
   /**

@@ -6,18 +6,20 @@
  */
 
 import type { ConstraintContext } from '../../../types/constraint';
+import { createRunEnv, type RunEnv } from '../run-env';
 
 /**
- * 检查环境：单次 run 内共享的上下文与 memoized I/O
+ * 检查环境：一次 run 内共享的观察面与证据提供者（ADR-0023 决策 1）
  *
- * - stagedDiff/stagedDiffNames：run 内 git 命令至多一次（工单 18）
+ * = `RunEnv`（项目上行数据的读取：config.yml / trace 尾部 / 源根，run 内至多一次）
+ *   + `context` + git/扫描证据。前者不含 context，故只能派生不能合并成一个对象。
+ *
+ * - stagedDiff/stagedDiffNames：run 内 git 命令至多一次（工单 18 / #87）
  * - srcScan：run 内同根源码扫描至多一次（CheckCache）
  */
-export interface CheckEnv {
+export interface CheckEnv extends RunEnv {
   /** 约束上下文（operation/changedFiles/各类证据标志） */
   context: ConstraintContext;
-  /** 项目根路径（context.projectPath || process.cwd()） */
-  projectPath: string;
   /** staged 全量 diff（run 内 memoized） */
   stagedDiff(): Promise<string>;
   /** staged 变更文件名列表（run 内 memoized） */
@@ -48,24 +50,28 @@ export interface EvidenceProviders {
  * - 'none' = 显式不接证据：证据函数返回空；evidence flag 未接线的
  *   checker 按契约返回 'skip'（见 contextEvidenceFlag），直接读空
  *   证据的 checker 在自然输入下判定
+ * - runEnv = 本 run 的运行级观察面（ADR-0023）：传入即与 context-builder 及
+ *   其余 checker 共用同一份上行数据读取；不传则自造一枚，只服务本次调用
  *
  * studio 侧若需 git 证据（#129），传真实 providers 即可。
  */
 export function buildCheckEnv(
   context: ConstraintContext,
-  evidence: EvidenceProviders | 'none'
+  evidence: EvidenceProviders | 'none',
+  runEnv?: RunEnv
 ): CheckEnv {
   const projectPath = context.projectPath || process.cwd();
+  const run = runEnv ?? createRunEnv(projectPath);
   if (evidence === 'none') {
     return {
+      ...run,
       context,
-      projectPath,
       stagedDiff: async () => '',
       stagedDiffNames: async () => '',
       srcScan: () => [],
     };
   }
-  return { context, projectPath, ...evidence };
+  return { ...run, context, ...evidence };
 }
 
 /**

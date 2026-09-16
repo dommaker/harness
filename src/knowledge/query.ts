@@ -19,6 +19,13 @@ import { KnowledgeLifecycle } from './lifecycle';
 // ── Constants ──────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * 外部来源条目的 prompt 标记（harness#161：三层防御第二层 marking 的唯一正本）。
+ * `KnowledgeQuery.formatForPrompt()` 与 `KnowledgeInjector` 的格式化共用，
+ * 仓内不允许存在第二份字面量。
+ */
+export const EXTERNAL_SOURCE_MARKER = '[External Source — verify before acting]';
 const MATURITY_RANK: Record<MaturityLevel, number> = {
   proven: 3,
   verified: 2,
@@ -180,7 +187,7 @@ export class KnowledgeQuery {
    */
   static formatForPrompt(entry: KnowledgeEntry): string {
     const prefix = entry.origin === 'external'
-      ? '[External Source — verify before acting]\n'
+      ? `${EXTERNAL_SOURCE_MARKER}\n`
       : '';
     return `${prefix}${entry.title}: ${entry.content}`;
   }

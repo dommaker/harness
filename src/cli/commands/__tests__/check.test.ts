@@ -7,8 +7,8 @@
  * 真 ConstraintChecker，断言 CLI 输出形状与 CommandResult。
  * 取证次数经 createGitEvidence 的计数 runner 观测——执行仍走真 git，不 mock 子进程。
  *
- * trace 记录器由命令侧组合根接线（harness#88）：套件把全局收集器重定向到临时文件，
- * 既不断言宿主仓写入，也不污染它。
+ * trace 记录器由命令侧组合根接线（harness#88）并锚根构造（#139）：落点在本用例的
+ * 临时项目里（`<projectPath>/.harness/logs/traces.log`），宿主仓 .harness/ 不受影响。
  */
 
 import * as fs from 'fs';
@@ -18,7 +18,7 @@ import { execFileSync } from 'child_process';
 
 import { check, listLaws } from '../check';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { configureTraceCollector } from '../../../monitoring/traces';
+import { DEFAULT_TRACE_FILE } from '../../../types/trace';
 import {
   createGitEvidence,
   realGitCommandRunner,
@@ -75,6 +75,23 @@ function passTraces(dir: string, lines = 1): void {
   );
 }
 
+/**
+ * 本项目的 trace 落点记录（harness#139：命令侧收集器锚根构造，写的就是 `<projectPath>/DEFAULT_TRACE_FILE` 正本）
+ *
+ * 含 `passTraces()` 预置的种子行，只看命令自己写入的用例按行数切掉前缀。
+ */
+function projectTraces(
+  dir: string
+): Array<{ constraintId: string; result: string; projectPath?: string; evidence?: string[] }> {
+  const file = path.join(dir, DEFAULT_TRACE_FILE);
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, 'utf-8')
+    .split('\n')
+    .filter(Boolean)
+    .map(line => JSON.parse(line));
+}
+
 /** 计数 git 证据：既记录证据方法请求，也记录实际 spawn 的 git 命令（执行走真 adapter） */
 function recordingEvidence(projectPath: string): {
   evidence: GitEvidence;
@@ -118,28 +135,9 @@ function stagedTestDeletion(): string {
 
 describe('check command（真 git fixture）', () => {
   let io: CapturingIO;
-  let traceDir: string;
-  let traceFile: string;
-  let traceSeq = 0;
-
-  beforeAll(() => {
-    traceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-check-traces-'));
-  });
-
-  afterAll(() => {
-    configureTraceCollector({});
-    try {
-      fs.rmSync(traceDir, { recursive: true, force: true });
-    } catch {
-      // ignore
-    }
-  });
 
   beforeEach(() => {
     io = captureIO();
-    // 命令侧接线的是全局收集器（默认 cwd 相对写入）：重定向到套件临时文件，宿主仓 .harness/ 不受影响
-    traceFile = path.join(traceDir, `trace-${++traceSeq}.log`);
-    configureTraceCollector({ traceFile });
   });
 
   describe('判定与输出形状', () => {
@@ -240,6 +238,22 @@ describe('check command（真 git fixture）', () => {
       expect(io.outText()).not.toContain('变更文件');
       expect(result).toEqual({ kind: 'ok' });
     });
+
+    it('不带 -p 时标注预设来源，带 -p 时打印所传值（ADR-0023 步骤 4.5）', async () => {
+      const dir = gitRepo();
+      stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
+      passTraces(dir);
+
+      await check({ staged: true, projectPath: dir, trigger: 'code_implementation' }, io);
+      await check(
+        { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
+        io
+      );
+
+      const out = io.outText();
+      expect(out).toContain('预设: （按 config.yml，缺省 standard）');
+      expect(out).toContain('预设: standard');
+    });
   });
 
   describe('判定证据外显（harness#119）', () => {
@@ -255,14 +269,9 @@ describe('check command（真 git fixture）', () => {
       return dir;
     }
 
-    /** 从本用例 trace 文件里取某条约束的记录 */
-    function traceOf(constraintId: string) {
-      return fs
-        .readFileSync(traceFile, 'utf-8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as { constraintId: string; result: string; evidence?: string[] })
-        .find((l) => l.constraintId === constraintId);
+    /** 从本用例项目的 trace 正本里取某条约束的记录（#139：落点锚在 projectPath） */
+    function traceOf(dir: string, constraintId: string) {
+      return projectTraces(dir).find(l => l.constraintId === constraintId);
     }
 
     it('变更文件未登记 → 警告随附证据点名该文件', async () => {
@@ -308,7 +317,7 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      const record = traceOf('capability_sync');
+      const record = traceOf(dir, 'capability_sync');
       expect(record?.result).toBe('pass');
       expect(record?.evidence?.join('\n')).toContain('src/nested/deep.ts');
     });
@@ -364,17 +373,15 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      const seeded = projectTraces(dir).length;
 
       await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
         io
       );
 
-      const traces = fs
-        .readFileSync(traceFile, 'utf-8')
-        .split('\n')
-        .filter(Boolean)
-        .map(l => JSON.parse(l) as { constraintId: string; result: string; projectPath: string });
+      // #139：落点锚在本 run 的 projectPath 上，切掉夹具预置的证据行
+      const traces = projectTraces(dir).slice(seeded);
 
       expect(traces.map(t => t.constraintId)).toEqual(
         expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])

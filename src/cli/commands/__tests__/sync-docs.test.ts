@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
+import * as os from 'os';
 import { syncDocs } from '../sync-docs';
 
 let io: CapturingIO;
@@ -13,10 +14,10 @@ beforeEach(() => {
 });
 
 describe('sync-docs command', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-sync-docs');
+  let tempDir: string;
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-sync-docs-'));
   });
 
   afterAll(() => {

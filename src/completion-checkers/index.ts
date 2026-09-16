@@ -10,7 +10,16 @@
  * 函数不碰文件系统与 git；commits 由调用方（completion-gates 类守卫）供给。
  */
 
-export * from './types';
+export type {
+  CommitInput,
+  CheckerVerdict,
+  CommitVerdict,
+  TddChainResult,
+  PhaseFormatResult,
+  ContractPresenceContext,
+  ContractPresenceResult,
+  CompletionCheckersConfig,
+} from './types';
 export { DEFAULT_TEST_GLOBS, DEFAULT_NONCODE_GLOBS, matchGlob, matchAnyGlob } from './glob-match';
 export { classifyCommitFiles, resolveGlobs } from './classify';
 export type { CommitFileClassification } from './classify';

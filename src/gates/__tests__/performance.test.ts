@@ -23,7 +23,6 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 describe('PerformanceGate', () => {
   let gate: PerformanceGate;
   const baseContext = {
-    projectId: 'test-project',
     projectPath: '/test/project',
   };
 
@@ -36,31 +35,19 @@ describe('PerformanceGate', () => {
     it('should use default config', () => {
       const defaultGate = new PerformanceGate();
       const config = defaultGate.getConfig();
-      expect(config.enabled).toBe(true);
       expect(config.thresholds).toEqual({});
     });
 
     it('should accept custom config', () => {
       const customGate = new PerformanceGate({
-        enabled: false,
         coverageTimeout: 60000,
       });
       const config = customGate.getConfig();
-      expect(config.enabled).toBe(false);
       expect(config.coverageTimeout).toBe(60000);
     });
   });
 
   describe('check()', () => {
-    it('should pass when gate is disabled', async () => {
-      const disabledGate = new PerformanceGate({ enabled: false });
-
-      const result = await disabledGate.check(baseContext);
-
-      expect(result.passed).toBe(true);
-      expect(result.message).toContain('已禁用');
-    });
-
     it('should pass when no thresholds defined', async () => {
       const result = await gate.check(baseContext);
 

@@ -87,21 +87,14 @@ describe('CommandGate', () => {
       }
     });
 
-    it('should respect enabled=false', async () => {
-      const gate = new CommandGate({ enabled: false });
-      const result = await gate.check('rm -rf /');
-      expect(result.passed).toBe(true);
-    });
-
-    it('should support custom blacklist', async () => {
-      const gate = new CommandGate({
-        customBlacklist: [{
-          id: 'custom-block',
-          pattern: /\bmy-custom-dangerous-command\b/i,
-          level: 'block',
-          message: 'Custom dangerous command',
-          category: 'custom',
-        }],
+    it('should support runtime rules via addRule（配置位 customBlacklist 已删，见 ADR-0024）', async () => {
+      const gate = new CommandGate();
+      gate.addRule({
+        id: 'custom-block',
+        pattern: /\bmy-custom-dangerous-command\b/i,
+        level: 'block',
+        message: 'Custom dangerous command',
+        category: 'custom',
       });
       const result = await gate.check('my-custom-dangerous-command --run');
       expect(result.passed).toBe(false);

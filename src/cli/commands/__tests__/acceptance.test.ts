@@ -4,6 +4,7 @@
 
 import { acceptance, listAcceptanceCriteria } from '../acceptance';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { decide, fakeGate, throwingGate } from './gate-decision';
 import * as fs from 'fs/promises';
 import { SpecAcceptanceGate } from '../../../gates/acceptance';
 
@@ -14,7 +15,7 @@ jest.mock('fs/promises', () => ({
 
 jest.mock('../../../gates/acceptance', () => ({
   SpecAcceptanceGate: jest.fn().mockImplementation(() => ({
-    check: jest.fn(),
+    evaluate: jest.fn(),
   })),
 }));
 
@@ -46,30 +47,31 @@ describe('acceptance command', () => {
 
   describe('acceptance', () => {
     it('should print success when check passes', async () => {
-      const mockCheck = jest.fn().mockResolvedValue({
-        passed: true,
-        message: 'ok',
-        details: { checkedCriteria: 5, totalCriteria: 5 },
-      });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(decide('acceptance', true, 'ok', { checkedCriteria: 5, totalCriteria: 5 })) as any
+      );
 
       const result = await acceptance({}, io);
 
       expect(io.outText()).toContain('验收标准检查通过');
+      expect(io.outText()).toContain('   通过项: 5');
+      expect(io.outText()).toContain('   总项数: 5');
       expect(result.kind).toBe('ok');
     });
 
     it('should print failure and exit 1 when check fails', async () => {
-      const mockCheck = jest.fn().mockResolvedValue({
-        passed: false,
-        message: 'criteria not met',
-        details: { uncheckedCriteria: ['criteria-1', 'criteria-2'] },
-      });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() =>
+        fakeGate(
+          decide('acceptance', false, 'criteria not met', {
+            uncheckedCriteria: ['criteria-1', 'criteria-2'],
+          })
+        ) as any
+      );
 
       const result = await acceptance({}, io);
 
       expect(io.outText()).toContain('验收标准检查失败');
+      expect(io.outText()).toContain('   - criteria-1');
       expect(result).toEqual({
         kind: 'fail',
         reason: 'acceptance gate denied: criteria not met',
@@ -77,8 +79,7 @@ describe('acceptance command', () => {
     });
 
     it('should handle errors and exit 1', async () => {
-      const mockCheck = jest.fn().mockRejectedValue(new Error('gate error'));
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() => throwingGate(new Error('gate error')) as any);
 
       const result = await acceptance({}, io);
 
@@ -90,30 +91,29 @@ describe('acceptance command', () => {
     });
 
     it('should use cwd as default projectPath', async () => {
-      const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      const gate = fakeGate(decide('acceptance', true, 'ok'));
+      MockGate.mockImplementation(() => gate as any);
 
       await acceptance({}, io);
 
-      expect(mockCheck).toHaveBeenCalledWith(
+      expect(gate.evaluate).toHaveBeenCalledWith(
         expect.objectContaining({ projectPath: process.cwd() }),
       );
     });
 
     it('should pass taskId to gate', async () => {
-      const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      const gate = fakeGate(decide('acceptance', true, 'ok'));
+      MockGate.mockImplementation(() => gate as any);
 
       await acceptance({ taskId: 'TASK-001' }, io);
 
-      expect(mockCheck).toHaveBeenCalledWith(
+      expect(gate.evaluate).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'TASK-001' }),
       );
     });
 
     it('should set e2eTestCommand when runE2e is true', async () => {
-      const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() => fakeGate(decide('acceptance', true, 'ok')) as any);
 
       await acceptance({ runE2e: true }, io);
 
@@ -123,8 +123,7 @@ describe('acceptance command', () => {
     });
 
     it('should not set e2eTestCommand when runE2e is false', async () => {
-      const mockCheck = jest.fn().mockResolvedValue({ passed: true, message: 'ok' });
-      MockGate.mockImplementation(() => ({ check: mockCheck }) as any);
+      MockGate.mockImplementation(() => fakeGate(decide('acceptance', true, 'ok')) as any);
 
       await acceptance({}, io);
 

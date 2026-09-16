@@ -8,9 +8,10 @@ import { KnowledgeQuery } from '../query';
 import type { KnowledgeEntry, QueryBudget } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('KnowledgeQuery', () => {
-  const tempDir = path.join(process.cwd(), 'temp-test-query');
+  let tempDir: string;
   let store: KnowledgeStore;
   let query: KnowledgeQuery;
 
@@ -36,7 +37,7 @@ describe('KnowledgeQuery', () => {
   });
 
   beforeAll(() => {
-    fs.mkdirSync(tempDir, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-query-'));
   });
 
   afterAll(() => {

@@ -82,13 +82,144 @@ export function extractBaselineSection(content: string): string[] {
 }
 
 // ============================================
+// 命令级共享索引
+// ============================================
+
+/** package.json 依赖面的一次解析结果（失败态同样入库，不重试） */
+type DependencySnapshot = { ok: true; deps: Record<string, string> } | { ok: false };
+
+/**
+ * 共享索引的驻留上限（#162，统一复审遗留项 3）：
+ * #146 把全仓源文件内容常驻一个 Map，排除面只有 node_modules/dist/隐藏目录与后缀，
+ * 无任何容量上限——峰值内存由 O(单文件) 变 O(全仓源码)，大 monorepo 会承担这个峰值。
+ * 超出任一上限即放弃驻留、回落逐文件流式读（峰值回到 O(单文件)），
+ * 正常规模仓仍保留「一次遍历」收益。
+ */
+export const SOURCE_INDEX_MAX_ENTRIES = 5000;
+export const SOURCE_INDEX_MAX_BYTES = 64 * 1024 * 1024;
+
+/** 驻留上限（测试可注入小值走回落路径；生产一律缺省常量） */
+export interface SourceIndexLimits {
+  maxEntries: number;
+  maxBytes: number;
+}
+
+/**
+ * 一次 spec-baseline-check 运行内的取数面（工单 #146，母票 #140 A 票）：
+ * 全仓内容扫描、`package.json` 解析、同一落点的存在性探测各至多一遍，
+ * 逐条前置只在索引上重放判定——此前是「前置条件数 × 关键词数 × 源文件数」的逐条重扫。
+ *
+ * 懒建：没有任何前置需要某类数据时，该类读取一次都不发生（口径与改前一致）。
+ * 运行结束即弃，不跨命令、不扩 `RunEnv` 公共面（#140 triage 裁决 5）。
+ */
+interface BaselineIndex {
+  /**
+   * 内容含 keyword 的源文件数。上限内走驻留索引重放（一次运行全仓至多读一遍）；
+   * 超 SOURCE_INDEX_MAX_ENTRIES / SOURCE_INDEX_MAX_BYTES 即放弃驻留，
+   * 每个关键词回落逐文件流式读（#162：驻留条目数有上界，峰值 O(单文件)）。
+   */
+  countFilesContaining(keyword: string): number;
+  /** package.json 的 dependencies + devDependencies 合并面 */
+  dependencies(): DependencySnapshot;
+  /** 绝对路径是否在世（同一落点一次运行内只 stat 一次） */
+  exists(fullPath: string): boolean;
+}
+
+export function createBaselineIndex(
+  projectPath: string,
+  limits: SourceIndexLimits = { maxEntries: SOURCE_INDEX_MAX_ENTRIES, maxBytes: SOURCE_INDEX_MAX_BYTES }
+): BaselineIndex {
+  /** undefined = 未建（懒建）；null = 超上限放弃驻留（回落流式读） */
+  let sources: Map<string, string> | null | undefined;
+  let dependencySnapshot: DependencySnapshot | undefined;
+  const stats = new Map<string, boolean>();
+
+  const walkSourceFiles = () =>
+    walkFiles(projectPath, {
+      skipDirs: ['node_modules', 'dist'],
+      skipHidden: true,
+      filter: (_name, filePath) => filePath.endsWith('.ts') || filePath.endsWith('.js'),
+    });
+
+  /** 遍历与内容读取各一次建驻留索引；超任一上限即弃表返回 null（#162 驻留上界） */
+  function buildIndex(): Map<string, string> | null {
+    const map = new Map<string, string>();
+    let totalBytes = 0;
+    for (const fullPath of walkSourceFiles()) {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        map.set(fullPath, content);
+        totalBytes += Buffer.byteLength(content);
+        if (map.size > limits.maxEntries || totalBytes > limits.maxBytes) {
+          return null; // 已读内容随 map 一起弃，驻留峰值 ≤ 上限
+        }
+      } catch {
+        /* skip：读失败的文件不入表（与改前逐文件 try/catch 跳过同义） */
+      }
+    }
+    return map;
+  }
+
+  return {
+    countFilesContaining(keyword) {
+      if (sources === undefined) sources = buildIndex();
+      if (sources !== null) {
+        let count = 0;
+        for (const content of sources.values()) {
+          if (content.includes(keyword)) count++;
+        }
+        return count;
+      }
+      // 回落：逐文件流式读、读完即弃，驻留 O(单文件)（改前逐关键词重读同形）
+      let count = 0;
+      for (const fullPath of walkSourceFiles()) {
+        try {
+          if (fs.readFileSync(fullPath, 'utf-8').includes(keyword)) count++;
+        } catch {
+          /* skip */
+        }
+      }
+      return count;
+    },
+    dependencies() {
+      if (!dependencySnapshot) {
+        try {
+          const pkgJson = JSON.parse(
+            fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8')
+          );
+          dependencySnapshot = {
+            ok: true,
+            deps: { ...pkgJson.dependencies, ...pkgJson.devDependencies },
+          };
+        } catch {
+          dependencySnapshot = { ok: false };
+        }
+      }
+      return dependencySnapshot;
+    },
+    exists(fullPath) {
+      let hit = stats.get(fullPath);
+      if (hit === undefined) {
+        hit = fs.existsSync(fullPath);
+        stats.set(fullPath, hit);
+      }
+      return hit;
+    },
+  };
+}
+
+// ============================================
 // 验证器
 // ============================================
 
 /**
  * 检查文件/目录是否存在
  */
-function checkFileExists(pattern: string, projectPath: string): { exists: boolean; evidence: string } {
+function checkFileExists(
+  pattern: string,
+  projectPath: string,
+  index: BaselineIndex
+): { exists: boolean; evidence: string } {
   // 提取路径引用（反引号中的路径、引号中的路径、或直接的路径模式）
   const pathPatterns = [
     /`([^`]+\.[a-z]+)`/g,           // `src/foo.ts`
@@ -115,7 +246,7 @@ function checkFileExists(pattern: string, projectPath: string): { exists: boolea
 
   for (const p of paths) {
     const fullPath = path.resolve(projectPath, p);
-    if (fs.existsSync(fullPath)) {
+    if (index.exists(fullPath)) {
       found.push(p);
     } else {
       missing.push(p);
@@ -134,7 +265,7 @@ function checkFileExists(pattern: string, projectPath: string): { exists: boolea
 /**
  * 检查代码中是否存在特定模式
  */
-function checkCodePattern(pattern: string, projectPath: string): { exists: boolean; evidence: string } {
+function checkCodePattern(pattern: string, index: BaselineIndex): { exists: boolean; evidence: string } {
   // 从描述中提取关键词
   const keywords: string[] = [];
 
@@ -162,21 +293,9 @@ function checkCodePattern(pattern: string, projectPath: string): { exists: boole
   const found: string[] = [];
   const notFound: string[] = [];
 
-  // 遍历一次，供所有关键词复用（工单 19：walkFiles 收敛）
-  const sourceFiles = walkFiles(projectPath, {
-    skipDirs: ['node_modules', 'dist'],
-    skipHidden: true,
-    filter: (_name, fullPath) => fullPath.endsWith('.ts') || fullPath.endsWith('.js'),
-  });
-
+  // 一次运行一份索引：全仓扫描与内容读取已在索引里发生一遍（超上限则回落流式），这里只做匹配
   for (const kw of keywords) {
-    let count = 0;
-    for (const fullPath of sourceFiles) {
-      try {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        if (content.includes(kw)) count++;
-      } catch { /* skip */ }
-    }
+    const count = index.countFilesContaining(kw);
     if (count > 0) {
       found.push(`${kw} (${count} files)`);
     } else {
@@ -196,7 +315,11 @@ function checkCodePattern(pattern: string, projectPath: string): { exists: boole
 /**
  * 检查包依赖是否安装
  */
-function checkDependency(pattern: string, projectPath: string): { exists: boolean; evidence: string } {
+function checkDependency(
+  pattern: string,
+  projectPath: string,
+  index: BaselineIndex
+): { exists: boolean; evidence: string } {
   // 提取包名
   const pkgPatterns = [
     /`(@?[\w-]+\/[\w-]+)`/g,      // `@scope/pkg` or `pkg-name`
@@ -223,15 +346,12 @@ function checkDependency(pattern: string, projectPath: string): { exists: boolea
   const found: string[] = [];
   const missing: string[] = [];
 
-  const pkgJsonPath = path.join(projectPath, 'package.json');
-  let deps: Record<string, string> = {};
-
-  try {
-    const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
-    deps = { ...pkgJson.dependencies, ...pkgJson.devDependencies };
-  } catch {
+  // 一次运行只读解析一遍 package.json（失败态同样入库）
+  const snapshot = index.dependencies();
+  if (!snapshot.ok) {
     return { exists: false, evidence: '无法读取 package.json' };
   }
+  const deps = snapshot.deps;
 
   for (const pkg of packages) {
     if (deps[pkg] || deps[`@types/${pkg}`]) {
@@ -239,7 +359,7 @@ function checkDependency(pattern: string, projectPath: string): { exists: boolea
     } else {
       // 检查 node_modules
       const nmPath = path.join(projectPath, 'node_modules', pkg);
-      if (fs.existsSync(nmPath)) {
+      if (index.exists(nmPath)) {
         found.push(pkg);
       } else {
         missing.push(pkg);
@@ -257,15 +377,19 @@ function checkDependency(pattern: string, projectPath: string): { exists: boolea
 }
 
 /**
- * 综合验证一条前置条件
+ * 综合验证一条前置条件（取数一律经命令级共享索引 `index`）
  */
-function verifyPrerequisite(prereq: string, projectPath: string): PrerequisiteResult {
+function verifyPrerequisite(
+  prereq: string,
+  projectPath: string,
+  index: BaselineIndex
+): PrerequisiteResult {
   const lower = prereq.toLowerCase();
 
   // 路径/文件存在性检查
   if (lower.includes('文件') || lower.includes('file') || lower.includes('目录') || lower.includes('directory')
     || /`[^`]+\.[a-z]+`/.test(prereq) || /\//.test(prereq)) {
-    const { exists, evidence } = checkFileExists(prereq, projectPath);
+    const { exists, evidence } = checkFileExists(prereq, projectPath, index);
     if (exists || evidence.includes('文件不存在')) {
       return { prerequisite: prereq, satisfied: exists, evidence };
     }
@@ -273,7 +397,7 @@ function verifyPrerequisite(prereq: string, projectPath: string): PrerequisiteRe
 
   // 依赖检查
   if (lower.includes('依赖') || lower.includes('install') || lower.includes('package') || lower.includes('npm')) {
-    const { exists, evidence } = checkDependency(prereq, projectPath);
+    const { exists, evidence } = checkDependency(prereq, projectPath, index);
     return { prerequisite: prereq, satisfied: exists, evidence };
   }
 
@@ -281,7 +405,7 @@ function verifyPrerequisite(prereq: string, projectPath: string): PrerequisiteRe
   if (lower.includes('实现') || lower.includes('implement') || lower.includes('exist')
     || lower.includes('已') || lower.includes('必须')
     || /`[^`]+`/.test(prereq)) {
-    const { exists, evidence } = checkCodePattern(prereq, projectPath);
+    const { exists, evidence } = checkCodePattern(prereq, index);
     return { prerequisite: prereq, satisfied: exists, evidence };
   }
 
@@ -360,8 +484,9 @@ export async function specBaselineCheck(
     return { kind: 'skip', reason: '未找到 Baseline / 前置条件 section，无可判定项' };
   }
 
-  // 验证每条前置条件
-  const results = prerequisites.map(p => verifyPrerequisite(p, projectPath));
+  // 验证每条前置条件（全仓扫描与 package.json 解析在本次运行内各至多一遍）
+  const index = createBaselineIndex(projectPath);
+  const results = prerequisites.map(p => verifyPrerequisite(p, projectPath, index));
 
   // 输出
   if (options.json) {

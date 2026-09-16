@@ -4,15 +4,16 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { CheckpointValidator } from '../core/validators/checkpoint';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('CheckpointValidator', () => {
-  const tempDir = join(process.cwd(), 'temp-test-checkpoint');
+  let tempDir: string;
   let validator: CheckpointValidator;
 
   beforeAll(async () => {
-    mkdirSync(tempDir, { recursive: true });
+    tempDir = mkdtempSync(join(tmpdir(), 'temp-test-checkpoint-'));
     validator = CheckpointValidator.getInstance();
     // 创建测试文件
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');
@@ -568,34 +569,50 @@ describe('CheckpointValidator', () => {
       afterEach(() => { globalThis.fetch = fetch; });
 
       it('fetch 网络错误应该返回失败', async () => {
-        globalThis.fetch = (() => Promise.reject(new Error('Network error'))) as any;
+        const attempts: string[] = [];
+        globalThis.fetch = ((url: string) => {
+          attempts.push(String(url));
+          return Promise.reject(new Error('Network error'));
+        }) as any;
+        const waits: number[] = [];
         const result = await CheckpointValidator.getInstance().validate(
           {
             id: 'cp-hs-fail',
             checks: [{ id: 'c-hs-fail', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
           },
-          { workdir: tempDir, projectPath: tempDir }
+          // 注入零等待 sleep：重试语义照旧断言，不再真烧 2+4+6s（工单 #136）
+          { workdir: tempDir, projectPath: tempDir, sleep: async (ms: number) => { waits.push(ms); } }
         );
         expect(result.passed).toBe(false);
         expect(result.checks[0].message).toContain('请求失败');
-      }, 20_000); // retry logic adds 2+4+6s delay
+        expect(attempts).toHaveLength(4);
+        expect(waits).toEqual([2000, 4000, 6000]);
+      });
     });
 
     describe('http_body 请求失败', () => {
       afterEach(() => { globalThis.fetch = fetch; });
 
       it('fetch 网络错误应该返回失败', async () => {
-        globalThis.fetch = (() => Promise.reject(new Error('Network error'))) as any;
+        const attempts: string[] = [];
+        globalThis.fetch = ((url: string) => {
+          attempts.push(String(url));
+          return Promise.reject(new Error('Network error'));
+        }) as any;
+        const waits: number[] = [];
         const result = await CheckpointValidator.getInstance().validate(
           {
             id: 'cp-hb-fail',
             checks: [{ id: 'c-hb-fail', type: 'http_body', config: { url: 'https://example.com', expected: 'test' } }],
           },
-          { workdir: tempDir, projectPath: tempDir }
+          // 注入零等待 sleep：重试语义照旧断言，不再真烧 2+4+6s（工单 #136）
+          { workdir: tempDir, projectPath: tempDir, sleep: async (ms: number) => { waits.push(ms); } }
         );
         expect(result.passed).toBe(false);
         expect(result.checks[0].message).toContain('请求失败');
-      }, 20_000);
+        expect(attempts).toHaveLength(4);
+        expect(waits).toEqual([2000, 4000, 6000]);
+      });
     });
 
     describe('output_contains JSON 输出', () => {

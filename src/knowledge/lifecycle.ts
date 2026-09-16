@@ -10,6 +10,7 @@ import type {
   MaturityLevel,
   MaturityChange,
   DecayConfig,
+  StoreUpdate,
 } from './types';
 import { DEFAULT_DECAY_CONFIG } from './types';
 import type { KnowledgeStore } from './store';
@@ -159,6 +160,7 @@ export class KnowledgeLifecycle {
   runDecayCycle(): MaturityChange[] {
     const entries = this.store.list({ excludeArchived: false });
     const changes: MaturityChange[] = [];
+    const updates: StoreUpdate[] = [];
 
     for (const entry of entries) {
       const targetMaturity = this.checkEntryDecay(entry.id);
@@ -169,11 +171,12 @@ export class KnowledgeLifecycle {
           to: targetMaturity,
           reason: `Auto-decay: ${entry.maturity} → ${targetMaturity} (unreferenced for threshold)`,
         };
-        this.store.update(entry.id, { maturity: targetMaturity });
+        updates.push({ id: entry.id, partial: { maturity: targetMaturity } });
         changes.push(change);
       }
     }
 
+    this.store.applyAll(updates);
     return changes;
   }
 
@@ -350,7 +353,7 @@ export class KnowledgeLifecycle {
   private checkRuleDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
     if (entry.maturity !== 'active') return undefined;
     const rate = this.getExecutionSuccessRate(entry.id);
-    if (rate && rate.total >= RULE_MIN_RESULTS_FOR_DECAY && rate.rate < RULE_FAIL_THRESHOLD) return 'deprecated';
+    if (rate && rate.total >= RULE_MIN_RESULTS_FOR_DECAY && rate.rate <= RULE_FAIL_THRESHOLD) return 'deprecated';
     return undefined;
   }
 

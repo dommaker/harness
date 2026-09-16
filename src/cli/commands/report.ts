@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
-import { getTraceCollector } from '../../monitoring/traces';
+import { TraceCollector } from '../../monitoring/traces';
 import type { ConstraintContext } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -48,7 +48,8 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
 
   const projectPath = options.projectPath || process.cwd();
   // trace 记录器经构造参数接线（harness#88）：本命令是组合根
-  const checker = new ConstraintChecker(getTraceCollector());
+  // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
+  const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
 
   const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...PROMPTS };
   const totalConstraints = Object.keys(allConstraints).length;

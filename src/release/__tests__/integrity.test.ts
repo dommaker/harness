@@ -139,19 +139,28 @@ describe('getCriticalArtifacts / verifyReleaseArtifacts（fixture 包根）', ()
 });
 
 describe('真实包根清单同步闸门', () => {
-  it('真实 package.json 推导覆盖全部声明入口 + extras（重构动声明面时本测试强制同步）', () => {
+  it('真实 package.json 推导清单与显式期望精确相等（声明面增/删/改任一条目本测试强制同步，#160）', () => {
     const root = resolvePackageRoot(__dirname);
     const artifacts = getCriticalArtifacts(root);
-    for (const required of [
-      'dist/index.js',
-      'dist/core/index.js',
-      'dist/presets/index.js',
-      'dist/context/index.js',
-      'dist/gates/index.js',
-      'bin/harness.js',
-      ...EXTRA_CRITICAL_ARTIFACTS,
-    ]) {
-      expect(artifacts).toContain(required);
-    }
+    // 双向对撞：toContain 只钉得住删/改，新增声明条目会静默多出——故用 toEqual 显式清单
+    // （ADR-0003 公共面冻结闸同形）。getCriticalArtifacts 返回已排序数组，期望侧同口径 .sort()。
+    expect(artifacts).toEqual(
+      [
+        // 声明面（main/exports/bin）推导的脚本入口：动 package.json 声明面须同步本清单
+        'bin/harness.js',
+        'dist/context/index.d.ts',
+        'dist/context/index.js',
+        'dist/core/index.d.ts',
+        'dist/core/index.js',
+        'dist/gates/index.d.ts',
+        'dist/gates/index.js',
+        'dist/index.d.ts',
+        'dist/index.js',
+        'dist/presets/index.d.ts',
+        'dist/presets/index.js',
+        // extras 单一来源在 integrity.ts，另由上方 toEqual 用例精确冻结，此处展开引用不复制
+        ...EXTRA_CRITICAL_ARTIFACTS,
+      ].sort(),
+    );
   });
 });

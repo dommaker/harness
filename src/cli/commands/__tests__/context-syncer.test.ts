@@ -53,6 +53,34 @@ class MemoryFs implements ScaffoldFileSystem {
 const PROJECT = '/srv/project';
 const USER_CONTENT = '# src\n\n我自己写的，不许覆盖\n';
 
+/**
+ * CONTEXT.md 骨架正文的冻结字面量（harness#158）：正本 `renderContextDoc('src')` 被改必红。
+ * 上面的对撞闸只证明「init 与 sync-docs 同源」——两侧一起漂它看不见（复审 M3：给正本
+ * 加一行 → 60/60 全绿）。骨架正文整体由此处逐字钉住，改骨架必须显式改这份字面量。
+ */
+const CONTEXT_MD_SKELETON = `# src
+
+> 此文件描述 src 目录的职责和上下文
+> 请阅读本目录的源代码，然后填写以下各节。
+> 如果使用 AI 编码助手，将本文件内容作为 prompt 请求它分析并填写。
+
+## 职责
+
+<!-- 本目录的核心职责是什么 -->
+
+## 核心导出
+
+<!-- 本目录对外暴露的主要模块/函数 -->
+
+## 依赖关系
+
+<!-- 本目录依赖哪些其他模块，谁依赖本目录 -->
+
+## 注意事项
+
+<!-- 开发时需要注意的约束或约定 -->
+`;
+
 let fs: MemoryFs;
 let io: CapturingIO;
 
@@ -70,6 +98,10 @@ describe('createContextMd 消费 scaffold 正本（harness#150）', () => {
     // init 侧经由同一个 contextDocFile 工厂落盘（见 init.ts 的 contextDocPlan）——
     // 两侧共用单一正本，任何一份偷偷漂移都会在这里撞红
     expect(written).toBe(contextDocFile(PROJECT, 'src').content);
+  });
+
+  it('骨架正文逐字冻结：正本 renderContextDoc 被改必红（#158，M3 假闸补钉）', () => {
+    expect(contextDocFile(PROJECT, 'src').content).toBe(CONTEXT_MD_SKELETON);
   });
 
   it('正本文案钉住：并入的两行引导 + 注释形占位（散文式提问已消失）', async () => {

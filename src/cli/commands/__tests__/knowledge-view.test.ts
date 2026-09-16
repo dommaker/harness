@@ -38,7 +38,8 @@ import {
   knowledgeSyncRagView, knowledgeAuditView, knowledgeSnapshotView, knowledgeMigrateView,
   knowledgeIndexView, knowledgeHealthView,
 } from '../knowledge';
-import { emitKnowledgeView, type DisplayCell, type DisplayModel, type KnowledgeView } from '../knowledge-view';
+import { emitKnowledgeView, toneForMaturity, type DisplayCell, type DisplayModel, type KnowledgeView } from '../knowledge-view';
+import type { MaturityLevel } from '../../../knowledge/types';
 
 const SRC_DIR = path.join(__dirname, '..');
 const DAY = 24 * 60 * 60 * 1000;
@@ -587,6 +588,33 @@ describe('闸 3：两投影一致性（同一 fixture）', () => {
     ]);
     expect(resolvePath(data, 'real.nested').found).toBe(true);
     expect(resolvePath(data, 'nope.missing').found).toBe(false);
+  });
+});
+
+describe('stats 成熟度格的 tone 传递（harness#158，复审 M7 假闸补钉）', () => {
+  // knowledge-tone-mapping.test.ts 钉住了 toneForMaturity 表与渲染链，但没钉「命令侧真的把
+  // tone 传进格」——把 knowledge.ts 成熟度格的 `tone:` 摘掉，全仓零红。此处看结构不看 ANSI，
+  // 不违背本文件 identity-mock 的立场。
+  it('按成熟度段每行首格必须携带 tone 且 = toneForMaturity(maturity)', async () => {
+    const root = fixture();
+    try {
+      const view = await knowledgeStatsView({ projectPath: root }, captureIO());
+      const section = view.human().sections.find(s => s.title === '  按成熟度:');
+      expect(section).toBeDefined();
+      const rows = section!.rows.filter(r => r.cells.some(c => 'field' in c));
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        const cell = row.cells[0];
+        expect('field' in cell).toBe(true);
+        const field = (cell as { field: string }).field;
+        expect(field.startsWith('byMaturity.')).toBe(true);
+        const maturity = field.slice('byMaturity.'.length) as MaturityLevel;
+        expect({ maturity, tone: (cell as { tone?: string }).tone })
+          .toEqual({ maturity, tone: toneForMaturity(maturity) });
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

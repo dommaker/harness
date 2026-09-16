@@ -78,6 +78,34 @@ fi
 echo "✅ All pre-push checks passed"
 `;
 
+/**
+ * src/CONTEXT.md 骨架的字节级冻结基线（harness#158；正本：`scaffold-templates.renderContextDoc('src')`）。
+ * #150 把 init 与 sync-docs 归一到单一正本后，「改正本无测试报警」成了新缺口（复审 M3：
+ * 给正本加一行 → 全绿）。改骨架必须同步改这份基线——「同步」这个动作正是拦住骨架被静改的地方。
+ */
+const CONTEXT_MD_BYTES = `# src
+
+> 此文件描述 src 目录的职责和上下文
+> 请阅读本目录的源代码，然后填写以下各节。
+> 如果使用 AI 编码助手，将本文件内容作为 prompt 请求它分析并填写。
+
+## 职责
+
+<!-- 本目录的核心职责是什么 -->
+
+## 核心导出
+
+<!-- 本目录对外暴露的主要模块/函数 -->
+
+## 依赖关系
+
+<!-- 本目录依赖哪些其他模块，谁依赖本目录 -->
+
+## 注意事项
+
+<!-- 开发时需要注意的约束或约定 -->
+`;
+
 describe('init 真落盘（无 IO mock）', () => {
   const roots: string[] = [];
 
@@ -140,7 +168,8 @@ describe('init 真落盘（无 IO mock）', () => {
     expect(await read('.harness/checkpoints.yml')).toContain('id: build-success');
     expect(JSON.parse(await read('.harness/resolutions.json')).capability_sync).toBeDefined();
     expect(await read('CHANGELOG.md')).toContain('Keep a Changelog');
-    expect(await read('src/CONTEXT.md')).toContain('# src');
+    // src/CONTEXT.md 骨架（#158）：字节级冻结，同 PRE_PUSH_HOOK_BYTES 手法
+    expect(await read('src/CONTEXT.md')).toBe(CONTEXT_MD_BYTES);
 
     for (const hookFile of ['.git/hooks/pre-commit', '.git/hooks/pre-push']) {
       const stat = await fs.stat(path.join(root, hookFile));
@@ -321,6 +350,28 @@ describe('init --ci 平台维度（harness#143，真落盘）', () => {
     expect(await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8')).toContain(
       'ci:\n  platform: gitlab',
     );
+  });
+
+  it('迁移方向：gitlab 已持久化后再 --ci github → config.yml 的 ci 键消失，回到 GitHub 形状', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    await init({ ...CI_OPTIONS, ci: 'gitlab', projectPath: root }, captureIO());
+    expect(await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8')).toContain(
+      'ci:\n  platform: gitlab',
+    );
+
+    const io = captureIO();
+    expect(await init({ ...CI_OPTIONS, ci: 'github', projectPath: root }, io)).toEqual({ kind: 'ok' });
+
+    // github 是缺省平台，非默认平台才写键（旧配置零迁移）——显式 --ci github 必须把
+    // 已持久化的 ci: 键抹掉，而不是留下 platform: github（harness#158 补钉，复审 M9 留口）
+    const config = yaml.load(await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8')) as Record<string, unknown>;
+    expect('ci' in config).toBe(false);
+    expect(io.outText()).not.toContain('CI 平台:');
+    expect(await fs.readFile(path.join(root, '.github/workflows/harness-check.yml'), 'utf-8'))
+      .toContain('name: Harness Check');
+    // 旧的 gitlab 站点是用户文件，不删不动
+    expect(await fs.readFile(path.join(root, '.gitlab-ci.yml'), 'utf-8')).toBe(GITLAB_PLAIN);
   });
 
   it('第二趟（.gitlab-ci.yml 已在场）：manual 态，用户内容一字节不动，打印的 job 片段即落盘正文的一部分', async () => {

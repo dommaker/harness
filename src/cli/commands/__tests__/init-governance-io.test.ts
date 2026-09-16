@@ -73,6 +73,35 @@ describe('init 治理链路的提示落在注入面（harness#149）', () => {
     expect(io.outText()).toContain('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复');
   });
 
+  // #158 补钉：这类提示在 init.ts 实测有四处，#149 只钉住上面一条——其余三处各补一条
+  // 捕获面断言。四处分支不同文件/不同段位，fixture 各自单建，不共用残缺文件。
+
+  it('标记残缺四处之二：CLAUDE.md 的 HARNESS_OUTPUT_STYLE 单边 → Output Style 注入告警', async () => {
+    const io = await runInit({ 'CLAUDE.md': '# CLAUDE.md\n\n<!-- HARNESS_OUTPUT_STYLE_START -->\n半残段\n' });
+    expect(io.outText()).toContain('⚠️  CLAUDE.md 中 HARNESS_OUTPUT_STYLE 标记残缺（单边或乱序），跳过 Output Style 注入，请人工修复');
+  });
+
+  it('标记残缺四处之三：AGENTS.md 的 PRESERVE 段内 HARNESS_CONSTRAINTS 单边 → 段内告警', async () => {
+    const broken = [
+      '# AGENTS.md',
+      '',
+      '<!-- PRESERVE:governance -->',
+      '手写契约',
+      '',
+      '<!-- HARNESS_CONSTRAINTS_START -->',
+      '半残注入',
+      '<!-- /PRESERVE:governance -->',
+      '',
+    ].join('\n');
+    const io = await runInit({ 'AGENTS.md': broken });
+    expect(io.outText()).toContain('⚠️  AGENTS.md PRESERVE:governance 段内 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理契约写入，请人工修复');
+  });
+
+  it('标记残缺四处之四：CLAUDE.md 的 HARNESS_CONSTRAINTS 单边 → 治理约束注入告警（旧模型仓落点）', async () => {
+    const io = await runInit({ 'CLAUDE.md': '# CLAUDE.md\n\n<!-- HARNESS_CONSTRAINTS_START -->\n半残段\n' });
+    expect(io.outText()).toContain('⚠️  CLAUDE.md 中 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理约束注入，请人工修复');
+  });
+
   it('新仓创建 AGENTS.md 治理段：创建提示进捕获 stdout', async () => {
     const io = await runInit({});
     expect(io.outText()).toContain('✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段');

@@ -240,21 +240,43 @@ describe('init 真落盘（无 IO mock）', () => {
     }
   });
 
-  it('治理 CI 站点：无 GH Actions 旗帜时自建，第二遍告知已存在', async () => {
+  it('治理 CI 站点：github 下既有 workflow 不覆盖治理命令时自建，第二遍告知已存在', async () => {
     const root = await makeProject(false);
     roots.push(root);
+    // 用户自带的 workflow 不含治理命令：harness-check 站点走 manual（只打印不落盘），
+    // 治理命令无任何覆盖 → 自建 harness-governance.yml（本站点唯一会真落盘的场景）
+    await fs.mkdir(path.join(root, '.github/workflows'), { recursive: true });
+    await fs.writeFile(path.join(root, '.github/workflows/ci.yml'), 'name: 我自己的流水线\n');
     const first = captureIO();
 
-    await init({ ...INIT_OPTIONS, githubActions: false, projectPath: root }, first);
+    await init({ ...INIT_OPTIONS, projectPath: root }, first);
     expect(normalize(first.outText(), root)).toContain('✅ 已创建 .github/workflows/harness-governance.yml');
     const governance = await fs.readFile(path.join(root, '.github/workflows/harness-governance.yml'), 'utf-8');
     expect(governance).toContain('name: Harness Governance');
     expect(governance).toContain('npx @dommaker/harness passes-gate');
 
     const second = captureIO();
-    await init({ ...INIT_OPTIONS, githubActions: false, projectPath: root }, second);
+    await init({ ...INIT_OPTIONS, projectPath: root }, second);
     expect(second.outLines()).toContain('harness-governance.yml 已存在');
     expect(await fs.readFile(path.join(root, '.github/workflows/harness-governance.yml'), 'utf-8')).toBe(governance);
+  });
+
+  it('治理 CI 站点：--ci none（含 --no-github-actions 别名）带 -g 也一律不建（harness#156 裁决 F1）', async () => {
+    // 本用例原是「无 GH Actions 旗帜时自建」——钉的是 #143 有意保留的旧边界；
+    // #156 裁决 F1 走「none = 不创建任何 CI 文件」，旧断言整体翻面
+    const root = await makeProject(false);
+    roots.push(root);
+    const io = captureIO();
+
+    await init({ ...INIT_OPTIONS, githubActions: false, projectPath: root }, io);
+
+    expect(io.outLines()).toContain('⚠️  --no-github-actions 已废弃，请改用 --ci none');
+    expect(io.outText()).not.toContain('harness-governance.yml');
+    expect(await exists(path.join(root, '.github'))).toBe(false);
+    expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
+    // 治理文档面照常：CHANGELOG / 约束段 / CONTEXT.md 不受 CI 豁免影响
+    expect(await exists(path.join(root, 'CHANGELOG.md'))).toBe(true);
+    expect(await exists(path.join(root, 'AGENTS.md'))).toBe(true);
   });
 
   it('无 .git 与无源码目录时仍按原措辞告知，不写任何文件', async () => {
@@ -494,6 +516,130 @@ describe('init --ci 平台维度（harness#143，真落盘）', () => {
     expect(await exists(path.join(root, '.github/workflows/harness-check.yml'))).toBe(true);
     expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
   });
+});
+
+// ── --ci × -g 组合边界（harness#156）：none = 零 CI 文件；-g 值域校验在命令入口 ──
+
+/** 项目下全部文件的相对路径（排序），逐字冻结「落盘文件集合」这个投影 */
+async function listProjectFiles(root: string): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else out.push(path.relative(root, full).split(path.sep).join('/'));
+    }
+  }
+  await walk(root);
+  return out.sort();
+}
+
+describe('init --ci × -g 组合边界（harness#156，真落盘）', () => {
+  const roots: string[] = [];
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => fs.rm(root, { recursive: true, force: true })));
+  });
+
+  it('--ci none -g standard：零 CI 文件、治理文档面照常；落盘文件集合与 config.yml 两投影逐字冻结', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    const io = captureIO();
+
+    expect(await init({ ...INIT_OPTIONS, ci: 'none', projectPath: root }, io)).toEqual({ kind: 'ok' });
+
+    // 投影一：落盘文件集合逐字冻结。反证可跑——把 setupGovernanceWorkflow 的豁免写回
+    // `platform === 'gitlab'`（不豁免 none），集合里会多出
+    // `.github/workflows/harness-governance.yml`，本断言即红（harness#156 F1 的形态）
+    expect(await listProjectFiles(root)).toEqual([
+      '.git/hooks/pre-commit',
+      '.git/hooks/pre-push',
+      '.harness/checkpoints.yml',
+      '.harness/config.yml',
+      '.harness/custom-constraints.yml',
+      '.harness/resolutions.json',
+      'AGENTS.md',
+      'CHANGELOG.md',
+      'src/CONTEXT.md',
+      'src/index.ts',
+    ]);
+
+    // 投影二：config.yml 逐字冻结（版本号随发布漂移，归一化）——ci.platform: none
+    // 与磁盘状态一致：配置声称不接任何 CI 平台，磁盘上也没有任何 CI 文件
+    const config = await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8');
+    expect(config.replace(/version: [\d.]+/, 'version: *')).toBe(`preset: standard
+governance:
+  level: standard
+  docs:
+    sync_command: harness sync-docs
+    check_on_ci: true
+    files:
+      - CAPABILITIES.md
+      - README.md
+  context_files:
+    enabled: true
+    required_dirs: []
+  changelog:
+    format: keep-a-changelog
+  testing:
+    test_first: true
+    coverage_threshold: 85
+    incremental_coverage: false
+ci:
+  platform: none
+harness:
+  version: *
+`);
+
+    // 治理文档面（CHANGELOG / 约束段 / CONTEXT.md）在 none 下照常生成，不受 CI 豁免影响
+    expect(await fs.readFile(path.join(root, 'CHANGELOG.md'), 'utf-8')).toContain('Keep a Changelog');
+    expect(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf-8')).toContain('PRESERVE:governance');
+    expect(await fs.readFile(path.join(root, 'src/CONTEXT.md'), 'utf-8')).toBe(CONTEXT_MD_BYTES);
+  });
+
+  it('-g 非法值在 github / gitlab / none 三平台后果一致：usage-error、零落盘（钉「一致」本身）', async () => {
+    // CLI 边界：commander 把用户敲的字符串原样递进来，合法域由命令入口校验
+    const dirty = { governance: 'bogus' as unknown as InitOptions['governance'] };
+    const runs: Array<{ platform: string; result: unknown; files: string[]; err: string }> = [];
+
+    for (const platform of ['github', 'gitlab', 'none'] as const) {
+      const root = await makeProject();
+      roots.push(root);
+      const io = captureIO();
+      const result = await init({ ...CI_OPTIONS, ...dirty, ci: platform, projectPath: root }, io);
+      runs.push({ platform, result, files: await listProjectFiles(root), err: io.errText() });
+    }
+
+    // 钉的是「三平台一致」这件事本身（harness#156 F2：同一非法输入，gitlab 曾落三个任务、
+    // github 曾静默不建治理站），不是各自冻一份基线
+    expect(runs[1].result).toEqual(runs[0].result);
+    expect(runs[2].result).toEqual(runs[0].result);
+    expect(runs[1].files).toEqual(runs[0].files);
+    expect(runs[2].files).toEqual(runs[0].files);
+    for (const run of runs) {
+      expect(run.result).toEqual({
+        kind: 'usage-error',
+        reason: expect.stringContaining('minimal | standard | strict'),
+      });
+      expect(run.err).toContain('用法错误');
+      // 零落盘：只剩夹具文件（src/index.ts；.git 是空目录不产生文件条目）
+      expect(run.files).toEqual(['src/index.ts']);
+    }
+  });
+
+  it.each(['minimal', 'standard', 'strict'] as const)(
+    '-g 合法值 %s 行为不变：ok 且治理级别写进 config.yml',
+    async level => {
+      const root = await makeProject();
+      roots.push(root);
+
+      expect(await init({ ...CI_OPTIONS, governance: level, projectPath: root }, captureIO()))
+        .toEqual({ kind: 'ok' });
+
+      const config = await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8');
+      expect(config).toContain(`level: ${level}`);
+    },
+  );
 });
 
 // ── --print-snippets 的 CI 片段视图（harness#153）：打印的 job 正文 == 落盘正本的一段 ──

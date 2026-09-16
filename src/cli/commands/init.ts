@@ -52,7 +52,7 @@ export interface InitOptions {
   projectPath?: string;
   /** 预设名称 */
   preset: 'strict' | 'standard' | 'relaxed';
-  /** 治理级别 */
+  /** 治理级别（值域 = `GOVERNANCE_PRESETS` 键集合，非法值在命令入口判 usage-error、零落盘，harness#156） */
   governance?: 'minimal' | 'standard' | 'strict';
   /** 是否创建 Git hooks */
   gitHooks?: boolean;
@@ -69,7 +69,7 @@ export interface InitOptions {
   printSnippets?: boolean;
 }
 
-/** `--ci` 的可取值域（`none` = 不做服务端 CI 接线，即旧 `--no-github-actions`） */
+/** `--ci` 的可取值域（`none` = 不创建任何服务端 CI 文件，治理 CI 面亦不建，即旧 `--no-github-actions`） */
 const CI_FLAG_VALUES: Array<CiPlatform | 'none'> = ['github', 'gitlab', 'none'];
 
 /** CI 平台解析结果（`error` 属用法错误，命令层直接非零退出，不落任何文件） */
@@ -240,6 +240,15 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
     return { kind: 'usage-error', reason: ci.reason };
   }
   if (ci.warning) log(io, chalk.yellow(ci.warning));
+
+  // `-g` 值域校验在命令入口（harness#156 裁决 F2，与 #152 脏输入 fail-loud 同判据）：
+  // 非法值 usage-error、先于任何落盘；合法值域与装配共用同一份 GOVERNANCE_PRESETS 表，
+  // github / gitlab / none 三平台同判（bin 把用户敲的字符串原样递进来）
+  if (options.governance !== undefined && !(options.governance in GOVERNANCE_PRESETS)) {
+    const reason = `-g/--governance 取值非法: ${String(options.governance)}（可取 ${Object.keys(GOVERNANCE_PRESETS).join(' | ')}）`;
+    logError(io, chalk.red(`❌ 用法错误: ${reason}`));
+    return { kind: 'usage-error', reason };
+  }
 
   // 只输出代码片段
   if (options.printSnippets) {
@@ -674,7 +683,7 @@ async function setupGovernance(
   // 4. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
   await runPlan(await contextDocPlan(projectPath, governance, io), io);
 
-  // 5. 生成治理 CI 面（gitlab 已在 .gitlab-ci.yml 的正文里，见 setupCiWiring）
+  // 5. 生成治理 CI 面（仅 github 形；gitlab 已并入 .gitlab-ci.yml 正文，none 不建，harness#156）
   await setupGovernanceWorkflow(projectPath, level, io, platform);
 }
 
@@ -730,7 +739,8 @@ async function findGovernanceCoverage(workflowsDir: string): Promise<string | un
  * 设置治理 CI workflow（目标已在场，或已有 workflow 覆盖治理命令时不新建 CI 面）
  *
  * 仅 github 形有本站点：gitlab 的治理任务已并入 `.gitlab-ci.yml` 正文（一个平台一份
- * CI 文件，harness#143）。
+ * CI 文件，harness#143）；`none` = 不创建任何 CI 文件，治理 CI 面随之不建
+ * （harness#156 裁决 F1；治理文档面不受影响，见 setupGovernance 1–4）。
  */
 async function setupGovernanceWorkflow(
   projectPath: string,
@@ -738,7 +748,7 @@ async function setupGovernanceWorkflow(
   io: CommandIO,
   platform: CiPlatform | 'none',
 ): Promise<void> {
-  if (platform === 'gitlab') return;
+  if (platform !== 'github') return;
 
   const workflowsDir = path.join(projectPath, '.github', 'workflows');
   const file = governanceWorkflowFile(projectPath, level);

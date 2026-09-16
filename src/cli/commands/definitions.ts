@@ -151,7 +151,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-g, --governance <level>', description: '治理级别 (minimal/standard/strict)' },
       { flags: '--project-path <path>', description: '项目路径' },
       { flags: '--no-git-hooks', description: '不创建 Git hooks' },
-      { flags: '--ci <platform>', description: '服务端 CI 接线平台 (github/gitlab/none)，缺省按 .harness/config.yml 的 ci.platform' },
+      { flags: '--ci <platform>', description: '服务端 CI 接线平台 (github/gitlab/none)；none = 不创建任何 CI 文件（治理 CI 面亦不建），缺省按 .harness/config.yml 的 ci.platform' },
       { flags: '--no-github-actions', description: '不创建 GitHub Actions（已废弃：等价 --ci none）' },
       { flags: '--print-snippets', description: '只输出代码片段，不创建文件' },
     ],

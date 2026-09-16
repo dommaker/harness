@@ -46,7 +46,9 @@ export function migrateKnowledgeEntries(baseDir: string): MigrationResult {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const fm = splitFrontmatter(raw);
       if (fm.state === 'absent') {
-        result.errors.push(`${file}: no frontmatter found`);
+        // 统一口径（harness#89 裁决 2 / harness#161）：'absent' 是合法输入、不上报——
+        // 按非条目语义静默跳过，计入 skipped（非损坏、非迁移对象，仅保证 total 计数闭环）
+        result.skipped++;
         continue;
       }
       if (fm.state === 'malformed') {

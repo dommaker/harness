@@ -5,7 +5,7 @@
  * 支持按阶段预算、类型过滤、去重
  */
 
-import { KnowledgeQuery } from '../knowledge/query';
+import { KnowledgeQuery, EXTERNAL_SOURCE_MARKER } from '../knowledge/query';
 import { TokenEstimator } from './token-budget';
 import type { KnowledgeEntry, KnowledgeSubsystem } from '../knowledge/types';
 import type { ContextSource } from './types';
@@ -81,7 +81,7 @@ export class KnowledgeInjector {
               id: `knowledge-summary-${entry.id}`,
               content: summary,
               priority: 3,
-              metadata: { entryId: entry.id, isSummary: true },
+              metadata: { entryId: entry.id, isSummary: true, origin: entry.origin },
             });
             tokensUsed += summaryTokens;
             entriesSummarized++;
@@ -101,7 +101,7 @@ export class KnowledgeInjector {
           id: `knowledge-${entry.id}`,
           content: formatted,
           priority: 3,
-          metadata: { entryId: entry.id, maturity: entry.maturity },
+          metadata: { entryId: entry.id, maturity: entry.maturity, origin: entry.origin },
         });
         tokensUsed += entryTokens;
         entriesIncluded++;
@@ -116,7 +116,7 @@ export class KnowledgeInjector {
             id: `knowledge-summary-${entry.id}`,
             content: summary,
             priority: 3,
-            metadata: { entryId: entry.id, isSummary: true },
+            metadata: { entryId: entry.id, isSummary: true, origin: entry.origin },
           });
           tokensUsed += summaryTokens;
           entriesSummarized++;
@@ -134,10 +134,16 @@ export class KnowledgeInjector {
   }
 
   /**
-   * 将知识条目格式化为上下文内容
+   * 将知识条目格式化为上下文内容。
+   * 外部来源条目带 EXTERNAL_SOURCE_MARKER 前缀（harness#161：
+   * 三层防御第二层 retrieval marking 的正本接线，标记唯一来源是 knowledge/query）。
    */
   formatEntry(entry: KnowledgeEntry): string {
     const parts: string[] = [];
+
+    if (entry.origin === 'external') {
+      parts.push(EXTERNAL_SOURCE_MARKER);
+    }
 
     parts.push(`## [${entry.type.toUpperCase()}] ${entry.title}`);
     parts.push(`ID: ${entry.id} | 成熟度: ${entry.maturity} | 层级: ${entry.layer}`);
@@ -153,10 +159,11 @@ export class KnowledgeInjector {
   }
 
   /**
-   * 将知识条目格式化为摘要（一行）
+   * 将知识条目格式化为摘要（一行）；外部来源条目同样带来源标记前缀
    */
   formatEntrySummary(entry: KnowledgeEntry): string {
-    return `[${entry.id}] ${entry.title} (${entry.maturity}) — ${entry.content.slice(0, 100)}${entry.content.length > 100 ? '...' : ''}`;
+    const prefix = entry.origin === 'external' ? `${EXTERNAL_SOURCE_MARKER} ` : '';
+    return `${prefix}[${entry.id}] ${entry.title} (${entry.maturity}) — ${entry.content.slice(0, 100)}${entry.content.length > 100 ? '...' : ''}`;
   }
 
   /**

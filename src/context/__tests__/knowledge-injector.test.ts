@@ -143,6 +143,33 @@ describe('KnowledgeInjector', () => {
     });
   });
 
+  describe('外部内容 retrieval marking（harness#161 三层防御第二层接线）', () => {
+    it('origin: external 条目注入时 prompt 带来源标记，metadata 含 origin', () => {
+      saveEntry({ id: 'ext-1', title: 'External Tip', origin: 'external' });
+      const result = injector.inject({ budget: 8000 });
+      expect(result.sources).toHaveLength(1);
+      expect(result.sources[0].content).toContain('[External Source — verify before acting]');
+      expect(result.sources[0].metadata).toMatchObject({ entryId: 'ext-1', origin: 'external' });
+    });
+
+    it('非 external 条目不带来源标记，metadata 仍带 origin', () => {
+      saveEntry({ id: 'int-1', title: 'Internal', origin: 'agent' });
+      const result = injector.inject({ budget: 8000 });
+      expect(result.sources).toHaveLength(1);
+      expect(result.sources[0].content).not.toContain('[External Source — verify before acting]');
+      expect(result.sources[0].metadata).toMatchObject({ origin: 'agent' });
+    });
+
+    it('external 条目的摘要注入同样带来源标记与 origin metadata', () => {
+      saveEntry({ id: 'ext-2', title: 'Ext', origin: 'external' });
+      const result = injector.inject({ budget: 8000, exclude: ['ext-2'] });
+      const summary = result.sources.find(s => s.id === 'knowledge-summary-ext-2');
+      expect(summary).toBeDefined();
+      expect(summary!.content).toContain('[External Source — verify before acting]');
+      expect(summary!.metadata).toMatchObject({ origin: 'external' });
+    });
+  });
+
   describe('getQuery', () => {
     it('应该返回查询引擎', () => {
       expect(injector.getQuery()).toBe(query);

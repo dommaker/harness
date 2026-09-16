@@ -353,7 +353,7 @@ export class KnowledgeLifecycle {
   private checkRuleDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
     if (entry.maturity !== 'active') return undefined;
     const rate = this.getExecutionSuccessRate(entry.id);
-    if (rate && rate.total >= RULE_MIN_RESULTS_FOR_DECAY && rate.rate < RULE_FAIL_THRESHOLD) return 'deprecated';
+    if (rate && rate.total >= RULE_MIN_RESULTS_FOR_DECAY && rate.rate <= RULE_FAIL_THRESHOLD) return 'deprecated';
     return undefined;
   }
 

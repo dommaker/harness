@@ -134,19 +134,22 @@ describe('migrateKnowledgeEntries', () => {
   });
 
   describe('frontmatter 收口（harness#89）', () => {
-    it('缺 frontmatter：errors 记 no frontmatter（原文案不变），不算损坏', () => {
+    it('缺 frontmatter：absent 是合法输入——不进 errors，按非条目语义计入 skipped（harness#161 裁决，正本 #89 裁决 2）', () => {
       fs.writeFileSync(path.join(tempDir, 'PLAIN.md'), '# 只是普通 markdown\n\n正文\n', 'utf-8');
 
       const result = migrateKnowledgeEntries(tempDir);
-      expect(result.errors).toEqual(['PLAIN.md: no frontmatter found']);
+      expect(result.errors).toEqual([]);
       expect(result.migrated).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.total).toBe(1);
     });
 
-    it('空 meta：与缺 frontmatter 同走一支（absent），不静默丢', () => {
+    it('空 meta：与缺 frontmatter 同走一支（absent），不进 errors、计 skipped', () => {
       fs.writeFileSync(path.join(tempDir, 'EMPTY-META.md'), '---\n\n---\n\nBody\n', 'utf-8');
 
       const result = migrateKnowledgeEntries(tempDir);
-      expect(result.errors).toEqual(['EMPTY-META.md: no frontmatter found']);
+      expect(result.errors).toEqual([]);
+      expect(result.skipped).toBe(1);
     });
 
     it('未闭合：errors 显式记 unterminated（收口前是一条 YAML 内部报错）', () => {

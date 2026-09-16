@@ -10,7 +10,7 @@
 - **Origin** — 闭集 (human/agent/external/system)，影响信任度和 maturity 起点
 
 ## 生命周期按模式分化
-- `rule`: draft → active → deprecated (1 次成功激活, 失败率>=50% 降级——**现状边界差一**：实现取成功率严格 `<0.5`（`lifecycle.ts:356` + `RULE_FAIL_THRESHOLD = 0.5`），失败率恰 50%（如 2 成 2 败、total≥3）不降级，与本文及该方法自己的注释相反；判「文档正确、代码待改」，缺陷票 #161 第 3 条)
+- `rule`: draft → active → deprecated (1 次成功激活, 失败率>=50% 降级)
 - `reference`: draft → verified → proven → archived (现有逻辑)
 - `context`: draft → active → archived (1 次引用激活, 3 个月未引用归档)
 - `signal`: active → archived (消费饱和: ref>=3 + 有更新同标签条目)
@@ -40,7 +40,7 @@
 - 被 `src/cli/commands/knowledge.ts` CLI 消费（含 `migrate` 子命令）
 
 ## 约定
-- 知识条目文件的 frontmatter 语法只由 `src/utils/frontmatter` 定义（harness#89）：缺头/空 meta = `absent`（合法输入，按非条目静默处理）——**现状偏差**（harness#142 核对，判「文档与正本正确、代码待改」）：`migrateKnowledgeEntries` 把 `absent` 写进 `result.errors`（`migration.ts:48-50`，且 `__tests__/migration.test.ts` 冻住了这个形状），与 `src/utils/frontmatter.ts` 正本注释「`'absent'` 是合法输入，不上报」相反；改哪一侧属 #89 裁决的重新开口，缺陷票 #161 第 1 条；未闭合/YAML 非法 = `malformed`（必须显式上报后按消费方语义恢复——migration 落 `errors`、store 与 index-generator 打一行 stderr 后跳过或走 best-effort），禁止静默丢条目；canonical 字段序是 `store.toFrontmatter` 的私有策略，`join` 只管包裹格式
+- 知识条目文件的 frontmatter 语法只由 `src/utils/frontmatter` 定义（harness#89）：缺头/空 meta = `absent`（合法输入，按非条目静默处理、不上报——migration 对 `absent` 不计 `errors`、不迁移，只计 `skipped` 保证 `total` 计数闭环，harness#161 对齐 #89 裁决 2）；未闭合/YAML 非法 = `malformed`（必须显式上报后按消费方语义恢复——migration 落 `errors`、store 与 index-generator 打一行 stderr 后跳过或走 best-effort），禁止静默丢条目；canonical 字段序是 `store.toFrontmatter` 的私有策略，`join` 只管包裹格式
 - **知识树的排除口径只有一个正本 `tree-walker`**（harness#134）：`_index.md`（索引生成物）、`.snapshots`、`.archive` / `archived`、`resolutions` 是树基建、不是条目人口。store 与 migration 的顶层扫描、index-generator 的递归扫描三处都走它；新增 walker 禁止另立排除清单。统一的是**排除口径**不是遍历深度（store/migration 顶层、index-generator 递归）。例外须原地记名理由：`import.ts` 的 docs 扫描吃的是**项目文档树**，本口径在它那里没有对应物
 - **循环内禁止逐条 `store.update()`**（harness#134）：`update()` 的形状是 get→save、`save()` 每次全量重写 index.json，N 条修复 = N 次全量重写。批量形是 `applyAll(id → partial)`；一次 `audit --fix`、一轮 `runDecayCycle()`、一次 `updateReferencedBy()` 各只重写一次索引，计数闸见 `audit-write-count.test.ts` 与 `lifecycle.test.ts` / `reference-tracker.test.ts` 的 stringify 计数项
 - **审计判定脱离文件系统可测**（harness#134）：规则表与 D1–D7 打分住 `audit-scoring.ts`，零 fs（源形状闸钉在 `audit-scoring.test.ts`）；引擎 `audit.ts` 只做 store 装配，环境数据经 `store.getConsumptionStats()` / `getSurvivalRate()` 取好喂入
@@ -49,7 +49,7 @@
 - Linter 检查完整性/一致性/时效性三个维度
 - Audit 7 维度评分：D1结构 D2内容 D3去重 D4成熟度 D5新鲜度 D6飞轮 D7增量存活
 - Ingest gate: ingestEntry() 先经 audit.validate() 检查，reject 不入库
-- 外部内容三层防御：ingest sanitization + retrieval marking + prompt constraint。**第二层现状未接线**（harness#142 核对）：唯一的 marking 机制是 `KnowledgeQuery.formatForPrompt()`（对 `origin === 'external'` 条目加 `[External Source — verify before acting]` 前缀），而它在仓内生产代码零调用方（只有旁测在调）；真正的注入路径用 `context/knowledge-injector.ts` 自带的 `formatEntry()`，既不看 `entry.origin`、metadata 也只带 `entryId`/`maturity`——即外部条目经 `query()` 注入 prompt 时不带任何来源标记，判「文档正确、代码待改」，缺陷票 #161 第 2 条。第三层（prompt constraint）在本仓不可核（属 studio/agent 侧提示词），未核不改
+- 外部内容三层防御：ingest sanitization + retrieval marking + prompt constraint。第二层 marking 已接线（harness#161）：标记正本是 `knowledge/query.ts` 的 `EXTERNAL_SOURCE_MARKER` 常量（`[External Source — verify before acting]`），`KnowledgeQuery.formatForPrompt()` 与注入路径 `context/knowledge-injector.ts` 的 `formatEntry()`/`formatEntrySummary()` 共用同一常量——`origin === 'external'` 条目注入 prompt 时带来源前缀，注入 source 的 metadata 带 `origin`。第三层（prompt constraint）在本仓不可核（属 studio/agent 侧提示词），未核不改
 - 消费饱和度替代固定 TTL 用于 signal 过期判断
 - **飞轮指标只有一个实现**（ADR-0013）：`refCoverage` / `avgRefs` / `consumptionHitRate` 一律出自 `flywheel-metrics.evaluateFlywheel()`，canonical 分子 = `genuineRefs()` 过滤后的真实消费引用（`search|test-agent|prompt-inject|monitor|analyst|...:<date>` 自动化按天记账键不算消费，`unknown:` 注入键算消费）。audit D6 / `knowledge stats` / `knowledge health` 只在展示层做单位与字段名映射（百分比取整、一位小数、`avgRefs`→`avgRefCount`），人口筛选留在各调用方。新增消费方禁止自行数 `referencedBy.length`。
 

@@ -7,7 +7,7 @@
 - `TokenBudget` — 多级 token 预算(system/user/tool/reserve)
 - `TokenEstimator` — 快速 token 估算静态类（`estimateText`：英文按 1 token≈4 字符、中文≈1.5 字符，非精确 tokenizer；仓内消费方是 `KnowledgeInjector` 的截断取数）
 - `SessionManager` — 会话管理
-- `KnowledgeInjector` — 知识注入引擎
+- `KnowledgeInjector` — 知识注入引擎；`origin === 'external'` 条目注入时带 `[External Source — verify before acting]` 前缀（标记唯一正本是 `knowledge/query.ts` 的 `EXTERNAL_SOURCE_MARKER`，本目录不另存字面量），注入 source 的 metadata 带 `entryId`/`maturity`/`origin`（外部内容三层防御第二层，harness#161）
 
 ## 依赖关系
 - 依赖 `src/types/` 公共类型

@@ -754,6 +754,39 @@ describe('KnowledgeLifecycle', () => {
       expect(lifecycle.checkEntryDecay('RULE-001')).toBe('deprecated');
     });
 
+    it('边界钉：成功率恰 0.5（失败率恰 50%）即降级（harness#161 修边界差一）', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01T00:00:00.000Z' },
+          { contributor: 'bob', success: false, timestamp: '2026-05-02T00:00:00.000Z' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03T00:00:00.000Z' },
+          { contributor: 'dave', success: false, timestamp: '2026-05-04T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBe('deprecated');
+    });
+
+    it('成功率略高于 0.5（3 成 2 败）不降级', () => {
+      store.save(makeEntry({
+        id: 'RULE-001',
+        consumptionMode: 'rule',
+        maturity: 'active',
+        content: 'API port must be 13101',
+        executionResults: [
+          { contributor: 'alice', success: true, timestamp: '2026-05-01T00:00:00.000Z' },
+          { contributor: 'bob', success: true, timestamp: '2026-05-02T00:00:00.000Z' },
+          { contributor: 'charlie', success: true, timestamp: '2026-05-03T00:00:00.000Z' },
+          { contributor: 'dave', success: false, timestamp: '2026-05-04T00:00:00.000Z' },
+          { contributor: 'erin', success: false, timestamp: '2026-05-05T00:00:00.000Z' },
+        ],
+      }));
+      expect(lifecycle.checkEntryDecay('RULE-001')).toBeUndefined();
+    });
+
     it('should NOT decay active→deprecated when fail rate < 50%', () => {
       store.save(makeEntry({
         id: 'RULE-001',

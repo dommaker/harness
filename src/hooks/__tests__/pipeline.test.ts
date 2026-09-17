@@ -88,3 +88,108 @@ describe('HookPipeline errorStrategy 语义', () => {
     expect(result.records.map(r => r.hookName)).toEqual(['enabled']);
   });
 });
+
+describe('HookPipeline.runOne 按名执行单个 hook（#167）', () => {
+  it('按名执行并返回观测记录，不连带其它 hook', async () => {
+    const other = jest.fn().mockResolvedValue({ passed: true });
+    const target = jest.fn().mockResolvedValue({ passed: true });
+    const { pipeline } = makeRegistry([
+      { hook: { name: 'target', phase: 'before', execute: target } },
+      { hook: { name: 'other', phase: 'before', execute: other } },
+    ]);
+
+    const record = await pipeline.runOne('target', {});
+
+    expect(record.hookName).toBe('target');
+    expect(record.phase).toBe('before');
+    expect(record.passed).toBe(true);
+    expect(record.skipped).toBeUndefined();
+    expect(typeof record.durationMs).toBe('number');
+    expect(target).toHaveBeenCalledTimes(1);
+    expect(other).not.toHaveBeenCalled();
+  });
+
+  it('enabled:false → 实现体零调用，返回 skipped:true / passed:true 记录', async () => {
+    const disabled = jest.fn().mockResolvedValue({ passed: true });
+    const { pipeline } = makeRegistry([
+      { hook: { name: 'disabled', phase: 'before', execute: disabled }, config: { enabled: false } },
+    ]);
+
+    const record = await pipeline.runOne('disabled', {});
+
+    expect(disabled).not.toHaveBeenCalled();
+    expect(record.skipped).toBe(true);
+    expect(record.passed).toBe(true);
+    expect(record.hookName).toBe('disabled');
+  });
+
+  it('block + 实现体抛错 → 抛错，message 含 hook 名与原文', async () => {
+    const { pipeline } = makeRegistry([
+      {
+        hook: { name: 'guard', phase: 'before', execute: async () => { throw new Error('iron-law violated'); } },
+        config: { errorStrategy: 'block' },
+      },
+    ]);
+
+    await expect(pipeline.runOne('guard', {})).rejects.toThrow('iron-law violated');
+    await expect(pipeline.runOne('guard', {})).rejects.toThrow('[harness] hook "guard" blocked:');
+  });
+
+  it('block + 实现体返回 passed:false → 抛错，message 含 result.error 原文', async () => {
+    const { pipeline } = makeRegistry([
+      { hook: { name: 'guard', phase: 'before', execute: async () => ({ passed: false, error: 'boom' }) }, config: { errorStrategy: 'block' } },
+    ]);
+
+    await expect(pipeline.runOne('guard', {})).rejects.toThrow('[harness] hook "guard" blocked: boom');
+  });
+
+  it('warn + 失败 → resolve，返回 passed:false 带 error 的记录', async () => {
+    const { pipeline } = makeRegistry([
+      {
+        hook: { name: 'soft', phase: 'before', execute: async () => { throw new Error('soft-fail'); } },
+        config: { errorStrategy: 'warn' },
+      },
+    ]);
+
+    const record = await pipeline.runOne('soft', {});
+
+    expect(record.passed).toBe(false);
+    expect(record.error).toBe('soft-fail');
+    expect(record.skipped).toBeUndefined();
+  });
+
+  it('未知 hook 名 → 抛错（与注册表闭环口径一致，不静默跳过）', async () => {
+    const { pipeline } = makeRegistry([
+      { hook: { name: 'known', phase: 'before', execute: async () => ({ passed: true }) } },
+    ]);
+
+    await expect(pipeline.runOne('no_such_hook', {})).rejects.toThrow('no_such_hook');
+    await expect(pipeline.runOne('no_such_hook', {})).rejects.toThrow('未注册');
+  });
+
+  it('sampleRate < 1 时采样语义与 run 路径一致（未抽中 → 零调用 + sampled 记录）', async () => {
+    const execute = jest.fn().mockResolvedValue({ passed: true });
+    const { pipeline } = makeRegistry([
+      { hook: { name: 'sampled', phase: 'before', sampleRate: 0.5, execute } },
+    ]);
+
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.9);
+    try {
+      const record = await pipeline.runOne('sampled', {});
+      expect(execute).not.toHaveBeenCalled();
+      expect(record.sampled).toBe(true);
+      expect(record.passed).toBe(true);
+    } finally {
+      randomSpy.mockRestore();
+    }
+
+    const hitSpy = jest.spyOn(Math, 'random').mockReturnValue(0.1);
+    try {
+      const record = await pipeline.runOne('sampled', {});
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(record.sampled).toBeUndefined();
+    } finally {
+      hitSpy.mockRestore();
+    }
+  });
+});

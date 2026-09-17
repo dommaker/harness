@@ -13,6 +13,7 @@ import { DEFAULT_TRACE_FILE } from '../../types/trace';
 import type { ExecutionTrace } from '../../types/trace';
 import type { TraceSummary, TraceAnomaly } from '../../types/trace';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { fileStateIO, type StateIO } from '../state-io';
 
 export interface StatusOptions {
   /** 项目路径 */
@@ -23,6 +24,13 @@ export interface StatusOptions {
   anomalies?: boolean;
   /** 时间范围（小时） */
   hours?: number;
+  /**
+   * 状态文件接缝（非 CLI flag；ADR-0026）
+   *
+   * 缺省 = 真实 fs 实现（fileStateIO）。注入则 `.harness/.state.json` 的读写
+   * 走替身，测试据此不碰真文件系统。
+   */
+  stateIO?: StateIO;
 }
 
 /**
@@ -32,7 +40,7 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
   const projectPath = options.projectPath || process.cwd();
   const harnessDir = path.join(projectPath, '.harness');
   const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
-  const statePath = path.join(harnessDir, '.state.json');
+  const stateIO = options.stateIO ?? fileStateIO(projectPath);
 
   log(io, chalk.blue('📊 Harness 状态'));
   log(io);
@@ -139,12 +147,9 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
     log(io);
   }
 
-  // 更新状态文件
-  const state = {
-    lastStatusRun: new Date().toISOString(),
-  };
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  // 更新状态文件：读-改-写（ADR-0026 决策 2）——不再整文件重写，
+  // 否则 check 写入的 shownHints 会被抹掉、智能提示去重失效
+  stateIO.write({ ...stateIO.read(), lastStatusRun: new Date().toISOString() });
 
   // 下一步建议
   log(io, chalk.blue('💡 下一步建议:'));

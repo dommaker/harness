@@ -3,10 +3,12 @@
  *
  * ADR-0020 起不再 mock TraceAnalyzer/TraceCollector：统计与异常由 trace-analyzer
  * 的模块级纯函数真算，用例喂合法 trace 行、断言真实输出。
+ * ADR-0026 起状态文件读写经注入的 StateIO 假件，不碰（被 mock 的）fs。
  */
 
-import { status } from '../status';
-import { captureIO, type CapturingIO } from '../../command-contract';
+import { status, type StatusOptions } from '../status';
+import { captureIO, type CapturingIO, type CommandResult } from '../../command-contract';
+import type { HarnessState, StateIO } from '../../state-io';
 import * as fs from 'fs';
 import type { ExecutionTrace } from '../../../types/trace';
 
@@ -42,9 +44,26 @@ function repeats(constraintId: string, n: number, result: ExecutionTrace['result
 }
 
 let io: CapturingIO;
+let stateIO: ReturnType<typeof memoryStateIO>;
 beforeEach(() => {
   io = captureIO();
+  stateIO = memoryStateIO();
 });
+
+/** 内存 StateIO 假件（ADR-0026）：状态读写走注入面，缺省 fileStateIO 在全 mock 的 fs 下会吃到 trace 假数据 */
+function memoryStateIO(initial: HarnessState = {}): StateIO & { snapshot(): HarnessState } {
+  let state = initial;
+  return {
+    read: () => state,
+    write: (next: HarnessState) => { state = next; },
+    snapshot: () => state,
+  };
+}
+
+/** 全部用例经注入假件调用 status（stateIO 可被单例覆盖以预置状态） */
+function runStatus(options: StatusOptions = {}): Promise<CommandResult> {
+  return status({ stateIO, ...options }, io);
+}
 
 describe('status command', () => {
 
@@ -59,7 +78,7 @@ describe('status command', () => {
   describe('未初始化情况', () => {
     it('应该显示未初始化提示', async () => {
       mockFs.existsSync.mockReturnValue(false);
-      await status({}, io);
+      await runStatus();
       expect(io.outText()).toContain('未初始化');
     });
   });
@@ -71,7 +90,7 @@ describe('status command', () => {
         .mockReturnValueOnce(true) // .harness dir
         .mockReturnValueOnce(false); // traces file
 
-      await status({}, io);
+      await runStatus();
       expect(io.outText()).toContain('暂无 Trace');
     });
   });
@@ -83,7 +102,7 @@ describe('status command', () => {
         { constraintId: 'test2', level: 'guideline' },
       ]));
 
-      await status({}, io);
+      await runStatus();
       expect(io.outText()).toContain('记录数: 2 条');
       expect(io.outText()).toContain('📈 约束统计:');
     });
@@ -93,7 +112,7 @@ describe('status command', () => {
         { constraintId: 'no_bypass_checkpoint' },
       ]));
 
-      await status({ detail: true }, io);
+      await runStatus({ detail: true });
       expect(io.outText()).toContain('🔴 Iron Laws:');
       expect(io.outText()).toContain('✅ no_bypass_checkpoint');
       expect(io.outText()).toContain('检查: 1 | 通过: 100% | 失败: 0%');
@@ -106,7 +125,7 @@ describe('status command', () => {
         { constraintId: 'test1', result: 'fail' },
       ]));
 
-      await status({ anomalies: true }, io);
+      await runStatus({ anomalies: true });
       expect(io.outText()).toContain('发现 1 个异常');
       expect(io.outText()).toContain('  test1');
       expect(io.outText()).toContain('类型: low_pass_rate');
@@ -120,17 +139,26 @@ describe('status command', () => {
         { constraintId: 'test1', result: 'fail' },
       ]));
 
-      await status({ detail: true }, io);
+      await runStatus({ detail: true });
       expect(io.outText()).toContain('检查: 5 | 通过: 80% | 失败: 20%');
     });
   });
 
   describe('状态文件更新', () => {
-    it('应该更新 .state.json', async () => {
+    it('应该经 StateIO 写入 lastStatusRun', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([{ constraintId: 'test' }]));
 
-      await status({}, io);
-      expect(mockFs.writeFileSync).toHaveBeenCalled();
+      await runStatus();
+      expect(stateIO.snapshot().lastStatusRun).toBeTruthy();
+    });
+
+    it('读-改-写：已有的 shownHints 不被 status 抹掉（ADR-0026 决策 2 的行为修复）', async () => {
+      mockFs.readFileSync.mockReturnValue(traceFile([{ constraintId: 'test' }]));
+      stateIO = memoryStateIO({ shownHints: ['trace_50'] });
+
+      await runStatus();
+      expect(stateIO.snapshot().shownHints).toEqual(['trace_50']);
+      expect(stateIO.snapshot().lastStatusRun).toBeTruthy();
     });
   });
 
@@ -140,7 +168,7 @@ describe('status command', () => {
         { constraintId: 'test_guide', level: 'guideline' },
       ]));
 
-      await status({}, io);
+      await runStatus();
       expect(io.outText()).toContain('🟡 Guidelines:');
       expect(io.outText()).toContain('✅ test_guide');
     });
@@ -150,7 +178,7 @@ describe('status command', () => {
     it('应该显示未发现异常当无异常', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([{ constraintId: 'test' }]));
 
-      await status({ anomalies: true }, io);
+      await runStatus({ anomalies: true });
       expect(io.outText()).toContain('✅ 未发现异常');
     });
 
@@ -159,7 +187,7 @@ describe('status command', () => {
         { constraintId: 'test', result: 'fail' },
       ]));
 
-      await status({ anomalies: true }, io);
+      await runStatus({ anomalies: true });
       expect(io.outText()).toContain('当前值: 0');
       expect(io.outText()).toContain('阈值: 0.3');
       expect(io.outText()).toContain('下一步建议');
@@ -170,7 +198,7 @@ describe('status command', () => {
     it('应该显示良好建议当 trace >= 100', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile(repeats('test', 100, 'pass')));
 
-      await status({}, io);
+      await runStatus();
       expect(io.outText()).toContain('记录数: 100 条');
       expect(io.outText()).toContain('状态良好');
     });
@@ -178,7 +206,7 @@ describe('status command', () => {
     it('应该显示积累数据建议当 trace < 100', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([{ constraintId: 'test' }]));
 
-      await status({}, io);
+      await runStatus();
       expect(io.outText()).toContain('继续积累数据');
     });
 
@@ -187,7 +215,7 @@ describe('status command', () => {
         { constraintId: 'test', result: 'fail' },
       ]));
 
-      await status({ anomalies: true }, io);
+      await runStatus({ anomalies: true });
       expect(io.outText()).toContain('harness status --detail');
     });
   });
@@ -199,7 +227,7 @@ describe('status command', () => {
         ...repeats('test_guide', 2, 'fail'),
       ].map(t => ({ ...t, level: 'guideline' as const }))));
 
-      await status({ detail: true }, io);
+      await runStatus({ detail: true });
       expect(io.outText()).toContain('⚠️ test_guide');
       expect(io.outText()).toContain('检查: 5 | 通过: 60% | 失败: 40%');
     });

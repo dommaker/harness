@@ -56,6 +56,53 @@ export class HookPipeline<C = unknown> {
   }
 
   /**
+   * 按名执行单个 hook（#167）
+   *
+   * 与 run() 共用 executeOne 的采样与错误隔离路径（判定与错误策略的实现体
+   * 只有一份）；enabled / errorStrategy 的值来源仍是注册环节填充的
+   * EffectiveHook（唯一声明点 HookConfig，#159）。
+   *
+   * - enabled:false → 实现体零调用，返回 skipped:true / passed:true 记录
+   *   （镜像 sampled 先例：未执行 = 记录上一面旗，不是异常）
+   * - errorStrategy 'block' 且失败 → 抛 Error（message 含 hook 名与原文）；
+   *   'warn' 且失败 → resolve，返回 passed:false 带 error 的记录
+   * - 未知名 → 抛错（与 assertHookRegistryClosed 闭环口径一致，拒绝静默缺失）
+   *
+   * @param name hook 名称（须已注册）
+   * @param context 传递给 hook 的上下文
+   * @returns 管线观测记录
+   */
+  async runOne(name: string, context: C): Promise<HookExecutionRecord> {
+    const hook = this.registry.get(name);
+    if (!hook) {
+      throw new Error(
+        `[harness] hook 执行失败：hook "${name}" 未注册。请注册同名 HookDefinition 与 HookConfig 声明。`
+      );
+    }
+
+    if (!hook.enabled) {
+      const now = Date.now();
+      return {
+        hookName: hook.name,
+        phase: hook.phase,
+        startedAt: now,
+        completedAt: now,
+        durationMs: 0,
+        passed: true,
+        skipped: true,
+      };
+    }
+
+    const record = await this.executeOne(hook, context);
+    if (!record.passed && hook.errorStrategy === 'block') {
+      throw new Error(
+        `[harness] hook "${hook.name}" blocked: ${record.error ?? '未知错误'}`
+      );
+    }
+    return record;
+  }
+
+  /**
    * 执行 before + after 全套管线
    *
    * @param context 上下文

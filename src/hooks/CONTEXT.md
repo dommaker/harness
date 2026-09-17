@@ -9,7 +9,7 @@ H5（#44）起增加两个机制（G2/G7）：
 
 ## 核心导出
 - `HookRegistry` — Hook 注册表（register/registerAll/unregister/get/getEnabled/listNames/listAll/setEnabled/clear；register 以 HookConfig 填充有效值）
-- `HookPipeline` — Hook 执行管线（注册/排序/错误隔离/采样；errorStrategy block/warn）
+- `HookPipeline` — Hook 执行管线（注册/排序/错误隔离/采样；errorStrategy block/warn；`run(phase)` 时机粒度、`runFull` 全套、`runOne(name)` 按名执行单个 hook——#167 新增：enabled:false 返回 skipped:true 记录且实现体零调用，block 失败抛错 / warn 失败返回 passed:false 记录，未知名抛错（口径同注册表闭环），采样与错误隔离复用 executeOne 单路径）
 - `assertHookRegistryClosed` — 注册表闭环双向校验（构建/测试期）
 - `HookConfig`（type）— per-hook 配置声明（enabled / errorStrategy 唯一声明点）
 - `EffectiveHook`（type）— HookDefinition + 配置填充的有效 enabled / errorStrategy（管线与注册表判定只读它）

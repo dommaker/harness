@@ -101,6 +101,8 @@ export interface HookExecutionRecord {
   passed: boolean;
   error?: string;
   sampled?: boolean;
+  /** 未执行标记之二：enabled:false 被 runOne 跳过（实现体零调用，镜像 sampled 先例） */
+  skipped?: boolean;
 }
 
 /**

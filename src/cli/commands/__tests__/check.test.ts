@@ -18,6 +18,7 @@ import { execFileSync } from 'child_process';
 
 import { check, listLaws } from '../check';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import type { HarnessState, StateIO } from '../../state-io';
 import { DEFAULT_TRACE_FILE } from '../../../types/trace';
 import {
   createGitEvidence,
@@ -90,6 +91,19 @@ function projectTraces(
     .split('\n')
     .filter(Boolean)
     .map(line => JSON.parse(line));
+}
+
+/**
+ * 内存 StateIO 假件（ADR-0026）：状态相关测试经注入面驱动，不碰真文件系统。
+ * `snapshot()` 给断言用——读的是假件当前持有的状态，不是磁盘。
+ */
+function memoryStateIO(initial: HarnessState = {}): StateIO & { snapshot(): HarnessState } {
+  let state = initial;
+  return {
+    read: () => state,
+    write: (next: HarnessState) => { state = next; },
+    snapshot: () => state,
+  };
 }
 
 /** 计数 git 证据：既记录证据方法请求，也记录实际 spawn 的 git 命令（执行走真 adapter） */
@@ -482,27 +496,25 @@ describe('check command（真 git fixture）', () => {
     });
   });
 
-  describe('智能提示（真 traces.log 与状态文件）', () => {
+  describe('智能提示（真 traces.log + 注入 StateIO 假件）', () => {
     it('记录数首次达到 50 时提示，并落盘已提示状态', async () => {
       const dir = gitRepo();
       passTraces(dir, 50);
+      const stateIO = memoryStateIO();
 
-      await check({ preset: 'standard', staged: true, projectPath: dir, trigger: 'manual' }, io);
+      await check({ preset: 'standard', staged: true, projectPath: dir, trigger: 'manual', stateIO }, io);
 
       expect(io.outText()).toContain('记录已足够，运行 harness status 查看统计');
       expect(io.outText()).toContain('────────────────');
-      const state = JSON.parse(
-        fs.readFileSync(path.join(dir, '.harness', '.state.json'), 'utf-8')
-      );
-      expect(state.shownHints).toContain('trace_50');
+      expect(stateIO.snapshot().shownHints).toContain('trace_50');
     });
 
     it('已提示过的不再重复提示', async () => {
       const dir = gitRepo();
       passTraces(dir, 50);
-      write(dir, '.harness/.state.json', JSON.stringify({ shownHints: ['trace_50'] }));
+      const stateIO = memoryStateIO({ shownHints: ['trace_50'] });
 
-      await check({ preset: 'standard', staged: true, projectPath: dir, trigger: 'manual' }, io);
+      await check({ preset: 'standard', staged: true, projectPath: dir, trigger: 'manual', stateIO }, io);
 
       expect(io.outText()).not.toContain('记录已足够');
       expect(io.outText()).not.toContain('────────────────');

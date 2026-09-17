@@ -9,7 +9,6 @@
  */
 
 import chalk from 'chalk';
-import * as fs from 'fs';
 import * as path from 'path';
 import { ConstraintChecker } from '../../core/constraints/checker';
 import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
@@ -24,6 +23,7 @@ import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 import type { ConstraintResult, ConstraintTrigger } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { fileStateIO, type StateIO } from '../state-io';
 
 /** 证据行着色（与调用处所属结论块一致） */
 const EVIDENCE_PAINT = {
@@ -74,6 +74,13 @@ export interface CheckOptions {
    * 测试据此断言「同一次运行内同一项目文件至多读一次」。
    */
   runEnv?: RunEnv;
+  /**
+   * 状态文件接缝（非 CLI flag；ADR-0026）
+   *
+   * 缺省 = 真实 fs 实现（fileStateIO）。注入则 `.harness/.state.json` 的读写
+   * 走替身，测试据此不碰真文件系统。
+   */
+  stateIO?: StateIO;
 }
 
 /**
@@ -91,6 +98,7 @@ export async function check(
     // 一次 run 一份证据与观察面（#87 / ADR-0023）：入口构造，沿生效集、context、checker 向下传
     const evidence = options.evidence ?? createGitEvidence(projectPath);
     const runEnv = options.runEnv ?? createRunEnv(projectPath);
+    const stateIO = options.stateIO ?? fileStateIO(projectPath);
 
     // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
     // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（工单 23 语义：
@@ -221,7 +229,7 @@ export async function check(
     log(io, chalk.green('✅ 约束检查通过'));
 
     // 智能提示
-    const hint = await getSmartHint(projectPath);
+    const hint = await getSmartHint(projectPath, stateIO);
     if (hint) {
       log(io);
       log(io, chalk.gray('────────────────────────────────────'));
@@ -241,10 +249,12 @@ const TRACE_HINT_THRESHOLD = 50;
 
 /**
  * 智能提示：检查是否需要提示用户下一步操作
+ *
+ * 状态读写经 StateIO（ADR-0026）：读-改-写，`status` 不再把 `shownHints` 抹掉，
+ * 「首次达到阈值」的去重自此真生效。
  */
-async function getSmartHint(projectPath: string): Promise<string | null> {
+async function getSmartHint(projectPath: string, stateIO: StateIO): Promise<string | null> {
   const tracesPath = path.join(projectPath, DEFAULT_TRACE_FILE);
-  const statePath = path.join(projectPath, '.harness', '.state.json');
 
   // 只读够 TRACE_HINT_THRESHOLD 行即停（坏行照旧占位，条数口径与改前的纯计数逐字一致）——
   // traces.log 是 append-only 无上限文件，为一个比较符整读不成立
@@ -256,19 +266,12 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
   if (traceCount === 0) {
     return null;
   }
-  // 读取状态
-  let state: { 
-    shownHints?: string[];
-    lastStatusRun?: string;
-    lastDiagnoseRun?: string;
-  } = {};
-  if (fs.existsSync(statePath)) {
-    state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-  }
+  // 读取状态（经接缝；文件缺失 → {}）
+  const state = stateIO.read();
   state.shownHints = state.shownHints || [];
-  
+
   const hints: string[] = [];
-  
+
   // 条件 1: 记录数首次达到阈值
   if (traceCount >= TRACE_HINT_THRESHOLD && !state.shownHints.includes('trace_50')) {
     hints.push('📊 记录已足够，运行 harness status 查看统计');
@@ -277,11 +280,10 @@ async function getSmartHint(projectPath: string): Promise<string | null> {
 
   // 保存状态
   if (hints.length > 0) {
-    fs.mkdirSync(path.dirname(statePath), { recursive: true });
-    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    stateIO.write(state);
     return hints.join('\n');
   }
-  
+
   return null;
 }
 

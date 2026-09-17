@@ -3,10 +3,12 @@
  *
  * ADR-0020 起不再 mock TraceAnalyzer/TraceCollector：异常判定走真实纯函数，
  * 用例喂能真的判出异常的 trace（passRate < 0.3 → low_pass_rate）。
+ * ADR-0026 起状态文件读写经注入的 StateIO 假件，不碰（被 mock 的）fs。
  */
 
-import { status } from '../status';
-import { captureIO, type CapturingIO } from '../../command-contract';
+import { status, type StatusOptions } from '../status';
+import { captureIO, type CapturingIO, type CommandResult } from '../../command-contract';
+import type { HarnessState, StateIO } from '../../state-io';
 import * as fs from 'fs';
 import type { ExecutionTrace } from '../../../types/trace';
 
@@ -46,6 +48,21 @@ beforeEach(() => {
   io = captureIO();
 });
 
+/** 内存 StateIO 假件（ADR-0026）：缺省 fileStateIO 在全 mock 的 fs 下会吃到 trace 假数据 */
+function memoryStateIO(initial: HarnessState = {}): StateIO & { snapshot(): HarnessState } {
+  let state = initial;
+  return {
+    read: () => state,
+    write: (next: HarnessState) => { state = next; },
+    snapshot: () => state,
+  };
+}
+
+/** 全部用例经注入假件调用 status */
+function runStatus(options: StatusOptions = {}): Promise<CommandResult> {
+  return status({ stateIO: memoryStateIO(), ...options }, io);
+}
+
 describe('status command - 补充覆盖', () => {
 
   beforeEach(() => {
@@ -64,7 +81,7 @@ describe('status command - 补充覆盖', () => {
         ...repeats('no_completion_without_verification', 2, 'fail'),
       ]));
 
-      await status({ anomalies: true }, io);
+      await runStatus({ anomalies: true });
 
       const output = io.outText();
       expect(output).toContain('发现 2 个异常');
@@ -78,7 +95,7 @@ describe('status command - 补充覆盖', () => {
         { constraintId: 'test', result: 'pass' },
       ]));
 
-      await status({ anomalies: true }, io);
+      await runStatus({ anomalies: true });
 
       expect(io.outText()).toContain('✅ 未发现异常');
     });
@@ -91,7 +108,7 @@ describe('status command - 补充覆盖', () => {
         { constraintId: 'no_completion_without_verification' },
       ]));
 
-      await status({}, io);
+      await runStatus();
 
       const output = io.outText();
       expect(output).toContain('📈 约束统计:');
@@ -104,7 +121,7 @@ describe('status command - 补充覆盖', () => {
         { constraintId: 'capability_sync', level: 'guideline', result: 'pass' },
       ]));
 
-      await status({}, io);
+      await runStatus();
 
       expect(io.outText()).toContain('🟡 Guidelines:');
     });
@@ -118,7 +135,7 @@ describe('status command - 补充覆盖', () => {
         { constraintId: 'capability_sync', level: 'guideline' },
       ]));
 
-      await status({ detail: true }, io);
+      await runStatus({ detail: true });
 
       const output = io.outText();
       expect(output).toContain('📈 约束统计:');
@@ -134,7 +151,7 @@ describe('status command - 补充覆盖', () => {
         ['invalid json', JSON.stringify({ constraintId: 'valid', level: 'iron_law', timestamp: 1, result: 'pass' }), 'also invalid'].join('\n')
       );
 
-      await status({}, io);
+      await runStatus();
 
       // 应该成功处理，不会抛出异常：坏行进 stderr 告知，合法行进统计
       const output = io.outText();

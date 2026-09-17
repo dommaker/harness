@@ -90,6 +90,8 @@ function fixtureRepo(): string {
   write(dir, 'src/existing.ts', 'export const a = 1;\n');
   write(dir, 'src/nested/deep.ts', 'export const d = 1;\n');
   write(dir, '.harness/logs/traces.log', '{"constraintId":"fixture","result":"pass"}\n');
+  // ADR-0026：状态文件进夹具，智能提示的状态读取随之进计数表（一次运行至多读一次）
+  write(dir, '.harness/.state.json', '{}');
   git(dir, 'add', '.');
   git(dir, 'commit', '-q', '-m', 'baseline');
   // 改一个已登记的源文件并 stage → 触发条件 module_modification
@@ -139,6 +141,7 @@ describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () 
         ['.harness/custom-constraints.yml', 1],
         ['CAPABILITIES.md', 1],
         ['.harness/logs/traces.log', 2],
+        ['.harness/.state.json', 1], // ADR-0026：智能提示经 StateIO 读状态，恰一次
         // —— 已知例外（改动需明写理由）——
         // traces.log = 2：head 50（智能提示的阈值判定，决策 3）与 tail 20（有无失败证据，
         // 决策 4）是两个不同窗口的**有界**读；并成一个窗口就等于回到整读。

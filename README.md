@@ -139,7 +139,7 @@ scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
 | 约束引擎 | check/prompt 二元约束 + 生效集合并（`getEffectiveConstraints`）+ 注入渲染/漂移校验 |
 | 知识引擎 | 约束退役 → KnowledgeStore 沉淀（规则原文 + 原因 + 历史统计），可检索、可追溯 |
 | 门禁系统 | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
-| Hook 管线 | 通用 before/after/around hook：注册 → 排序 → 错误隔离 → 采样执行 |
+| 运行环境引导 | `bootstrapHarness` / `bootstrapHarnessSync`：一次调用装配约束检查器 + trace 记录器 + 会话管理器（原「Hook 管线」面双仓零消费者，已随 ADR-0027 整体删除） |
 | 上下文/监控 | Token 预算 + 会话压缩 + Trace 收集/分析 |
 
 ### 代码结构

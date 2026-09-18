@@ -51,7 +51,7 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 | `src/context/` | Session management, token budget, compaction, knowledge injection |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
-| `src/hooks/` | Generic hook pipeline: register, sort, error-isolate, sampled execution |
+| `src/hooks/` | Harness runtime bootstrap only (`bootstrapHarness` / `bootstrapHarnessSync`): loads `.harness/config.yml`, wires checker + trace collector + session manager. The generic hook pipeline was removed by ADR-0027 (zero consumers in both repos) |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
 | `src/tools/` | Tool path management (paths.ts) + 113 yml capability definitions |
 | `src/cli/commands/` | 21 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, posteval-plan, release, constraints, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
@@ -97,7 +97,7 @@ When making changes to this codebase, follow these rules:
 - Trace records must use the `ExecutionTrace` type from `src/types/trace.ts`
 - CLI 命令注册的单一来源是 `src/cli/commands/definitions.ts`（COMMAND_DEFINITIONS，含 CLI 元数据与 module+export 实现引用）；bin/harness.js 由定义表驱动生成，禁止手写命令块；definitions 是纯数据模块，禁止 import 任何命令实现/运行时依赖（per-command 懒加载，O2；唯一已落地例外：`utils/numeric-flag` 纯函数解析器——harness#154 指名的数值旗帜唯一解析器、零 IO，机器闸口径为「加载 definitions 不引入任何命令实现」，见 `registry.test.ts`）；新增命令 = 命令实现文件 + 定义表一条 + 测试，实现引用可解析性由 `src/cli/commands/__tests__/registry.test.ts` 断言
 - CLI 命令的判定只经返回值外溢（架构评审候选7）：`src/cli/commands/` 下命令实现返回 `CommandResult`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位 `reason`，多闸门命令 reason 含 `gate <id>`），流式输出经末位可选形参 `io: CommandIO = processIO` 注入（缺省 process 流，`log`/`logError` 与 console 逐字节等价）。命令实现与定义表内禁止 `process.exit` / `process.exitCode`，kind → 退出码的唯一映射在 `bin/harness.js`；测试断言退出语义走返回值、输出走 `captureIO()`，禁止 `spyOn(process, 'exit')`。契约定义在 `src/cli/command-contract.ts`，细则见 `src/cli/commands/CONTEXT.md`
-- Hook 声明与实现必须注册表闭环：`HookConfig` 声明 ↔ `HookDefinition` 注册一一对应，`assertHookRegistryClosed` 双向校验（引用未注册/注册无定义/重复 → 抛错，断言限构建/测试期）；per-hook 配置归一走 `errorStrategy`（`blocking` → block/warn 无损映射见 `toErrorStrategy`），不再维护平行 blocking 语义
+- Hook 管线面已整体删除（ADR-0027，执行票 #170）：`HookRegistry` / `HookPipeline` / `assertHookRegistryClosed` / `toErrorStrategy` 与 `HookConfig` ↔ `HookDefinition` 的注册表闭环、`blocking → errorStrategy` 映射全部退出包根，`src/hooks/` 只剩 bootstrap 组合根。删除依据 = 双仓零生产消费者（ADR-0022 同判据）；要重开 hook 能力须先按该判据重新裁决，不要照旧符号名恢复实现
 
 ### Behavioral Guidelines
 

@@ -44,8 +44,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'FileKnowledgeStore',
   'GATE_DEFINITIONS',
   'GUIDELINES',
-  'HookPipeline',
-  'HookRegistry',
   'IRON_LAWS',
   'KnowledgeAudit',
   'KnowledgeHealthScorer',
@@ -71,7 +69,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'TraceAnalyzer',
   'TraceCollector',
   'assertGateRegistryClosed',
-  'assertHookRegistryClosed',
   'bootstrapHarness',
   'bootstrapHarnessSync',
   'checkBeforeExecution',
@@ -117,7 +114,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'resolveGlobs',
   'runGates',
   'sanitizeExternalContent',
-  'toErrorStrategy',
   'validateAllSpecs',
   'validateSpec',
   'verifyContractPresence',
@@ -189,4 +185,34 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
     expect(liveCheck.allowed).toBe(true);
     expect(liveTask.command).toBe('npm test');
   });
+
+  /**
+   * ADR-0027（#170）管线面删除的可达性负钉：4 值符号 + 8 类型。
+   *
+   * 两道全量清单闸钉的是「码与名单不符」，本钉直接钉「barrel 源里不再出现这些名字」——
+   * 回灌时红名指到 barrel 本身，不必从清单 diff 反推。barrel 源形状即全可达面：
+   * `export *` 已被 `sub-barrels-explicit.test.ts` 禁到 src 下全部目录 barrel，
+   * 且 `./hooks` 不在 `package.json` 的 `exports` 内（无子路径入口可绕）。
+   */
+  const ADR0027_DELETED_SYMBOLS = [
+    'HookRegistry',
+    'HookPipeline',
+    'assertHookRegistryClosed',
+    'toErrorStrategy',
+    'HookDefinition',
+    'HookConfig',
+    'EffectiveHook',
+    'HookErrorStrategy',
+    'HookExecutionRecord',
+    'HookPhase',
+    'HookResult',
+    'PipelineResult',
+  ];
+
+  for (const rel of ['../hooks/index.ts', '../index.ts']) {
+    it(`${rel} 不再提及 ADR-0027 已删的管线面符号（保留面 bootstrapHarness* 不受影响）`, () => {
+      const source = fs.readFileSync(path.join(__dirname, rel), 'utf-8');
+      expect(ADR0027_DELETED_SYMBOLS.filter((name) => source.includes(name))).toEqual([]);
+    });
+  }
 });

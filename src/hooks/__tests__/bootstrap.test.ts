@@ -5,17 +5,17 @@
  * bootstrapHarnessSync uses synchronous fs reads and is more straightforward.
  *
  * Uses temp directories to provide harness config.
+ *
+ * ADR-0027（#170）：hooks 管线面删除后本层只剩组合根职责——加载项目配置、
+ * 装配 checker / SessionManager / TraceCollector。`hookDefinitions` / `hookConfigs`
+ * 两参数与 `hooks` / `pipeline` 两字段随之消失，形状由编译期 + 运行期双钉冻结
+ * （手法照 ADR-0022 对 AC-007 的改写）。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { bootstrapHarnessSync, bootstrapHarness } from '../bootstrap';
-import type { HookConfig, HookDefinition } from '../types';
-
-function makeHookConfig(name: string, overrides: Partial<HookConfig> = {}): HookConfig {
-  return { name, enabled: true, errorStrategy: 'warn', ...overrides };
-}
 
 function setupTempDir(dir: string): string {
   const harnessDir = path.join(dir, '.harness');
@@ -26,6 +26,16 @@ function setupTempDir(dir: string): string {
   };
   fs.writeFileSync(path.join(harnessDir, 'config.yml'), yaml.dump(config), 'utf-8');
   return harnessDir;
+}
+
+/** 已删字段的编译期钉：回灌（重新声明该字段）即 TS2578 红。纯读，不产生任何落盘副作用。 */
+function assertPipelineSurfaceUnreachable(result: ReturnType<typeof bootstrapHarnessSync>): void {
+  // @ts-expect-error hooks 字段随 ADR-0027 管线面删除
+  const gone = result.hooks;
+  expect(gone).toBeUndefined();
+  // @ts-expect-error pipeline 字段随 ADR-0027 管线面删除
+  const gone2 = result.pipeline;
+  expect(gone2).toBeUndefined();
 }
 
 describe('bootstrapHarness', () => {
@@ -44,10 +54,11 @@ describe('bootstrapHarness', () => {
     const result = await bootstrapHarness(tempDir);
     expect(result).toHaveProperty('checker');
     expect(result).toHaveProperty('sessions');
-    expect(result).toHaveProperty('hooks');
-    expect(result).toHaveProperty('pipeline');
     expect(result).toHaveProperty('projectPath', tempDir);
     expect(result).toHaveProperty('mergedConstraints');
+    expect(Object.keys(result).sort()).toEqual(
+      ['checker', 'mergedConstraints', 'projectPath', 'sessions'],
+    );
   });
 
   it('initializes with the provided project path', async () => {
@@ -55,33 +66,8 @@ describe('bootstrapHarness', () => {
     expect(result.projectPath).toBe(tempDir);
   });
 
-  it('registers hook definitions when provided (with configs)', async () => {
-    const hookDef: HookDefinition = {
-      name: 'async-hook',
-      phase: 'before',
-      execute: async () => ({ passed: true }),
-    };
-    const result = await bootstrapHarness(tempDir, [hookDef], [makeHookConfig('async-hook')]);
-    expect(result.hooks.listNames()).toContain('async-hook');
-    expect(result.hooks.get('async-hook')?.errorStrategy).toBe('warn');
-  });
-
-  it('throws when definitions are provided without configs (#159)', async () => {
-    const hookDef: HookDefinition = {
-      name: 'async-hook',
-      phase: 'before',
-      execute: async () => ({ passed: true }),
-    };
-    await expect(bootstrapHarness(tempDir, [hookDef])).rejects.toThrow(/HookConfig/);
-  });
-
-  it('does not register hooks when no definitions provided', async () => {
-    const result = await bootstrapHarness(tempDir, []);
-    expect(result.hooks.listNames()).toEqual([]);
-  });
-
   it('uses process.cwd() when no project path is given', async () => {
-    const result = await bootstrapHarness(undefined, []);
+    const result = await bootstrapHarness();
     expect(result).toHaveProperty('projectPath');
     expect(result.projectPath).toBeDefined();
   });
@@ -122,10 +108,9 @@ describe('bootstrapHarnessSync', () => {
     const result = bootstrapHarnessSync(tempDir);
     expect(result).toHaveProperty('checker');
     expect(result).toHaveProperty('sessions');
-    expect(result).toHaveProperty('hooks');
-    expect(result).toHaveProperty('pipeline');
     expect(result).toHaveProperty('projectPath', tempDir);
     expect(result).toHaveProperty('mergedConstraints');
+    assertPipelineSurfaceUnreachable(result);
   });
 
   it('initializes with the provided project path', () => {
@@ -140,34 +125,10 @@ describe('bootstrapHarnessSync', () => {
     expect(result.mergedConstraints).toHaveProperty('guidelines');
   });
 
-  it('registers hook definitions when provided (with configs)', () => {
-    const hookDef: HookDefinition = {
-      name: 'test-hook',
-      phase: 'before',
-      execute: async () => ({ passed: true }),
-    };
-    const result = bootstrapHarnessSync(tempDir, [hookDef], [makeHookConfig('test-hook')]);
-    expect(result.hooks.listNames()).toContain('test-hook');
-  });
-
-  it('throws when definitions are provided without configs (#159)', () => {
-    const hookDef: HookDefinition = {
-      name: 'test-hook',
-      phase: 'before',
-      execute: async () => ({ passed: true }),
-    };
-    expect(() => bootstrapHarnessSync(tempDir, [hookDef])).toThrow(/HookConfig/);
-  });
-
-  it('does not register hooks when no definitions provided', () => {
-    const result = bootstrapHarnessSync(tempDir, []);
-    expect(result.hooks.listNames()).toEqual([]);
-  });
-
   it('uses process.cwd() when no project path is given', () => {
     // We cannot easily test process.cwd() fallback without mocking cwd,
     // but we can verify the function accepts undefined
-    const result = bootstrapHarnessSync(undefined, []);
+    const result = bootstrapHarnessSync(undefined);
     // Should not throw with process.cwd() — harness directory may not exist
     expect(result).toHaveProperty('projectPath');
     expect(result.projectPath).toBeDefined();
@@ -180,16 +141,6 @@ describe('bootstrapHarnessSync', () => {
     result.sessions.createSession('boot-session');
     const sessionDir = path.join(tempDir, '.harness', 'sessions', 'boot-session');
     expect(fs.existsSync(sessionDir)).toBe(true);
-  });
-
-  it('creates a working HookPipeline', () => {
-    const hookDef: HookDefinition = {
-      name: 'pipeline-hook',
-      phase: 'after',
-      execute: async () => ({ passed: true, data: 'ok' }),
-    };
-    const result = bootstrapHarnessSync(tempDir, [hookDef], [makeHookConfig('pipeline-hook')]);
-    expect(result.pipeline).toBeDefined();
   });
 
   it('loads from .harness/config.yml when present', () => {

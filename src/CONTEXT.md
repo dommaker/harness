@@ -34,7 +34,7 @@
 
 | 术语 | 定义 |
 |------|------|
-| 插件 | harness 扩展点统称 = hook / checker / 门禁(Gate) / 命令(CLI)；非运行时插件容器——harness 是文件驱动 CLI、无常驻进程 |
+| 插件 | harness 扩展点统称 = checker / 门禁(Gate) / 命令(CLI)；非运行时插件容器——harness 是文件驱动 CLI、无常驻进程。hook 一族已退出扩展点统称（ADR-0027/#170 删 hooks 管线面，`src/hooks/` 只剩 bootstrap 组合根） |
 | Gate（门禁） | 统一守卫接口 `Gate{id, order, evaluate(ctx)}` → `GateDecision`；统一的是决策协议（id/order/三态），执行细节私有 |
 | GateDecision | 三态决策 `deny \| abstain \| ask`；deny 单调（下游不可改回 allow）、ask 枚举预留 fail-closed = deny |
 | GateResult | 报告结构（gate/passed/message/details/timestamp/duration），保留为报告层，不作决策 |

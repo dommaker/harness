@@ -1,34 +1,24 @@
 # hooks/
 
 ## 职责
-通用 Hook 管线：注册 → 排序 → 错误隔离 → 采样执行。无业务逻辑，consumer 自行定义 hook 名称和语义。
+Harness 运行环境的组合根：一次调用装配起约束检查器、会话管理器与 trace 记录器，并加载项目配置。
 
-H5（#44）起增加两个机制（G2/G7）：
-- **注册表闭环**：`assertHookRegistryClosed(configs, hooks)` 声明（HookConfig）↔ 实现（HookDefinition）双向校验——引用未注册/注册无定义/重复均抛错，复制 checker 闭环模式；断言限构建/测试期，不进运行时热路径
-- **配置归一**：`HookConfig { name, enabled, errorStrategy }` 为 per-hook 配置唯一真相，且自 #159 起是 `enabled` / `errorStrategy` 的**唯一声明点**——`HookDefinition` 不再携带这两个字段，注册环节以配置表填充有效值（`EffectiveHook`），声明一处、读取一处，两侧矛盾在构造上不可能出现；`toErrorStrategy(blocking)` 承载 studio `blocking` → errorStrategy 的无损映射
+ADR-0027（#170）起本层只剩 bootstrap 一个面。原先的通用 hook 管线（`registry` / `pipeline` / `config` / `types` 四文件：注册 → 排序 → 错误隔离 → 采样执行）双仓零生产消费者，整体删除——裁决记录 `docs/adr/0027-hooks-pipeline-surface-trim.md`，事实前提 studio#562（studio 侧 hooks 层删除）。目录名沿用历史，不再表示「提供 hook 能力」。
 
 ## 核心导出
-- `HookRegistry` — Hook 注册表（register/registerAll/unregister/get/getEnabled/listNames/listAll/setEnabled/clear；register 以 HookConfig 填充有效值）
-- `HookPipeline` — Hook 执行管线（注册/排序/错误隔离/采样；errorStrategy block/warn；`run(phase)` 时机粒度、`runFull` 全套、`runOne(name)` 按名执行单个 hook——#167 新增：enabled:false 返回 skipped:true 记录且实现体零调用，block 失败抛错 / warn 失败返回 passed:false 记录，未知名抛错（口径同注册表闭环），采样与错误隔离复用 executeOne 单路径）
-- `assertHookRegistryClosed` — 注册表闭环双向校验（构建/测试期）
-- `HookConfig`（type）— per-hook 配置声明（enabled / errorStrategy 唯一声明点）
-- `EffectiveHook`（type）— HookDefinition + 配置填充的有效 enabled / errorStrategy（管线与注册表判定只读它）
-- `toErrorStrategy` — blocking → errorStrategy 无损映射（G7）
-- `bootstrapHarness` / `bootstrapHarnessSync` — Harness 启动引导；也是 trace 记录器的组合根：`new ConstraintChecker(new TraceCollector({ projectPath }))`（harness#88 接线，core 不上行依赖 monitoring，故由本层接线；#139 收根：两个入口本就收 projectPath，落点随之锚定，不再取 cwd 锚定的 `getTraceCollector()` 单例）
+- `bootstrapHarness` — 异步组合根（S9：配置异步加载，不阻塞事件循环）；也是 trace 记录器的接线点：`new ConstraintChecker(new TraceCollector({ projectPath }))`（harness#88：core 不上行依赖 monitoring，故由本层接线；#139 收根：两个入口本就收 projectPath，落点随之锚定，不再取 cwd 锚定的 `getTraceCollector()` 单例）
+- `bootstrapHarnessSync` — 同形状的同步版，配置走 `readFileSync`，供不支持 top-level await 的环境与 `bootstrapHarness` 失败时的回落路径
+- `HarnessBootstrap`（type）— 返回值形状 `{ checker, sessions, projectPath, mergedConstraints }`
 
 ## 依赖关系
-- 类型正本在**本模块** `src/hooks/types.ts`（`HookPhase`/`HookErrorStrategy`/`HookConfig`/`HookDefinition`/`EffectiveHook`/`HookResult`/`PipelineResult`）；`src/types/` 里没有 hook 类型，本层只从 `src/types/project-config` 取 `MergedConstraintsConfig` 类型
-- 向下依赖（仅 `bootstrap.ts` 组合根）：`core/constraints/checker`、`core/project-config-loader`、`context/session-manager`、`monitoring/traces`——`registry/pipeline/config/types` 四文件零上层依赖，是纯管线
-- 消费方：包根 `src/index.ts` 的 `./hooks` 出口与下游项目（studio 的 hook 装配）。**harness 内部无生产消费方**——core/cli 侧的调用边已随零消费者清账删除（harness#141 同判据，ADR-0022），「被 core 核心引擎/CLI 初始化流程消费」的旧说法已失效（harness#142 核对）
+- 向下依赖：`core/constraints/checker`、`core/project-config-loader`、`context/session-manager`、`monitoring/traces`；类型面只从 `src/types/project-config` 取 `MergedConstraintsConfig`
+- 消费方：包根 `src/index.ts` 的 bootstrap 三符号出口，与下游项目的运行环境初始化。生产唯一调用方是 studio（经 studio-shared `runtime/bootstrap.ts`，**无参调用**、只以类型持有 `HarnessBootstrap`）。**harness 内部无生产消费方**——core/cli 侧的调用边已随零消费者清账删除（harness#141 同判据，ADR-0022）
 
 ## 约定
-- 无业务逻辑，只提供管线能力
-- Consumer 自行定义 hook 名称和触发时机
-- **闭环**：声明配置与注册实现必须一一对应，缺一抛错（消灭「hook 定义不注册 = 死代码」类人记规矩）
-- **映射语义**：blocking=true → 'block'（失败阻断管线，停止后续 hook、passed=false）；blocking=false → 'warn'（记录警告继续）；有效策略集合仅 'block' | 'warn'（#159 起原 'ignore' 与「未声明 strategy」形态退出有效面——策略由 HookConfig 必填声明）
-- 错误隔离：单个 hook 失败不影响其他 hook
+- 参数面只有 `projectPath`（缺省 `process.cwd()`）：不给 hook 定义、不给配置表，`hookDefinitions` / `hookConfigs` 与注册闭环语义随管线面一同退场
+- 组合根只做装配不做判定，`mergedConstraints` 原样透出，用不用由调用方决定
+- 本层无内置 hook 定义，也不再提供 hook 管线能力；provider 侧的 PreToolUse 执法入口是 `src/pretool-use-hook.ts`（门禁 CLI 的另一条路），与本目录无关
 
 ## 注意事项
-- 通用管线设计，不绑定特定生命周期
-- 采样执行用于高频 hook(减少性能影响)
-- 闭环断言是纯函数，由 consumer 在其注册点/测试中调用；harness 无内置 hook 定义，不自动断言
+- 无 unload/dispose：`SessionManager` 与 `TraceCollector` 随进程生命周期，本层不提供逆操作（口径同 `src/CONTEXT.md` 术语「文件驱动 CLI」）
+- 删除属公共面 breaking：包根不再可达的符号有 4 个值符号（注册表、管线、闭环断言、blocking 映射）与 8 个类型，迁移路径 = 删引用；可达性负钉在 `src/__tests__/public-exports.test.ts`，两道全量清单闸（`public-exports` / `public-type-surface`）的条目已同步收缩

@@ -1,25 +1,10 @@
 /**
  * Hooks 模块
  *
- * 通用 hook 管线：注册 → 排序 → 错误隔离 → 采样执行。
- * 无业务逻辑，consumer 自行定义 hook 名称和语义。
+ * ADR-0027（#170）起本层只剩 `bootstrap.ts` 一个面：通用 hook 管线
+ * （registry / pipeline / config / types 四文件）双仓零生产消费者，整体删除。
+ * 目录名沿用历史，职责是 harness 运行环境的组合根。
  */
 
-export type {
-  HookPhase,
-  HookErrorStrategy,
-  HookConfig,
-  HookDefinition,
-  EffectiveHook,
-  HookResult,
-  HookExecutionRecord,
-  PipelineResult,
-} from './types';
-export { HookRegistry, assertHookRegistryClosed } from './registry';
-export { HookPipeline } from './pipeline';
-export { toErrorStrategy } from './config';
-export {
-  bootstrapHarness,
-  bootstrapHarnessSync,
-  type HarnessBootstrap,
-} from './bootstrap';
+export { bootstrapHarness, bootstrapHarnessSync } from './bootstrap';
+export type { HarnessBootstrap } from './bootstrap';

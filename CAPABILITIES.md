@@ -48,8 +48,8 @@ FreshnessRunner (config-driven doc freshness checking: changelog_version, contex
 ## Release Integrity
 verifyReleaseArtifacts / getCriticalArtifacts（#75 N4 收编）：关键发布物清单 = package.json 声明面（main/exports/bin）运行时推导 + 运行时 extras（bin 引导定义表、dist/tools/definitions）随源码维护；pkgRoot 缺省自动解析本包根，外部消费者零参数即自检已安装的 harness。挂载点：release 命令第 4 步、studio publishPackage dist 校验（studio#425 配套切换）
 
-## Hooks
-HookRegistry, HookPipeline (register → sort → error-isolate → sampled execution)；`assertHookRegistryClosed` 声明（HookConfig）↔ 实现双向闭环（引用未注册/注册无定义/重复 → 抛错，复制 checker 闭环模式，H5）；`toErrorStrategy` blocking→errorStrategy(block/warn) 无损映射（配置归一，G7）
+## Runtime Bootstrap
+`bootstrapHarness` / `bootstrapHarnessSync` / `HarnessBootstrap`（type）：运行环境组合根，一次调用装配 `ConstraintChecker` + `TraceCollector`（锚 projectPath，harness#88/#139）+ `SessionManager`，并加载 `.harness/config.yml` 产出 `mergedConstraints`。原 `## Hooks` 段的通用管线面（`HookRegistry` / `HookPipeline` / `assertHookRegistryClosed` / `toErrorStrategy` 四值符号 + 八类型）双仓零生产消费者，已随 ADR-0027 整体删除（#170）。
 
 ## Templates
 node-api, python-api, nextjs-app

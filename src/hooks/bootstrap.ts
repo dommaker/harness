@@ -8,21 +8,22 @@
  * Consumer 用法：
  * ```typescript
  * const harness = await bootstrapHarness('/path/to/project');
- * // harness.checker, harness.config, harness.hooks, harness.sessions
+ * // harness.checker, harness.sessions, harness.mergedConstraints
  * ```
  *
  * checker 的 trace 记录器在此接线（harness#88：core 不上行依赖 monitoring），
  * 且锚在本函数收到的 projectPath 上（#139：落点跟根走，不落调用方 cwd）。
+ *
+ * ADR-0027（#170）：hooks 管线面（registry/pipeline/config/types）双仓零生产消费者，
+ * 整体删除；本层的 `hookDefinitions` / `hookConfigs` 两参数与 `hooks` / `pipeline`
+ * 两字段随之消失——生产唯一调用方本就无参调用、不访问被删字段。
  */
 
 import { ConstraintChecker } from '../core/constraints/checker';
 import { SessionManager } from '../context/session-manager';
 import { ProjectConfigLoader } from '../core/project-config-loader';
 import { TraceCollector } from '../monitoring/traces';
-import { HookRegistry } from './registry';
-import { HookPipeline } from './pipeline';
 import type { MergedConstraintsConfig } from '../types/project-config';
-import type { HookConfig, HookDefinition } from './types';
 
 /**
  * 异步加载项目配置（S9：异步 I/O）
@@ -50,10 +51,6 @@ export interface HarnessBootstrap {
   checker: ConstraintChecker;
   /** 会话管理器 */
   sessions: SessionManager;
-  /** Hook 注册表 */
-  hooks: HookRegistry;
-  /** Hook 管线 */
-  pipeline: HookPipeline;
   /** 项目路径 */
   projectPath: string;
   /** 合并后的约束配置 */
@@ -61,35 +58,12 @@ export interface HarnessBootstrap {
 }
 
 /**
- * 注册初始 hook（定义必须配对配置声明表——#159 起 HookConfig 是
- * enabled / errorStrategy 的唯一声明点，缺表即抛错）
- */
-function registerInitialHooks(
-  hooks: HookRegistry,
-  hookDefinitions: HookDefinition[] | undefined,
-  hookConfigs: HookConfig[] | undefined
-): void {
-  if (!hookDefinitions || hookDefinitions.length === 0) return;
-  if (!hookConfigs) {
-    throw new Error(
-      '[harness] bootstrap 失败：注册 hook 定义必须同时提供 HookConfig 声明表' +
-      '（enabled / errorStrategy 的唯一声明点）。'
-    );
-  }
-  hooks.registerAll(hookDefinitions, hookConfigs);
-}
-
-/**
  * 初始化 harness 运行环境（异步，不阻塞事件循环）
  *
  * @param projectPath 项目根路径
- * @param hookDefinitions 可选，初始化时注册的 hook
- * @param hookConfigs 可选，与 hookDefinitions 配对的配置声明表（注册定义时必填）
  */
 export async function bootstrapHarness(
-  projectPath?: string,
-  hookDefinitions?: HookDefinition[],
-  hookConfigs?: HookConfig[]
+  projectPath?: string
 ): Promise<HarnessBootstrap> {
   const resolvedPath = projectPath || process.cwd();
 
@@ -101,17 +75,10 @@ export async function bootstrapHarness(
   const checker = new ConstraintChecker(new TraceCollector({ projectPath: resolvedPath }));
 
   const sessions = new SessionManager(resolvedPath);
-  const hooks = new HookRegistry();
-  const pipeline = new HookPipeline(hooks);
-
-  // 3. 注册初始 hook
-  registerInitialHooks(hooks, hookDefinitions, hookConfigs);
 
   return {
     checker,
     sessions,
-    hooks,
-    pipeline,
     projectPath: resolvedPath,
     mergedConstraints,
   };
@@ -121,11 +88,11 @@ export async function bootstrapHarness(
  * 同步 bootstrap（兼容不支持 top-level await 的环境）
  *
  * 配置加载仍为同步（readFileSync），其他组件初始化同上。
+ *
+ * @param projectPath 项目根路径
  */
 export function bootstrapHarnessSync(
-  projectPath?: string,
-  hookDefinitions?: HookDefinition[],
-  hookConfigs?: HookConfig[]
+  projectPath?: string
 ): HarnessBootstrap {
   const resolvedPath = projectPath || process.cwd();
 
@@ -136,16 +103,10 @@ export function bootstrapHarnessSync(
   const checker = new ConstraintChecker(new TraceCollector({ projectPath: resolvedPath }));
 
   const sessions = new SessionManager(resolvedPath);
-  const hooks = new HookRegistry();
-  const pipeline = new HookPipeline(hooks);
-
-  registerInitialHooks(hooks, hookDefinitions, hookConfigs);
 
   return {
     checker,
     sessions,
-    hooks,
-    pipeline,
     projectPath: resolvedPath,
     mergedConstraints,
   };

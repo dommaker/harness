@@ -54,12 +54,18 @@ export async function updateCapabilitiesFile(
 
   // 如果有表格行，更新表格
   if (existingFiles.length > 0) {
-    // 移除已删除文件的行
-    for (const removed of result.removed) {
-      const escapedFile = removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // 第二列存完整路径，basename 只在末尾出现，用 [^|]* 匹配路径前缀
-      const rowRegex = new RegExp(`^\\|[^|]*\\|[^|]*\\b${escapedFile}\\s*\\|.*$`, 'gm');
-      content = content.replace(rowRegex, '');
+    // 移除已删除文件的行（整行连行尾一起删——只清行内容会留一个空行，
+    // CommonMark 据此把一张表切成若干小表，harness#171）
+    if (result.removed.length > 0) {
+      const deadRowRegexes = result.removed.map((removed) => {
+        const escapedFile = removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // 第二列存完整路径，basename 只在末尾出现，用 [^|]* 匹配路径前缀
+        return new RegExp(`^\\|[^|]*\\|[^|]*\\b${escapedFile}\\s*\\|.*\\r?$`);
+      });
+      content = content
+        .split('\n')
+        .filter((line) => !deadRowRegexes.some((rowRegex) => rowRegex.test(line)))
+        .join('\n');
     }
 
     // 添加新文件的行（在最后一个表格行之后）；module 模式跳过
@@ -88,6 +94,9 @@ export async function updateCapabilitiesFile(
     content += '\n\n' + (mode === 'module' ? generateDirTable(currentModules) : generateModuleTable(currentModules));
   }
 
+  // 表格排版收拢放在增删之后：有新行的表不会被误判为空表（#171）
+  content = normalizeCapabilitiesTableLayout(content).content;
+
   // 更新最后更新时间
   const now = new Date().toISOString().split('T')[0];
   content = content.replace(
@@ -96,6 +105,72 @@ export async function updateCapabilitiesFile(
   );
 
   await fs.writeFile(capabilitiesPath, content, 'utf-8');
+}
+
+/** 表格行：以 `|` 起始（表头、分隔行、数据行都算） */
+const TABLE_ROW_REGEX = /^\s*\|/;
+
+/** 表格分隔行（|------|------|） */
+const TABLE_SEPARATOR_REGEX = /^\s*\|[\s:|-]+\|\s*$/;
+
+export interface TableLayoutNormalization {
+  /** 收拢后的内容 */
+  content: string;
+  /** 被删掉的「表格内空行」行数 */
+  blankLines: number;
+  /** 被收掉的「空表」（表头+分隔行且无数据行）张数 */
+  emptyTables: number;
+}
+
+/**
+ * 收拢 CAPABILITIES.md 的表格排版（harness#171）
+ *
+ * 两条规则：① 删掉夹在两个表格行之间的空行（CommonMark 会在此切断表格）；
+ * ② 收掉没有数据行的表头+分隔行。表格外的空行（段落分隔）不动。
+ *
+ * 幂等，且 `--check` 与写模式共用此正本——判定面就是「返回内容与入参是否不同」，
+ * 因此不存在「check 报了 fix 修不掉」的不收敛（ADR-0009 口径）。
+ */
+export function normalizeCapabilitiesTableLayout(content: string): TableLayoutNormalization {
+  const lines = content.split('\n');
+
+  // ① 收拢表格内空行：一段连续空行，两侧最近非空行都是表格行 → 整段丢弃
+  const kept: string[] = [];
+  let blankLines = 0;
+  for (let i = 0; i < lines.length; ) {
+    if (lines[i].trim() !== '') {
+      kept.push(lines[i]);
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < lines.length && lines[end].trim() === '') end++;
+    const next = end < lines.length ? lines[end] : '';
+    if (TABLE_ROW_REGEX.test(kept[kept.length - 1] ?? '') && TABLE_ROW_REGEX.test(next)) {
+      blankLines += end - i;
+    } else {
+      kept.push(...lines.slice(i, end));
+    }
+    i = end;
+  }
+
+  // ② 收掉空表：表头 + 分隔行后面没有数据行
+  const out: string[] = [];
+  let emptyTables = 0;
+  for (let i = 0; i < kept.length; i++) {
+    if (
+      TABLE_ROW_REGEX.test(kept[i]) &&
+      TABLE_SEPARATOR_REGEX.test(kept[i + 1] ?? '') &&
+      !TABLE_ROW_REGEX.test(kept[i + 2] ?? '')
+    ) {
+      emptyTables++;
+      i++;
+      continue;
+    }
+    out.push(kept[i]);
+  }
+
+  return { content: out.join('\n'), blankLines, emptyTables };
 }
 
 /**

@@ -34,6 +34,7 @@ import {
   parseCapabilitiesFiles,
   updateCapabilitiesFile,
   compactCapabilitiesContent,
+  normalizeCapabilitiesTableLayout,
 } from './capabilities-syncer';
 import {
   createContextMd,
@@ -264,7 +265,15 @@ export async function syncDocs(
   }
   const hasAgentsIssues = options.agents === true && agentsMdStale;
 
-  const hasTableIssues = result.added.length > 0 || result.removed.length > 0;
+  // 表格排版脏行（#171）：撤登记时残留的空行会把 CAPABILITIES.md 的表格切断。
+  // 判定与修复共用 normalizeCapabilitiesTableLayout 正本——同一份规则，check 报的 fix 必清得掉。
+  const tableLayout = capsIsCapabilityListing
+    ? { blankLines: 0, emptyTables: 0 }
+    : normalizeCapabilitiesTableLayout(capsContent);
+  const hasTableLayoutIssues = tableLayout.blankLines > 0 || tableLayout.emptyTables > 0;
+
+  const hasTableEntryIssues = result.added.length > 0 || result.removed.length > 0;
+  const hasTableIssues = hasTableEntryIssues || hasTableLayoutIssues;
   const hasCapIssues = capCountMismatches.length > 0;
   // mtime 只作提示，不参与判定（harness#142）：判定面是内容漂移与缺失
   const hasContextIssues = result.contextMissing.length > 0 || result.contextContentDrift.length > 0;
@@ -287,6 +296,7 @@ export async function syncDocs(
         contextMissing: result.contextMissing.length,
         contextStale: result.contextStale.length,
         contextContentDrift: result.contextContentDrift.length,
+        tableLayoutDirty: hasTableLayoutIssues,
       },
       contextMissing: result.contextMissing.map(d => ({
         dir: d,
@@ -314,7 +324,7 @@ export async function syncDocs(
       });
     }
 
-    if (!capsIsCapabilityListing && hasTableIssues) {
+    if (!capsIsCapabilityListing && hasTableEntryIssues) {
       if (capsMode === 'module') {
         // module 模式：added 为聚合后的未覆盖目录，需人工登记目录条目
         jsonOutput.added = result.added.map(d => ({ dir: d }));
@@ -339,6 +349,19 @@ export async function syncDocs(
           command: 'harness sync-docs',
         });
       }
+    }
+
+    if (hasTableLayoutIssues) {
+      jsonOutput.tableLayout = {
+        blankLines: tableLayout.blankLines,
+        emptyTables: tableLayout.emptyTables,
+      };
+      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
+        action: 'sync-capabilities-table-layout',
+        command: 'harness sync-docs',
+        details:
+          'CAPABILITIES.md 的表格被空行切断、或残留无数据行的空表头，运行 harness sync-docs 收拢',
+      });
     }
 
     if (hasContextIssues) {
@@ -400,6 +423,16 @@ export async function syncDocs(
     result.removed.forEach(f => log(io, chalk.gray(`  - ${f}`)));
   }
 
+  if (hasTableLayoutIssues) {
+    log(io, chalk.yellow(`\n🧹 CAPABILITIES.md 表格排版待收拢:`));
+    if (tableLayout.blankLines > 0) {
+      log(io, chalk.gray(`  - 表格内空行 ${tableLayout.blankLines} 处（CommonMark 会在此把表格切断）`));
+    }
+    if (tableLayout.emptyTables > 0) {
+      log(io, chalk.gray(`  - 无数据行的空表 ${tableLayout.emptyTables} 张（连表头/分隔行一起收掉）`));
+    }
+  }
+
   if (result.contextMissing.length > 0) {
     log(io, chalk.yellow(`\n📋 缺少 CONTEXT.md:`));
     result.contextMissing.forEach(d => log(io, chalk.gray(`  - ${d}/CONTEXT.md`)));
@@ -450,10 +483,14 @@ export async function syncDocs(
   if (isCheck) {
     log(io, chalk.red('\n❌ 文档不是最新的，请运行 harness sync-docs 更新'));
     // reason 必须可定位（harness#142）：CI 判红时要直接拿到文件与符号，不靠翻 stdout
+    const tableLayoutReason = hasTableLayoutIssues
+      ? `；CAPABILITIES.md 表格排版待收拢（表格内空行 ${tableLayout.blankLines} 处、`
+        + `空表 ${tableLayout.emptyTables} 张）`
+      : '';
     return drift(
       contextDriftReason
-        ? `文档不是最新的（CONTEXT.md 与实现漂移：${contextDriftReason}）`
-        : '文档不是最新的，请运行 harness sync-docs 更新'
+        ? `文档不是最新的（CONTEXT.md 与实现漂移：${contextDriftReason}）${tableLayoutReason}`
+        : `文档不是最新的，请运行 harness sync-docs 更新${tableLayoutReason}`
     );
   }
 

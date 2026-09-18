@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import { normalizeCapabilitiesTableLayout } from '../sync-docs/capabilities-syncer';
 import { syncDocs } from '../sync-docs';
 
 let io: CapturingIO;
@@ -160,6 +161,86 @@ describe('sync-docs CAPABILITIES.md 表格排版（#171）', () => {
     const check = await syncDocs({ projectPath: dir, check: true }, io);
     expect(check).toEqual({ kind: 'ok' });
     expect(read(dir)).toBe(doc);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('代码块内「表头+分隔行无数据行」的示例不被收掉', async () => {
+    const doc =
+      `# Capabilities\n\n${HEADER}${dataRow('a', 'src/a.ts')}\n\n` +
+      `登记格式：\n\n\`\`\`markdown\n| 模块 | 文件 | 说明 |\n|------|------|------|\n\`\`\`\n\n散文。\n`;
+    const dir = makeProject('fenced-empty-table', ['a.ts'], doc);
+
+    expect(await syncDocs({ projectPath: dir, check: true }, io)).toEqual({ kind: 'ok' });
+
+    await syncDocs({ projectPath: dir }, io);
+    expect(read(dir)).toBe(doc);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('代码块内的表格样式行不被收拢（含块内空行）', async () => {
+    const doc =
+      `# Capabilities\n\n${HEADER}${dataRow('a', 'src/a.ts')}\n\n` +
+      `示例：\n\n\`\`\`\n| x | y |\n\n| z | w |\n\`\`\`\n`;
+    const dir = makeProject('fenced-blank-row', ['a.ts'], doc);
+
+    expect(await syncDocs({ projectPath: dir, check: true }, io)).toEqual({ kind: 'ok' });
+
+    await syncDocs({ projectPath: dir }, io);
+    expect(read(dir)).toBe(doc);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('两张空表相邻：一次收拢即干净（规则互相制造触发点，须跑到不动点）', () => {
+    // 规则①先吃掉两张空表之间的那个空行（两侧都是表格行），规则②在同一轮里
+    // 只看得到「表头+分隔行后面还有表格行」的前一张，收得掉后一张。不迭代就收不干净。
+    const first = normalizeCapabilitiesTableLayout(`${HEADER}\n${HEADER}`);
+
+    expect(first).toEqual({ content: '', blankLines: 1, emptyTables: 2 });
+    // 不动点：再跑一次零改动，`--check` 才不会修完还红
+    expect(normalizeCapabilitiesTableLayout(first.content)).toEqual({
+      content: '',
+      blankLines: 0,
+      emptyTables: 0,
+    });
+  });
+
+  it('收掉空表后不留三个以上连续换行（写模式收干净）', async () => {
+    const dir = makeProject(
+      'no-triple-newline',
+      [],
+      `# Capabilities\n\n${HEADER}${dataRow('gone', 'src/gone.ts')}\n\n## 说明\n\n散文。\n`
+    );
+
+    await syncDocs({ projectPath: dir }, io);
+
+    const out = read(dir);
+    expect(out).not.toMatch(/\n{3,}/);
+    expect(out).toContain('## 说明');
+    expect(out).toContain('散文。');
+    expect(await syncDocs({ projectPath: dir, check: true }, io)).toEqual({ kind: 'ok' });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('围栏内示例行引用已删文件：随幽灵行一起删掉，且 check 收敛（取舍见实现注释）', async () => {
+    // 登记条目由 capabilities-parser 全文扫描得出（ADR-0009），块内行也算登记项；
+    // 只让幽灵行删除豁免围栏，这个示例会永远被报成已删模块且修不掉。
+    const doc =
+      `# Capabilities\n\n${HEADER}${dataRow('a', 'src/a.ts')}\n\n` +
+      `登记格式示例：\n\n\`\`\`markdown\n${HEADER}${dataRow('gone', 'src/gone.ts')}\n\`\`\`\n`;
+    const dir = makeProject('fenced-ghost-entry', ['a.ts'], doc);
+
+    expect(await syncDocs({ projectPath: dir, check: true }, io)).toMatchObject({ kind: 'fail' });
+    expect(io.outText()).toContain('src/gone.ts');
+
+    await syncDocs({ projectPath: dir }, io);
+
+    const out = read(dir);
+    expect(out).not.toContain('src/gone.ts');
+    expect(out).toContain(dataRow('a', 'src/a.ts'));
+    // 只吃掉引用已删文件的那一行，块内其余正文留着（不是「把围栏里所有行一起删」）
+    expect(out).toContain('```markdown\n' + HEADER);
+    expect(countBlankRowsInsideTable(out)).toBe(0);
+    expect(await syncDocs({ projectPath: dir, check: true }, io)).toEqual({ kind: 'ok' });
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

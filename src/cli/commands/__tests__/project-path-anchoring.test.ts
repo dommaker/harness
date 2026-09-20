@@ -210,7 +210,7 @@ describe('-p 锚定：执行与 IO 必须落在 projectPath（cwd ≠ projectPat
         .slice(seeded)
         .map(l => JSON.parse(l) as { constraintId: string; projectPath?: string });
       expect(written.map(t => t.constraintId)).toEqual(
-        expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+        expect.arrayContaining(['no_completion_without_verification', 'no_hardcoded_credentials'])
       );
       expect(written.every(t => t.projectPath === projectSide)).toBe(true);
       // 病灶：修复前这一支落在调用方 cwd（A），B 侧 mtime 不动
@@ -231,7 +231,7 @@ describe('-p 锚定：执行与 IO 必须落在 projectPath（cwd ≠ projectPat
       expect(await status({ projectPath: projectSide }, io)).toEqual({ kind: 'ok' });
       // 记录数取自 B 的正本行数：写侧漏到 A 就必然对不上（假绿），读到 A 也读不到 check 的落点
       expect(io.outText()).toContain(`记录数: ${traceLinesOf(projectSide).length} 条`);
-      expect(io.outText()).toContain('no_implementation_without_requirement');
+      expect(io.outText()).toContain('no_completion_without_verification');
     });
 
     it('不带 --project-path 的项目内使用：落点仍是当下 cwd（存量使用者无感）', async () => {

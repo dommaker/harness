@@ -23,23 +23,6 @@ export const GUIDELINES: Record<string, Constraint> = {
     trigger: ['code_implementation', 'doc_update', 'config_change', 'commit'],
     enforcement: 'credential-scan',
     description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、Markdown 文档、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。建议配合 pre-commit hook 做自动扫描。`,
-    promptInjection: '禁止在代码中硬编码密码、API 密钥、Token 等凭证。使用环境变量或安全的凭证管理方案存储敏感信息。',
-  },
-
-  /**
-   * 禁止跳过检查点验证
-   * 原因：安全底线，检查点是质量门控
-   */
-  no_bypass_checkpoint: {
-    id: 'no_bypass_checkpoint',
-    kind: 'check',
-    rule: 'NO BYPASSING CHECKPOINTS',
-    message: '禁止跳过检查点验证',
-    level: 'guideline',
-    trigger: 'code_implementation',
-    enforcement: 'checkpoint-required',
-    description: '所有检查点必须通过，不能跳过验证步骤。检查点是质量的最后一道防线。',
-    promptInjection: '每个关键步骤后有 checkpoint 验证点，必须通过才能继续。通过标准：测试通过、类型检查无错误、lint 无新增警告。未通过时回退修复，不得跳过。',
   },
 
   /**

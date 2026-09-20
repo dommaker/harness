@@ -23,8 +23,6 @@ import type { EffectiveConfigLint } from '../effective-constraints';
  */
 export const FLAG_EVIDENCE_CONSTRAINT_IDS: ReadonlySet<string> = new Set([
   'no_completion_without_verification',
-  'incremental_progress',
-  'no_implementation_without_requirement',
 ]);
 
 /**

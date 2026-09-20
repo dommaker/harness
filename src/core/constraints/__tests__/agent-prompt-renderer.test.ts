@@ -31,25 +31,23 @@ function makeProject(files: Record<string, string>): string {
 }
 
 describe('renderConstraintsByTrigger', () => {
-  test('内置约束按层级分组渲染：铁律 → 指导原则 → 行为提示', () => {
+  test('内置约束按层级分组渲染：铁律 → 行为提示（harness#174 后指导原则组无 promptInjection 条目，不渲染）', () => {
     const projectRoot = makeProject({});
     const out = renderConstraintsByTrigger('code_implementation', { projectRoot });
 
     expect(out).toContain('## 行为约束（前置声明）');
     expect(out).toContain('### 铁律（绝对禁止，无例外）');
     expect(out).toContain('- **no_completion_without_verification**:');
-    expect(out).toContain('### 指导原则（优先建议）');
-    expect(out).toContain('- **no_hardcoded_credentials**:');
+    // 指导原则组无带 promptInjection 的存活条目 → 整组不渲染
+    expect(out).not.toContain('### 指导原则（优先建议）');
     expect(out).toContain('### 行为提示');
     expect(out).toContain('- **no_code_without_test**:');
 
-    // 分组顺序：铁律 < 指导原则 < 行为提示
+    // 分组顺序：铁律 < 行为提示
     const ironIdx = out.indexOf('### 铁律（绝对禁止，无例外）');
-    const guideIdx = out.indexOf('### 指导原则（优先建议）');
     const promptIdx = out.indexOf('### 行为提示');
     expect(ironIdx).toBeGreaterThanOrEqual(0);
-    expect(guideIdx).toBeGreaterThan(ironIdx);
-    expect(promptIdx).toBeGreaterThan(guideIdx);
+    expect(promptIdx).toBeGreaterThan(ironIdx);
   });
 
   test('无 promptInjection 的约束不渲染（即使 trigger 匹配）', () => {
@@ -64,9 +62,9 @@ describe('renderConstraintsByTrigger', () => {
 
   test('支持 trigger 数组入参，仅匹配交集约束', () => {
     const projectRoot = makeProject({});
-    const out = renderConstraintsByTrigger(['test_creation'], { projectRoot });
+    const out = renderConstraintsByTrigger(['api_change'], { projectRoot });
 
-    expect(out).toContain('- **no_test_simplification**:');
+    expect(out).toContain('- **verify_external_capability**:');
     // no_completion_without_verification 的 trigger 为 code_implementation，不匹配
     expect(out).not.toContain('- **no_completion_without_verification**:');
   });
@@ -115,15 +113,15 @@ describe('renderConstraintsByTrigger', () => {
   });
 
   test('scenes 过滤：带 appliesTo 的场景专属 prompt 默认不渲染，声明场景后渲染', () => {
-    // no_skill_without_test：appliesTo ['agent-skill']，trigger module_creation
+    // no_model_for_deterministic：appliesTo ['llm-app']，trigger code_implementation
     const plain = makeProject({});
-    expect(renderConstraintsByTrigger('module_creation', { projectRoot: plain }))
-      .not.toContain('- **no_skill_without_test**:');
+    expect(renderConstraintsByTrigger('code_implementation', { projectRoot: plain }))
+      .not.toContain('- **no_model_for_deterministic**:');
 
     const withScene = makeProject({
-      '.harness/config.yml': 'scenes:\n  - agent-skill\n',
+      '.harness/config.yml': 'scenes:\n  - llm-app\n',
     });
-    expect(renderConstraintsByTrigger('module_creation', { projectRoot: withScene }))
-      .toContain('- **no_skill_without_test**:');
+    expect(renderConstraintsByTrigger('code_implementation', { projectRoot: withScene }))
+      .toContain('- **no_model_for_deterministic**:');
   });
 });

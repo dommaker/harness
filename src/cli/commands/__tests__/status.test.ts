@@ -109,12 +109,12 @@ describe('status command', () => {
 
     it('应该显示 Iron Laws 统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'no_bypass_checkpoint' },
+        { constraintId: 'no_completion_without_verification' },
       ]));
 
       await runStatus({ detail: true });
       expect(io.outText()).toContain('🔴 Iron Laws:');
-      expect(io.outText()).toContain('✅ no_bypass_checkpoint');
+      expect(io.outText()).toContain('✅ no_completion_without_verification');
       expect(io.outText()).toContain('检查: 1 | 通过: 100% | 失败: 0%');
     });
   });

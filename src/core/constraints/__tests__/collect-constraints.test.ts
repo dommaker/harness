@@ -46,10 +46,15 @@ describe('collectConstraints（收集模式，不抛）', () => {
   });
 
   it('首个违规不截断：触发域内后续铁律照常评估', async () => {
-    const result = await checker.collectConstraints(VIOLATING);
+    // 首条铁律（no_completion_without_verification）违规后，extraTriggers 带入的
+    // no_test_simplification 仍须出现在收集结果里
+    const result = await checker.collectConstraints({
+      ...VIOLATING,
+      extraTriggers: ['test_creation'],
+    });
     const ids = result.ironLaws.map((r: ConstraintResult) => r.id);
-    expect(ids).toContain('incremental_progress');
-    expect(ids).toContain('no_implementation_without_requirement');
+    expect(ids).toContain('no_completion_without_verification');
+    expect(ids).toContain('no_test_simplification');
   });
 
   it('guidelines 照常执行，warningCount 与不满意条目同口径', async () => {

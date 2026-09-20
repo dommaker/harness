@@ -99,23 +99,23 @@ describe('retireConstraint 执行逻辑', () => {
   it('KnowledgeStore 写入退役记录：规则原文 + 原因 + 统计 + signal 模式', () => {
     const root = createProjectFixture({
       name: 'harness-retire-test',
-      traces: [{ constraintId: 'no_bypass_checkpoint', result: 'fail' }],
+      traces: [{ constraintId: 'no_completion_without_verification', result: 'fail' }],
     });
 
-    const result = retireConstraint(root, 'no_bypass_checkpoint', { reason: '流程已内置门禁', now: FIXED_NOW });
+    const result = retireConstraint(root, 'no_completion_without_verification', { reason: '流程已内置门禁', now: FIXED_NOW });
     expect(result.status).toBe('retired');
-    expect(result.knowledgeEntryId).toBe('constraint-retired-no_bypass_checkpoint');
+    expect(result.knowledgeEntryId).toBe('constraint-retired-no_completion_without_verification');
 
     const store = new FileKnowledgeStore({ baseDir: path.join(root, '.harness', 'knowledge') });
-    const entry = store.get('constraint-retired-no_bypass_checkpoint');
+    const entry = store.get('constraint-retired-no_completion_without_verification');
     expect(entry).toBeDefined();
     expect(entry!.consumptionMode).toBe('signal');
     expect(entry!.origin).toBe('human');
     expect(entry!.tags).toContain('constraint-retired');
-    expect(entry!.tags).toContain('constraint:no_bypass_checkpoint');
-    expect(entry!.title).toContain('no_bypass_checkpoint');
+    expect(entry!.tags).toContain('constraint:no_completion_without_verification');
+    expect(entry!.title).toContain('no_completion_without_verification');
 
-    const def = getConstraint('no_bypass_checkpoint')!;
+    const def = getConstraint('no_completion_without_verification')!;
     expect(entry!.content).toContain(def.description!);
     expect(entry!.content).toContain('流程已内置门禁');
     expect(entry!.content).toContain('total: 1');
@@ -127,17 +127,17 @@ describe('retireConstraint 执行逻辑', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     // 先用当前生效集渲染一个合法注入段
     const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
-    expect(before).toContain('no_bypass_checkpoint');
+    expect(before).toContain('no_completion_without_verification');
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}\n其他内容\n`, 'utf-8');
 
-    const result = retireConstraint(root, 'no_bypass_checkpoint', { now: FIXED_NOW });
+    const result = retireConstraint(root, 'no_completion_without_verification', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.injectionSynced).toBe(true);
 
     const after = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8');
     expect(after).toContain('HARNESS_CONSTRAINTS_START');
     expect(after).toContain('HARNESS_CONSTRAINTS_END');
-    expect(after).not.toContain('**no_bypass_checkpoint**');
+    expect(after).not.toContain('**no_completion_without_verification**');
     expect(after).toContain('其他内容');
 
     printRetireResult(result, io);
@@ -158,14 +158,14 @@ describe('retireConstraint 执行逻辑', () => {
   it('新模型仓：AGENTS.md PRESERVE:governance 内含标记段时同步重渲染（无 CLAUDE.md）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
-    expect(before).toContain('no_bypass_checkpoint');
+    expect(before).toContain('no_completion_without_verification');
     fs.writeFileSync(
       path.join(root, 'AGENTS.md'),
       `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n\n其他内容\n`,
       'utf-8'
     );
 
-    const result = retireConstraint(root, 'no_bypass_checkpoint', { now: FIXED_NOW });
+    const result = retireConstraint(root, 'no_completion_without_verification', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.injectionSynced).toBe(true);
     expect(result.injectionFile).toBe('AGENTS.md');
@@ -173,7 +173,7 @@ describe('retireConstraint 执行逻辑', () => {
     const after = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf-8');
     expect(after).toContain('HARNESS_CONSTRAINTS_START');
     expect(after).toContain('HARNESS_CONSTRAINTS_END');
-    expect(after).not.toContain('**no_bypass_checkpoint**');
+    expect(after).not.toContain('**no_completion_without_verification**');
     expect(after).toContain('PRESERVE:governance');
     expect(after).toContain('其他内容');
     // 不制造 CLAUDE.md
@@ -187,12 +187,12 @@ describe('retireConstraint 执行逻辑', () => {
     const agentsMd = `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n`;
     fs.writeFileSync(path.join(root, 'AGENTS.md'), agentsMd, 'utf-8');
 
-    const result = retireConstraint(root, 'no_bypass_checkpoint', { now: FIXED_NOW });
+    const result = retireConstraint(root, 'no_completion_without_verification', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.injectionSynced).toBe(true);
     expect(result.injectionFile).toBe('CLAUDE.md');
 
-    expect(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8')).not.toContain('**no_bypass_checkpoint**');
+    expect(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8')).not.toContain('**no_completion_without_verification**');
     expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf-8')).toBe(agentsMd);
   });
 

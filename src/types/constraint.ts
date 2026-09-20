@@ -186,10 +186,10 @@ export interface ConstraintContext {
   /** 是否已进行复用检查 */
   hasReuseCheck?: boolean;
   
-  /** 是否只处理单个任务（用于 incremental_progress） */
+  /** 是否只处理单个任务（证据标志，当前无内置 checker 消费，供自定义约束用） */
   hasSingleTask?: boolean;
   
-  /** 是否有需求文档（用于 no_implementation_without_requirement） */
+  /** 是否有需求文档（证据标志，当前无内置 checker 消费，供自定义约束用） */
   hasRequirement?: boolean;
 
   /** worktree 路径（用于 worktree 相关检查） */

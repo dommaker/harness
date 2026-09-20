@@ -58,11 +58,8 @@ export const RELAXED_PRESET: PresetConfig = {
   name: 'relaxed',
   ironLaws: [
     'no_completion_without_verification',
-    'incremental_progress',
-    'no_implementation_without_requirement',
   ],
   guidelines: [
-    'no_bypass_checkpoint',
     'no_hardcoded_credentials',
   ],
   prompts: [],  // 禁用提示

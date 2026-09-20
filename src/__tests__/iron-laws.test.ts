@@ -1,5 +1,5 @@
 /**
- * 约束系统测试（ADR-0001：kind 二元模型，26 条清单构成 + 注册表闭环）
+ * 约束系统测试（ADR-0001：kind 二元模型；harness#174：26 → 16 条清单构成 + 注册表闭环）
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -16,17 +16,17 @@ import { getConstraintCheck, registeredCheckCount } from '../core/constraints/ch
 import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
-  describe('清单构成（ADR-0001：42 → 26）', () => {
-    it('getAllConstraints 返回 26 条：10 check + 16 prompt', () => {
+  describe('清单构成（ADR-0001：42 → 26；harness#174：26 → 16）', () => {
+    it('getAllConstraints 返回 16 条：7 check + 9 prompt', () => {
       const all = getAllConstraints();
-      expect(all).toHaveLength(26);
-      expect(all.filter(c => c.kind === 'check')).toHaveLength(10);
-      expect(all.filter(c => c.kind === 'prompt')).toHaveLength(16);
+      expect(all).toHaveLength(16);
+      expect(all.filter(c => c.kind === 'check')).toHaveLength(7);
+      expect(all.filter(c => c.kind === 'prompt')).toHaveLength(9);
     });
 
-    it('check 层 = 5 iron + 5 guideline', () => {
-      expect(Object.keys(IRON_LAWS)).toHaveLength(5);
-      expect(Object.keys(GUIDELINES)).toHaveLength(5);
+    it('check 层 = 3 iron + 4 guideline', () => {
+      expect(Object.keys(IRON_LAWS)).toHaveLength(3);
+      expect(Object.keys(GUIDELINES)).toHaveLength(4);
       Object.values(IRON_LAWS).forEach(c => {
         expect(c.kind).toBe('check');
         expect(c.level).toBe('iron_law');
@@ -37,8 +37,8 @@ describe('Constraint System', () => {
       });
     });
 
-    it('prompt 层 16 条，level 统一为 prompt', () => {
-      expect(Object.keys(PROMPTS)).toHaveLength(16);
+    it('prompt 层 9 条，level 统一为 prompt', () => {
+      expect(Object.keys(PROMPTS)).toHaveLength(9);
       Object.values(PROMPTS).forEach(c => {
         expect(c.kind).toBe('prompt');
         expect(c.level).toBe('prompt');
@@ -78,9 +78,38 @@ describe('Constraint System', () => {
       }
     });
 
-    it('场景标签：no_skill_without_test / no_model_for_deterministic', () => {
-      expect(PROMPTS['no_skill_without_test'].appliesTo).toEqual(['agent-skill']);
+    it('harness#174 删除的 10 条不再存在', () => {
+      const removed = [
+        'incremental_progress',
+        'no_implementation_without_requirement',
+        'no_bypass_checkpoint',
+        'simplest_solution_first',
+        'no_simplification_without_approval',
+        'follow_conventions',
+        'first_principles_first',
+        'no_conflict_blending',
+        'no_performative_agreement',
+        'no_skill_without_test',
+      ];
+      for (const id of removed) {
+        expect(getConstraint(id)).toBeUndefined();
+        expect(getConstraintCheck(id)).toBeUndefined();
+      }
+    });
+
+    it('harness#174：no_test_simplification / no_hardcoded_credentials 保留定义但清除 promptInjection', () => {
+      expect(getConstraint('no_test_simplification')).toBeDefined();
+      expect(getConstraint('no_hardcoded_credentials')).toBeDefined();
+      expect(IRON_LAWS['no_test_simplification'].promptInjection).toBeUndefined();
+      expect(GUIDELINES['no_hardcoded_credentials'].promptInjection).toBeUndefined();
+    });
+
+    it('场景标签：仅剩 no_model_for_deterministic 带 appliesTo', () => {
       expect(PROMPTS['no_model_for_deterministic'].appliesTo).toEqual(['llm-app']);
+      // agent-skill 场景已无条目（唯一条目 no_skill_without_test 已删）
+      expect(
+        getAllConstraints().filter(c => c.appliesTo?.includes('agent-skill'))
+      ).toHaveLength(0);
     });
 
     it('no_completion_without_verification 不硬编码具体命令示例（#25：口径由项目声明）', () => {
@@ -192,43 +221,23 @@ describe('Constraint Checker', () => {
     expect(result.ironLaws.length + result.guidelines.length).toBeGreaterThan(0);
   });
 
-  it('should skip incremental_progress when hasSingleTask is undefined（未接线不评估）', async () => {
+  it('should skip no_completion_without_verification when hasVerificationEvidence is undefined（未接线不评估）', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
     };
 
-    const result = await constraintChecker.check(IRON_LAWS['incremental_progress'], context);
+    const result = await constraintChecker.check(IRON_LAWS['no_completion_without_verification'], context);
     expect(result.skipped).toBe(true);
     expect(result.satisfied).toBe(true);
   });
 
-  it('should pass incremental_progress when hasSingleTask is true', async () => {
+  it('should pass no_completion_without_verification when hasVerificationEvidence is true', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
-      hasSingleTask: true,
+      hasVerificationEvidence: true,
     };
 
-    const result = await constraintChecker.check(IRON_LAWS['incremental_progress'], context);
-    expect(result.satisfied).toBe(true);
-  });
-
-  it('should skip no_implementation_without_requirement when hasRequirement is undefined（未接线不评估）', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-    };
-
-    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement'], context);
-    expect(result.skipped).toBe(true);
-    expect(result.satisfied).toBe(true);
-  });
-
-  it('should pass no_implementation_without_requirement when hasRequirement is true', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-      hasRequirement: true,
-    };
-
-    const result = await constraintChecker.check(IRON_LAWS['no_implementation_without_requirement'], context);
+    const result = await constraintChecker.check(IRON_LAWS['no_completion_without_verification'], context);
     expect(result.satisfied).toBe(true);
   });
 });

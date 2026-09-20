@@ -220,9 +220,9 @@ custom_constraints:
       loader.load();
       const merged = loader.mergeConstraints({ preset: 'relaxed' });
 
-      // relaxed 仅启用 3 条铁律 + 2 条指导原则，禁用提示
-      expect(Object.keys(merged.ironLaws)).toHaveLength(3);
-      expect(Object.keys(merged.guidelines)).toHaveLength(2);
+      // relaxed 仅启用 1 条铁律 + 1 条指导原则，禁用提示（harness#174）
+      expect(Object.keys(merged.ironLaws)).toHaveLength(1);
+      expect(Object.keys(merged.guidelines)).toHaveLength(1);
       expect(Object.keys(merged.prompts ?? {})).toHaveLength(0);
       expect(merged.disabled.length).toBeGreaterThan(0);
     });

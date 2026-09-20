@@ -58,18 +58,19 @@ describe('getEffectiveConstraints / lintEffectiveConfig', () => {
       );
     });
 
-    it('scenes 命中：对应场景 prompt 进入生效集，其余场景 prompt 仍排除', () => {
-      const dir = setupProject(`scenes:\n  - agent-skill\n`);
-      const ids = getEffectiveConstraints(dir).map(c => c.id);
+    it('scenes 命中：对应场景 prompt 进入生效集，缺省排除', () => {
+      const excluded = getEffectiveConstraints(setupProject()).map(c => c.id);
+      expect(excluded).not.toContain('no_model_for_deterministic');
 
-      expect(ids).toContain('no_skill_without_test');
-      expect(ids).not.toContain('no_model_for_deterministic');
+      const dir = setupProject(`scenes:\n  - llm-app\n`);
+      const ids = getEffectiveConstraints(dir).map(c => c.id);
+      expect(ids).toContain('no_model_for_deterministic');
     });
 
     it('config.yml 禁用：check 与 prompt 条目均从生效集移除', () => {
       const dir = setupProject(`
 constraints:
-  no_bypass_checkpoint:
+  capability_sync:
     enabled: false
   no_fuzzy_completion_claim:
     enabled: false
@@ -77,7 +78,7 @@ constraints:
       const constraints = getEffectiveConstraints(dir);
       const ids = constraints.map(c => c.id);
 
-      expect(ids).not.toContain('no_bypass_checkpoint');
+      expect(ids).not.toContain('capability_sync');
       expect(ids).not.toContain('no_fuzzy_completion_claim');
       expect(constraints.length).toBe(BUILTIN_TOTAL - SCENE_PROMPTS.length - 2);
     });
@@ -111,13 +112,10 @@ custom_constraints:
       expect(ids).toEqual(
         expect.arrayContaining([
           'no_completion_without_verification',
-          'incremental_progress',
-          'no_implementation_without_requirement',
-          'no_bypass_checkpoint',
           'no_hardcoded_credentials',
         ])
       );
-      expect(constraints).toHaveLength(5);
+      expect(constraints).toHaveLength(2);
       expect(constraints.every(c => c.kind === 'check')).toBe(true);
     });
 
@@ -157,8 +155,8 @@ constraints:
       const lint = lintEffectiveConfig(dir);
 
       expect(lint.scenes).toEqual(['llm-app']);
-      expect(lint.sceneExcluded).toContain('no_skill_without_test');
-      expect(lint.sceneExcluded).not.toContain('no_model_for_deterministic');
+      // llm-app 命中后 no_model_for_deterministic 进入生效集，无其他场景条目被排除
+      expect(lint.sceneExcluded).toEqual([]);
       expect(lint.unknownIds).toEqual([]);
     });
   });

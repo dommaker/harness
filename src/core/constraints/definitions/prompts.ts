@@ -80,37 +80,6 @@ export const PROMPTS: Record<string, Constraint> = {
   },
 
   /**
-   * 简单方案优先（合并枢纽）
-   * 吸收：no_creation_without_reuse_check、yagni_check
-   */
-  simplest_solution_first: {
-    id: 'simplest_solution_first',
-    kind: 'prompt',
-    rule: 'CHECK LOCAL/SIMPLE OPTIONS BEFORE REMOTE/COMPLEX',
-    message: '先检查本地/简单方案',
-    level: 'prompt',
-    trigger: ['code_implementation', 'module_extension', 'module_creation', 'design_request'],
-    enforcement: 'check-local-first',
-    description: `在实现功能时，必须按顺序检查（吸收 no_creation_without_reuse_check / yagni_check）：
-1) 是否有本地数据源（内存/文件）？
-2) 是否有更简单的方案（更少依赖/更少代码）？
-3) 创建新能力前是否查过现有能力索引，确认无可复用？
-4) 如需远程查询/复杂架构，必须说明理由。
-
-复用优先级：直接复用 > 扩展现有 > 组合现有 > 创建新能力。
-
-例外情况（可跳过简单方案）：
-- scalability_required: 需要多实例/分布式部署
-- security_required: 需要加密/鉴权等安全措施
-- performance_required: 本地方案性能不足
-- reliability_required: 需要持久化/高可用
-
-YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件系统；一个抽象只有一个实现者时删除该抽象。`,
-    promptInjection: '最简方案优先：用最少代码解决当前问题，不添加"以防万一"的冗余功能，不为仅用一次的代码强行设计抽象。创建新模块/文件/能力前，先查现有能力索引确认无可复用——优先级：直接复用 > 扩展现有 > 组合现有 > 新建。遵循 YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件系统；一个 interface/abstract class 只有一个实现者时，删除这个抽象。自检：资深工程师是否会认为此实现过度复杂？若是，立即简化。',
-    injectPrompt: true,
-  },
-
-  /**
    * 业务逻辑代码必须先写测试
    * 例外：配置文件、类型定义
    */
@@ -136,32 +105,6 @@ YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件�
 - 简单 getter/setter
 - 纯展示 UI 组件（无交互逻辑）`,
     promptInjection: '新代码必须同时编写测试。实现功能前先写测试用例（RED），然后实现让测试通过（GREEN）。不得提交无测试覆盖的实现代码。',
-  },
-
-  /**
-   * 禁止砍功能
-   * 例外：冗余代码清理
-   */
-  no_simplification_without_approval: {
-    id: 'no_simplification_without_approval',
-    kind: 'prompt',
-    rule: 'NO SIMPLIFYING LOGIC WITHOUT USER APPROVAL',
-    message: '禁止砍功能，合理重构除外',
-    level: 'prompt',
-    trigger: 'code_implementation',
-    enforcement: 'preserve-complexity',
-    description: `在实现或修改代码时，区分简化类型：
-
-[禁止] 必须向用户说明并获取批准
-- 为了赶进度砍掉必要功能
-- 为了省事跳过边界条件处理
-- 为了简化逻辑牺牲用户体验
-
-[允许] 合理优化，不需要批准
-- 发现冗余代码后的重构优化
-- 用更简洁的实现达到相同效果
-- 删除不再使用的遗留代码`,
-    promptInjection: '不得擅自简化或删除测试、lint 规则、类型检查或约束。如需降低检查标准，必须先提案并获明确批准。',
   },
 
   /**
@@ -286,112 +229,6 @@ YAGNI：不为"未来可能需要"添加抽象层、接口、配置项或插件�
     description: `仅改动绝对必要的部分。不"顺手优化"相邻代码、注释或排版格式。未出问题的代码不重构。严格贴合项目既有风格。`,
     promptInjection: '外科手术式修改：仅改动绝对必要的部分。不顺手"优化"相邻代码、注释或格式。未出问题的代码不重构。',
     injectPrompt: true,
-  },
-
-  /**
-   * 约定胜于新奇 — Mnilax Rule 11
-   * 原因：规范一致性 > 技术偏好
-   */
-  follow_conventions: {
-    id: 'follow_conventions',
-    kind: 'prompt',
-    rule: 'MATCH CODEBASE CONVENTIONS, EVEN IF YOU DISAGREE',
-    message: '规范一致性 > 技术偏好，有异议显式提出不暗中背离',
-    level: 'prompt',
-    trigger: ['code_implementation', 'module_extension'],
-    enforcement: 'convention-check',
-    description: `在代码库内部：规范一致性 > 个人技术偏好。若项目用 snake_case 而你偏好 camelCase：用 snake_case。若项目用 class 组件而你偏好 hooks：用 class。若确信某规范存在实质危害，请显式提出。切勿暗中背离规范另起范式。`,
-    promptInjection: '约定胜于新奇：规范一致性 > 技术偏好。项目用 snake_case 就用 snake_case。有异议显式提出，不暗中另起范式。',
-    injectPrompt: true,
-  },
-
-  /**
-   * 第一性优先 — Mnilax extension
-   * 原因：从当前状态推导结论会自我证明。正确顺序：第一性→事实校验→结论。
-   */
-  first_principles_first: {
-    id: 'first_principles_first',
-    kind: 'prompt',
-    rule: 'ANALYZE FROM FIRST PRINCIPLES, NOT FROM CURRENT STATE',
-    message: '分析顺序: 第一性→事实校验→结论。禁止"代码就是这样"作为理由',
-    level: 'prompt',
-    trigger: ['code_implementation', 'module_modification', 'file_modification'],
-    enforcement: 'principle-check',
-    description: `架构分析与设计决策必须从第一性原理出发，而非从当前实现状态推导。禁止的模式: "当前代码这样写的所以应该保持这样"——这是自我证明的错误逻辑。`,
-    promptInjection: '第一性优先: 分析设计问题从本质出发，不从当前代码推导。正确设计是什么→当前实现匹配吗→差距决定行动。禁止"代码就是这样"作为理由。',
-    injectPrompt: true,
-  },
-
-  /**
-   * 暴露冲突 — Mnilax Rule 7
-   * 原因：两种模式冲突时不要折中
-   */
-  no_conflict_blending: {
-    id: 'no_conflict_blending',
-    kind: 'prompt',
-    rule: 'SURFACE CONFLICTS, DO NOT BLEND THEM',
-    message: '两种模式冲突→选其一+说明理由，不折中',
-    level: 'prompt',
-    trigger: ['code_implementation', 'module_extension'],
-    enforcement: 'conflict-check',
-    description: `若代码库中既有的两种模式相互矛盾，明确选择其一（优先更新或更经测试的版本），阐明选择理由，将另一种标记为待清理项。试图同时迎合两套规则的中庸代码往往是最糟的。`,
-    promptInjection: '暴露冲突不折中：若两种模式冲突→选其一（优先更经测试的版本）+说明理由+标记另一种为待清理。',
-    injectPrompt: true,
-  },
-
-  /**
-   * 禁止表演性同意
-   * 原因：同意不等于理解，必须先分析再确认
-   * 来源：Superpowers no_performative_agreement
-   */
-  no_performative_agreement: {
-    id: 'no_performative_agreement',
-    kind: 'prompt',
-    rule: 'NO PERFORMATIVE AGREEMENT WITHOUT ANALYSIS',
-    message: '禁止表演性同意，必须先分析再确认',
-    level: 'prompt',
-    trigger: ['design_request'],
-    enforcement: 'performative-check',
-    description: `收到需求或反馈时，不能仅表示"好的"、"明白了"就直接执行。必须先分析、复述理解、确认一致。
-
-【禁止模式】
-- "好的，我来做" → 无分析直接行动
-- "明白了" → 没有复述理解
-- "没问题" → 没有提出疑问
-
-【必须步骤】
-1. 复述你对需求的理解
-2. 提出潜在的疑问或边界情况
-3. 说明你的实现方案
-4. 确认理解一致后再行动`,
-    promptInjection: '先思后码。明确声明前提假设。遇不确定先提问而非猜测。存在歧义时列出多种理解路径。若存在更简方案应果断提出异议。收到需求时：①复述理解 ②提出疑问 ③说明方案 ④确认一致。',
-  },
-
-  /**
-   * 技能需要测试
-   * 例外：MVP
-   */
-  no_skill_without_test: {
-    id: 'no_skill_without_test',
-    kind: 'prompt',
-    rule: 'NO SKILL WITHOUT A FAILING TEST FIRST',
-    message: '创建技能前必须先定义测试场景',
-    level: 'prompt',
-    trigger: 'module_creation',
-    enforcement: 'skill-test-scenario',
-    appliesTo: ['agent-skill'],
-    description: `在创建新的 agent 技能之前，必须先定义测试场景：
-
-1. 定义输入/输出期望
-2. 定义边界条件
-3. 定义失败场景
-4. 编写测试用例
-
-测试场景帮助：
-- 明确技能的功能边界
-- 验证技能的正确性
-- 防止回归`,
-    promptInjection: '新创建的 Skill 模块必须有对应的测试文件。测试应覆盖正常路径、边界情况和错误处理。',
   },
 
   /**

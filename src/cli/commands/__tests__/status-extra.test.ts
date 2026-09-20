@@ -77,7 +77,7 @@ describe('status command - 补充覆盖', () => {
     it('有异常时应该显示详细信息和下一步建议', async () => {
       // 两个约束各自全失败 → 各自判出一枚 low_pass_rate
       mockFs.readFileSync.mockReturnValue(traceFile([
-        ...repeats('no_bypass_checkpoint', 2, 'fail'),
+        ...repeats('docs_freshness', 2, 'fail'),
         ...repeats('no_completion_without_verification', 2, 'fail'),
       ]));
 
@@ -104,7 +104,7 @@ describe('status command - 补充覆盖', () => {
   describe('约束级别统计', () => {
     it('应该显示 Iron Laws 统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'no_bypass_checkpoint' },
+        { constraintId: 'docs_freshness' },
         { constraintId: 'no_completion_without_verification' },
       ]));
 
@@ -130,7 +130,7 @@ describe('status command - 补充覆盖', () => {
   describe('详细模式扩展', () => {
     it('详细模式应该显示所有级别详情', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'no_bypass_checkpoint', level: 'iron_law' },
+        { constraintId: 'docs_freshness', level: 'iron_law' },
         { constraintId: 'capability_sync', level: 'guideline' },
         { constraintId: 'capability_sync', level: 'guideline' },
       ]));

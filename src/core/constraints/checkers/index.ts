@@ -13,10 +13,7 @@ import { getAllConstraints } from '../definitions';
 
 import {
   noCompletionWithoutVerification,
-  incrementalProgress,
-  noImplementationWithoutRequirement,
 } from './iron-flags';
-import { noBypassCheckpoint } from './no-bypass-checkpoint';
 import { noTestSimplification } from './no-test-simplification';
 import { capabilitySync } from './capability-sync';
 import { contextDocSync } from './context-doc-sync';
@@ -27,13 +24,10 @@ import { governancePresence } from './governance-presence';
 const CHECKS: ConstraintCheck[] = [
   // Iron Laws
   noCompletionWithoutVerification,
-  incrementalProgress,
-  noImplementationWithoutRequirement,
   noTestSimplification,
   docsFreshness,
   // Guidelines
   noHardcodedCredentials,
-  noBypassCheckpoint,
   capabilitySync,
   contextDocSync,
   governancePresence,

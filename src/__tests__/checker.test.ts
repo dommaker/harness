@@ -9,7 +9,7 @@
 import { ConstraintChecker, checkConstraint } from '../core/constraints/checker';
 import { PROMPTS } from '../core/constraints/definitions';
 import type { ConstraintContext } from '../types/constraint';
-import { writeFileSync, rmSync, mkdtempSync } from 'fs';
+import { rmSync, mkdtempSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -32,41 +32,6 @@ describe('ConstraintChecker', () => {
   });
 
   describe('Iron Laws', () => {
-    it('should check no_bypass_checkpoint with skip patterns', async () => {
-      // 创建包含 skip 的文件
-      const skipFile = join(tempDir, 'skip-test.ts');
-      writeFileSync(skipFile, 'test.skip("skipped test", () => {});');
-
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        changedFiles: [skipFile],
-      };
-
-      const result = await checker.check(
-        { id: 'no_bypass_checkpoint', kind: 'check', level: 'guideline', rule: 'NO BYPASS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
-        context
-      );
-
-      expect(result.satisfied).toBe(false);
-    });
-
-    it('should pass no_bypass_checkpoint without skip patterns', async () => {
-      const normalFile = join(tempDir, 'normal-test.ts');
-      writeFileSync(normalFile, 'test("normal test", () => { expect(true).toBe(true); });');
-
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        changedFiles: [normalFile],
-      };
-
-      const result = await checker.check(
-        { id: 'no_bypass_checkpoint', kind: 'check', level: 'guideline', rule: 'NO BYPASS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
-        context
-      );
-
-      expect(result.satisfied).toBe(true);
-    });
-
     it('should check no_completion_without_verification', async () => {
       const contextWithEvidence: ConstraintContext = {
         operation: 'code_implementation',
@@ -90,56 +55,6 @@ describe('ConstraintChecker', () => {
 
       expect(resultWithEvidence.satisfied).toBe(true);
       expect(resultWithoutEvidence.satisfied).toBe(false);
-    });
-
-    it('should check incremental_progress', async () => {
-      const contextWithSingleTask: ConstraintContext = {
-        operation: 'code_implementation',
-        hasSingleTask: true,
-      };
-
-      const contextWithMultipleTasks: ConstraintContext = {
-        operation: 'code_implementation',
-        hasSingleTask: false,
-      };
-
-      const resultWith = await checker.check(
-        { id: 'incremental_progress', kind: 'check', level: 'iron_law', rule: 'ONE TASK', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
-        contextWithSingleTask
-      );
-
-      const resultWithout = await checker.check(
-        { id: 'incremental_progress', kind: 'check', level: 'iron_law', rule: 'ONE TASK', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
-        contextWithMultipleTasks
-      );
-
-      expect(resultWith.satisfied).toBe(true);
-      expect(resultWithout.satisfied).toBe(false);
-    });
-
-    it('should check no_implementation_without_requirement', async () => {
-      const contextWithRequirement: ConstraintContext = {
-        operation: 'code_implementation',
-        hasRequirement: true,
-      };
-
-      const contextWithoutRequirement: ConstraintContext = {
-        operation: 'code_implementation',
-        hasRequirement: false,
-      };
-
-      const resultWith = await checker.check(
-        { id: 'no_implementation_without_requirement', kind: 'check', level: 'iron_law', rule: 'REQ EXISTS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
-        contextWithRequirement
-      );
-
-      const resultWithout = await checker.check(
-        { id: 'no_implementation_without_requirement', kind: 'check', level: 'iron_law', rule: 'REQ EXISTS', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
-        contextWithoutRequirement
-      );
-
-      expect(resultWith.satisfied).toBe(true);
-      expect(resultWithout.satisfied).toBe(false);
     });
   });
 

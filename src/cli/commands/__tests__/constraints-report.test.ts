@@ -38,17 +38,17 @@ describe('buildConstraintsUsageReport', () => {
     const report = buildConstraintsUsageReport(root);
 
     expect(report.traceFileExists).toBe(false);
-    expect(report.stats.length).toBe(10); // 5 iron + 5 guideline
+    expect(report.stats.length).toBe(7); // 3 iron + 4 guideline（harness#174）
     for (const s of report.stats) {
       expect(s.total).toBe(0);
       expect(s.evaluated).toBe(0);
       expect(s.failRate).toBe(0);
       expect(s.firstAt).toBeUndefined();
     }
-    expect(report.candidates.length).toBe(10);
+    expect(report.candidates.length).toBe(7);
     expect(report.candidates.every(c => c.kind === 'zero_trigger')).toBe(true);
-    // prompt 注入清单（standard preset、无 scenes → 14 条通用 prompt）
-    expect(report.activePromptIds.length).toBe(14);
+    // prompt 注入清单（standard preset、无 scenes → 8 条通用 prompt，harness#174）
+    expect(report.activePromptIds.length).toBe(8);
     expect(report.activePromptIds).toContain('no_fuzzy_completion_claim');
   });
 
@@ -103,8 +103,8 @@ describe('buildConstraintsUsageReport', () => {
       // 不可评估（存在性探测未命中）：全部 skip
       ...tracesOf('capability_sync', 'skip', 5),
       // 高噪：24 次评估 fail 率 83% > 80%
-      ...tracesOf('no_bypass_checkpoint', 'fail', 20),
-      ...tracesOf('no_bypass_checkpoint', 'pass', 4, 1700001000000),
+      ...tracesOf('no_test_simplification', 'fail', 20),
+      ...tracesOf('no_test_simplification', 'pass', 4, 1700001000000),
       // 零拦截：50 次评估 0 fail
       ...tracesOf('no_hardcoded_credentials', 'pass', 50, 1700010000000),
     ]);
@@ -125,7 +125,7 @@ describe('buildConstraintsUsageReport', () => {
     expect(probeC?.reason).toContain('约定未采用');
 
     // 高噪
-    const noiseC = byId.get('no_bypass_checkpoint');
+    const noiseC = byId.get('no_test_simplification');
     expect(noiseC?.kind).toBe('high_noise');
     expect(noiseC?.reason).toContain('83%');
 
@@ -192,9 +192,9 @@ describe('constraintsReport CLI', () => {
   it('--export 缺省路径：写入 .harness/reports/constraints-<YYYYMMDD>.md 且内容脱敏', async () => {
     const root = createProjectFixture({ name: 'harness-report-test' });
     writeProjectTraces(root, [
-      ...tracesOf('no_bypass_checkpoint', 'fail', 20),
+      ...tracesOf('no_test_simplification', 'fail', 20),
       // projectPath 字段进 trace，但不得进 export
-      { constraintId: 'no_bypass_checkpoint', result: 'fail', projectPath: root, timestamp: 1700001000000 },
+      { constraintId: 'no_test_simplification', result: 'fail', projectPath: root, timestamp: 1700001000000 },
     ]);
 
     await constraintsReport({ projectPath: root, export: true }, io);
@@ -206,7 +206,7 @@ describe('constraintsReport CLI', () => {
     const content = fs.readFileSync(exportPath, 'utf-8');
     expect(content).toContain('harness 版本');
     expect(content).toContain('| id | total | pass | fail | skip |');
-    expect(content).toContain('no_bypass_checkpoint');
+    expect(content).toContain('no_test_simplification');
     expect(content).toContain('高噪');
     // 脱敏：不包含项目路径
     expect(content).not.toContain(root);

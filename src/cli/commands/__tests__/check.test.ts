@@ -155,7 +155,7 @@ describe('check command（真 git fixture）', () => {
   });
 
   describe('判定与输出形状', () => {
-    it('真证据全部满足时逐层通过，未接线证据单独列示', async () => {
+    it('真证据全部满足时逐层通过', async () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
@@ -165,11 +165,8 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      // 3 条 code_implementation 铁律：incremental_progress 的 hasSingleTask 未接线 → skip
-      expect(io.outText()).toContain('✅ 铁律: 全部通过 (2 条)');
-      expect(io.outText()).toContain('✅ 指导原则: 2/2 通过');
-      expect(io.outText()).toContain('⏭️  跳过评估: 1 条（约定未采用或证据未接线，不计通过/失败）');
-      expect(io.outText()).toContain('- incremental_progress');
+      expect(io.outText()).toContain('✅ 铁律: 全部通过 (1 条)');
+      expect(io.outText()).toContain('✅ 指导原则: 1/1 通过');
       expect(io.outText()).toContain('✅ 约束检查通过');
       expect(result).toEqual({ kind: 'ok' });
     });
@@ -398,7 +395,7 @@ describe('check command（真 git fixture）', () => {
       const traces = projectTraces(dir).slice(seeded);
 
       expect(traces.map(t => t.constraintId)).toEqual(
-        expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+        expect.arrayContaining(['no_completion_without_verification', 'no_hardcoded_credentials'])
       );
       expect(traces.every(t => ['pass', 'fail', 'skip'].includes(t.result))).toBe(true);
       expect(traces.every(t => t.projectPath === dir)).toBe(true);

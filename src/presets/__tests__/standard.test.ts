@@ -34,8 +34,8 @@ describe('预设数据', () => {
   describe('RELAXED_PRESET', () => {
     it('应该只启用核心约束', () => {
       expect(RELAXED_PRESET.name).toBe('relaxed');
-      expect(RELAXED_PRESET.ironLaws).toHaveLength(3);
-      expect(RELAXED_PRESET.guidelines).toHaveLength(2);
+      expect(RELAXED_PRESET.ironLaws).toHaveLength(1);
+      expect(RELAXED_PRESET.guidelines).toHaveLength(1);
       expect(RELAXED_PRESET.prompts).toEqual([]);
     });
 
@@ -43,8 +43,8 @@ describe('预设数据', () => {
       expect(RELAXED_PRESET.ironLaws).toContain('no_completion_without_verification');
     });
 
-    it('应该包含 no_bypass_checkpoint', () => {
-      expect(RELAXED_PRESET.guidelines).toContain('no_bypass_checkpoint');
+    it('应该包含 no_hardcoded_credentials', () => {
+      expect(RELAXED_PRESET.guidelines).toContain('no_hardcoded_credentials');
     });
   });
 

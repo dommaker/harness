@@ -36,7 +36,7 @@ describe('TraceCollector', () => {
   describe('record', () => {
     it('应该记录 trace', () => {
       const trace: ExecutionTrace = {
-        constraintId: 'no_bypass_checkpoint',
+        constraintId: 'no_test_simplification',
         level: 'iron_law',
         timestamp: Date.now(),
         result: 'pass',
@@ -45,7 +45,7 @@ describe('TraceCollector', () => {
       collector.record(trace);
 
       const content = fs.readFileSync(traceFile, 'utf-8');
-      expect(content).toContain('no_bypass_checkpoint');
+      expect(content).toContain('no_test_simplification');
       expect(content).toContain('pass');
     });
 
@@ -88,7 +88,7 @@ describe('TraceCollector', () => {
 
   describe('recordPass', () => {
     it('应该记录通过 trace', () => {
-      collector.recordPass('no_bypass_checkpoint', 'iron_law');
+      collector.recordPass('no_test_simplification', 'iron_law');
 
       const traces = collector.read();
       expect(traces.length).toBe(1);
@@ -98,7 +98,7 @@ describe('TraceCollector', () => {
 
   describe('recordFail', () => {
     it('应该记录失败 trace', () => {
-      collector.recordFail('no_bypass_checkpoint', 'iron_law');
+      collector.recordFail('no_test_simplification', 'iron_law');
 
       const traces = collector.read();
       expect(traces.length).toBe(1);

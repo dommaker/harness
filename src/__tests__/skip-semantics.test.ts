@@ -185,20 +185,8 @@ describe('skip 三态语义（ADR-0001）', () => {
       expect(passed.satisfied).toBe(true);
     });
 
-    it('hasSingleTask / hasRequirement undefined → skip', async () => {
-      const single = await checker.check(IRON_LAWS['incremental_progress'], {
-        operation: 'code_implementation',
-      });
-      expect(single.skipped).toBe(true);
-
-      const req = await checker.check(IRON_LAWS['no_implementation_without_requirement'], {
-        operation: 'code_implementation',
-      });
-      expect(req.skipped).toBe(true);
-    });
-
     it('Iron Law skip 不阻断 checkConstraints', async () => {
-      // 三个 flag 全部未接线（CLI pre-commit 路径的典型形态）
+      // flag 未接线（CLI pre-commit 路径的典型形态）
       const result = await checker.checkConstraints({
         operation: 'code_implementation',
         projectPath: path.join(tempDir, 'empty'),
@@ -207,11 +195,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       expect(result.passed).toBe(true);
       const skippedIds = result.ironLaws.filter(r => r.skipped).map(r => r.id);
       expect(skippedIds).toEqual(
-        expect.arrayContaining([
-          'no_completion_without_verification',
-          'incremental_progress',
-          'no_implementation_without_requirement',
-        ])
+        expect.arrayContaining(['no_completion_without_verification'])
       );
     });
 
@@ -296,7 +280,7 @@ describe('skip 三态语义（ADR-0001）', () => {
 
       const skipTraces = records.filter(t => t.result === 'skip');
       expect(skipTraces.map(t => t.constraintId)).toEqual(
-        expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+        expect.arrayContaining(['no_completion_without_verification'])
       );
     });
 

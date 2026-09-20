@@ -154,17 +154,16 @@ describe('setupClaudeMdConstraints（消费生效集）', () => {
     writeConfig('preset: standard\n');
     await setupClaudeMdConstraints(tempDir, io);
     let content = fs.readFileSync(claudeMdPath, 'utf-8');
-    expect(content).not.toContain('no_skill_without_test');
+    expect(content).not.toContain('no_model_for_deterministic');
 
-    writeConfig('preset: standard\nscenes:\n  - agent-skill\n');
+    writeConfig('preset: standard\nscenes:\n  - llm-app\n');
     await setupClaudeMdConstraints(tempDir, io);
     content = fs.readFileSync(claudeMdPath, 'utf-8');
-    expect(content).toContain('- **no_skill_without_test**');
-    expect(content).not.toContain('no_model_for_deterministic');
+    expect(content).toContain('- **no_model_for_deterministic**');
   });
 
   it('注入段文本与 renderConstraintsSection(getEffectiveConstraints()) 一致', async () => {
-    writeConfig('constraints:\n  no_bypass_checkpoint:\n    enabled: false\n');
+    writeConfig('constraints:\n  no_fuzzy_completion_claim:\n    enabled: false\n');
     await setupClaudeMdConstraints(tempDir, io);
 
     const content = fs.readFileSync(claudeMdPath, 'utf-8');

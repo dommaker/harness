@@ -97,7 +97,7 @@ describe('report command', () => {
       const parsed = JSON.parse(jsonStr);
       expect(parsed.constraints).toBeDefined();
       expect(parsed.constraints.total).toBeGreaterThan(0);
-      expect(parsed.constraints.ironLaws).toBeGreaterThan(0);
+      expect(parsed.constraints.errors).toBeGreaterThan(0);
       expect(parsed.timestamp).toBeDefined();
       expect(parsed.projectPath).toBeDefined();
     });

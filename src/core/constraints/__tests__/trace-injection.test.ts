@@ -51,7 +51,7 @@ describe('trace 记录器构造注入（harness#88）', () => {
     await checker.checkConstraints(context());
 
     expect(records.map(r => r.constraintId)).toEqual(
-      expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+      expect.arrayContaining(['no_completion_without_verification', 'no_hardcoded_credentials'])
     );
     expect(records.every(r => ['pass', 'fail', 'skip'].includes(r.result))).toBe(true);
   });

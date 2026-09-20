@@ -1,15 +1,15 @@
 /**
- * check · guideline 定义（ADR-0001：kind 二元模型）
+ * check 约束定义（severity='warning' 组，ADR-0029）
  *
- * 只保留带真实 checker 的指导原则。每条必须：
+ * 只保留带真实 checker 的约束。每条必须：
  * - kind: 'check'
- * - level: 'guideline'
+ * - severity: 'warning'（违规告警不阻断）
  * - 在 checkers/ 注册表中有对应实现（注册表闭环，缺失即加载期抛错）
  */
 
 import type { Constraint } from '../../../types/constraint';
 
-export const GUIDELINES: Record<string, Constraint> = {
+export const WARNING_CONSTRAINTS: Record<string, Constraint> = {
   /**
    * 禁止硬编码凭证
    * 原因：密码/token/密钥泄露是最严重的安全漏洞，一旦提交到版本控制即不可逆
@@ -19,27 +19,10 @@ export const GUIDELINES: Record<string, Constraint> = {
     kind: 'check',
     rule: 'NO HARDCODED PASSWORDS, TOKENS, SECRETS, OR CREDENTIALS IN ANY SOURCE FILE',
     message: '禁止在代码/文档/配置文件中硬编码密码、token、密钥、API key',
-    level: 'guideline',
+    severity: 'warning',
     trigger: ['code_implementation', 'doc_update', 'config_change', 'commit'],
     enforcement: 'credential-scan',
     description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、Markdown 文档、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。建议配合 pre-commit hook 做自动扫描。`,
-    promptInjection: '禁止在代码中硬编码密码、API 密钥、Token 等凭证。使用环境变量或安全的凭证管理方案存储敏感信息。',
-  },
-
-  /**
-   * 禁止跳过检查点验证
-   * 原因：安全底线，检查点是质量门控
-   */
-  no_bypass_checkpoint: {
-    id: 'no_bypass_checkpoint',
-    kind: 'check',
-    rule: 'NO BYPASSING CHECKPOINTS',
-    message: '禁止跳过检查点验证',
-    level: 'guideline',
-    trigger: 'code_implementation',
-    enforcement: 'checkpoint-required',
-    description: '所有检查点必须通过，不能跳过验证步骤。检查点是质量的最后一道防线。',
-    promptInjection: '每个关键步骤后有 checkpoint 验证点，必须通过才能继续。通过标准：测试通过、类型检查无错误、lint 无新增警告。未通过时回退修复，不得跳过。',
   },
 
   /**
@@ -51,7 +34,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     kind: 'check',
     rule: 'CODE CHANGES MUST UPDATE CAPABILITIES.MD',
     message: '核心模块变更必须同步功能清单（支持模块级目录条目登记）',
-    level: 'guideline',
+    severity: 'warning',
     trigger: ['module_creation', 'module_modification', 'module_deletion', 'module_extension'],
     enforcement: 'update-capabilities',
     description: `在创建/修改/删除/扩展核心模块时，必须同步更新 CAPABILITIES.md：
@@ -79,7 +62,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     kind: 'check',
     rule: 'KEY DIRECTORIES SHOULD HAVE CONTEXT.MD',
     message: '关键目录缺少 CONTEXT.md，运行 harness sync-docs 创建模板后填写实际内容',
-    level: 'guideline',
+    severity: 'warning',
     trigger: 'module_modification',
     enforcement: 'context-check',
     description: `项目的关键目录应包含 CONTEXT.md 文件，描述目录职责和上下文。
@@ -108,7 +91,7 @@ export const GUIDELINES: Record<string, Constraint> = {
     kind: 'check',
     rule: 'GOVERNANCE CONTRACT MUST BE PRESENT (AGENTS.MD PRESERVE:GOVERNANCE BLOCK OR CLAUDE.MD GOVERNANCE RULES)',
     message: '治理契约缺失：AGENTS.md 缺少非空 PRESERVE:governance 段，且 CLAUDE.md 无 Governance Rules 块',
-    level: 'guideline',
+    severity: 'warning',
     trigger: ['file_modification', 'module_creation', 'module_modification', 'doc_update', 'config_change', 'commit'],
     enforcement: 'governance-presence-check',
     description: `治理契约（约束清单正本）必须在场，两处居其一：

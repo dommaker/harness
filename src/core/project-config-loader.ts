@@ -6,15 +6,14 @@
  * ADR-0023 决策 2），一次运行内各至多读一次。
  */
 
-import type { Constraint, ConstraintTrigger } from '../types/constraint';
+import type { Constraint } from '../types/constraint';
 import type {
   ProjectConfig,
-  CustomConstraintDefinition,
   MergedConstraintsConfig,
   CapabilitiesConfig,
   GovernanceConfig,
 } from '../types/project-config';
-import { IRON_LAWS, GUIDELINES, PROMPTS } from './constraints/definitions';
+import { CONSTRAINTS } from './constraints/definitions';
 import { PRESETS_BY_NAME, STANDARD_PRESET } from '../presets';
 import { filterEnabledEntries } from './effective-set';
 import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-env';
@@ -24,7 +23,6 @@ import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-en
  */
 const DEFAULT_CONFIG: ProjectConfig = {
   preset: 'standard',
-  custom_constraints_file: 'custom-constraints.yml',
 };
 
 /**
@@ -104,32 +102,12 @@ export function getCapabilitiesMode(target: RunTarget): CapabilitiesMode {
 }
 
 /**
- * 退役判定单点（studio#82 D6 一处真相）
- *
- * 两个落点合成一条规则：禁用（config.yml `constraints.<id>.enabled: false`，内置约束的
- * 退役落点）或 custom 条目自带 `retired` 元数据（custom 约束的退役落点，不拆 config.yml
- * 第二处）。`mergeConstraints` 的 custom 追加跳过与 `harness constraints retire` 的
- * already_retired 检查共用本函数——后者此前是这条规则的手写复印（harness#137 收口）。
- *
- * `disabled` 由调用方给：mergeConstraints 传的是含 preset 裁剪的完整禁用集，
- * retire 传的是 config.yml 单点（退役落点只有这一处，preset 语义不掺进退役判定）。
- * `retired` 按 truthiness 判，与 mergeConstraints 历史口径逐字一致。
- */
-export function isConstraintRetired(
-  customDef: { retired?: unknown } | undefined,
-  disabled: boolean
-): boolean {
-  return disabled || Boolean(customDef?.retired);
-}
-
-/**
  * 项目配置加载器
  */
 export class ProjectConfigLoader {
   private env: RunEnv;
   private projectPath: string;
   private config: ProjectConfig;
-  private customConstraints: Record<string, CustomConstraintDefinition>;
 
   /**
    * @param target 项目根路径，或本 run 已构造的运行级观察面（ADR-0023 决策 2）
@@ -139,51 +117,23 @@ export class ProjectConfigLoader {
     this.env = resolveRunEnv(target);
     this.projectPath = this.env.projectPath;
     this.config = { ...DEFAULT_CONFIG };
-    this.customConstraints = {};
   }
 
   /**
-   * 加载项目配置
+   * 加载项目配置（run 内 memo 在观察面上，同一份解析结果供全部消费方共用）
    */
   load(): ProjectConfig {
-    // 1. 加载主配置（run 内 memo 在观察面上，同一份解析结果供全部消费方共用）
     const raw = this.env.rawConfig();
     if (raw) {
       this.config = { ...DEFAULT_CONFIG, ...(raw as Partial<ProjectConfig>) };
     }
-
-    // 2. 加载自定义约束
-    this.loadCustomConstraints();
-
     return this.config;
   }
 
   /**
-   * 加载自定义约束
+   * 合并内置约束（生效集完整链路，ADR-0029）
    *
-   * 文件读取经观察面（ADR-0023 决策 2）：同一次运行内多个加载器共用同一份内容，
-   * 「哪个文件名算数」与合并顺序仍由本函数决定（方式 1 文件 → 方式 2 主配置内联，后者覆盖）。
-   */
-  private loadCustomConstraints(): void {
-    // 方式 1：从单独文件加载
-    if (this.config.custom_constraints_file) {
-      const defs = this.env.customConstraints(this.config.custom_constraints_file);
-      this.customConstraints = { ...this.customConstraints, ...defs };
-    }
-
-    // 方式 2：从主配置文件中加载
-    if (this.config.custom_constraints) {
-      this.customConstraints = { ...this.customConstraints, ...this.config.custom_constraints };
-    }
-  }
-
-  /**
-   * 合并内置约束和自定义约束（ADR-0001 生效集完整链路）
-   *
-   * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false`
-   * 删除（对内置与 custom 同效）→ custom-constraints 追加
-   * （禁用/已退役的 custom 不追加）→ scenes 过滤
-   * （带 appliesTo 的 prompt 仅当 scenes 交集非空时保留）。
+   * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false` 删除。
    *
    * config.yml 中未知约束 id（如已移除约束的禁用残留）静默忽略，
    * 记录在结果 unknownIds 中供诊断。
@@ -199,6 +149,9 @@ export class ProjectConfigLoader {
       console.error(`[harness] 未知预设 "${presetName}"，已回落 standard`);
       preset = STANDARD_PRESET;
     }
+    // preset 按 severity 分键；展开为「id → 是否启用」的单桶视图
+    const bySeverity = (severity: 'error' | 'warning'): Record<string, Constraint> =>
+      Object.fromEntries(Object.entries(CONSTRAINTS).filter(([, c]) => c.severity === severity));
     const pick = (
       source: Record<string, Constraint>,
       ids: string[] | null
@@ -215,102 +168,34 @@ export class ProjectConfigLoader {
       ids: string[] | null
     ): string[] => (ids === null ? [] : Object.keys(source).filter(id => !ids.includes(id)));
 
+    const errorConstraints = bySeverity('error');
+    const warningConstraints = bySeverity('warning');
+
     const unknownIds: string[] = [];
     const result: MergedConstraintsConfig = {
-      ironLaws: pick(IRON_LAWS, preset.ironLaws),
-      guidelines: pick(GUIDELINES, preset.guidelines),
-      prompts: pick(PROMPTS, preset.prompts),
+      constraints: {
+        ...pick(errorConstraints, preset.errors),
+        ...pick(warningConstraints, preset.warnings),
+      },
       disabled: [
-        ...presetDisabled(IRON_LAWS, preset.ironLaws),
-        ...presetDisabled(GUIDELINES, preset.guidelines),
-        ...presetDisabled(PROMPTS, preset.prompts),
+        ...presetDisabled(errorConstraints, preset.errors),
+        ...presetDisabled(warningConstraints, preset.warnings),
       ],
-      custom: [],
       unknownIds,
     };
 
     // 1. 处理启用/禁用配置（未知 id 静默忽略，记录供诊断）
     if (this.config.constraints) {
-      const knownIds = new Set([
-        ...Object.keys(IRON_LAWS),
-        ...Object.keys(GUIDELINES),
-        ...Object.keys(PROMPTS),
-        ...Object.keys(this.customConstraints),
-      ]);
+      const knownIds = new Set(Object.keys(CONSTRAINTS));
       const filtered = filterEnabledEntries(knownIds, this.config.constraints);
       unknownIds.push(...filtered.unknownIds);
       for (const constraintId of filtered.disabledIds) {
         result.disabled.push(constraintId);
-        // 从对应层级中移除
-        delete result.ironLaws[constraintId];
-        delete result.guidelines[constraintId];
-        delete result.prompts![constraintId];
-      }
-    }
-
-    // 2. 添加自定义约束（config.yml 禁用的 id 不追加：step 1 已将其
-    // 收集进 disabled，custom 在 step 1 时尚未入桶，须在此兜底跳过；
-    // 条目带 retired 元数据的同样不追加——studio#82 D6 退役落点在条目自身）
-    for (const [id, customDef] of Object.entries(this.customConstraints)) {
-      if (isConstraintRetired(customDef, result.disabled.includes(id))) {
-        continue;
-      }
-      const constraint = this.toConstraint(customDef, id);
-
-      result.custom.push(id);
-
-      const level = customDef.level || 'guideline';
-      switch (level) {
-        case 'iron_law':
-          result.ironLaws[id] = constraint;
-          break;
-        case 'guideline':
-          result.guidelines[id] = constraint;
-          break;
-        case 'prompt':
-          result.prompts![id] = constraint;
-          break;
-      }
-    }
-
-    // 3. scenes 过滤（ADR-0001）：带 appliesTo 标签的 prompt 仅当项目 scenes
-    // 与其交集非空时保留；无 appliesTo 的条目不受影响。缺省 scenes=[] 即
-    // 场景专属 prompt 默认不进入生效集。
-    const scenes = this.config.scenes ?? [];
-    for (const [id, constraint] of Object.entries(result.prompts!)) {
-      if (
-        constraint.appliesTo &&
-        constraint.appliesTo.length > 0 &&
-        !constraint.appliesTo.some(scene => scenes.includes(scene))
-      ) {
-        delete result.prompts![id];
+        delete result.constraints[constraintId];
       }
     }
 
     return result;
-  }
-
-  /**
-   * 将自定义约束定义转换为 Constraint
-   *
-   * kind 推导（ADR-0001）：自定义约束没有注册表中的 checker，统一归为
-   * kind='prompt'（不执行 checker，check() 短路通过），level 仅决定其所在
-   * 桶与严重性行为，保持与历史"未注册默认通过"相同的执行语义。
-   */
-  private toConstraint(def: CustomConstraintDefinition, defaultId: string): Constraint {
-    const level = def.level || 'guideline';
-    return {
-      id: def.id || defaultId,
-      kind: 'prompt',
-      level,
-      rule: def.rule || '',
-      message: def.message || '',
-      trigger: (def.trigger || 'manual') as ConstraintTrigger | ConstraintTrigger[],
-      description: def.description,
-      promptInjection: def.promptInjection,
-      enabled: def.enabled !== false,
-      enforcement: 'custom',
-    };
   }
 
   /**
@@ -321,19 +206,9 @@ export class ProjectConfigLoader {
   }
 
   /**
-   * 获取自定义约束
-   */
-  getCustomConstraints(): Record<string, CustomConstraintDefinition> {
-    return this.customConstraints;
-  }
-
-  /**
    * 检查是否有自定义配置
    */
   hasCustomConfig(): boolean {
-    return (
-      Object.keys(this.customConstraints).length > 0 ||
-      (this.config.constraints !== undefined && Object.keys(this.config.constraints).length > 0)
-    );
+    return this.config.constraints !== undefined && Object.keys(this.config.constraints).length > 0;
   }
 }

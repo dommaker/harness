@@ -1,30 +1,22 @@
 /**
- * harness constraints retire —— 约束退役（ADR-0001 决策 2/5）
+ * harness constraints retire —— 约束退役（ADR-0001 决策 2/5，ADR-0029 收窄）
  *
  * 建议层全自动（候选诊断复用 report 数据层），执行层保留一次人确认。
- * 落盘形态（studio#82 D6 一处真相）：
+ * 落盘形态（一处真相）：
  *
- * - 内置约束 → config.yml `enabled: false` + `retired` 元数据：
+ * - config.yml `enabled: false` + `retired` 元数据：
  *
  *     constraints:
  *       <id>:
  *         enabled: false
  *         retired: { at, reason, stats: { total, fail, failRate } }
  *
- * - custom 约束 → custom-constraints.yml 条目内 `retired` 元数据段
- *   （不拆 config.yml 第二处）：
+ * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'）。
  *
- *     custom_constraints:
- *       <id>:
- *         rule: ...
- *         retired: { at, reason, stats: { total, fail, failRate } }
+ * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役，
+ * retire 只处理内置 check 约束。
  *
- * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'），
- * 并同步治理注入段（CLAUDE.md 或 AGENTS.md，存在 HARNESS_CONSTRAINTS 标记时；
- * 落点路由与 init 一致，见 core/constraints/injection-drift resolveInjectionTarget）。
- *
- * retire 不是删除——恢复方法：内置删 config.yml 中 constraints.<id> 段；
- * custom 删 custom-constraints.yml 中 custom_constraints.<id>.retired 段。
+ * retire 不是删除——恢复方法：删 config.yml 中 constraints.<id> 段。
  *
  * 交互与执行分离：retireConstraint 为纯执行逻辑（同步、可测），
  * runRetireInteractive 只做 readline 交互，IO 流可注入。
@@ -37,11 +29,7 @@ import { log, logError, processIO, type CommandIO, type CommandResult } from '..
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
-import { renderConstraintsSection, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER } from '../../core/constraints/injection-renderer';
-import { replaceStandaloneRange, resolveInjectionTarget } from '../../core/constraints/injection-writer';
-import { getEffectiveConstraints } from '../../core/effective-constraints';
-import { isConstraintRetired, ProjectConfigLoader } from '../../core/project-config-loader';
-import { getHarnessPackageVersion } from '../../utils/package-version';
+import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { FileKnowledgeStore } from '../../knowledge/store';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
@@ -65,15 +53,9 @@ export type RetireStatus = 'retired' | 'already_retired' | 'unknown_id';
 export interface RetireResult {
   id: string;
   status: RetireStatus;
-  /** 是否 check 层 iron（交互模式据此追加确认） */
-  isIronLaw: boolean;
-  /** 退役落点：custom 约束落 custom-constraints.yml（studio#82 D6），内置落 config.yml */
-  landing: 'config.yml' | 'custom-constraints.yml';
+  /** 是否 severity='error'（交互模式据此追加确认） */
+  isError: boolean;
   stats: { total: number; fail: number; failRate: number };
-  /** 治理注入段（CLAUDE.md / AGENTS.md）是否已同步 */
-  injectionSynced: boolean;
-  /** 实际同步的落点文件（injectionSynced 时存在） */
-  injectionFile?: string;
   /** KnowledgeStore 条目 id（status='retired' 时存在） */
   knowledgeEntryId?: string;
 }
@@ -86,61 +68,34 @@ export interface ConstraintsRetireOptions {
 }
 
 interface RetireTargetInfo {
-  source: 'builtin' | 'custom';
-  isIronLaw: boolean;
-  level: Constraint['level'];
+  severity: Constraint['severity'];
   description?: string;
   rule?: string;
   message?: string;
-  promptInjection?: string;
 }
 
 /**
- * 查找约束定义（内置 definitions + 项目 custom-constraints）
+ * 查找约束定义（内置 definitions）
  *
  * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
  * 不再自造 ProjectConfigLoader。
  */
-function findRetireTarget(
-  loader: ProjectConfigLoader,
-  id: string
-): RetireTargetInfo | undefined {
+function findRetireTarget(id: string): RetireTargetInfo | undefined {
   const builtIn = getConstraint(id);
-  if (builtIn) {
-    return {
-      source: 'builtin',
-      isIronLaw: builtIn.kind === 'check' && builtIn.level === 'iron_law',
-      level: builtIn.level,
-      description: builtIn.description,
-      rule: builtIn.rule,
-      message: builtIn.message,
-      promptInjection: builtIn.promptInjection,
-    };
-  }
-
-  const custom = loader.getCustomConstraints()[id];
-  if (custom) {
-    const level = custom.level || 'guideline';
-    return {
-      source: 'custom',
-      isIronLaw: false, // custom 约束统一 kind='prompt'（无 checker），不存在 check 层 iron
-      level,
-      description: custom.description,
-      rule: custom.rule,
-      message: custom.message,
-      promptInjection: custom.promptInjection,
-    };
-  }
-
-  return undefined;
+  if (!builtIn) return undefined;
+  return {
+    severity: builtIn.severity,
+    description: builtIn.description,
+    rule: builtIn.rule,
+    message: builtIn.message,
+  };
 }
 
 /**
  * YAML 条目的读-改-写单点（harness#137）
  *
- * 内置与 custom 两处退役落点原本是两段同型的读-改-写，只差键路径与 patch 内容。
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
- * 文件名，与合并前两处逐字一致）。落盘字节由 `__tests__/constraints-retire.test.ts`
+ * 文件名）。落盘字节由 `__tests__/constraints-retire.test.ts`
  * 的逐字节冻结用例钉住——合并属内部重构，对外产物不得漂移。
  */
 function setYamlEntry(
@@ -191,7 +146,6 @@ function saveRetireKnowledge(
     target.description ? `description: ${target.description}` : undefined,
     target.rule ? `rule: ${target.rule}` : undefined,
     target.message ? `message: ${target.message}` : undefined,
-    target.promptInjection ? `promptInjection: ${target.promptInjection}` : undefined,
     '',
     '## 退役原因',
     '',
@@ -217,7 +171,7 @@ function saveRetireKnowledge(
     lastReferenced: iso,
     contributors: [],
     projects: [],
-    tags: ['constraint-retired', `constraint:${id}`, `level:${target.level}`],
+    tags: ['constraint-retired', `constraint:${id}`, `severity:${target.severity}`],
     applicablePhases: [],
     sourceReferences: [{ timestamp: iso }],
     referencedBy: [],
@@ -229,26 +183,6 @@ function saveRetireKnowledge(
   const store = new FileKnowledgeStore({ baseDir: path.join(projectRoot, '.harness', 'knowledge') });
   store.save(entry);
   return entryId;
-}
-
-/**
- * 同步治理注入段（CLAUDE.md 或 AGENTS.md，存在 HARNESS_CONSTRAINTS 标记时）
- *
- * 落点路由复用 resolveInjectionTarget（studio #307：新模型仓注入段在
- * AGENTS.md PRESERVE:governance 内；旧模型仓 CLAUDE.md 优先）。
- * 复用 renderConstraintsSection（P3 导出纯函数）按退役后生效集重渲染。
- * 无标记段不动（不追加——retire 不承担 init 职责）。
- */
-function syncGovernanceInjection(projectRoot: string): { synced: boolean; file?: string } {
-  const target = resolveInjectionTarget(projectRoot);
-  if (!target) return { synced: false };
-
-  const body = renderConstraintsSection(getEffectiveConstraints(projectRoot), getHarnessPackageVersion());
-  const write = replaceStandaloneRange(target.content, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, body);
-  if (write.kind === 'updated' && write.content !== target.content) {
-    fs.writeFileSync(path.join(projectRoot, target.file), write.content, 'utf-8');
-  }
-  return { synced: true, file: target.file };
 }
 
 /**
@@ -265,27 +199,20 @@ export function retireConstraint(
   const iso = now.toISOString();
   const reason = options.reason ?? '';
 
-  // 一次退役一份观察面（ADR-0023 决策 2）：定义查找、already_retired 判定与 custom 文件名
-  // 解析共用这一份装载结果。此前同一次调用 new 了 2–3 枚加载器、各带一次 load()（harness#137）。
-  // 只覆盖写盘**之前**的读取：写盘后 syncGovernanceInjection 必须读到新状态，另起观察面。
+  // 一次退役一份观察面（ADR-0023 决策 2）：定义查找与 already_retired 判定共用这一份装载结果。
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
 
-  const target = findRetireTarget(loader, id);
+  const target = findRetireTarget(id);
   const emptyStats = { total: 0, fail: 0, failRate: 0 };
-  const landing: RetireResult['landing'] =
-    target?.source === 'custom' ? 'custom-constraints.yml' : 'config.yml';
   if (!target) {
-    return { id, status: 'unknown_id', isIronLaw: false, landing, stats: emptyStats, injectionSynced: false };
+    return { id, status: 'unknown_id', isError: false, stats: emptyStats };
   }
+  const isError = target.severity === 'error';
 
-  // 已退役保护：判定单点在 core/project-config-loader isConstraintRetired
-  // （内置看 config.yml enabled:false；custom 看 yml 条目 retired 元数据，
-  // 历史落点 config.yml enabled:false 同样保护）
-  const disabledInConfig = loader.getConfig().constraints?.[id]?.enabled === false;
-  const customDef = target.source === 'custom' ? loader.getCustomConstraints()[id] : undefined;
-  if (isConstraintRetired(customDef, disabledInConfig)) {
-    return { id, status: 'already_retired', isIronLaw: target.isIronLaw, landing, stats: emptyStats, injectionSynced: false };
+  // 已退役保护：退役落点只有 config.yml constraints.<id>.enabled:false 一处
+  if (loader.getConfig().constraints?.[id]?.enabled === false) {
+    return { id, status: 'already_retired', isError, stats: emptyStats };
   }
 
   // 历史统计（来自 traces.log）
@@ -300,42 +227,24 @@ export function retireConstraint(
     failRate: evaluated > 0 ? (usage!.fail / evaluated) : 0,
   };
 
-  // 1. 落盘退役（custom → yml 条目 retired 段；内置 → config.yml enabled:false + retired 段，
-  // 两处原文均保留）
+  // 1. 落盘退役（config.yml enabled:false + retired 段，原文保留）
   const retiredMeta = { at: iso, reason, stats };
-  if (target.source === 'custom') {
-    const customFile = loader.getConfig().custom_constraints_file ?? 'custom-constraints.yml';
-    setYamlEntry(
-      path.join(projectRoot, '.harness', customFile),
-      'custom-constraints.yml',
-      'custom_constraints',
-      id,
-      { retired: retiredMeta }
-    );
-  } else {
-    setYamlEntry(
-      path.join(projectRoot, '.harness', 'config.yml'),
-      'config.yml',
-      'constraints',
-      id,
-      { enabled: false, retired: retiredMeta }
-    );
-  }
+  setYamlEntry(
+    path.join(projectRoot, '.harness', 'config.yml'),
+    'config.yml',
+    'constraints',
+    id,
+    { enabled: false, retired: retiredMeta }
+  );
 
   // 2. KnowledgeStore
   const knowledgeEntryId = saveRetireKnowledge(projectRoot, id, target, reason, stats, iso);
 
-  // 3. 治理注入段同步（CLAUDE.md / AGENTS.md，路由见 syncGovernanceInjection）
-  const injection = syncGovernanceInjection(projectRoot);
-
   return {
     id,
     status: 'retired',
-    isIronLaw: target.isIronLaw,
-    landing,
+    isError,
     stats,
-    injectionSynced: injection.synced,
-    injectionFile: injection.file,
     knowledgeEntryId,
   };
 }
@@ -346,7 +255,7 @@ export function retireConstraint(
 export function printRetireResult(result: RetireResult, io: CommandIO = processIO): CommandResult {
   switch (result.status) {
     case 'unknown_id':
-      log(io, chalk.red(`❌ ${result.id}: 约束不存在（既非内置也非 custom-constraints），未做任何变更`));
+      log(io, chalk.red(`❌ ${result.id}: 约束不存在（非内置约束），未做任何变更`));
       return { kind: 'skip', reason: `${result.id}: 约束不存在，未做任何变更` };
     case 'already_retired':
       log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 中 enabled: false），跳过`));
@@ -355,14 +264,7 @@ export function printRetireResult(result: RetireResult, io: CommandIO = processI
       log(io, chalk.green(`✅ ${result.id}: 已退役`));
       log(io, `   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
       log(io, `   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
-      if (result.injectionSynced) {
-        log(io, `   已同步 ${result.injectionFile ?? '治理文档'} 注入段`);
-      }
-      const recovery =
-        result.landing === 'custom-constraints.yml'
-          ? `删除 custom-constraints.yml 中 custom_constraints.${result.id}.retired 段`
-          : `删除 config.yml 中 constraints.${result.id} 段`;
-      log(io, chalk.gray(`   retire 不是删除——恢复方法：${recovery}`));
+      log(io, chalk.gray(`   retire 不是删除——恢复方法：删除 config.yml 中 constraints.${result.id} 段`));
       break;
     }
   }
@@ -439,25 +341,23 @@ export async function runRetireInteractive(
       selectedIds = [...new Set(selectedIds)];
     }
 
-    // 逐条收集 reason + iron 二次确认（一次交互一份装载结果：候选到确认之间不写盘）
-    const planLoader = new ProjectConfigLoader(projectRoot);
-    planLoader.load();
-    const plan: { id: string; reason: string; source: RetireTargetInfo['source'] }[] = [];
+    // 逐条收集 reason + error 级二次确认
+    const plan: { id: string; reason: string }[] = [];
     for (const id of selectedIds) {
-      const target = findRetireTarget(planLoader, id);
+      const target = findRetireTarget(id);
       if (!target) {
         console.log(chalk.red(`❌ ${id}: 约束不存在，跳过`));
         continue;
       }
-      if (target.isIronLaw) {
-        const confirm = await ask(chalk.yellow(`⚠️  ${id} 是一条 Iron Law，确认退役？(y/N) `));
+      if (target.severity === 'error') {
+        const confirm = await ask(chalk.yellow(`⚠️  ${id} 是一条 error 级约束，确认退役？(y/N) `));
         if (confirm.toLowerCase() !== 'y' && confirm.toLowerCase() !== 'yes') {
           console.log(`   已跳过 ${id}`);
           continue;
         }
       }
       const reason = await ask(`退役原因（${id}，可留空）: `);
-      plan.push({ id, reason, source: target.source });
+      plan.push({ id, reason });
     }
 
     if (plan.length === 0) {
@@ -469,14 +369,9 @@ export async function runRetireInteractive(
     console.log();
     console.log(chalk.bold('将执行以下变更:'));
     for (const p of plan) {
-      if (p.source === 'custom') {
-        console.log(`  - custom-constraints.yml: custom_constraints.${p.id}.retired 元数据（原因: ${p.reason || '（空）'}）`);
-      } else {
-        console.log(`  - config.yml: constraints.${p.id}.enabled=false + retired 元数据（原因: ${p.reason || '（空）'}）`);
-      }
+      console.log(`  - config.yml: constraints.${p.id}.enabled=false + retired 元数据（原因: ${p.reason || '（空）'}）`);
       console.log(`  - KnowledgeStore: 写入 constraint-retired-${p.id}`);
     }
-    console.log('  - CLAUDE.md / AGENTS.md: 若含 HARNESS_CONSTRAINTS 标记段则同步重渲染');
     const finalConfirm = await ask('确认执行？(y/N) ');
     if (finalConfirm.toLowerCase() !== 'y' && finalConfirm.toLowerCase() !== 'yes') {
       console.log('已取消');
@@ -527,8 +422,8 @@ export async function constraintsRetire(
     }
 
     const result = retireConstraint(projectRoot, id, { reason: options.reason });
-    if (result.status === 'retired' && result.isIronLaw) {
-      log(io, chalk.yellow(`⚠️  ${id} 是一条 Iron Law，已通过 --yes 直达退役（交互模式会要求二次确认）`));
+    if (result.status === 'retired' && result.isError) {
+      log(io, chalk.yellow(`⚠️  ${id} 是一条 error 级约束，已通过 --yes 直达退役（交互模式会要求二次确认）`));
     }
     return printRetireResult(result, io);
   }

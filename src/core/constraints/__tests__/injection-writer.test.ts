@@ -1,32 +1,27 @@
 /**
- * injection-writer 旁测（架构评审候选1，ADR-0011）
+ * injection-writer 旁测（架构评审候选1，ADR-0011；ADR-0029 收窄）
  *
- * 测试面 = 纯函数（字符串进、字符串出）+ 落点路由（真实 fs 临时目录）。
- * 幂等/半标记守护/两种尾部形状/读写路由优先级全部在此测一次；
- * 消费方（init/retire/drift）只测各自语义（init-injection.test 行为面）。
+ * 测试面 = 纯函数（字符串进、字符串出）+ 治理正本探测。
+ * 幂等/半标记守护/两种尾部形状在此测一次。
+ * ADR-0029：注入段落点路由（resolveInjectionTarget/resolveGovernanceLanding）
+ * 已随文本注入层关停删除，相关用例移除。
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import * as fs from 'fs';
-import * as path from 'path';
+import { describe, it, expect } from '@jest/globals';
 import {
   replaceStandaloneRange,
   replaceEnclosedRange,
   cutMarkerBlock,
-  resolveInjectionTarget,
-  resolveGovernanceLanding,
   GOVERNANCE_HEADING,
   hasGovernanceContract,
   countGovernanceHeadings,
   hasPreserveBlock,
 } from '../injection-writer';
-import {
-  CONSTRAINTS_START_MARKER as CS,
-  CONSTRAINTS_END_MARKER as CE,
-} from '../injection-renderer';
 
 const B = '<!-- B -->';
 const E = '<!-- E -->';
+const CS = '<!-- CS -->';
+const CE = '<!-- CE -->';
 
 describe('replaceStandaloneRange — 独立成节形状', () => {
   it('替换含标记区间；尾文多换行折叠为恰好一个空行', () => {
@@ -94,54 +89,6 @@ describe('cutMarkerBlock', () => {
   it('absent / half 与替换函数同一判定', () => {
     expect(cutMarkerBlock('clean', B, E)).toBe('absent');
     expect(cutMarkerBlock(`${B} only`, B, E)).toBe('half');
-  });
-});
-
-describe('落点路由（读写两侧，studio #307/#302）', () => {
-  let dir: string;
-
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(process.cwd(), 'temp-test-inj-writer-'));
-  });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
-
-  const write = (name: string, content: string) =>
-    fs.writeFileSync(path.join(dir, name), content, 'utf-8');
-
-  it('resolveInjectionTarget：CLAUDE.md 完整标记段优先于 AGENTS.md', () => {
-    write('CLAUDE.md', `x\n${CS}\nbody\n${CE}\n`);
-    write('AGENTS.md', `<!-- PRESERVE:governance -->\n${CS}\nbody2\n${CE}\n`);
-    expect(resolveInjectionTarget(dir)?.file).toBe('CLAUDE.md');
-  });
-
-  it('CLAUDE.md 标记残缺（单边）不算落点 → 落 AGENTS.md', () => {
-    write('CLAUDE.md', `x\n${CS}\nbroken\n`);
-    write('AGENTS.md', `${CS}\nbody\n${CE}\n`);
-    expect(resolveInjectionTarget(dir)?.file).toBe('AGENTS.md');
-  });
-
-  it('两处均无完整标记段 → null（未注入）', () => {
-    write('CLAUDE.md', '# 无约束标记\n');
-    expect(resolveInjectionTarget(dir)).toBeNull();
-  });
-
-  it('resolveGovernanceLanding：CLAUDE.md 有标记或有旧版 Governance Rules 块 → claude-md', () => {
-    write('CLAUDE.md', `${CS}\nbody\n${CE}\n`);
-    expect(resolveGovernanceLanding(dir).target).toBe('claude-md');
-    write('CLAUDE.md', '# CLAUDE.md\n\n## Governance Rules\n\n手写\n');
-    expect(resolveGovernanceLanding(dir).target).toBe('claude-md');
-  });
-
-  it('CLAUDE.md 与治理无关 / 不存在 → agents-md', () => {
-    write('CLAUDE.md', '# CLAUDE.md\n\n@AGENTS.md\n');
-    expect(resolveGovernanceLanding(dir).target).toBe('agents-md');
-    fs.rmSync(path.join(dir, 'CLAUDE.md'));
-    expect(resolveGovernanceLanding(dir).target).toBe('agents-md');
-  });
-
-  it('落点路由消费共享宽松谓词：双空格标题变体也路由 claude-md（fail-open）', () => {
-    write('CLAUDE.md', '# CLAUDE.md\n\n##  Governance Rules\n\n手写\n');
-    expect(resolveGovernanceLanding(dir).target).toBe('claude-md');
   });
 });
 

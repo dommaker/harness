@@ -42,7 +42,7 @@ describe('TraceCollector', () => {
       const disabledCollector = new TraceCollector({ enabled: false });
       disabledCollector.record({
         constraintId: 'test',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: Date.now(),
         result: 'pass',
       });
@@ -54,7 +54,7 @@ describe('TraceCollector', () => {
     it('should append trace to file', () => {
       collector.record({
         constraintId: 'test',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: Date.now(),
         result: 'pass',
       });
@@ -64,7 +64,7 @@ describe('TraceCollector', () => {
 
   describe('recordPass()', () => {
     it('should record pass trace', () => {
-      collector.recordPass('test_constraint', 'iron_law');
+      collector.recordPass('test_constraint', 'error');
       const call = mockFs.appendFileSync.mock.calls[0];
       const content = JSON.parse(call[1] as string);
       expect(content.result).toBe('pass');
@@ -73,7 +73,7 @@ describe('TraceCollector', () => {
 
   describe('recordFail()', () => {
     it('should record fail trace', () => {
-      collector.recordFail('test_constraint', 'iron_law');
+      collector.recordFail('test_constraint', 'error');
       const call = mockFs.appendFileSync.mock.calls[0];
       const content = JSON.parse(call[1] as string);
       expect(content.result).toBe('fail');
@@ -91,8 +91,8 @@ describe('TraceCollector', () => {
 
     it('should parse all traces from file', () => {
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
-        '{"constraintId":"b","level":"guideline","timestamp":200,"result":"fail"}\n'
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"b","severity":"warning","timestamp":200,"result":"fail"}\n'
       );
       const traces = collector.read();
       expect(traces.length).toBe(2);
@@ -100,19 +100,19 @@ describe('TraceCollector', () => {
 
     it('should apply constraintId filter', () => {
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
-        '{"constraintId":"b","level":"guideline","timestamp":200,"result":"fail"}\n'
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"b","severity":"warning","timestamp":200,"result":"fail"}\n'
       );
       const traces = collector.read({ constraintId: 'a' });
       expect(traces.length).toBe(1);
     });
 
-    it('should apply level filter', () => {
+    it('should apply severity filter', () => {
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
-        '{"constraintId":"b","level":"guideline","timestamp":200,"result":"fail"}\n'
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"b","severity":"warning","timestamp":200,"result":"fail"}\n'
       );
-      const traces = collector.read({ level: 'guideline' });
+      const traces = collector.read({ severity: 'warning' });
       expect(traces.length).toBe(1);
     });
   });
@@ -121,7 +121,7 @@ describe('TraceCollector', () => {
     it('should read recent traces', () => {
       const now = Date.now();
       mockFs.readFileSync.mockReturnValueOnce(
-        `{"constraintId":"new","level":"iron_law","timestamp":${now - 1000},"result":"pass"}\n`
+        `{"constraintId":"new","severity":"error","timestamp":${now - 1000},"result":"pass"}\n`
       );
       const traces = collector.readRecent(1);
       expect(traces.length).toBe(1);
@@ -131,7 +131,7 @@ describe('TraceCollector', () => {
   describe('readByConstraint()', () => {
     it('should read by constraint', () => {
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n'
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n'
       );
       const traces = collector.readByConstraint('a');
       expect(traces.length).toBe(1);
@@ -143,7 +143,7 @@ describe('TraceCollector', () => {
       mockFs.statSync.mockReturnValueOnce({ size: 11 * 1024 * 1024 } as any);
       collector.record({
         constraintId: 'test',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: Date.now(),
         result: 'pass',
       });
@@ -155,7 +155,7 @@ describe('TraceCollector', () => {
     it('should return stats', () => {
       mockFs.existsSync.mockReturnValueOnce(true);
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n'
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n'
       );
       mockFs.statSync.mockReturnValueOnce({ size: 1024 } as any);
       const stats = collector.getStats();
@@ -166,9 +166,9 @@ describe('TraceCollector', () => {
   describe('坏行容错（harness#82 裁决 4：原「抛」改 skip，签名与返回类型不变）', () => {
     it('read() 单行损坏只丢该行，合法 trace 照常返回', () => {
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n' +
         '{"constraintId":"b","broken"\n' +
-        '{"constraintId":"c","level":"guideline","timestamp":200,"result":"fail"}\n'
+        '{"constraintId":"c","severity":"warning","timestamp":200,"result":"fail"}\n'
       );
       const traces = collector.read();
       expect(traces.map(t => t.constraintId)).toEqual(['a', 'c']);
@@ -176,9 +176,9 @@ describe('TraceCollector', () => {
 
     it('read() 坏行不阻断过滤', () => {
       mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n' +
         'not-json\n' +
-        '{"constraintId":"a","level":"iron_law","timestamp":200,"result":"fail"}\n'
+        '{"constraintId":"a","severity":"error","timestamp":200,"result":"fail"}\n'
       );
       const traces = collector.read({ constraintId: 'a' });
       expect(traces).toHaveLength(2);
@@ -187,8 +187,8 @@ describe('TraceCollector', () => {
     it('getStats() 首末行坏时不抛：totalLines 保持原始行数，时间戳取合法记录', () => {
       mockFs.readFileSync.mockReturnValueOnce(
         'not-json\n' +
-        '{"constraintId":"a","level":"iron_law","timestamp":100,"result":"pass"}\n' +
-        '{"constraintId":"b","level":"guideline","timestamp":200,"result":"fail"}\n' +
+        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n' +
+        '{"constraintId":"b","severity":"warning","timestamp":200,"result":"fail"}\n' +
         'also-bad\n'
       );
       mockFs.statSync.mockReturnValueOnce({ size: 2048 } as any);

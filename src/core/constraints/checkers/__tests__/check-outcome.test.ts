@@ -23,7 +23,7 @@ import type { MergedConstraintsConfig } from '../../../../types/project-config';
 const CAPABILITY_SYNC: Constraint = {
   id: 'capability_sync',
   kind: 'check',
-  level: 'guideline',
+  severity: 'warning',
   rule: 'CODE CHANGES MUST UPDATE CAPABILITIES.MD',
   message: '核心模块变更必须同步功能清单',
   trigger: ['module_modification'],
@@ -62,11 +62,8 @@ describe('normalizeCheckOutcome — 三态 + 证据归一', () => {
 /** 只含 capability_sync 的生效集：一次 run 一条 trace，不牵动其他约束 */
 function onlyCapabilitySync(): MergedConstraintsConfig {
   return {
-    ironLaws: {},
-    guidelines: { capability_sync: CAPABILITY_SYNC },
-    prompts: {},
+    constraints: { capability_sync: CAPABILITY_SYNC },
     disabled: [],
-    custom: [],
   };
 }
 
@@ -81,7 +78,7 @@ async function runGuideline(dir: string): Promise<{
     { operation: 'module_modification', projectPath: dir },
     onlyCapabilitySync()
   );
-  const result = run.guidelines.find(r => r.id === 'capability_sync')!;
+  const result = run.warnings.find(r => r.id === 'capability_sync')!;
   const trace = traces.find(t => t.constraintId === 'capability_sync')!;
   return { result, trace };
 }
@@ -151,7 +148,7 @@ describe('证据随铁律异常外溢（CLI catch 分支只打印 error.message�
   it('ConstraintViolationError 文案带出证据行', () => {
     const error = new ConstraintViolationError({
       id: 'docs_freshness',
-      level: 'iron_law',
+      severity: 'error',
       satisfied: false,
       message: '文档新鲜度检查未通过',
       evidence: ['CAPABILITIES.md 登记的条目不存在:', 'src/gone.ts'],
@@ -165,7 +162,7 @@ describe('证据随铁律异常外溢（CLI catch 分支只打印 error.message�
   it('无证据时文案保持原样（旧消费方断言不受影响）', () => {
     const error = new ConstraintViolationError({
       id: 'no_test_simplification',
-      level: 'iron_law',
+      severity: 'error',
       satisfied: false,
       message: '禁止简化测试绕过困难',
       checkedAt: new Date(),

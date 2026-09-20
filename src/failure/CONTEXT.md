@@ -22,6 +22,6 @@
 - 分类器基于规则匹配，不调用 LLM
 - S4 约束违规处理策略模块（ConstraintViolationHandler / executeWithBlock /
   executeWithCollect / executeWithSafeBoolean）已删除（架构评审候选1）：
-  COLLECT 对真实 checker 结构上不可交付（checker 首个铁律违规即 throw，
+  COLLECT 对真实 checker 结构上不可交付（checker 首个 error 级违规即 throw，
   handler 的 catch 只能吞证据造假绿）。语义归宿——阻断 = `checkConstraints` 本体，
   收集 = `checker.collectConstraints`（report 直调）；BLOCK/SAFE_BOOLEAN 零生产消费者随迁

@@ -4,7 +4,7 @@
 
 import type { ConstraintCheck } from './types';
 
-// m 标志必需：真实 diff 首行恒为 `diff --git`，缺 m 则 ^ 永不命中删除行（铁律静默失效）
+// m 标志必需：真实 diff 首行恒为 `diff --git`，缺 m 则 ^ 永不命中删除行（checker 静默失效）
 const DELETED_TEST_PATTERNS = [
   /^-\s*(test|it|describe)\s*\(/m, // 删除 test/it/describe
   /^-\s*expect\s*\(/m,              // 删除 expect

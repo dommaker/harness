@@ -47,16 +47,12 @@ const ENTRY_SUBPATHS: string[] = Object.keys(EXPORTS_MAP);
 /** 每个已发布子路径入口的值面全量清单。增删任一项即公共面 breaking，见文件头。 */
 const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {
   './core': [
-    'CONSTRAINTS_END_MARKER',
-    'CONSTRAINTS_START_MARKER',
+    'CONSTRAINTS',
     'CSOValidator',
     'CheckCache',
     'CheckpointValidator',
     'ConstraintChecker',
     'ConstraintViolationError',
-    'GUIDELINES',
-    'IRON_LAWS',
-    'PROMPTS',
     'PassesGate',
     'ProjectConfigLoader',
     'SpecValidator',
@@ -73,8 +69,6 @@ const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {
     'getGovernanceConfig',
     'lintEffectiveConfig',
     'loadRawProjectConfig',
-    'renderConstraintsByTrigger',
-    'renderConstraintsSection',
     'resolveContextFiles',
   ],
   './presets': [

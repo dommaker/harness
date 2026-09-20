@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-20
+
+### Changes
+- refactor(constraints)!: 删 kind=prompt/promptInjection 面，severity 显式化，文本注入层关停（studio#605）
+- chore(constraints): 内置注入规则瘦身——删除 11 条冗余/矛盾/不可执行文本规则
+
 ## [1.9.0] - 2026-09-20
 
 ### BREAKING

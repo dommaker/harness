@@ -3,8 +3,10 @@
  *
  * init.test.ts 把 fs/promises 整体 mock 掉，只能看到「调过 writeFile」，看不到
  * 真写出了什么内容。本文件不 mock 任何 IO：在临时目录里真跑两遍 init——
- * 第一遍断言 9 个受管文件的落盘字节，第二遍（文件已在场且被用户改过）断言
- * 9 站点各自的第三态、用户内容一字节不动、以及「打印片段 == 真正落盘的内容」。
+ * 第一遍断言 8 个受管文件的落盘字节，第二遍（文件已在场且被用户改过）断言
+ * 8 站点各自的第三态、用户内容一字节不动、以及「打印片段 == 真正落盘的内容」。
+ * ADR-0029：custom-constraints.yml 示例站与 AGENTS.md 治理契约段 writer 已随
+ * 文本注入层关停移除，落盘集合同步收缩。
  */
 
 import * as fs from 'fs/promises';
@@ -120,9 +122,9 @@ describe('init 真落盘（无 IO mock）', () => {
 
     expect(await init({ ...INIT_OPTIONS, projectPath: root }, io)).toEqual({ kind: 'ok' });
 
-    // 冻结的整屏 = scaffold 9 站点 + 治理段 writer 的落盘提示。#149 前 io 在
-    // setupGovernance 两个调用点被丢，治理 writer 的提示逃到 process.stdout、不进捕获面
-    // （本文件因此曾缺这一行）；io 贯通后它回到捕获面，真机输出的字节不变。
+    // 冻结的整屏 = scaffold 8 站点 + 治理段 writer 的落盘提示。#149 前 io 在
+    // setupGovernance 调用点被丢，治理 writer 的提示逃到 process.stdout、不进捕获面；
+    // io 贯通后它回到捕获面，真机输出的字节不变。
     expect(normalize(io.outText(), root)).toBe(`🚀 初始化 harness 配置...
 配置目录: <P>/.harness
 预设: standard
@@ -130,14 +132,12 @@ describe('init 真落盘（无 IO mock）', () => {
 ✅ 已创建配置文件: <P>/.harness/config.yml (v*)
 ✅ 已创建示例检查点文件: <P>/.harness/checkpoints.yml
 ✅ 已创建 Resolutions 文件: <P>/.harness/resolutions.json
-✅ 已创建自定义约束示例: custom-constraints.yml
 ✅ 已创建 .git/hooks/pre-commit
 ✅ 已创建 .git/hooks/pre-push
 ✅ 已创建 .github/workflows/harness-check.yml
 
 📋 设置治理文件...
 ✅ 已创建 CHANGELOG.md
-✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v*)
 ✅ 已创建 src/CONTEXT.md
 治理检查已由 harness-check.yml 覆盖，跳过创建 harness-governance.yml
 
@@ -145,9 +145,8 @@ describe('init 真落盘（无 IO mock）', () => {
 
 下一步:
   1. 编辑 .harness/config.yml 自定义配置
-  2. 编辑 .harness/custom-constraints.yml 添加项目约束
-  3. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然
-  4. 运行 harness status 查看状态
+  2. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然
+  3. 运行 harness status 查看状态
 
 💡 提示: 使用 harness init --print-snippets 查看配置代码片段
 `);
@@ -164,7 +163,6 @@ describe('init 真落盘（无 IO mock）', () => {
     expect(await read('.git/hooks/pre-push')).toBe(PRE_PUSH_HOOK_BYTES);
 
     expect(await read('.github/workflows/harness-check.yml')).toContain('name: Harness Check');
-    expect(await read('.harness/custom-constraints.yml')).toContain('custom_constraints:');
     expect(await read('.harness/checkpoints.yml')).toContain('id: build-success');
     expect(JSON.parse(await read('.harness/resolutions.json')).capability_sync).toBeDefined();
     expect(await read('CHANGELOG.md')).toContain('Keep a Changelog');
@@ -186,11 +184,10 @@ describe('init 真落盘（无 IO mock）', () => {
     await init({ ...INIT_OPTIONS, projectPath: root }, io);
     const lines = io.outLines();
 
-    // 顺序 = init 的落盘顺序；harness-governance.yml（第九站）因既有 workflow 覆盖而跳过
+    // 顺序 = init 的落盘顺序；harness-governance.yml（末站）因既有 workflow 覆盖而跳过
     expectOrderedSubsequence(lines, [
       'checkpoints.yml 已存在，跳过',
       'resolutions.json 已存在，跳过',
-      'custom-constraints.yml 已存在',
       '⚠️  .git/hooks/pre-commit 已存在',
       '💡 请手动添加以下内容到文件末尾：',
       '⚠️  .git/hooks/pre-push 已存在',
@@ -223,7 +220,6 @@ describe('init 真落盘（无 IO mock）', () => {
       '.git/hooks/pre-commit': '#!/bin/sh\n# 我自己的钩子\n',
       '.git/hooks/pre-push': '#!/bin/sh\n# 我自己的推送钩子\n',
       '.github/workflows/harness-check.yml': 'name: 我自己的流水线\n',
-      '.harness/custom-constraints.yml': 'custom_constraints: {}\n',
       '.harness/checkpoints.yml': 'checkpoints: []\n',
       '.harness/resolutions.json': '{}\n',
       'CHANGELOG.md': '# 我的更新日志\n',
@@ -274,9 +270,8 @@ describe('init 真落盘（无 IO mock）', () => {
     expect(io.outText()).not.toContain('harness-governance.yml');
     expect(await exists(path.join(root, '.github'))).toBe(false);
     expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
-    // 治理文档面照常：CHANGELOG / 约束段 / CONTEXT.md 不受 CI 豁免影响
+    // 治理文档面照常：CHANGELOG / CONTEXT.md 不受 CI 豁免影响
     expect(await exists(path.join(root, 'CHANGELOG.md'))).toBe(true);
-    expect(await exists(path.join(root, 'AGENTS.md'))).toBe(true);
   });
 
   it('无 .git 与无源码目录时仍按原措辞告知，不写任何文件', async () => {
@@ -556,9 +551,7 @@ describe('init --ci × -g 组合边界（harness#156，真落盘）', () => {
       '.git/hooks/pre-push',
       '.harness/checkpoints.yml',
       '.harness/config.yml',
-      '.harness/custom-constraints.yml',
       '.harness/resolutions.json',
-      'AGENTS.md',
       'CHANGELOG.md',
       'src/CONTEXT.md',
       'src/index.ts',
@@ -591,9 +584,8 @@ harness:
   version: *
 `);
 
-    // 治理文档面（CHANGELOG / 约束段 / CONTEXT.md）在 none 下照常生成，不受 CI 豁免影响
+    // 治理文档面（CHANGELOG / CONTEXT.md）在 none 下照常生成，不受 CI 豁免影响
     expect(await fs.readFile(path.join(root, 'CHANGELOG.md'), 'utf-8')).toContain('Keep a Changelog');
-    expect(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf-8')).toContain('PRESERVE:governance');
     expect(await fs.readFile(path.join(root, 'src/CONTEXT.md'), 'utf-8')).toBe(CONTEXT_MD_BYTES);
   });
 

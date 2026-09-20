@@ -2,7 +2,7 @@
  * 运行级观察面（ADR-0023 决策 1）
  *
  * 一次 `harness check` 一份、跑完即弃：把「本项目有哪些源码根」「最近的 trace 记录」
- * 「`.harness/config.yml` 与自定义约束文件写了什么」这类上行数据的读取收在此处，
+ * 「`.harness/config.yml` 写了什么」这类上行数据的读取收在此处，
  * 同一次运行内每个文件至多读一次。
  *
  * 为什么不是一个对象而是两个：checker 拿到的 `CheckEnv` 里含 `context`，而 `context` 正是
@@ -20,7 +20,6 @@ import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { reconcileCapabilities, type CapabilityVerdict } from './capabilities-reconcile';
 import { readJsonlWindow, type JsonlWindow, type JsonlReadResult } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
-import type { CustomConstraintDefinition } from '../../types/project-config';
 
 /** config.yml 在项目根下的相对路径（读取口径唯一落点） */
 const CONFIG_FILE_REL = path.join('.harness', 'config.yml');
@@ -49,14 +48,6 @@ export interface RunEnv {
    * 空文件 → `{}`；YAML 解析失败 → **抛出**（兜底与否属各消费方的判定，不在读面上替它决定）。
    */
   rawConfig(): Record<string, unknown> | undefined;
-  /**
-   * `.harness/<fileName>` 里的自定义约束定义（一次运行内同名文件至多读一次）
-   *
-   * 文件名由消费方（ProjectConfigLoader）从合并后的 config 解析后传入——
-   * 「`custom_constraints_file` 怎么写才算数」属加载器口径，不在读面上判。
-   * 文件缺失或无 `custom_constraints` 段 → `{}`（与改前的直读逐字一致）。
-   */
-  customConstraints(fileName: string): Record<string, CustomConstraintDefinition>;
   /**
    * `CAPABILITIES.md` 的读取 + 解析 + 与代码实况的对照判定（ADR-0023 决策 4）
    *
@@ -97,7 +88,6 @@ export function createRunEnv(projectPath: string): RunEnv {
   let sourceRoots: string[] | null = null;
   let configLoaded = false;
   let configRaw: Record<string, unknown> | undefined;
-  const customDefs = new Map<string, Record<string, CustomConstraintDefinition>>();
   /** 能力表 memo：undefined = 未算，null = 项目无 CAPABILITIES.md */
   let caps: ProjectCapabilities | null | undefined;
 
@@ -119,14 +109,6 @@ export function createRunEnv(projectPath: string): RunEnv {
         configLoaded = true;
       }
       return configRaw;
-    },
-    customConstraints(fileName: string) {
-      let defs = customDefs.get(fileName);
-      if (!defs) {
-        defs = readCustomConstraints(path.join(projectPath, '.harness', fileName));
-        customDefs.set(fileName, defs);
-      }
-      return defs;
     },
     capabilities(populationFiles: string[]) {
       if (caps === undefined) {
@@ -162,20 +144,6 @@ export function createRunEnv(projectPath: string): RunEnv {
     const file = path.join(projectPath, CAPABILITIES_FILE_REL);
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : undefined;
   }
-}
-
-/**
- * 读一个自定义约束文件并取出 `custom_constraints` 段
- *
- * 缺失 → `{}`。文档解析成空值（空 yaml 文件）时取段会抛——改前直读就是这个行为，
- * 不在此新增兜底：畸形配置文件该炸在配置上，不该被读面抹平。
- */
-function readCustomConstraints(absPath: string): Record<string, CustomConstraintDefinition> {
-  if (!fs.existsSync(absPath)) return {};
-  const loaded = yaml.load(fs.readFileSync(absPath, 'utf-8')) as {
-    custom_constraints?: Record<string, CustomConstraintDefinition>;
-  };
-  return loaded.custom_constraints ?? {};
 }
 
 /**

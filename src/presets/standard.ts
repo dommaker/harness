@@ -2,10 +2,10 @@
  * 约束预设（纯数据）
  *
  * 预设定义哪些内置约束被启用。筛选与合并逻辑统一在
- * core/project-config-loader.ts 的 mergeConstraints（ADR-0001 生效集链路），
+ * core/project-config-loader.ts 的 mergeConstraints（生效集链路），
  * 本文件只保留预设数据，不再含函数。
  *
- * ADR-0001：kind 二元（check + prompt 纯注入层）。
+ * ADR-0029：桶按 severity 命名（errors / warnings），取代三层命名。
  */
 
 /**
@@ -15,14 +15,11 @@ export interface PresetConfig {
   /** 预设名称 */
   name: string;
 
-  /** 启用的铁律 ID 列表（null 表示全部启用） */
-  ironLaws: string[] | null;
+  /** 启用的 severity='error' 约束 ID 列表（null 表示全部启用） */
+  errors: string[] | null;
 
-  /** 启用的指导原则 ID 列表（null 表示全部启用） */
-  guidelines: string[] | null;
-
-  /** 启用的提示 ID 列表（null 表示全部启用） */
-  prompts: string[] | null;
+  /** 启用的 severity='warning' 约束 ID 列表（null 表示全部启用） */
+  warnings: string[] | null;
 }
 
 /**
@@ -32,40 +29,34 @@ export interface PresetConfig {
  */
 export const STRICT_PRESET: PresetConfig = {
   name: 'strict',
-  ironLaws: null,    // 全部启用
-  guidelines: null,  // 全部启用
-  prompts: null,     // 全部启用
+  errors: null,    // 全部启用
+  warnings: null,  // 全部启用
 };
 
 /**
  * 标准预设
  *
- * 铁律全部启用，指导原则和提示选择性启用
+ * 全部约束启用
  */
 export const STANDARD_PRESET: PresetConfig = {
   name: 'standard',
-  ironLaws: null,    // 全部启用
-  guidelines: null,  // 全部启用
-  prompts: null,     // 全部启用
+  errors: null,    // 全部启用
+  warnings: null,  // 全部启用
 };
 
 /**
  * 宽松预设
  *
- * 仅启用核心铁律，禁用提示
+ * 仅启用核心 error 级与凭证扫描
  */
 export const RELAXED_PRESET: PresetConfig = {
   name: 'relaxed',
-  ironLaws: [
+  errors: [
     'no_completion_without_verification',
-    'incremental_progress',
-    'no_implementation_without_requirement',
   ],
-  guidelines: [
-    'no_bypass_checkpoint',
+  warnings: [
     'no_hardcoded_credentials',
   ],
-  prompts: [],  // 禁用提示
 };
 
 /**

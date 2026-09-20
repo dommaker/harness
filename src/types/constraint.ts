@@ -1,11 +1,12 @@
 /**
  * 约束类型定义
  *
- * kind 二元模型（ADR-0001）：
- * - check：必须带真实 checker，参与运行时检查与 trace 统计
- *   - iron_law：绝对禁止，无例外，违背即阻止执行
- *   - guideline：优先建议，违背发警告但不阻止
- * - prompt：纯文本提示，仅参与 prompt 注入，不占检查位、不产生 trace
+ * severity 显式模型（ADR-0029，取代 ADR-0001 的三层命名与 kind 二元模型）：
+ * - 全部约束 kind='check'：必须带真实 checker，参与运行时检查与 trace 统计
+ * - severity 直接写死在定义上：error = 违规即阻断；warning = 违规告警不阻断；
+ *   info = 仅记录
+ * - 纯文本提示层（kind='prompt' / promptInjection / 注入段渲染）已整体关停，
+ *   文本规则由消费方手写治理段承接
  */
 
 /**
@@ -14,16 +15,14 @@
 export type ConstraintId = string;
 
 /**
- * 约束类别：check = 可执行检查；prompt = 纯文本注入
+ * 约束类别（ADR-0029 收窄为单值）：check = 可执行检查
  */
-export type ConstraintKind = 'check' | 'prompt';
+export type ConstraintKind = 'check';
 
 /**
- * 约束层级
- *
- * check 层只使用 'iron_law' | 'guideline'；prompt 类统一为 'prompt'。
+ * 约束严重性（显式字段，取代三层 level 命名）
  */
-export type ConstraintLevel = 'iron_law' | 'guideline' | 'prompt';
+export type ConstraintSeverity = 'error' | 'warning' | 'info';
 
 /**
  * 约束触发条件（开放扩展）
@@ -41,9 +40,8 @@ export interface Constraint {
   id: ConstraintId;
 
   /**
-   * 约束类别（ADR-0001）：
-   * - check：必须带真实 checker，参与运行时检查
-   * - prompt：纯文本提示，仅参与注入，不执行 checker
+   * 约束类别（ADR-0029）：恒为 'check'——必须带真实 checker，参与运行时检查；
+   * 纯文本提示（kind='prompt'）已随文本注入层一并关停
    */
   kind: ConstraintKind;
 
@@ -53,8 +51,8 @@ export interface Constraint {
   /** 约束消息（中文） */
   message: string;
   
-  /** 约束层级 */
-  level: ConstraintLevel;
+  /** 约束严重性：error = 违规即阻断；warning = 违规告警不阻断；info = 仅记录 */
+  severity: ConstraintSeverity;
   
   /** 触发条件（支持多个 trigger） */
   trigger: ConstraintTrigger | ConstraintTrigger[];
@@ -65,20 +63,8 @@ export interface Constraint {
   /** 约束描述 */
   description?: string;
 
-  /** 软约束 prompt 注入（引导 Agent 行为的提示文本） */
-  promptInjection?: string;
-
-  /** 是否注入 Agent prompt（默认 iron_law=true, guideline=false） */
-  injectPrompt?: boolean;
-
   /** 是否启用 */
   enabled?: boolean;
-
-  /**
-   * 适用场景标签（prompt 类专用，如 'agent-skill'、'llm-app'）。
-   * 未标注表示通用场景。消费端（init 注入 / studio 路由）可按标签过滤。
-   */
-  appliesTo?: string[];
 }
 
 /**
@@ -88,8 +74,8 @@ export interface ConstraintResult {
   /** 约束 ID */
   id: ConstraintId;
   
-  /** 约束层级 */
-  level: ConstraintLevel;
+  /** 约束严重性 */
+  severity: ConstraintSeverity;
   
   /** 是否满足 */
   satisfied: boolean;
@@ -186,10 +172,10 @@ export interface ConstraintContext {
   /** 是否已进行复用检查 */
   hasReuseCheck?: boolean;
   
-  /** 是否只处理单个任务（用于 incremental_progress） */
+  /** 是否只处理单个任务（证据标志，当前无内置 checker 消费，供自定义约束用） */
   hasSingleTask?: boolean;
   
-  /** 是否有需求文档（用于 no_implementation_without_requirement） */
+  /** 是否有需求文档（证据标志，当前无内置 checker 消费，供自定义约束用） */
   hasRequirement?: boolean;
 
   /** worktree 路径（用于 worktree 相关检查） */
@@ -203,8 +189,8 @@ export class ConstraintViolationError extends Error {
   public readonly result: ConstraintResult;
 
   constructor(result: ConstraintResult) {
-    // 铁律违规在 checkConstraints 处直接 throw，CLI 的结构化输出块走不到这里，
-    // error.message 是判定证据唯一的外溢面（harness#119）
+    // severity='error' 的违规在 checkConstraints 处直接 throw，CLI 的结构化输出块
+    // 走不到这里，error.message 是判定证据唯一的外溢面（harness#119）
     const detail = result.evidence?.length
       ? `：\n${result.evidence.map((line) => `  - ${line}`).join('\n')}`
       : '';
@@ -215,16 +201,16 @@ export class ConstraintViolationError extends Error {
 }
 
 /**
- * 约束检查结果（check 层）
+ * 约束检查结果（按 severity 分桶）
  */
 export interface ConstraintCheckResult {
-  /** 铁律检查结果（必须全部通过） */
-  ironLaws: ConstraintResult[];
+  /** severity='error' 的检查结果（必须全部通过） */
+  errors: ConstraintResult[];
   
-  /** 指导原则检查结果（警告，不阻止） */
-  guidelines: ConstraintResult[];
+  /** severity='warning' 的检查结果（警告，不阻止） */
+  warnings: ConstraintResult[];
   
-  /** 是否通过（铁律全部通过） */
+  /** 是否通过（error 级全部通过） */
   passed: boolean;
   
   /** 警告数量 */

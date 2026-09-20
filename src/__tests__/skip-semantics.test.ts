@@ -3,8 +3,8 @@
  *
  * 覆盖：
  * - 三条存在性探测（capability_sync / context_doc_sync / docs_freshness）有/无约定两路
- * - flag 型铁律 undefined → skip（显式 false 仍 fail，true 仍 pass）
- * - Iron Law skip 不阻断 checkConstraints
+ * - flag 型 error 级约束 undefined → skip（显式 false 仍 fail，true 仍 pass）
+ * - error 级 skip 不阻断 checkConstraints
  * - detectTrigger 代码文件 → 附加 code_implementation 推断
  * - trace 记录 result: 'skip'；TraceAnalyzer 的 pass/fail 率分母不计 skip
  */
@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ConstraintChecker } from '../core/constraints/checker';
 import { detectTrigger, buildConstraintContext } from '../core/constraints/context-builder';
-import { IRON_LAWS } from '../core/constraints/definitions';
+import { CONSTRAINTS } from '../core/constraints/definitions';
 import { TraceAnalyzer } from '../monitoring/trace-analyzer';
 import type { Constraint, ConstraintContext } from '../types/constraint';
 import type { ExecutionTrace } from '../types/trace';
@@ -26,10 +26,10 @@ const checker = new ConstraintChecker({ record: () => undefined });
 
 function makeConstraint(
   id: string,
-  level: 'iron_law' | 'guideline',
+  severity: 'error' | 'warning',
   trigger: string = 'commit'
 ): Constraint {
-  return { id, kind: 'check', level, rule: 'TEST', message: 'test', trigger, enforcement: 'test' };
+  return { id, kind: 'check', severity, rule: 'TEST', message: 'test', trigger, enforcement: 'test' };
 }
 
 describe('skip 三态语义（ADR-0001）', () => {
@@ -58,7 +58,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       const dir = path.join(tempDir, 'cap-skip');
       fs.mkdirSync(dir, { recursive: true });
 
-      const result = await checker.check(makeConstraint('capability_sync', 'guideline'), {
+      const result = await checker.check(makeConstraint('capability_sync', 'warning'), {
         operation: 'commit',
         projectPath: dir,
       } as ConstraintContext);
@@ -75,7 +75,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       // 散文文档（无表格）历史放行；此处只验证"进入评估"而非 skip
       fs.writeFileSync(path.join(dir, 'CAPABILITIES.md'), '# Capabilities\n\n- Feature: test');
 
-      const result = await checker.check(makeConstraint('capability_sync', 'guideline'), {
+      const result = await checker.check(makeConstraint('capability_sync', 'warning'), {
         operation: 'commit',
         projectPath: dir,
       } as ConstraintContext);
@@ -92,7 +92,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       const dir = path.join(tempDir, 'ctx-skip');
       fs.mkdirSync(dir, { recursive: true });
 
-      const result = await checker.check(makeConstraint('context_doc_sync', 'guideline'), {
+      const result = await checker.check(makeConstraint('context_doc_sync', 'warning'), {
         operation: 'module_modification',
         projectPath: dir,
       } as ConstraintContext);
@@ -114,7 +114,7 @@ describe('skip 三态语义（ADR-0001）', () => {
         yaml.dump({ governance: { context_files: { enabled: true, required_dirs: ['src'] } } })
       );
 
-      const result = await checker.check(makeConstraint('context_doc_sync', 'guideline'), {
+      const result = await checker.check(makeConstraint('context_doc_sync', 'warning'), {
         operation: 'module_modification',
         projectPath: dir,
       } as ConstraintContext);
@@ -131,7 +131,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       const dir = path.join(tempDir, 'fresh-skip');
       fs.mkdirSync(dir, { recursive: true });
 
-      const result = await checker.check(makeConstraint('docs_freshness', 'iron_law', 'file_modification'), {
+      const result = await checker.check(makeConstraint('docs_freshness', 'error', 'file_modification'), {
         operation: 'file_modification',
         projectPath: dir,
       } as ConstraintContext);
@@ -150,7 +150,7 @@ describe('skip 三态语义（ADR-0001）', () => {
         '# Capabilities\n\n| 模块 | 文件 | 说明 |\n|------|------|------|\n| ghost | src/ghost.ts | 不存在 |'
       );
 
-      const result = await checker.check(makeConstraint('docs_freshness', 'iron_law', 'file_modification'), {
+      const result = await checker.check(makeConstraint('docs_freshness', 'error', 'file_modification'), {
         operation: 'file_modification',
         projectPath: dir,
       } as ConstraintContext);
@@ -162,9 +162,9 @@ describe('skip 三态语义（ADR-0001）', () => {
     });
   });
 
-  describe('flag 型铁律：undefined → skip', () => {
+  describe('flag 型 error 级约束：undefined → skip', () => {
     it('hasVerificationEvidence undefined → skip；false → fail；true → pass', async () => {
-      const law = IRON_LAWS['no_completion_without_verification'];
+      const law = CONSTRAINTS['no_completion_without_verification'];
 
       const skipped = await checker.check(law, { operation: 'code_implementation' });
       expect(skipped.skipped).toBe(true);
@@ -185,33 +185,17 @@ describe('skip 三态语义（ADR-0001）', () => {
       expect(passed.satisfied).toBe(true);
     });
 
-    it('hasSingleTask / hasRequirement undefined → skip', async () => {
-      const single = await checker.check(IRON_LAWS['incremental_progress'], {
-        operation: 'code_implementation',
-      });
-      expect(single.skipped).toBe(true);
-
-      const req = await checker.check(IRON_LAWS['no_implementation_without_requirement'], {
-        operation: 'code_implementation',
-      });
-      expect(req.skipped).toBe(true);
-    });
-
     it('Iron Law skip 不阻断 checkConstraints', async () => {
-      // 三个 flag 全部未接线（CLI pre-commit 路径的典型形态）
+      // flag 未接线（CLI pre-commit 路径的典型形态）
       const result = await checker.checkConstraints({
         operation: 'code_implementation',
         projectPath: path.join(tempDir, 'empty'),
       });
 
       expect(result.passed).toBe(true);
-      const skippedIds = result.ironLaws.filter(r => r.skipped).map(r => r.id);
+      const skippedIds = result.errors.filter(r => r.skipped).map(r => r.id);
       expect(skippedIds).toEqual(
-        expect.arrayContaining([
-          'no_completion_without_verification',
-          'incremental_progress',
-          'no_implementation_without_requirement',
-        ])
+        expect.arrayContaining(['no_completion_without_verification'])
       );
     });
 
@@ -296,17 +280,17 @@ describe('skip 三态语义（ADR-0001）', () => {
 
       const skipTraces = records.filter(t => t.result === 'skip');
       expect(skipTraces.map(t => t.constraintId)).toEqual(
-        expect.arrayContaining(['incremental_progress', 'no_implementation_without_requirement'])
+        expect.arrayContaining(['no_completion_without_verification'])
       );
     });
 
     it('TraceAnalyzer：skip 单独计数，不计入 pass/fail 率分母', () => {
       const analyzer = new TraceAnalyzer(null as any);
       const traces: ExecutionTrace[] = [
-        { constraintId: 'c1', level: 'iron_law', timestamp: 1, result: 'pass' },
-        { constraintId: 'c1', level: 'iron_law', timestamp: 2, result: 'skip' },
-        { constraintId: 'c1', level: 'iron_law', timestamp: 3, result: 'skip' },
-        { constraintId: 'c1', level: 'iron_law', timestamp: 4, result: 'fail' },
+        { constraintId: 'c1', severity: 'error', timestamp: 1, result: 'pass' },
+        { constraintId: 'c1', severity: 'error', timestamp: 2, result: 'skip' },
+        { constraintId: 'c1', severity: 'error', timestamp: 3, result: 'skip' },
+        { constraintId: 'c1', severity: 'error', timestamp: 4, result: 'fail' },
       ];
 
       const [summary] = analyzer.summarize(traces);

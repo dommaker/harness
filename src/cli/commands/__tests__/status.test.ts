@@ -34,7 +34,7 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 /** trace 文件内容：一 trace 一行，缺省字段补齐成合法 ExecutionTrace（timestamp 递增） */
 function traceFile(traces: Array<Partial<ExecutionTrace>>): string {
   return traces
-    .map((t, i) => JSON.stringify({ level: 'iron_law', timestamp: i + 1, result: 'pass', ...t }))
+    .map((t, i) => JSON.stringify({ severity: 'error', timestamp: i + 1, result: 'pass', ...t }))
     .join('\n');
 }
 
@@ -99,7 +99,7 @@ describe('status command', () => {
     it('应该显示记录数', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
         { constraintId: 'test1' },
-        { constraintId: 'test2', level: 'guideline' },
+        { constraintId: 'test2', severity: 'warning' },
       ]));
 
       await runStatus();
@@ -107,14 +107,14 @@ describe('status command', () => {
       expect(io.outText()).toContain('📈 约束统计:');
     });
 
-    it('应该显示 Iron Laws 统计', async () => {
+    it('应该显示 error 级约束统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'no_bypass_checkpoint' },
+        { constraintId: 'no_completion_without_verification' },
       ]));
 
       await runStatus({ detail: true });
-      expect(io.outText()).toContain('🔴 Iron Laws:');
-      expect(io.outText()).toContain('✅ no_bypass_checkpoint');
+      expect(io.outText()).toContain('🔴 error 级约束:');
+      expect(io.outText()).toContain('✅ no_completion_without_verification');
       expect(io.outText()).toContain('检查: 1 | 通过: 100% | 失败: 0%');
     });
   });
@@ -162,14 +162,14 @@ describe('status command', () => {
     });
   });
 
-  describe('Guidelines 统计', () => {
-    it('应该显示 Guidelines 统计', async () => {
+  describe('warning 级约束统计', () => {
+    it('应该显示 warning 级约束统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'test_guide', level: 'guideline' },
+        { constraintId: 'test_guide', severity: 'warning' },
       ]));
 
       await runStatus();
-      expect(io.outText()).toContain('🟡 Guidelines:');
+      expect(io.outText()).toContain('🟡 warning 级约束:');
       expect(io.outText()).toContain('✅ test_guide');
     });
   });
@@ -221,11 +221,11 @@ describe('status command', () => {
   });
 
   describe('详细模式扩展', () => {
-    it('应该显示 Guidelines 详细统计', async () => {
+    it('应该显示 warning 级约束详细统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
         ...repeats('test_guide', 3, 'pass'),
         ...repeats('test_guide', 2, 'fail'),
-      ].map(t => ({ ...t, level: 'guideline' as const }))));
+      ].map(t => ({ ...t, severity: 'warning' as const }))));
 
       await runStatus({ detail: true });
       expect(io.outText()).toContain('⚠️ test_guide');

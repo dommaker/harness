@@ -46,8 +46,8 @@ describe('report command - 补充覆盖', () => {
 
       expect(output).toContain('# Harness 检查报告');
       expect(output).toContain('## 约束检查');
-      expect(output).toContain('Iron Laws');
-      expect(output).toContain('Guidelines');
+      expect(output).toContain('error 级');
+      expect(output).toContain('warning 级');
       expect(output).toContain('@dommaker/harness');
     });
   });
@@ -71,8 +71,8 @@ describe('report command - 补充覆盖', () => {
       expect(data).toHaveProperty('timestamp');
       expect(data).toHaveProperty('constraints');
       expect(data.constraints).toHaveProperty('total');
-      expect(data.constraints).toHaveProperty('ironLaws');
-      expect(data.constraints).toHaveProperty('guidelines');
+      expect(data.constraints).toHaveProperty('errors');
+      expect(data.constraints).toHaveProperty('warnings');
       expect(data.constraints).toHaveProperty('violations');
     });
   });

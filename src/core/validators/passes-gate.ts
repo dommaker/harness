@@ -97,7 +97,7 @@ export class PassesGate {
    * - 业务层自己运行测试，传入结果
    *
    * @param testResult 测试结果（由业务层运行测试后传入）
-   * @returns 验证结果（是否允许标记完成 + Iron Law 违规）
+   * @returns 验证结果（是否允许标记完成 + 阻断级违规）
    *
    * @example
    * ```typescript
@@ -107,7 +107,7 @@ export class PassesGate {
    *
    * if (!passesResult.allowed) {
    *   return res.status(400).json({
-   *     error: 'Iron Law 违规',
+   *     error: '约束违规',
    *     violations: passesResult.violations,
    *   });
    * }
@@ -116,23 +116,23 @@ export class PassesGate {
   check(testResult: TestResult): PassesGateCheckResult {
     const violations: PassesGateViolation[] = [];
 
-    // 1. 测试未通过 → Iron Law #2: NO SELF APPROVAL WITHOUT TEST EVIDENCE
+    // 1. 测试未通过 → NO SELF APPROVAL WITHOUT TEST EVIDENCE
     if (!testResult.passed) {
       violations.push({
         id: 'no_self_approval',
         rule: 'NO SELF APPROVAL WITHOUT TEST EVIDENCE',
         message: '测试未通过',
-        level: 'iron_law',
+        severity: 'error',
       });
     }
 
-    // 2. 缺少证据 → Iron Law #3: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION
+    // 2. 缺少证据 → NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION
     if (this.config.requireEvidence && !testResult.evidence) {
       violations.push({
         id: 'no_completion_without_verification',
         rule: 'NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION',
         message: '缺少测试证据',
-        level: 'iron_law',
+        severity: 'error',
       });
     }
 

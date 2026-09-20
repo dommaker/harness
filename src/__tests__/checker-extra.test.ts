@@ -54,9 +54,9 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       const result = checker.findApplicableConstraints(context);
 
-      expect(result.ironLaws.length).toBeGreaterThan(0);
+      expect(result.errors.length).toBeGreaterThan(0);
       expect(
-        result.ironLaws.some((c: any) => c.id === 'no_completion_without_verification')
+        result.errors.some(c => c.id === 'no_completion_without_verification')
       ).toBe(true);
     });
 
@@ -68,9 +68,9 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = checker.findApplicableConstraints(context);
 
       // file_creation 可能没有任何约束匹配
-      // 这个测试的目的是验证 filterByTrigger 逻辑
-      expect(Array.isArray(result.ironLaws)).toBe(true);
-      expect(Array.isArray(result.guidelines)).toBe(true);
+      // 这个测试的目的是验证按 trigger 过滤逻辑
+      expect(Array.isArray(result.errors)).toBe(true);
+      expect(Array.isArray(result.warnings)).toBe(true);
     });
   });
 
@@ -99,25 +99,25 @@ describe('ConstraintChecker - 补充覆盖', () => {
       await expect(checkBeforeExecution(context)).rejects.toThrow();
     });
 
-    it('customConfig 应替换内置集（空配置不检查内置铁律）', async () => {
+    it('customConfig 应替换内置集（空配置不检查内置 error 级约束）', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
         hasTest: false,
         hasVerificationEvidence: false,
       };
 
-      // 内置铁律下违规抛错
+      // 内置 error 级约束下违规抛错
       await expect(checkBeforeExecution(context)).rejects.toThrow();
 
       // 空 customConfig 替换内置集 → 不抛
       await expect(
-        checkBeforeExecution(context, { ironLaws: {}, guidelines: {}, disabled: [], custom: [] })
+        checkBeforeExecution(context, { constraints: {}, disabled: [] })
       ).resolves.not.toThrow();
     });
   });
 
   describe('checkConstraints 完整流程', () => {
-    it('应该返回完整的三层检查结果', async () => {
+    it('应该返回完整的检查结果', async () => {
       const context: ConstraintContext = {
         operation: 'commit',
         projectPath: tempDir,
@@ -127,8 +127,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       const result = await checkConstraints(context);
 
-      expect(result.ironLaws).toBeDefined();
-      expect(result.guidelines).toBeDefined();
+      expect(result.errors).toBeDefined();
+      expect(result.warnings).toBeDefined();
       expect(typeof result.passed).toBe('boolean');
       expect(typeof result.warningCount).toBe('number');
     });
@@ -137,59 +137,57 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('自定义约束配置', () => {
     it('per-request customConfig 应该生效', () => {
       const constraints = checker.getConstraints({
-        ironLaws: {},
-        guidelines: {},
+        constraints: {},
         disabled: [],
-        custom: [],
       });
 
-      expect(constraints.ironLaws).toEqual({});
-      expect(constraints.guidelines).toEqual({});
+      expect(constraints).toEqual({});
     });
 
-    it('checkConstraint 带 customConfig 应命中自定义约束', async () => {
-      const context: ConstraintContext = { operation: 'file_modification' };
+    it('checkConstraint 带 customConfig 应命中配置内约束', async () => {
+      const context: ConstraintContext = {
+        operation: 'code_implementation',
+        hasVerificationEvidence: true,
+      };
       const customConfig = {
-        ironLaws: {
-          test_only: {
-            id: 'test_only',
-            kind: 'prompt' as const,
-            level: 'iron_law' as const,
+        constraints: {
+          no_completion_without_verification: {
+            id: 'no_completion_without_verification',
+            kind: 'check' as const,
+            severity: 'error' as const,
             rule: 'TEST',
             message: 'test',
-            trigger: 'file_modification',
+            trigger: 'code_implementation',
             enforcement: 'test',
           },
         },
-        guidelines: {},
         disabled: [] as string[],
-        custom: [] as string[],
       };
 
-      // 不带 customConfig：自定义约束不可见
+      // 不带 customConfig：未生效的 id 不可见
       const missing = await checkConstraint('test_only', context);
       expect(missing.satisfied).toBe(false);
       expect(missing.message).toContain('未知的约束');
 
-      // 带 customConfig：命中（prompt kind 直接 pass）
-      const hit = await checkConstraint('test_only', context, customConfig);
-      expect(hit.id).toBe('test_only');
+      // 带 customConfig：命中配置内约束
+      const hit = await checkConstraint('no_completion_without_verification', context, customConfig);
+      expect(hit.id).toBe('no_completion_without_verification');
       expect(hit.satisfied).toBe(true);
     });
   });
 
-  describe('getSeverity', () => {
-    it('iron_law 应该返回 error', async () => {
+  describe('severity 透传', () => {
+    it('check 结果带约束定义的 severity', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasTest: true,
+        hasVerificationEvidence: true,
       };
 
       const result = await checker.check(
         {
-          id: 'test_severity_iron',
-          kind: 'prompt',
-          level: 'iron_law',
+          id: 'no_completion_without_verification',
+          kind: 'check',
+          severity: 'error',
           rule: 'TEST',
           message: 'test',
           trigger: 'code_implementation',
@@ -198,30 +196,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
         context
       );
 
-      expect(result).toBeDefined();
+      expect(result.severity).toBe('error');
     });
-
-    it('guideline 应该返回 warning', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-      };
-
-      const result = await checker.check(
-        {
-          id: 'test_severity_guideline',
-          kind: 'prompt',
-          level: 'guideline',
-          rule: 'TEST',
-          message: 'test',
-          trigger: 'code_implementation',
-          enforcement: 'test',
-        },
-        context
-      );
-
-      expect(result).toBeDefined();
-    });
-
   });
 
   describe('checkConstraint 快捷函数', () => {
@@ -251,8 +227,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
   });
 
-  describe('checkConstraints Iron Law 违规', () => {
-    it('Iron Law 违规应该抛出 ConstraintViolationError', async () => {
+  describe('checkConstraints error 级违规', () => {
+    it('error 级违规应该抛出 ConstraintViolationError', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
         hasTest: false,

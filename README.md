@@ -42,26 +42,23 @@ await checkBeforeExecution({
 const meta = await import('child_process').then(cp =>
   JSON.parse(cp.execSync('npx @dommaker/harness constraints --json', { encoding: 'utf-8' }))
 );
-// { version, hash, counts: { ironLaws, guidelines, prompts }, textSize }
+// { version, hash, counts: { errors, warnings } }
 ```
-
-> Agent prompt 注入约束由 `@dommaker/studio-shared` 提供（`formatConstraintsForPrompt(role)`）。
 
 ---
 
-## 约束体系：check / prompt 二元模型
+## 约束体系：severity 显式模型（ADR-0029）
 
-| 类别 | 数量 | 行为 |
+| severity | 数量 | 行为 |
 |------|:--:|------|
-| **check · Iron Law** | 5 | 代码级检查，违规 throw `ConstraintViolationError` 阻断执行 |
-| **check · Guideline** | 4 | 代码级检查，违规记录 warning 放行 |
-| **prompt** | 16 | 纯文本行为约束，注入 Agent context，不占检查位、不产生 trace 统计 |
+| **error** | 3 | 代码级检查，违规 throw `ConstraintViolationError` 阻断执行 |
+| **warning** | 4 | 代码级检查，违规记录 warning 放行 |
 
-- check 层每条必须带真实 checker（注册表闭环，引用未注册 checker 构建报错）；`capability_sync`/`docs_freshness`/`context_doc_sync` 为存在性探测——项目未采用对应约定文件时 skip（不阻断、不计 pass/fail）。
-- prompt 层带角色路由与适用性标签；场景专属条目仅在 config.yml `scenes` 命中时进入生效集。
-- 生效集由 `getEffectiveConstraints(projectRoot)` 统一计算：内置 → preset 裁剪 → config.yml 禁用 → custom 追加 → scenes 过滤。init 注入、`harness check`、外部消费者全部走它。
+- 全部约束 kind='check'，每条必须带真实 checker（注册表闭环，引用未注册 checker 构建报错）；`capability_sync`/`docs_freshness`/`context_doc_sync` 为存在性探测——项目未采用对应约定文件时 skip（不阻断、不计 pass/fail）。
+- ADR-0029：三层命名（Iron Laws / Guidelines / Prompts）废弃，纯文本提示层（prompt 类约束 + promptInjection 注入 + HARNESS_CONSTRAINTS 注入段与漂移校验）整体关停，文本规则由消费方手写治理段承接；项目自定义纯文本约束（custom-constraints / scenes）随之一并退役。
+- 生效集由 `getEffectiveConstraints(projectRoot)` 统一计算：内置 → preset 裁剪 → config.yml 禁用。`harness check` 与外部消费者全部走它。
 
-约束定义按类别维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines,prompts}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
+约束定义按 severity 分组维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 

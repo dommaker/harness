@@ -34,7 +34,7 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 /** trace 文件内容：一 trace 一行，缺省字段补齐成合法 ExecutionTrace（timestamp 递增） */
 function traceFile(traces: Array<Partial<ExecutionTrace>>): string {
   return traces
-    .map((t, i) => JSON.stringify({ level: 'iron_law', timestamp: i + 1, result: 'pass', ...t }))
+    .map((t, i) => JSON.stringify({ severity: 'error', timestamp: i + 1, result: 'pass', ...t }))
     .join('\n');
 }
 
@@ -77,7 +77,7 @@ describe('status command - 补充覆盖', () => {
     it('有异常时应该显示详细信息和下一步建议', async () => {
       // 两个约束各自全失败 → 各自判出一枚 low_pass_rate
       mockFs.readFileSync.mockReturnValue(traceFile([
-        ...repeats('no_bypass_checkpoint', 2, 'fail'),
+        ...repeats('docs_freshness', 2, 'fail'),
         ...repeats('no_completion_without_verification', 2, 'fail'),
       ]));
 
@@ -102,9 +102,9 @@ describe('status command - 补充覆盖', () => {
   });
 
   describe('约束级别统计', () => {
-    it('应该显示 Iron Laws 统计', async () => {
+    it('应该显示 error 级约束统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'no_bypass_checkpoint' },
+        { constraintId: 'docs_freshness' },
         { constraintId: 'no_completion_without_verification' },
       ]));
 
@@ -112,35 +112,35 @@ describe('status command - 补充覆盖', () => {
 
       const output = io.outText();
       expect(output).toContain('📈 约束统计:');
-      expect(output).toContain('🔴 Iron Laws:');
+      expect(output).toContain('🔴 error 级约束:');
       expect(output).toContain('✅ no_completion_without_verification');
     });
 
-    it('应该显示 Guidelines 统计', async () => {
+    it('应该显示 warning 级约束统计', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'capability_sync', level: 'guideline', result: 'pass' },
+        { constraintId: 'capability_sync', severity: 'warning', result: 'pass' },
       ]));
 
       await runStatus();
 
-      expect(io.outText()).toContain('🟡 Guidelines:');
+      expect(io.outText()).toContain('🟡 warning 级约束:');
     });
   });
 
   describe('详细模式扩展', () => {
     it('详细模式应该显示所有级别详情', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([
-        { constraintId: 'no_bypass_checkpoint', level: 'iron_law' },
-        { constraintId: 'capability_sync', level: 'guideline' },
-        { constraintId: 'capability_sync', level: 'guideline' },
+        { constraintId: 'docs_freshness', severity: 'error' },
+        { constraintId: 'capability_sync', severity: 'warning' },
+        { constraintId: 'capability_sync', severity: 'warning' },
       ]));
 
       await runStatus({ detail: true });
 
       const output = io.outText();
       expect(output).toContain('📈 约束统计:');
-      expect(output).toContain('🔴 Iron Laws:');
-      expect(output).toContain('🟡 Guidelines:');
+      expect(output).toContain('🔴 error 级约束:');
+      expect(output).toContain('🟡 warning 级约束:');
       expect(output).toContain('检查: 2 | 通过: 100% | 失败: 0%');
     });
   });
@@ -148,7 +148,7 @@ describe('status command - 补充覆盖', () => {
   describe('JSON parse 异常处理', () => {
     it('无效 JSON 行应该被过滤', async () => {
       mockFs.readFileSync.mockReturnValue(
-        ['invalid json', JSON.stringify({ constraintId: 'valid', level: 'iron_law', timestamp: 1, result: 'pass' }), 'also invalid'].join('\n')
+        ['invalid json', JSON.stringify({ constraintId: 'valid', severity: 'error', timestamp: 1, result: 'pass' }), 'also invalid'].join('\n')
       );
 
       await runStatus();

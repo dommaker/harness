@@ -41,8 +41,8 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('趋势计算', () => {
     it('少于 10 条记录应该返回 stable', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'test', level: 'iron_law', timestamp: 2000, result: 'pass' },
+        { constraintId: 'test', severity: 'error', timestamp: 1000, result: 'pass' },
+        { constraintId: 'test', severity: 'error', timestamp: 2000, result: 'pass' },
       ];
 
       const summaries = analyzer.summarize(traces);
@@ -53,10 +53,10 @@ describe('TraceAnalyzer - 补充覆盖', () => {
       // 创建 15 条记录，前半段通过率低，后半段高 → rising
       const traces: ExecutionTrace[] = [];
       for (let i = 0; i < 8; i++) {
-        traces.push({ constraintId: 'test', level: 'iron_law', timestamp: 1000 + i * 100, result: 'fail' });
+        traces.push({ constraintId: 'test', severity: 'error', timestamp: 1000 + i * 100, result: 'fail' });
       }
       for (let i = 8; i < 15; i++) {
-        traces.push({ constraintId: 'test', level: 'iron_law', timestamp: 1000 + i * 100, result: 'pass' });
+        traces.push({ constraintId: 'test', severity: 'error', timestamp: 1000 + i * 100, result: 'pass' });
       }
 
       const summaries = analyzer.summarize(traces);
@@ -67,10 +67,10 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('compareWithPrevious', () => {
     it('应该计算环比变化', () => {
       const current: any[] = [
-        { constraintId: 'test', passRate: 0.8, failRate: 0.2, level: 'iron_law' },
+        { constraintId: 'test', passRate: 0.8, failRate: 0.2, severity: 'error' },
       ];
       const previous: any[] = [
-        { constraintId: 'test', passRate: 0.6, failRate: 0.4, level: 'iron_law' },
+        { constraintId: 'test', passRate: 0.6, failRate: 0.4, severity: 'error' },
       ];
 
       const result = analyzer.compareWithPrevious(current, previous);
@@ -81,7 +81,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
 
     it('无历史数据应该不设置变化', () => {
       const current: any[] = [
-        { constraintId: 'new_test', passRate: 0.8, failRate: 0.2, level: 'iron_law' },
+        { constraintId: 'new_test', passRate: 0.8, failRate: 0.2, severity: 'error' },
       ];
       const previous: any[] = [];
 
@@ -94,7 +94,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('saveSummary/loadSummary', () => {
     it('应该保存和加载汇总', () => {
       const summaries: any[] = [
-        { constraintId: 'test', passRate: 0.8, failRate: 0.2, level: 'iron_law', totalChecks: 10 },
+        { constraintId: 'test', passRate: 0.8, failRate: 0.2, severity: 'error', totalChecks: 10 },
       ];
 
       analyzer.saveSummary(summaries);
@@ -120,7 +120,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
     it('应该运行小时汇总', () => {
       // 写入一些 traces
       const traces: ExecutionTrace[] = [
-        { constraintId: 'hourly_test', level: 'iron_law', timestamp: Date.now(), result: 'pass' },
+        { constraintId: 'hourly_test', severity: 'error', timestamp: Date.now(), result: 'pass' },
       ];
       collector.record(traces[0]);
 
@@ -137,7 +137,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
       for (let i = 0; i < 20; i++) {
         traces.push({
           constraintId: 'daily_test',
-          level: 'iron_law',
+          severity: 'error',
           timestamp: Date.now() - i * 1000,
           result: i < 15 ? 'fail' : 'pass', // 75% 失败率
         });
@@ -155,7 +155,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
       const summaries: any[] = [
         {
           constraintId: 'report_test',
-          level: 'iron_law',
+          severity: 'error',
           passRate: 0.8,
           failRate: 0.2,
           totalChecks: 100,
@@ -180,7 +180,7 @@ describe('TraceAnalyzer - 补充覆盖', () => {
   describe('analyzeConstraint', () => {
     it('应该分析特定约束', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'specific_test', level: 'iron_law', timestamp: Date.now(), result: 'pass' },
+        { constraintId: 'specific_test', severity: 'error', timestamp: Date.now(), result: 'pass' },
       ];
       traces.forEach(t => collector.record(t));
 
@@ -201,10 +201,10 @@ describe('TraceAnalyzer - 补充覆盖', () => {
 
       const traces: ExecutionTrace[] = [];
       for (let i = 0; i < 6; i++) {
-        traces.push({ constraintId: 'rising_fail', level: 'iron_law', timestamp: 1000 + i * 100, result: 'fail' });
+        traces.push({ constraintId: 'rising_fail', severity: 'error', timestamp: 1000 + i * 100, result: 'fail' });
       }
       for (let i = 6; i < 14; i++) {
-        traces.push({ constraintId: 'rising_fail', level: 'iron_law', timestamp: 1000 + i * 100, result: 'pass' });
+        traces.push({ constraintId: 'rising_fail', severity: 'error', timestamp: 1000 + i * 100, result: 'pass' });
       }
 
       const summaries = customAnalyzer.summarize(traces);

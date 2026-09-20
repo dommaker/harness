@@ -62,13 +62,13 @@ jest.mock('chalk', () => ({
   red: jest.fn((str: string) => str),
 }));
 
-function fakeConstraint(id: string, level: 'iron_law' | 'guideline') {
+function fakeConstraint(id: string, severity: 'error' | 'warning') {
   return {
     kind: 'check' as const,
     id,
     rule: 'test',
     message: `msg-${id}`,
-    level,
+    severity,
     trigger: 'code_implementation',
     enforcement: 'test',
   };
@@ -83,21 +83,21 @@ describe('check 命令 skip 输出', () => {
     jest.clearAllMocks();
   });
 
-  it('skipped 单独列示，不计入铁律通过条数', async () => {
+  it('skipped 单独列示，不计入 error 级通过条数', async () => {
     mockChecker.checkConstraints.mockResolvedValue({
       passed: true,
-      ironLaws: [
-        { id: 'law_pass', level: 'iron_law', satisfied: true, checkedAt: new Date(), constraint: fakeConstraint('law_pass', 'iron_law') },
-        { id: 'law_skip', level: 'iron_law', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('law_skip', 'iron_law') },
+      errors: [
+        { id: 'law_pass', severity: 'error', satisfied: true, checkedAt: new Date(), constraint: fakeConstraint('law_pass', 'error') },
+        { id: 'law_skip', severity: 'error', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('law_skip', 'error') },
       ],
-      guidelines: [],
+      warnings: [],
       warningCount: 0,
     });
 
     await check({ preset: 'default', staged: false }, io);
 
     // 通过条数只计实际评估的 1 条
-    expect(io.outText()).toContain('铁律: 全部通过 (1 条)');
+    expect(io.outText()).toContain('error 级约束: 全部通过 (1 条)');
     // skipped 单独列示
     expect(io.outText()).toContain('跳过评估: 1 条');
     expect(io.outText()).toContain('- law_skip');
@@ -105,20 +105,20 @@ describe('check 命令 skip 输出', () => {
     expect(io.outText()).toContain('约束检查通过');
   });
 
-  it('指导原则通过计数排除 skipped', async () => {
+  it('warning 级通过计数排除 skipped', async () => {
     mockChecker.checkConstraints.mockResolvedValue({
       passed: true,
-      ironLaws: [],
-      guidelines: [
-        { id: 'g_pass', level: 'guideline', satisfied: true, checkedAt: new Date(), constraint: fakeConstraint('g_pass', 'guideline') },
-        { id: 'g_skip', level: 'guideline', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('g_skip', 'guideline') },
+      errors: [],
+      warnings: [
+        { id: 'g_pass', severity: 'warning', satisfied: true, checkedAt: new Date(), constraint: fakeConstraint('g_pass', 'warning') },
+        { id: 'g_skip', severity: 'warning', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('g_skip', 'warning') },
       ],
       warningCount: 0,
     });
 
     await check({ preset: 'default', staged: false }, io);
 
-    expect(io.outText()).toContain('指导原则: 1/1 通过');
+    expect(io.outText()).toContain('warning 级约束: 1/1 通过');
     expect(io.outText()).toContain('跳过评估: 1 条');
   });
 });

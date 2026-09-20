@@ -3,9 +3,9 @@
  *
  * 通用工程约束框架
  *
- * 约束体系（ADR-0001 kind 二元）：
- * - check：可执行检查（Iron Laws 阻断 / Guidelines 告警）
- * - prompt：纯文本注入，不参与检查
+ * 约束体系（ADR-0029 severity 显式模型）：
+ * - 全部约束 kind='check'：可执行检查（error 阻断 / warning 告警）
+ * - 纯文本提示层已整体关停（ADR-0029）
  *
  * 门禁系统：
  * - PassesGate：测试门控
@@ -16,13 +16,13 @@
  * - CheckpointValidator：检查点验证
  *
  * 公共导出（ADR-0003）：显式清单，禁 export *。
- * 收录标准：属 harness 定位（约束数据 / 执行引擎 / 注入工具 / 知识基建）、
+ * 收录标准：属 harness 定位（约束数据 / 执行引擎 / 知识基建）、
  * 实现真实可用、无同名冲突。内部 seam
  * （ConstraintChecker / constraintChecker / ProjectConfigLoader）不进公共清单。
  */
 
 // ========================================
-// 约束类型（三层体系 + kind 二元）
+// 约束类型（severity 显式模型）
 // ========================================
 export {
   ConstraintViolationError,
@@ -31,7 +31,7 @@ export type {
   Constraint,
   ConstraintId,
   ConstraintKind,
-  ConstraintLevel,
+  ConstraintSeverity,
   ConstraintTrigger,
   ConstraintContext,
   ConstraintResult,
@@ -43,9 +43,7 @@ export type {
 // 约束数据（内置定义 + 生效集）
 // ========================================
 export {
-  IRON_LAWS,
-  GUIDELINES,
-  PROMPTS,
+  CONSTRAINTS,
   getAllConstraints,
   getConstraint,
   findConstraintsByTrigger,
@@ -67,17 +65,10 @@ export {
 export type { CheckConstraintsOptions } from './core/constraints/checker';
 
 // ========================================
-// 约束缓存与注入渲染
+// 约束缓存
 // ========================================
 export { CheckCache } from './core/constraints/check-cache';
 export type { CheckCacheConfig, CheckSamplingConfig } from './core/constraints/check-cache';
-export { renderConstraintsByTrigger } from './core/constraints/agent-prompt-renderer';
-export type { RenderConstraintsByTriggerOptions } from './core/constraints/agent-prompt-renderer';
-export {
-  CONSTRAINTS_START_MARKER,
-  CONSTRAINTS_END_MARKER,
-  renderConstraintsSection,
-} from './core/constraints/injection-renderer';
 
 // ========================================
 // 检查点与验证器
@@ -373,7 +364,6 @@ export type {
 export type {
   ProjectConfig,
   MergedConstraintsConfig,
-  CustomConstraintDefinition,
   GovernanceConfig,
   CapabilitiesConfig,
   ChangelogConfig,

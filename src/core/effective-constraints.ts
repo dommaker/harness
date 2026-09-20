@@ -1,26 +1,22 @@
 /**
- * 生效约束集（ADR-0001）
+ * 生效约束集（ADR-0029，链路承自 ADR-0001）
  *
  * `getEffectiveConstraints(projectRoot)` 是全仓唯一的生效集来源：
- * 内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
- * init 注入、`harness check`、外部消费者（studio 等）全部消费它，
- * 不再直接读 IRON_LAWS/GUIDELINES/PROMPTS 全集。
+ * 内置 → preset → config.yml 禁用。
+ * `harness check`、外部消费者（studio 等）全部消费它，
+ * 不再直接读 CONSTRAINTS 全集。
  */
 
 import type { Constraint } from '../types/constraint';
 import type { MergedConstraintsConfig } from '../types/project-config';
-import { PROMPTS } from './constraints/definitions';
 import { ProjectConfigLoader } from './project-config-loader';
 import type { RunTarget } from './constraints/run-env';
 
 /**
- * 获取项目当前生效的约束集（check + prompt，带 kind）
+ * 获取项目当前生效的约束集（check 全量，带 kind/severity）
  *
  * 生效集链路同 getMergedConstraintsConfig：内置 → preset 裁剪 → config.yml
- * `constraints.<id>.enabled:false` 删除（内置与 custom 同效）→ custom-constraints
- * 追加（禁用/已退役的 custom 不追加）→ scenes 过滤
- * （带 appliesTo 的 prompt 仅当 config.yml `scenes` 与其交集非空时保留，
- * 缺省 scenes=[] 即场景专属 prompt 默认不进入生效集）。
+ * `constraints.<id>.enabled:false` 删除。
  *
  * @param target 项目根路径，或本 run 的运行级观察面（缺省 process.cwd()）
  *   传观察面 = config.yml 读取与本 run 其余消费方共用同一份（ADR-0023 决策 2）
@@ -37,22 +33,18 @@ export function getEffectiveConstraints(
 /**
  * 从已算好的合并配置取出生效集清单（与 getEffectiveConstraints 同一形状）
  *
- * 给已经持有 `MergedConstraintsConfig` 的消费方复用（CLI check 把这一份同时交给
- * 漂移检测，避免生效集链路在一次运行里算两遍，ADR-0023 步骤 4.5）。
+ * 给已经持有 `MergedConstraintsConfig` 的消费方复用（CLI check 复用这一份，
+ * 避免生效集链路在一次运行里算两遍，ADR-0023 步骤 4.5）。
  */
 export function constraintsFromMerged(merged: MergedConstraintsConfig): Constraint[] {
-  return [
-    ...Object.values(merged.ironLaws),
-    ...Object.values(merged.guidelines),
-    ...Object.values(merged.prompts ?? {}),
-  ];
+  return Object.values(merged.constraints);
 }
 
 /**
- * 获取项目当前生效的合并约束配置（ADR-0001 唯一来源的完整形状）
+ * 获取项目当前生效的合并约束配置（唯一来源的完整形状）
  *
  * 与 getEffectiveConstraints 同一生效集链路，返回完整 MergedConstraintsConfig
- * （含 disabled/custom/unknownIds），供 check 等需要诊断信息的消费方使用。
+ * （含 disabled/unknownIds），供 check 等需要诊断信息的消费方使用。
  *
  * options.preset（CLI --preset）仅在项目无自定义配置时覆盖 config.yml 的
  * preset（工单 23 语义：项目自定义配置优先于 CLI 预设）；不传 preset 时
@@ -77,24 +69,15 @@ export function getMergedConstraintsConfig(
  */
 export interface EffectiveConfigLint {
   /**
-   * config.yml `constraints.<id>` 中既非内置也非自定义的未知 id
+   * config.yml `constraints.<id>` 中非内置的未知 id
    * （如禁用了已被本版移除的约束的残留配置）。生效集计算静默忽略，
    * 在此列出供 report 提示。
    */
   unknownIds: string[];
-
-  /** 项目配置的场景标签（config.yml `scenes`，缺省 []） */
-  scenes: string[];
-
-  /**
-   * 因 scenes 过滤而未进入生效集的场景专属 prompt id
-   * （已被 preset/config 禁用的不重复列出）
-   */
-  sceneExcluded: string[];
 }
 
 /**
- * 诊断项目约束配置：未知 id 残留、scenes 生效情况
+ * 诊断项目约束配置：未知 id 残留
  *
  * 不抛错、不修改任何文件，供 report / check 的诊断输出使用。
  *
@@ -102,23 +85,9 @@ export interface EffectiveConfigLint {
  */
 export function lintEffectiveConfig(projectRoot: string = process.cwd()): EffectiveConfigLint {
   const loader = new ProjectConfigLoader(projectRoot);
-  const config = loader.load();
+  loader.load();
   const merged = loader.mergeConstraints();
-  const scenes = config.scenes ?? [];
-
-  const sceneExcluded = Object.values(PROMPTS)
-    .filter(
-      c =>
-        c.appliesTo &&
-        c.appliesTo.length > 0 &&
-        !c.appliesTo.some(scene => scenes.includes(scene)) &&
-        !merged.disabled.includes(c.id)
-    )
-    .map(c => c.id);
-
   return {
     unknownIds: merged.unknownIds ?? [],
-    scenes,
-    sceneExcluded,
   };
 }

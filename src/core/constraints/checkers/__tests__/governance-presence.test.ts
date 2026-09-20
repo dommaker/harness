@@ -16,7 +16,6 @@ import {
   hasGovernancePreserveBlock,
   hasClaudeGovernance,
 } from '../governance-presence';
-import { detectInjectionDrift } from '../../injection-drift';
 import { createProjectFixture, writeProjectConfig } from '../../../../test-setup/project-fixture';
 import { normalizeCheckOutcome, type CheckEnv } from '../types';
 import { createRunEnv } from '../../run-env';
@@ -99,7 +98,7 @@ describe('governance_presence checker', () => {
     const outcome = await outcomeOf(tempDir);
     expect(outcome.satisfied).toBe(false);
     expect(outcome.evidence.join('\n')).toContain('治理契约');
-    expect(outcome.evidence.join('\n')).toContain('harness init');
+    expect(outcome.evidence.join('\n')).toContain('PRESERVE:governance');
     // ADR-0016：证据只有一个出口。侧信道留着会让 CLI 结构化输出与 trace 两头口径不一致
     expect(errorSpy).not.toHaveBeenCalled();
   });
@@ -157,56 +156,5 @@ describe('hasGovernancePreserveBlock / hasClaudeGovernance 判定函数', () => 
       '<!-- PRESERVE:governance -->\n条款一 <!-- /PRESERVE:governance --> 尾注\n'
     );
     expect(hasGovernancePreserveBlock(p)).toBe(false);
-  });
-});
-
-describe('governance_presence × detectInjectionDrift 同 fixture 一致性（#83）', () => {
-  let tempDir: string;
-
-  const writeConfig = () => writeProjectConfig(tempDir, 'preset: standard\n');
-
-  beforeEach(() => {
-    tempDir = createProjectFixture({
-      name: 'temp-test-gov-consistency',
-      parentDir: process.cwd(),
-    });
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('双空格标题：presence 认在场（pass），drift 严格计数 0 不报重复——两层不再互相矛盾', async () => {
-    writeConfig();
-    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n##  Governance Rules\n\n条款\n');
-
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
-    const drift = detectInjectionDrift(tempDir);
-    expect(drift.notInjected).toBe(true);
-    expect(drift.duplicateHeading).toBe(false);
-    expect(drift.hasDrift).toBe(false);
-  });
-
-  it('精确拼写单标题：presence pass，drift 不报重复', async () => {
-    writeConfig();
-    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'), '# CLAUDE.md\n\n## Governance Rules\n\n条款\n');
-
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
-    const drift = detectInjectionDrift(tempDir);
-    expect(drift.notInjected).toBe(true);
-    expect(drift.duplicateHeading).toBe(false);
-  });
-
-  it('精确拼写双标题：presence 认在场，drift 报重复章节（计数是 drift 的独立职责）', async () => {
-    writeConfig();
-    fs.writeFileSync(
-      path.join(tempDir, 'CLAUDE.md'),
-      '# CLAUDE.md\n\n## Governance Rules\n\n甲\n\n## Governance Rules\n\n乙\n'
-    );
-
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe(true);
-    const drift = detectInjectionDrift(tempDir);
-    expect(drift.notInjected).toBe(true);
-    expect(drift.duplicateHeading).toBe(true);
   });
 });

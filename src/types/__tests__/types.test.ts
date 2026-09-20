@@ -17,7 +17,7 @@ describe('ConstraintViolationError', () => {
   it('应该使用 result.message 作为错误消息', () => {
     const error = new ConstraintViolationError({
       id: 'test',
-      level: 'iron_law',
+      severity: 'error',
       satisfied: false,
       message: '测试违规消息',
       checkedAt: new Date(),
@@ -31,7 +31,7 @@ describe('ConstraintViolationError', () => {
   it('应该在 message 为空时使用默认消息', () => {
     const error = new ConstraintViolationError({
       id: 'test',
-      level: 'iron_law',
+      severity: 'error',
       satisfied: false,
       checkedAt: new Date(),
     });
@@ -42,7 +42,7 @@ describe('ConstraintViolationError', () => {
   it('应该在 message 为空字符串时使用默认消息', () => {
     const error = new ConstraintViolationError({
       id: 'test',
-      level: 'iron_law',
+      severity: 'error',
       satisfied: false,
       message: '',
       checkedAt: new Date(),

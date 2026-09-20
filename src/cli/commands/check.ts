@@ -1,9 +1,9 @@
 /**
  * harness check 命令
  *
- * 检查约束是否满足（check 层：Iron Laws / Guidelines；prompt 层仅注入不检查）
+ * 检查约束是否满足（severity='error' 阻断 / severity='warning' 告警）
  * 工单 23：触发条件与证据检测迁至 core/constraints/context-builder
- * ADR-0001：约束集统一走 getMergedConstraintsConfig 生效集链路（preset/config 禁用/custom/scenes）
+ * 约束集统一走 getMergedConstraintsConfig 生效集链路（preset/config 禁用）
  * harness#88：本命令是 trace 记录器的组合根——core 不上行依赖 monitoring，
  * 真实收集器在此经构造参数接线；#139：收集器锚根构造，trace 落点跟 --project-path 走
  */
@@ -11,13 +11,11 @@
 import chalk from 'chalk';
 import * as path from 'path';
 import { ConstraintChecker } from '../../core/constraints/checker';
-import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
-import { getMergedConstraintsConfig, constraintsFromMerged } from '../../core/effective-constraints';
+import { CONSTRAINTS } from '../../core/constraints/definitions';
+import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
 import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
-import { detectInjectionDrift } from '../../core/constraints/injection-drift';
-import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { TraceCollector } from '../../monitoring/traces';
 import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
@@ -100,14 +98,11 @@ export async function check(
     const runEnv = options.runEnv ?? createRunEnv(projectPath);
     const stateIO = options.stateIO ?? fileStateIO(projectPath);
 
-    // 生效约束集（ADR-0001）：内置 → preset → config.yml 禁用 → custom 追加 → scenes 过滤。
+    // 生效约束集：内置 → preset → config.yml 禁用。
     // --preset 仅在没有项目自定义配置时覆盖 config.yml 的 preset（工单 23 语义：
     // 项目自定义配置优先于 CLI 预设），优先级规则收在 getMergedConstraintsConfig 一处。
     // CLI 不给 -p 缺省值：没传 = 尊重 config.yml（ADR-0023 步骤 4.5，缺省值曾让两者不可区分）
     const merged = getMergedConstraintsConfig(runEnv, { preset: options.preset });
-    if (merged.custom.length > 0) {
-      log(io, chalk.gray(`自定义约束: ${merged.custom.length} 条`));
-    }
     if (merged.disabled.length > 0) {
       log(io, chalk.gray(`已禁用约束: ${merged.disabled.join(', ')}`));
     }
@@ -132,7 +127,7 @@ export async function check(
     }
     log(io, chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
-    // 执行三层检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
+    // 执行约束检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
     // trace 记录器经构造参数接线（harness#88）：一次命令一个 checker 实例
     // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
     const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
@@ -141,20 +136,20 @@ export async function check(
     // 输出结果
     log(io);
 
-    // skipped（约定未采用/证据未接线）单独列示，不进 pass/fail 统计（ADR-0001）
+    // skipped（约定未采用/证据未接线）单独列示，不进 pass/fail 统计
     const skippedResults = [
-      ...result.ironLaws,
-      ...result.guidelines,
+      ...result.errors,
+      ...result.warnings,
     ].filter(r => r.skipped);
 
-    // Iron Laws
-    const evaluatedIronLaws = result.ironLaws.filter(r => !r.skipped);
-    const ironLawViolations = evaluatedIronLaws.filter(r => !r.satisfied);
-    if (ironLawViolations.length === 0 && evaluatedIronLaws.length > 0) {
-      log(io, chalk.green(`✅ 铁律: 全部通过 (${evaluatedIronLaws.length} 条)`));
-    } else if (ironLawViolations.length > 0) {
-      log(io, chalk.red(`❌ 铁律违规: ${ironLawViolations.length} 条`));
-      ironLawViolations.forEach(r => {
+    // severity='error'（违规即阻断）
+    const evaluatedErrors = result.errors.filter(r => !r.skipped);
+    const errorViolations = evaluatedErrors.filter(r => !r.satisfied);
+    if (errorViolations.length === 0 && evaluatedErrors.length > 0) {
+      log(io, chalk.green(`✅ error 级约束: 全部通过 (${evaluatedErrors.length} 条)`));
+    } else if (errorViolations.length > 0) {
+      log(io, chalk.red(`❌ error 级约束违规: ${errorViolations.length} 条`));
+      errorViolations.forEach(r => {
         if (r.constraint) {
           log(io, chalk.red(`   - ${r.constraint.id}: ${r.constraint.message}`));
           log(io, chalk.red(`     ${r.constraint.rule}`));
@@ -162,31 +157,31 @@ export async function check(
         }
       });
       log(io);
-      log(io, chalk.red('🛑 铁律检查失败，请修复后再提交'));
+      log(io, chalk.red('🛑 error 级约束检查失败，请修复后再提交'));
       return {
         kind: 'fail',
-        reason: `iron law violated: ${ironLawViolations.map(r => r.constraint?.id ?? 'unknown').join(', ')}`,
+        reason: `error-severity constraint violated: ${errorViolations.map(r => r.constraint?.id ?? 'unknown').join(', ')}`,
       };
     }
 
-    // Guidelines
+    // severity='warning'（告警不阻断）
     if (result.warningCount > 0) {
-      log(io, chalk.yellow(`⚠️  指导原则警告: ${result.warningCount} 条`));
-      result.guidelines.filter(r => !r.satisfied).forEach(r => {
+      log(io, chalk.yellow(`⚠️  warning 级约束警告: ${result.warningCount} 条`));
+      result.warnings.filter(r => !r.satisfied).forEach(r => {
         if (r.constraint) {
           log(io, chalk.yellow(`   - ${r.constraint.id}: ${r.constraint.message}`));
           logEvidence(io, r, 'yellow');
         }
       });
-    } else if (result.guidelines.length > 0) {
-      const evaluatedGuidelines = result.guidelines.filter(r => !r.skipped);
-      const passedGuidelines = evaluatedGuidelines.filter(r => r.satisfied).length;
-      log(io, chalk.green(`✅ 指导原则: ${passedGuidelines}/${evaluatedGuidelines.length} 通过`));
+    } else if (result.warnings.length > 0) {
+      const evaluatedWarnings = result.warnings.filter(r => !r.skipped);
+      const passedWarnings = evaluatedWarnings.filter(r => r.satisfied).length;
+      log(io, chalk.green(`✅ warning 级约束: ${passedWarnings}/${evaluatedWarnings.length} 通过`));
     }
 
     // 提示：通过但带证据（harness#119）——与本次变更无因果的仓库级漂移在此露出，
     // 不判违规、不改 exit code，只保证「看得见且能自己修」
-    const hints = [...result.ironLaws, ...result.guidelines].filter(
+    const hints = [...result.errors, ...result.warnings].filter(
       r => !r.skipped && r.satisfied && (r.evidence?.length ?? 0) > 0
     );
     if (hints.length > 0) {
@@ -200,29 +195,6 @@ export async function check(
       skippedResults.forEach(r => {
         log(io, chalk.gray(`   - ${r.id}`));
       });
-    }
-
-    // 注入漂移校验（ADR-0001 决策 7）：黄色警告块，不改 exit code、不影响门禁结果。
-    // 无漂移/未注入零输出；漂移检测自身异常静默吞掉，绝不影响 check。
-    try {
-      // 生效集直接用本 run 那一份：一遍算完，且比对对象就是本次实际执法的规则集（ADR-0023 步骤 4.5）
-      const drift = detectInjectionDrift(runEnv, undefined, constraintsFromMerged(merged));
-      if (drift.hasDrift) {
-        log(io);
-        log(io, chalk.yellow(`⚠️  检测到 ${drift.injectionFile ?? '治理文档'} 约束注入漂移（仅警告，不阻断）:`));
-        if (drift.versionDrift) {
-          log(io, chalk.yellow(`   ⚠️⚠️ 注入段版本 (${drift.versionDrift.actual}) ≠ 已安装 harness 版本 (${drift.versionDrift.expected})：agent 上下文中的规则与已安装 harness 版本不一致`));
-        }
-        if (drift.contentDrift) {
-          log(io, chalk.yellow(`   内容漂移: 缺失 ${drift.contentDrift.missing.length} 条 / 多余 ${drift.contentDrift.extra.length} 条（条目级差异见 harness constraints report）`));
-        }
-        if (drift.duplicateHeading) {
-          log(io, chalk.yellow(`   检测到重复的 "${GOVERNANCE_HEADING}" 章节`));
-        }
-        log(io, chalk.yellow(`   修复: ${drift.fixHint}`));
-      }
-    } catch {
-      // 漂移检测失败不影响 check 结果
     }
 
     log(io);
@@ -288,37 +260,26 @@ async function getSmartHint(projectPath: string, stateIO: StateIO): Promise<stri
 }
 
 /**
- * 列出所有约束
+ * 列出所有约束（按 severity 分组）
  */
 /** optionRoutes 一律以 (options) 调用；--list 不消费检查选项，形参仅占位 */
 export function listLaws(_options: Partial<CheckOptions> = {}, io: CommandIO = processIO): CommandResult {
   log(io, chalk.blue('\n📜 所有约束:\n'));
 
-  // Iron Laws
-  log(io, chalk.red('🔴 铁律 (Iron Laws) - 绝对禁止，无例外:\n'));
-  Object.values(IRON_LAWS).forEach(constraint => {
-    log(io, chalk.red(`  ${constraint.id}`));
-    log(io, chalk.gray(`    ${constraint.rule}`));
-    log(io, chalk.gray(`    ${constraint.message}`));
-    log(io);
-  });
-
-  // Guidelines
-  log(io, chalk.yellow('🟡 指导原则 (Guidelines) - 优先建议，违背发警告但不阻止:\n'));
-  Object.values(GUIDELINES).forEach(constraint => {
-    log(io, chalk.yellow(`  ${constraint.id}`));
-    log(io, chalk.gray(`    ${constraint.rule}`));
-    log(io, chalk.gray(`    ${constraint.message}`));
-    log(io);
-  });
-
-  // Prompts（ADR-0001：纯注入层，不执行检查）
-  log(io, chalk.blue('🔵 提示 (Prompts) - 纯文本注入，不参与检查:\n'));
-  Object.values(PROMPTS).forEach(constraint => {
-    log(io, chalk.blue(`  ${constraint.id}`));
-    log(io, chalk.gray(`    ${constraint.rule}`));
-    log(io, chalk.gray(`    ${constraint.message}`));
-    log(io);
-  });
+  const groups: Array<{ severity: 'error' | 'warning'; heading: string; paint: (s: string) => string }> = [
+    { severity: 'error', heading: '🔴 error 级 - 违规即阻断，无例外:', paint: chalk.red },
+    { severity: 'warning', heading: '🟡 warning 级 - 违规发警告但不阻止:', paint: chalk.yellow },
+  ];
+  for (const group of groups) {
+    log(io, group.paint(group.heading + '\n'));
+    Object.values(CONSTRAINTS)
+      .filter(c => c.severity === group.severity)
+      .forEach(constraint => {
+        log(io, group.paint(`  ${constraint.id}`));
+        log(io, chalk.gray(`    ${constraint.rule}`));
+        log(io, chalk.gray(`    ${constraint.message}`));
+        log(io);
+      });
+  }
   return { kind: 'ok' };
 }

@@ -36,8 +36,8 @@ describe('TraceCollector', () => {
   describe('record', () => {
     it('应该记录 trace', () => {
       const trace: ExecutionTrace = {
-        constraintId: 'no_bypass_checkpoint',
-        level: 'iron_law',
+        constraintId: 'no_test_simplification',
+        severity: 'error',
         timestamp: Date.now(),
         result: 'pass',
       };
@@ -45,7 +45,7 @@ describe('TraceCollector', () => {
       collector.record(trace);
 
       const content = fs.readFileSync(traceFile, 'utf-8');
-      expect(content).toContain('no_bypass_checkpoint');
+      expect(content).toContain('no_test_simplification');
       expect(content).toContain('pass');
     });
 
@@ -57,7 +57,7 @@ describe('TraceCollector', () => {
 
       disabledCollector.record({
         constraintId: 'test',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: Date.now(),
         result: 'pass',
       });
@@ -69,13 +69,13 @@ describe('TraceCollector', () => {
     it('应该追加多条记录', () => {
       collector.record({
         constraintId: 'test1',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: Date.now(),
         result: 'pass',
       });
       collector.record({
         constraintId: 'test2',
-        level: 'guideline',
+        severity: 'warning',
         timestamp: Date.now(),
         result: 'fail',
       });
@@ -88,7 +88,7 @@ describe('TraceCollector', () => {
 
   describe('recordPass', () => {
     it('应该记录通过 trace', () => {
-      collector.recordPass('no_bypass_checkpoint', 'iron_law');
+      collector.recordPass('no_test_simplification', 'error');
 
       const traces = collector.read();
       expect(traces.length).toBe(1);
@@ -98,7 +98,7 @@ describe('TraceCollector', () => {
 
   describe('recordFail', () => {
     it('应该记录失败 trace', () => {
-      collector.recordFail('no_bypass_checkpoint', 'iron_law');
+      collector.recordFail('no_test_simplification', 'error');
 
       const traces = collector.read();
       expect(traces.length).toBe(1);
@@ -110,13 +110,13 @@ describe('TraceCollector', () => {
     it('应该返回所有 traces', () => {
       collector.record({
         constraintId: 'test1',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 1000,
         result: 'pass',
       });
       collector.record({
         constraintId: 'test2',
-        level: 'guideline',
+        severity: 'warning',
         timestamp: 2000,
         result: 'fail',
       });
@@ -128,19 +128,19 @@ describe('TraceCollector', () => {
     it('应该按时间范围过滤', () => {
       collector.record({
         constraintId: 'test1',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 1000,
         result: 'pass',
       });
       collector.record({
         constraintId: 'test2',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 2000,
         result: 'pass',
       });
       collector.record({
         constraintId: 'test3',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 3000,
         result: 'pass',
       });
@@ -155,18 +155,18 @@ describe('TraceCollector', () => {
     it('应该按约束层级过滤', () => {
       collector.record({
         constraintId: 'test1',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 1000,
         result: 'pass',
       });
       collector.record({
         constraintId: 'test2',
-        level: 'guideline',
+        severity: 'warning',
         timestamp: 2000,
         result: 'pass',
       });
 
-      const traces = collector.read({ level: 'iron_law' });
+      const traces = collector.read({ severity: 'error' });
       expect(traces.length).toBe(1);
     });
   });
@@ -176,13 +176,13 @@ describe('TraceCollector', () => {
       const now = Date.now();
       collector.record({
         constraintId: 'old',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: now - 25 * 60 * 60 * 1000,  // 25 小时前
         result: 'pass',
       });
       collector.record({
         constraintId: 'recent',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: now - 1 * 60 * 60 * 1000,  // 1 小时前
         result: 'pass',
       });
@@ -197,13 +197,13 @@ describe('TraceCollector', () => {
     it('应该按约束 ID 过滤', () => {
       collector.record({
         constraintId: 'no_bypass',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 1000,
         result: 'pass',
       });
       collector.record({
         constraintId: 'other_constraint',
-        level: 'guideline',
+        severity: 'warning',
         timestamp: 2000,
         result: 'pass',
       });
@@ -218,13 +218,13 @@ describe('TraceCollector', () => {
     it('应该返回统计信息', () => {
       collector.record({
         constraintId: 'test1',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 1000,
         result: 'pass',
       });
       collector.record({
         constraintId: 'test2',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: 2000,
         result: 'fail',
       });

@@ -2,7 +2,8 @@
  * governance_presence：治理契约在场守护（studio #302，ADR 2026-08-21 落点模型）
  *
  * 治理契约正本 = AGENTS.md 手写 `PRESERVE:governance` 段（旧模型仓 = CLAUDE.md
- * Governance Rules / HARNESS_CONSTRAINTS 注入段）。PRESERVE 只保「存在」不保「在场」：
+ * Governance Rules 块 / 历史 HARNESS_CONSTRAINTS 注入段，ADR-0029 后注入段不再
+ * 生成，残留段仅作历史兼容判据）。PRESERVE 只保「存在」不保「在场」：
  * 段被删除/掏空后 sync-docs 重新生成会静默丢失，此处补「在场」校验。
  *
  * ADR-0001 存在性探测：项目未采用 harness 治理（无 .harness/config.yml）→ skip。
@@ -48,12 +49,12 @@ export const governancePresence: ConstraintCheck = {
     if (hasClaudeGovernance(join(projectPath, 'CLAUDE.md'))) return true;
 
     // 证据随判定一并返回（ADR-0016 补迁）：此前这里是 console.error 侧信道——
-    // 只进本地 stderr，进不了 CLI 结论块与 trace，铁律拦截时用户看不到该恢复哪个正本
+    // 只进本地 stderr，进不了 CLI 结论块与 trace，error 级拦截时用户看不到该恢复哪个正本
     return {
       pass: false,
       evidence: [
         '治理契约缺失：AGENTS.md 无非空 PRESERVE:governance 段，CLAUDE.md 也无 Governance Rules 块（正本静默丢失）',
-        '修复: 恢复其一（重跑 `harness init` 会同步注入段）',
+        '修复: 恢复其一——AGENTS.md 补回手写 PRESERVE:governance 段，或 CLAUDE.md 补回 Governance Rules 块',
       ],
     };
   },

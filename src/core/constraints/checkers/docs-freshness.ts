@@ -90,7 +90,7 @@ export const docsFreshness: ConstraintCheck = {
     if (deadEntries.length > 0) {
       // 证据通道点名条目（harness#119）：此前是 console.error 侧信道（2026-08-08 studio
       // CI 4 连红时的临时办法），CLI 结构化输出与 trace 两头都拿不到，
-      // 铁律拦截时用户只看到一句通用提示，basename 碰撞下无从定位
+      // error 级拦截时用户只看到一句通用提示，basename 碰撞下无从定位
       return {
         pass: false,
         evidence: formatEvidence('CAPABILITIES.md 登记的条目不存在', deadEntries),

@@ -94,17 +94,17 @@ export interface TestResult {
  * PassesGate 验证违规
  */
 export interface PassesGateViolation {
-  /** Iron Law ID */
+  /** 约束 ID */
   id: string;
 
-  /** Iron Law 规则 */
+  /** 约束规则 */
   rule: string;
 
   /** 中文消息 */
   message: string;
 
-  /** 约束层级 */
-  level: 'iron_law';
+  /** 约束严重性（PassesGate 违规恒为阻断级） */
+  severity: 'error';
 }
 
 /**
@@ -114,7 +114,7 @@ export interface PassesGateCheckResult {
   /** 是否允许标记完成 */
   allowed: boolean;
 
-  /** Iron Law 违规列表 */
+  /** 阻断级违规列表 */
   violations?: PassesGateViolation[];
 
   /** 原始测试结果 */

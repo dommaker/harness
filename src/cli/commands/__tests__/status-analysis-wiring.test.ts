@@ -18,8 +18,8 @@ import { status } from '../status';
 const STATUS_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'status.ts'), 'utf-8');
 
 /** 1 pass + 1 fail：failRate 0.5、passRate 0.5 → 无异常；2 fail：passRate 0 → low_pass_rate */
-const PASS = { constraintId: 'alpha', level: 'iron_law' as const, result: 'pass' as const };
-const FAIL = { constraintId: 'beta', level: 'guideline' as const, result: 'fail' as const };
+const PASS = { constraintId: 'alpha', severity: 'error' as const, result: 'pass' as const };
+const FAIL = { constraintId: 'beta', severity: 'warning' as const, result: 'fail' as const };
 
 let io: CapturingIO;
 beforeEach(() => {
@@ -47,7 +47,7 @@ describe('status 分析接线（ADR-0020）', () => {
 
     await status({ projectPath: root, detail: true }, io);
 
-    expect(io.outText()).toContain('🔴 Iron Laws:');
+    expect(io.outText()).toContain('🔴 error 级约束:');
     expect(io.outText()).toContain('alpha');
     expect(io.outText()).toContain('检查: 2 | 通过: 100% | 失败: 0%');
     expect(io.outText()).not.toContain('个异常');

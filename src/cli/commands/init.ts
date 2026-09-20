@@ -10,21 +10,9 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { getHarnessPackageVersion } from '../../utils/package-version';
-import { getEffectiveConstraints } from '../../core/effective-constraints';
 import { loadRawProjectConfig } from '../../core/project-config-loader';
 import type { CiConfig, CiPlatform, GovernanceConfig } from '../../types/project-config';
-import {
-  CONSTRAINTS_START_MARKER,
-  CONSTRAINTS_END_MARKER,
-  renderConstraintsSection,
-} from '../../core/constraints/injection-renderer';
-import {
-  replaceStandaloneRange,
-  replaceEnclosedRange,
-  cutMarkerBlock,
-  resolveGovernanceLanding,
-  GOVERNANCE_HEADING,
-} from '../../core/constraints/injection-writer';
+import { replaceStandaloneRange } from '../../core/constraints/injection-writer';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import {
   runPlan,
@@ -32,7 +20,6 @@ import {
   preCommitHookFile,
   prePushHookFile,
   harnessCheckCiFile,
-  customConstraintsFile,
   changelogFile,
   contextDocFile,
   governanceWorkflowFile,
@@ -294,9 +281,9 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   await fs.writeFile(configPath, configContent, 'utf-8');
   log(io, chalk.green(`✅ 已创建配置文件: ${configPath} (v${pkgVersion})`));
 
-  // 受管示例文件：检查点 / Resolutions（RKB 狗粮）/ 自定义约束
+  // 受管示例文件：检查点 / Resolutions（RKB 狗粮）
   await runPlan(
-    [checkpointsFile(projectPath), resolutionsFile(projectPath), customConstraintsFile(projectPath)],
+    [checkpointsFile(projectPath), resolutionsFile(projectPath)],
     io,
   );
 
@@ -322,9 +309,8 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   log(io);
   log(io, chalk.gray('下一步:'));
   log(io, chalk.gray('  1. 编辑 .harness/config.yml 自定义配置'));
-  log(io, chalk.gray('  2. 编辑 .harness/custom-constraints.yml 添加项目约束'));
-  log(io, chalk.gray('  3. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然'));
-  log(io, chalk.gray('  4. 运行 harness status 查看状态'));
+  log(io, chalk.gray('  2. 正常开发：每次 git commit 查暂存的（增量快反馈），每次 git push 查整仓的（全量兜底）——重复是设计使然'));
+  log(io, chalk.gray('  3. 运行 harness status 查看状态'));
   log(io);
   log(io, chalk.blue('💡 提示: 使用 harness init --print-snippets 查看配置代码片段'));
   return { kind: 'ok' };
@@ -463,7 +449,7 @@ export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandI
   try {
     content = await fs.readFile(claudeMdPath, 'utf-8');
   } catch {
-    // CLAUDE.md 不存在——setupClaudeMdConstraints 会创建它
+    // CLAUDE.md 不存在——无人持有该文件，跳过 Output Style 段
     return;
   }
 
@@ -513,159 +499,6 @@ export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandI
 }
 
 /**
- * 治理契约 PRESERVE 段标记（studio #302，ADR 2026-08-21 落点模型：
- * 治理契约正本住 AGENTS.md 手写 PRESERVE 段，sync-docs 重新生成时原样保留）
- */
-const GOVERNANCE_PRESERVE_BEGIN = '<!-- PRESERVE:governance -->';
-const GOVERNANCE_PRESERVE_END = '<!-- /PRESERVE:governance -->';
-
-/**
- * 在 AGENTS.md 的 PRESERVE:governance 段写入/更新 Governance Rules 约束段（新落点模型）
- *
- * - AGENTS.md 不存在：创建最小骨架（标题 + 说明 + PRESERVE:governance 段），
- *   完整导读由 `harness sync-docs --agents` 生成，PRESERVE 段在重新生成时原样保留
- * - 已有 PRESERVE:governance 段：段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间——
- *   有标记则只替换标记区间，段内其余手写内容（治理契约引言/流程/纪律等）原样保留；
- *   无标记（纯手写段）则在段尾追加注入段，不动手写内容
- * - 无该段：在文件末尾追加
- * - 段标记残缺（外层或段内 HARNESS_CONSTRAINTS 单边/乱序）：不写入，告警交由人工修复（防二次损坏）
- */
-export async function setupAgentsMdConstraints(projectPath: string, io: CommandIO): Promise<void> {
-  const agentsMdPath = path.join(projectPath, 'AGENTS.md');
-  const version = getHarnessPackageVersion();
-
-  const constraints = getEffectiveConstraints(projectPath);
-  const bodyOnly = renderConstraintsSection(constraints, version);
-  const block = `${GOVERNANCE_PRESERVE_BEGIN}\n${GOVERNANCE_HEADING}\n${bodyOnly}${GOVERNANCE_PRESERVE_END}\n`;
-
-  let existingContent: string | null = null;
-  try {
-    existingContent = await fs.readFile(agentsMdPath, 'utf-8');
-  } catch {
-    // AGENTS.md 不存在
-  }
-
-  if (existingContent === null) {
-    const skeleton = [
-      '# AGENTS.md',
-      '',
-      '> 机器生成部分由 `harness sync-docs --agents` 维护；`PRESERVE:governance` 段是治理契约正本（手写/治理变更流程管控），重新生成时原样保留。',
-      '',
-      block,
-    ].join('\n');
-    await fs.writeFile(agentsMdPath, skeleton, 'utf-8');
-    log(io, chalk.green(`✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段 (v${version})`));
-    return;
-  }
-
-  const preserve = cutMarkerBlock(existingContent, GOVERNANCE_PRESERVE_BEGIN, GOVERNANCE_PRESERVE_END);
-
-  if (preserve === 'half') {
-    log(io, chalk.yellow('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复'));
-    return;
-  }
-
-  if (preserve !== 'absent') {
-    // 段内机器管理的只有 HARNESS_CONSTRAINTS 标记区间；其余手写内容原样保留
-    const inner = replaceEnclosedRange(preserve.inner, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, bodyOnly);
-    if (inner.kind === 'half') {
-      log(io, chalk.yellow('⚠️  AGENTS.md PRESERVE:governance 段内 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理契约写入，请人工修复'));
-      return;
-    }
-    const newInner =
-      inner.kind === 'updated'
-        ? inner.content
-        : // 纯手写段（无约束标记）：段尾追加注入段，手写内容不动
-          preserve.inner.trimEnd() + '\n\n' + GOVERNANCE_HEADING + '\n' + bodyOnly;
-
-    const write = replaceStandaloneRange(
-      existingContent,
-      GOVERNANCE_PRESERVE_BEGIN,
-      GOVERNANCE_PRESERVE_END,
-      GOVERNANCE_PRESERVE_BEGIN + newInner + GOVERNANCE_PRESERVE_END + '\n'
-    );
-    if (write.kind === 'updated' && write.content !== existingContent) {
-      await fs.writeFile(agentsMdPath, write.content, 'utf-8');
-      log(io, chalk.green(`✅ 已更新 AGENTS.md 治理契约 PRESERVE:governance 段 (v${version})`));
-    }
-    return;
-  }
-
-  // 无该段：文件末尾追加
-  const newContent = existingContent.trimEnd() + '\n\n' + block;
-  await fs.writeFile(agentsMdPath, newContent, 'utf-8');
-  log(io, chalk.green(`✅ 已追加治理契约 PRESERVE:governance 段到 AGENTS.md (v${version})`));
-}
-
-/**
- * 在 CLAUDE.md 中写入/更新 Governance Rules 约束段（旧落点模型，向后兼容保留）
- *
- * - 约束集来自 getEffectiveConstraints（ADR-0001）：preset 裁剪、config.yml
- *   禁用、custom 追加、scenes 过滤全部反映在注入文本里
- * - 期望段文本由纯函数 renderConstraintsSection 渲染（P6 漂移校验复用）
- * - 如果 CLAUDE.md 不存在，创建并写入完整约束段
- * - 如果存在 HARNESS_CONSTRAINTS_START/END 标记，替换标记间内容
- * - 如果不存在标记，在文件末尾追加约束段
- */
-export async function setupClaudeMdConstraints(projectPath: string, io: CommandIO): Promise<void> {
-  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-
-  const version = getHarnessPackageVersion();
-
-  // 生效约束集 → 渲染期望段（纯函数，与写文件分离）
-  const constraints = getEffectiveConstraints(projectPath);
-  const bodyOnly = renderConstraintsSection(constraints, version);
-  const fullSection = GOVERNANCE_HEADING + '\n' + bodyOnly;
-
-  // 检查 CLAUDE.md 是否存在
-  let existingContent: string;
-  let fileExists = false;
-  try {
-    existingContent = await fs.readFile(claudeMdPath, 'utf-8');
-    fileExists = true;
-  } catch {
-    existingContent = '';
-  }
-
-  if (!fileExists) {
-    // 创建新文件
-    await fs.writeFile(claudeMdPath, fullSection, 'utf-8');
-    log(io, chalk.green(`✅ 已创建 CLAUDE.md 并写入治理约束 (v${version})`));
-    return;
-  }
-
-  const write = replaceStandaloneRange(existingContent, CONSTRAINTS_START_MARKER, CONSTRAINTS_END_MARKER, bodyOnly);
-
-  if (write.kind === 'updated') {
-    // 替换标记区间含标记本身（保持包括最新版本号），尾部换行规范化在 writer 内
-    await fs.writeFile(claudeMdPath, write.content, 'utf-8');
-    log(io, chalk.green(`✅ 已更新 CLAUDE.md 治理约束 (v${version})`));
-  } else if (write.kind === 'half') {
-    log(io, chalk.yellow('⚠️  CLAUDE.md 中 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理约束注入，请人工修复'));
-  } else {
-    // 在文件末尾追加完整段
-    const newContent = existingContent.trimEnd() + '\n\n' + fullSection;
-    await fs.writeFile(claudeMdPath, newContent, 'utf-8');
-    log(io, chalk.green(`✅ 已追加治理约束到 CLAUDE.md (v${version})`));
-  }
-}
-
-/**
- * 治理约束段写入落点路由（studio #302，ADR 2026-08-21 落点模型）
- *
- * 判定收口在 core/constraints/injection-writer resolveGovernanceLanding：
- * - 旧模型仓（CLAUDE.md 已有 HARNESS_CONSTRAINTS 标记或 `## Governance Rules` 块）：
- *   继续写 CLAUDE.md——init 幂等重跑不破坏既有仓，不制造双份约束正本
- * - 其余（新仓初始化）：写 AGENTS.md PRESERVE:governance 段（入库公共面正本）
- */
-export async function setupGovernanceConstraints(projectPath: string, io: CommandIO): Promise<void> {
-  const { target } = resolveGovernanceLanding(projectPath);
-  return target === 'claude-md'
-    ? setupClaudeMdConstraints(projectPath, io)
-    : setupAgentsMdConstraints(projectPath, io);
-}
-
-/**
  * 设置治理相关文件
  */
 async function setupGovernance(
@@ -686,14 +519,10 @@ async function setupGovernance(
   // 2. 在 CLAUDE.md 中写入 Output Style 段（仅在不存在时创建）
   await setupClaudeMdOutputStyle(projectPath, io);
 
-  // 3. 写入/更新 Governance Rules 约束段（新仓 → AGENTS.md PRESERVE:governance；
-  //    旧模型仓 → CLAUDE.md，落点路由见 setupGovernanceConstraints）
-  await setupGovernanceConstraints(projectPath, io);
-
-  // 4. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
+  // 3. 生成 CONTEXT.md 文件（预设形状即 GovernanceConfig，无需再 cast）
   await runPlan(await contextDocPlan(projectPath, governance, io), io);
 
-  // 5. 生成治理 CI 面（仅 github 形；gitlab 已并入 .gitlab-ci.yml 正文，none 不建，harness#156）
+  // 4. 生成治理 CI 面（仅 github 形；gitlab 已并入 .gitlab-ci.yml 正文，none 不建，harness#156）
   await setupGovernanceWorkflow(projectPath, level, io, platform);
 }
 

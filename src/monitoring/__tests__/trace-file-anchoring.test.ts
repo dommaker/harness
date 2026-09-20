@@ -14,7 +14,7 @@ import { createProjectFixture } from '../../test-setup/project-fixture';
 
 const trace = (constraintId: string): ExecutionTrace => ({
   constraintId,
-  level: 'guideline',
+  severity: 'warning',
   timestamp: 1700000000000,
   result: 'pass',
 });

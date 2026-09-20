@@ -20,7 +20,6 @@ import * as nodeFs from 'fs/promises';
 import type { CiPlatform } from '../../types/project-config';
 import { log, type CommandIO } from '../command-contract';
 import {
-  CUSTOM_CONSTRAINTS_TEMPLATE,
   DEFAULT_CHECKPOINT_FILE,
   HARNESS_CHECK_WORKFLOW,
   PRE_COMMIT_SNIPPET,
@@ -232,16 +231,6 @@ export function harnessCheckCiFile(
       instruction: '💡 请手动添加以下内容到 jobs 中：',
       snippet: HARNESS_CHECK_WORKFLOW,
     },
-  };
-}
-
-/** .harness/custom-constraints.yml 示例 */
-export function customConstraintsFile(projectPath: string): ManagedFile {
-  return {
-    target: path.join(projectPath, '.harness', 'custom-constraints.yml'),
-    content: CUSTOM_CONSTRAINTS_TEMPLATE,
-    created: '✅ 已创建自定义约束示例: custom-constraints.yml',
-    onPresent: { outcome: 'skip', notice: 'custom-constraints.yml 已存在' },
   };
 }
 

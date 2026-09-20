@@ -113,7 +113,7 @@ export const MAX_EVIDENCE_ITEMS = 10;
 /**
  * 组装证据行：一行说明 + 逐条依据（超限截断）
  *
- * 每行自描述且不带缩进——缩进由消费端（CLI / gate 理由 / 铁律异常文案）决定，trace 原样存。
+ * 每行自描述且不带缩进——缩进由消费端（CLI / gate 理由 / error 级异常文案）决定，trace 原样存。
  * 修复入口不写在这里：那是各约束自己的事，写进各自的 summary 行（docs_freshness 的
  * 幽灵条目与 sync-docs 无关，共用一个指针会误导）。
  */

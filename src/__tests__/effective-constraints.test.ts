@@ -1,7 +1,8 @@
 /**
  * 生效约束集（getEffectiveConstraints / lintEffectiveConfig）测试
  *
- * 合并矩阵：preset 裁剪 / config.yml 禁用 / custom 追加 / scenes 过滤 / 未知 id 诊断
+ * 合并矩阵（ADR-0029）：preset 裁剪 / config.yml 禁用 / 未知 id 诊断
+ * （custom 追加与 scenes 过滤已随文本注入层关停一并退役）
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
@@ -11,25 +12,19 @@ import {
   lintEffectiveConfig,
 } from '../core/effective-constraints';
 import { createProjectFixture } from '../test-setup/project-fixture';
-import { IRON_LAWS, GUIDELINES, PROMPTS } from '../core/constraints/definitions';
+import { CONSTRAINTS } from '../core/constraints/definitions';
 
-const BUILTIN_TOTAL =
-  Object.keys(IRON_LAWS).length + Object.keys(GUIDELINES).length + Object.keys(PROMPTS).length;
-/** 带 appliesTo 标签的内置 prompt（scenes 过滤对象） */
-const SCENE_PROMPTS = Object.values(PROMPTS)
-  .filter(c => c.appliesTo && c.appliesTo.length > 0)
-  .map(c => c.id);
+const BUILTIN_TOTAL = Object.keys(CONSTRAINTS).length;
 
 describe('getEffectiveConstraints / lintEffectiveConfig', () => {
   let tempDir: string;
   let counter = 0;
 
-  const setupProject = (configYaml?: string, customYaml?: string): string =>
+  const setupProject = (configYaml?: string): string =>
     createProjectFixture({
       parentDir: tempDir,
       name: `p${counter++}`,
       config: configYaml,
-      files: customYaml === undefined ? undefined : { '.harness/custom-constraints.yml': customYaml },
     });
 
   beforeEach(() => {
@@ -42,65 +37,28 @@ describe('getEffectiveConstraints / lintEffectiveConfig', () => {
   });
 
   describe('合并矩阵', () => {
-    it('无配置项目：内置全集减去场景专属 prompt（scenes 缺省为空）', () => {
+    it('无配置项目：内置全集（全部 kind=check，带 severity）', () => {
       const dir = setupProject();
       const constraints = getEffectiveConstraints(dir);
-      const ids = constraints.map(c => c.id);
 
-      expect(constraints.length).toBe(BUILTIN_TOTAL - SCENE_PROMPTS.length);
-      for (const id of SCENE_PROMPTS) {
-        expect(ids).not.toContain(id);
-      }
-      // check + prompt 均带 kind
-      expect(constraints.every(c => c.kind === 'check' || c.kind === 'prompt')).toBe(true);
-      expect(constraints.filter(c => c.kind === 'check')).toHaveLength(
-        Object.keys(IRON_LAWS).length + Object.keys(GUIDELINES).length
-      );
+      expect(constraints.length).toBe(BUILTIN_TOTAL);
+      expect(constraints.every(c => c.kind === 'check')).toBe(true);
     });
 
-    it('scenes 命中：对应场景 prompt 进入生效集，其余场景 prompt 仍排除', () => {
-      const dir = setupProject(`scenes:\n  - agent-skill\n`);
-      const ids = getEffectiveConstraints(dir).map(c => c.id);
-
-      expect(ids).toContain('no_skill_without_test');
-      expect(ids).not.toContain('no_model_for_deterministic');
-    });
-
-    it('config.yml 禁用：check 与 prompt 条目均从生效集移除', () => {
+    it('config.yml 禁用：条目从生效集移除', () => {
       const dir = setupProject(`
 constraints:
-  no_bypass_checkpoint:
+  capability_sync:
     enabled: false
-  no_fuzzy_completion_claim:
+  docs_freshness:
     enabled: false
 `);
       const constraints = getEffectiveConstraints(dir);
       const ids = constraints.map(c => c.id);
 
-      expect(ids).not.toContain('no_bypass_checkpoint');
-      expect(ids).not.toContain('no_fuzzy_completion_claim');
-      expect(constraints.length).toBe(BUILTIN_TOTAL - SCENE_PROMPTS.length - 2);
-    });
-
-    it('config.yml 禁用：custom 约束同样从生效集移除（retire 落 config.yml 的退役路径）', () => {
-      const dir = setupProject(
-        `
-constraints:
-  my_project_rule:
-    enabled: false
-`,
-        `
-custom_constraints:
-  my_project_rule:
-    level: iron_law
-    rule: MY RULE
-    message: 项目自定义
-`
-      );
-      const constraints = getEffectiveConstraints(dir);
-      const ids = constraints.map(c => c.id);
-
-      expect(ids).not.toContain('my_project_rule');
+      expect(ids).not.toContain('capability_sync');
+      expect(ids).not.toContain('docs_freshness');
+      expect(constraints.length).toBe(BUILTIN_TOTAL - 2);
     });
 
     it('preset: relaxed 裁剪生效集', () => {
@@ -111,31 +69,11 @@ custom_constraints:
       expect(ids).toEqual(
         expect.arrayContaining([
           'no_completion_without_verification',
-          'incremental_progress',
-          'no_implementation_without_requirement',
-          'no_bypass_checkpoint',
           'no_hardcoded_credentials',
         ])
       );
-      expect(constraints).toHaveLength(5);
+      expect(constraints).toHaveLength(2);
       expect(constraints.every(c => c.kind === 'check')).toBe(true);
-    });
-
-    it('custom-constraints.yml 追加自定义约束（kind=prompt）', () => {
-      const dir = setupProject(undefined, `
-custom_constraints:
-  my_project_rule:
-    level: guideline
-    rule: MY RULE
-    message: 项目自定义
-    trigger: code_implementation
-`);
-      const constraints = getEffectiveConstraints(dir);
-      const custom = constraints.find(c => c.id === 'my_project_rule');
-
-      expect(custom).toBeDefined();
-      expect(custom!.kind).toBe('prompt');
-      expect(custom!.level).toBe('guideline');
     });
 
     it('禁用未知 id（已移除约束的残留配置）：不报错，lint 可诊断', () => {
@@ -146,19 +84,16 @@ constraints:
 `);
       // 生效集不受影响、不抛错
       const constraints = getEffectiveConstraints(dir);
-      expect(constraints.length).toBe(BUILTIN_TOTAL - SCENE_PROMPTS.length);
+      expect(constraints.length).toBe(BUILTIN_TOTAL);
 
       const lint = lintEffectiveConfig(dir);
       expect(lint.unknownIds).toContain('removed_legacy_constraint');
     });
 
-    it('lintEffectiveConfig 报告 scenes 与被场景过滤的 prompt', () => {
-      const dir = setupProject(`scenes:\n  - llm-app\n`);
+    it('lintEffectiveConfig：干净配置 unknownIds 为空', () => {
+      const dir = setupProject();
       const lint = lintEffectiveConfig(dir);
 
-      expect(lint.scenes).toEqual(['llm-app']);
-      expect(lint.sceneExcluded).toContain('no_skill_without_test');
-      expect(lint.sceneExcluded).not.toContain('no_model_for_deterministic');
       expect(lint.unknownIds).toEqual([]);
     });
   });

@@ -22,7 +22,6 @@ function setupTempDir(dir: string): string {
   fs.mkdirSync(harnessDir, { recursive: true });
   const config = {
     preset: 'standard',
-    custom_constraints_file: 'custom-constraints.yml',
   };
   fs.writeFileSync(path.join(harnessDir, 'config.yml'), yaml.dump(config), 'utf-8');
   return harnessDir;
@@ -85,7 +84,7 @@ describe('bootstrapHarness', () => {
       const result = await bootstrapHarness(noConfigDir);
       expect(result).toHaveProperty('checker');
       expect(result).toHaveProperty('projectPath', noConfigDir);
-      expect(result.mergedConstraints).toHaveProperty('ironLaws');
+      expect(result.mergedConstraints).toHaveProperty('constraints');
     } finally {
       fs.rmSync(noConfigDir, { recursive: true, force: true });
     }
@@ -121,9 +120,8 @@ describe('bootstrapHarnessSync', () => {
   it('initializes ConstraintChecker with merged constraints', () => {
     const result = bootstrapHarnessSync(tempDir);
     // Check that mergedConstraints has the expected structure
-    expect(result.mergedConstraints).toHaveProperty('ironLaws');
-    expect(result.mergedConstraints).toHaveProperty('guidelines');
-  });
+    expect(result.mergedConstraints).toHaveProperty('constraints');
+      });
 
   it('uses process.cwd() when no project path is given', () => {
     // We cannot easily test process.cwd() fallback without mocking cwd,

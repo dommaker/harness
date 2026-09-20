@@ -30,7 +30,7 @@ describe('PassesGate.check()', () => {
     expect(result.violations).toBeDefined();
     expect(result.violations?.length).toBe(1);
     expect(result.violations?.[0]?.id).toBe('no_self_approval');
-    expect(result.violations?.[0]?.level).toBe('iron_law');
+    expect(result.violations?.[0]?.severity).toBe('error');
     expect(result.testResult).toEqual(testResult);
   });
 
@@ -47,7 +47,7 @@ describe('PassesGate.check()', () => {
     expect(result.violations).toBeDefined();
     expect(result.violations?.length).toBe(1);
     expect(result.violations?.[0]?.id).toBe('no_completion_without_verification');
-    expect(result.violations?.[0]?.level).toBe('iron_law');
+    expect(result.violations?.[0]?.severity).toBe('error');
     expect(result.testResult).toEqual(testResult);
   });
 

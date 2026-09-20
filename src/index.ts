@@ -342,25 +342,13 @@ export { getCriticalArtifacts, verifyReleaseArtifacts } from './release';
 export type { ArtifactIntegrityResult } from './release';
 
 // ========================================
-// Hooks 管线
+// Harness 运行环境引导（bootstrap 单面；hooks 管线面已随 ADR-0027 删除）
 // ========================================
 export {
-  HookRegistry,
-  assertHookRegistryClosed,
-  HookPipeline,
-  toErrorStrategy,
   bootstrapHarness,
   bootstrapHarnessSync,
 } from './hooks';
 export type {
-  HookDefinition,
-  HookConfig,
-  EffectiveHook,
-  HookErrorStrategy,
-  HookExecutionRecord,
-  HookPhase,
-  HookResult,
-  PipelineResult,
   HarnessBootstrap,
 } from './hooks';
 

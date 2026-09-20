@@ -1,7 +1,7 @@
 # ADR-0002: 注册型能力一律「定义即注册 + 构建期闭环」
 
 - 日期：2026-08-16
-- 状态：已接受（2026-09-15 部分失效：门禁侧「声明式生效集」面已收缩——`getEffectiveGates` 与 config.yml `gates.order` / `gates.<id>.enabled` 删除；注册表闭环与统一接口本身不动。判据与影响面见文末「后续变更」）
+- 状态：已接受（2026-09-15 部分失效：门禁侧「声明式生效集」面已收缩——`getEffectiveGates` 与 config.yml `gates.order` / `gates.<id>.enabled` 删除；注册表闭环与统一接口本身不动。判据与影响面见文末「后续变更」。2026-09-18 hook 侧整面失效：hooks 管线面随 ADR-0027 整体删除（#170），本 ADR 背景条目 2 与「落地」的 hook 段不再描述现存架构，见文末「后续变更（2026-09-18）」）
 - 影响版本：1.0.0
 
 ## 背景
@@ -86,3 +86,11 @@ harness 有 4 类「注册型能力」——能力以「id → 实现」的方�
 - **`runGates` 与 `order` 字段**——链语义（deny 单调 / ask fail-closed / 决策浅冻结）是判定层里唯一一处真逻辑，57 行、6 条测试。它的消费者仍然只有测试，但 #115 的裁决已把复开条件写明：「若未来出现真实门禁链消费方，可重开」。故留 `order` 与本执行器作该复开点，删掉的只是「用户可声明式改写顺序/开关」这一层。
 
 定级：`GateContext`、`Gate`、`getEffectiveGates`、`GatesConfig` 与四个 `*GateConfig` 属包根公开导出，删必填字段与删导出符号对下游是编译级变更。按 ADR-0022 口径走 minor（2026-09-09 人类裁决：breaking 内容按 minor 号发布）。studio 侧受影响面一处：`apps/api/tests/review-gate.test.ts` 按类型构造 `GateContext` 时填了 `projectId`，随动单独开票。
+
+## 后续变更（2026-09-18，ADR-0027 执行票 #170）：本 ADR 的 hook 侧整面失效
+
+失效内容：`src/hooks/{registry,pipeline,config,types}.ts` 四文件连同其包根公开面——4 个值符号（注册表、管线、`assertHookRegistryClosed` 闭环断言、`toErrorStrategy` 映射）+ 8 个类型（含 `HookConfig` / `HookDefinition` / `EffectiveHook`）。上面「落地」小节的 hook 条目与背景条目 2 描述的机制从此不存在，`src/hooks/` 只剩 bootstrap 组合根。
+
+为什么「定义即注册 + 构建期闭环」这套主张对 hook 不再成立：**闭环的前提是两侧都有物**。声明表与实现两侧都归 consumer（harness 无内置 hook 定义），而管线执行入口在双仓零生产调用方——唯一需求方 studio 的 hooks 层随 studio#562 删除。于是闭环断言变成给一张空注册表站岗，同一判据即 ADR-0022 的「零消费者收缩」；裁决记录 = #169 三项人类裁定（2026-09-17，ADR-0027）。
+
+其余三类（checker / 门禁 / 命令）不受影响：它们的闭环有真实生产消费方，本 ADR 对那三类继续生效。定级与迁移路径见 ADR-0027 与 CHANGELOG 的 `Unreleased / BREAKING` 节。

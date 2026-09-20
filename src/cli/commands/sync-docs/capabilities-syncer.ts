@@ -54,12 +54,22 @@ export async function updateCapabilitiesFile(
 
   // 如果有表格行，更新表格
   if (existingFiles.length > 0) {
-    // 移除已删除文件的行
-    for (const removed of result.removed) {
-      const escapedFile = removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // 第二列存完整路径，basename 只在末尾出现，用 [^|]* 匹配路径前缀
-      const rowRegex = new RegExp(`^\\|[^|]*\\|[^|]*\\b${escapedFile}\\s*\\|.*$`, 'gm');
-      content = content.replace(rowRegex, '');
+    // 移除已删除文件的行（整行连行尾一起删——只清行内容会留一个空行，
+    // CommonMark 据此把一张表切成若干小表，harness#171）。
+    // 这里**不**豁免围栏代码块，与下方排版收拢刻意不同口径：登记条目由
+    // capabilities-parser 全文扫描得出（ADR-0009），围栏内的行同样算登记项；
+    // 只让删除认围栏而条目不认，块内示例行会一直被解析成幽灵条目，`--check`
+    // 从此每轮都报同一个已删文件且永远修不掉。豁免要生效得连登记面一起改。
+    if (result.removed.length > 0) {
+      const deadRowRegexes = result.removed.map((removed) => {
+        const escapedFile = removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // 第二列存完整路径，basename 只在末尾出现，用 [^|]* 匹配路径前缀
+        return new RegExp(`^\\|[^|]*\\|[^|]*\\b${escapedFile}\\s*\\|.*\\r?$`);
+      });
+      content = content
+        .split('\n')
+        .filter((line) => !deadRowRegexes.some((rowRegex) => rowRegex.test(line)))
+        .join('\n');
     }
 
     // 添加新文件的行（在最后一个表格行之后）；module 模式跳过
@@ -80,13 +90,16 @@ export async function updateCapabilitiesFile(
         content = content.replace(lastTableRow, lastTableRow + '\n' + newRows);
       }
     }
-
-    // 清理多余空行
-    content = content.replace(/\n{3,}/g, '\n\n');
   } else {
     // 没有表格，追加模块表格（module 模式按目录聚合）
     content += '\n\n' + (mode === 'module' ? generateDirTable(currentModules) : generateModuleTable(currentModules));
   }
+
+  // 表格排版收拢放在增删之后：有新行的表不会被误判为空表（#171）
+  content = normalizeCapabilitiesTableLayout(content).content;
+  // 多余空行的清理收在收拢之后一处：收拢本身会新产出连续空行
+  // （收掉一张夹在两段散文之间的空表就留下 `\n\n\n`，#171）
+  content = content.replace(/\n{3,}/g, '\n\n');
 
   // 更新最后更新时间
   const now = new Date().toISOString().split('T')[0];
@@ -96,6 +109,123 @@ export async function updateCapabilitiesFile(
   );
 
   await fs.writeFile(capabilitiesPath, content, 'utf-8');
+}
+
+/** 表格行：以 `|` 起始（表头、分隔行、数据行都算） */
+const TABLE_ROW_REGEX = /^\s*\|/;
+
+/** 表格分隔行（|------|------|） */
+const TABLE_SEPARATOR_REGEX = /^\s*\|[\s:|-]+\|\s*$/;
+
+/** 围栏代码块的起止行（``` / ~~~，允许缩进与信息串） */
+const FENCE_LINE_REGEX = /^\s*(?:```|~~~)/;
+
+export interface TableLayoutNormalization {
+  /** 收拢后的内容 */
+  content: string;
+  /** 被删掉的「表格内空行」行数 */
+  blankLines: number;
+  /** 被收掉的「空表」（表头+分隔行且无数据行）张数 */
+  emptyTables: number;
+}
+
+/** 参与排版判定的行：正文 + 是否落在围栏代码块内 */
+interface LayoutLine {
+  text: string;
+  fenced: boolean;
+}
+
+/**
+ * 按行切开并标出围栏代码块（``` / ~~~）内的行
+ *
+ * 只服务排版收拢：CAPABILITIES.md 是手写文档，块内长得像表格的示例行不是排版脏行，
+ * 收它就是删用户正文（harness#171）。登记条目面不在此列——见 `updateCapabilitiesFile`
+ * 里「幽灵行删除不豁免围栏」的取舍注释。
+ */
+function parseLayoutLines(content: string): LayoutLine[] {
+  const parsed: LayoutLine[] = [];
+  let inFence = false;
+  for (const text of content.split('\n')) {
+    if (FENCE_LINE_REGEX.test(text)) {
+      parsed.push({ text, fenced: true });
+      inFence = !inFence;
+      continue;
+    }
+    parsed.push({ text, fenced: inFence });
+  }
+  return parsed;
+}
+
+const isTableRow = (line: LayoutLine | undefined): line is LayoutLine =>
+  line !== undefined && !line.fenced && TABLE_ROW_REGEX.test(line.text);
+
+const isTableSeparator = (line: LayoutLine | undefined): boolean =>
+  line !== undefined && !line.fenced && TABLE_SEPARATOR_REGEX.test(line.text);
+
+/** 走一遍两条收拢规则（不迭代） */
+function collapseTableLayoutOnce(content: string): TableLayoutNormalization {
+  const parsed = parseLayoutLines(content);
+
+  // ① 收拢表格内空行：一段连续空行，两侧最近非空行都是表格行 → 整段丢弃
+  const kept: LayoutLine[] = [];
+  let blankLines = 0;
+  for (let i = 0; i < parsed.length; ) {
+    if (parsed[i].text.trim() !== '') {
+      kept.push(parsed[i]);
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < parsed.length && parsed[end].text.trim() === '') end++;
+    if (isTableRow(kept[kept.length - 1]) && isTableRow(parsed[end])) {
+      blankLines += end - i;
+    } else {
+      kept.push(...parsed.slice(i, end));
+    }
+    i = end;
+  }
+
+  // ② 收掉空表：表头 + 分隔行后面没有数据行
+  const out: string[] = [];
+  let emptyTables = 0;
+  for (let i = 0; i < kept.length; i++) {
+    if (isTableRow(kept[i]) && isTableSeparator(kept[i + 1]) && !isTableRow(kept[i + 2])) {
+      emptyTables++;
+      i++;
+      continue;
+    }
+    out.push(kept[i].text);
+  }
+
+  return { content: out.join('\n'), blankLines, emptyTables };
+}
+
+/**
+ * 收拢 CAPABILITIES.md 的表格排版（harness#171）
+ *
+ * 两条规则：① 删掉夹在两个表格行之间的空行（CommonMark 会在此切断表格）；
+ * ② 收掉没有数据行的表头+分隔行。表格外的空行（段落分隔）不动；围栏代码块内的行整体豁免。
+ *
+ * 规则互相制造对方的触发点（①把两张空表之间的那个空行吃掉后，②一轮只收得掉后一张），
+ * 所以跑到不动点：**一次 `sync-docs` 必须把 `--check` 报出来的东西全清掉**，
+ * 否则下游 CI 修完还是红的。计数 = 各轮合计（每轮只删当轮存在的行，不会重计）。
+ *
+ * 幂等，且 `--check` 与写模式共用此正本——判定面就是「返回内容与入参是否不同」，
+ * 因此不存在「check 报了 fix 修不掉」的不收敛（ADR-0009 口径）。
+ */
+export function normalizeCapabilitiesTableLayout(content: string): TableLayoutNormalization {
+  let current = content;
+  let blankLines = 0;
+  let emptyTables = 0;
+  for (;;) {
+    const pass = collapseTableLayoutOnce(current);
+    if (pass.blankLines === 0 && pass.emptyTables === 0) {
+      return { content: current, blankLines, emptyTables };
+    }
+    blankLines += pass.blankLines;
+    emptyTables += pass.emptyTables;
+    current = pass.content;
+  }
 }
 
 /**

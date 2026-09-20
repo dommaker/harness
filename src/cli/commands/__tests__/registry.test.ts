@@ -15,6 +15,7 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { COMMAND_DEFINITIONS, type CommandDefinition, type CommandImplRef } from '../definitions';
 import { GATE_DEFINITIONS } from '../../../gates/definitions';
+import { FileKnowledgeStore } from '../../../knowledge/store';
 
 function collectRefs(defs: CommandDefinition[]): CommandImplRef[] {
   const refs: CommandImplRef[] = [];
@@ -189,8 +190,17 @@ const hasDist = fs.existsSync(distCommands);
  * 经 NODE_OPTIONS=--require 预加载探针 spawn bin（进程退出时打印加载的
  * 命令实现模块清单）。不用 node -e（commander 在 -e 下走 eval 分支，
  * argv 解析不同，会误判位置参数）。
+ *
+ * env 用于把命令指向临时夹具（见「别名子命令」用例），第二参随调用方并入。
+ * maxBuffer 显式抬高：spawnSync 缺省 1MB，子进程 stdout 超限是被 ENOBUFS **杀掉**
+ * 而非报错——status 变 null、stderr 一句解释都没有，看着像路由崩了。2026-09-20 本机
+ * 发版即以此形状暴露（真实库 221 条 / 1.35MB JSON）。抬高上限只是别再吞掉诊断信息，
+ * **数据面隔离仍由各用例的夹具负责**，不拿它当免罪符。
  */
-function runWithModuleProbe(argv: string[]): { status: number | null; implModules: string[]; stdout: string; stderr: string } {
+function runWithModuleProbe(
+  argv: string[],
+  extraEnv: Record<string, string> = {},
+): { status: number | null; implModules: string[]; stdout: string; stderr: string } {
   const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-lazy-probe-'));
   const probeFile = path.join(probeDir, 'probe.js');
   fs.writeFileSync(probeFile, [
@@ -204,7 +214,8 @@ function runWithModuleProbe(argv: string[]): { status: number | null; implModule
       cwd: repoRoot,
       encoding: 'utf-8',
       timeout: 30000,
-      env: { ...process.env, NODE_OPTIONS: `--require ${probeFile}` },
+      maxBuffer: 32 * 1024 * 1024,
+      env: { ...process.env, NODE_OPTIONS: `--require ${probeFile}`, ...extraEnv },
     });
     const match = r.stderr.match(/IMPL_MODULES=(.*)/);
     return {
@@ -270,7 +281,32 @@ smoke('bin/harness.js 端到端（dist 存在时）', () => {
   });
 
   it('别名子命令解析到同一实现（knowledge ls = list，候选7）', () => {
-    const r = runWithModuleProbe(['knowledge', 'ls', '--json']);
+    // 数据面隔离：本用例判的是**路由**（别名 ls 与主名 list 命中同一实现、只加载 knowledge
+    // 侧两个模块），知识库内容纯属旁证。不指夹具时它读的是操作机的真实库（本机实测 221 条 /
+    // 1.35MB JSON），而 CI 全新 checkout 上该库为空——两侧取数规模差三个数量级，大的一侧
+    // stdout 越过 spawnSync 缺省缓冲直接被杀掉（形状见 runWithModuleProbe 注释）。
+    // 夹具目录由 src/test-setup/mkdtemp-cleanup.ts 在 afterAll 统一回收。
+    const kbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-smoke-kb-'));
+    new FileKnowledgeStore({ baseDir: kbDir }).save({
+      id: 'SMOKE-001',
+      type: 'guideline',
+      title: 'Smoke Fixture Entry',
+      content: '别名路由用例的夹具条目，只为了让 --json 出口有真实记录可数',
+      maturity: 'verified',
+      layer: 'project',
+      created: new Date().toISOString(),
+      lastReferenced: new Date().toISOString(),
+      contributors: ['tester'],
+      projects: ['smoke'],
+      tags: [],
+      applicablePhases: [],
+      sourceReferences: [],
+      referencedBy: [],
+      executionResults: [],
+      consumptionMode: 'reference',
+      origin: 'system',
+    });
+    const r = runWithModuleProbe(['knowledge', 'ls', '--json'], { KNOWLEDGE_BASE_DIR: kbDir });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout)).toHaveProperty('total');
     expect(r.implModules).toEqual([

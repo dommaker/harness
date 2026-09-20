@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
-import { IRON_LAWS, GUIDELINES, PROMPTS } from '../../core/constraints/definitions';
+import { CONSTRAINTS } from '../../core/constraints/definitions';
 import { TraceCollector } from '../../monitoring/traces';
 import type { ConstraintContext } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
@@ -26,15 +26,14 @@ interface ReportData {
   projectPath: string;
   constraints: {
     total: number;
-    ironLaws: number;
-    guidelines: number;
-    prompts: number;
+    errors: number;
+    warnings: number;
     passed: number;
     failed: number;
-    warnings: number;
+    warningViolations: number;
     violations: Array<{
       id: string;
-      level: string;
+      severity: string;
       message: string;
     }>;
   };
@@ -51,23 +50,22 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
   // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
   const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
 
-  const allConstraints = { ...IRON_LAWS, ...GUIDELINES, ...PROMPTS };
-  const totalConstraints = Object.keys(allConstraints).length;
+  const totalConstraints = Object.keys(CONSTRAINTS).length;
 
   const context: ConstraintContext = {
     operation: 'file_modification',
     projectPath,
   };
 
-  // 收集模式（架构评审候选1）：不抛、全量收集，铁律违规如实进报告
+  // 收集模式（架构评审候选1）：不抛、全量收集，error 级违规如实进报告
   const result = await checker.collectConstraints(context);
 
-  const failedIronLaws = result.ironLaws.filter(r => !r.satisfied);
-  const failedGuidelines = result.guidelines.filter(r => !r.satisfied);
+  const failedErrors = result.errors.filter(r => !r.satisfied);
+  const failedWarnings = result.warnings.filter(r => !r.satisfied);
 
-  const violations = [...failedIronLaws, ...failedGuidelines].map(r => ({
+  const violations = [...failedErrors, ...failedWarnings].map(r => ({
     id: r.id,
-    level: r.level,
+    severity: r.severity,
     message: r.message || '',
   }));
 
@@ -76,12 +74,11 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
     projectPath,
     constraints: {
       total: totalConstraints,
-      ironLaws: Object.keys(IRON_LAWS).length,
-      guidelines: Object.keys(GUIDELINES).length,
-      prompts: Object.keys(PROMPTS).length,
+      errors: Object.values(CONSTRAINTS).filter(c => c.severity === 'error').length,
+      warnings: Object.values(CONSTRAINTS).filter(c => c.severity === 'warning').length,
       passed: result.passed ? totalConstraints : totalConstraints - violations.length,
-      failed: failedIronLaws.length,
-      warnings: failedGuidelines.length,
+      failed: failedErrors.length,
+      warningViolations: failedWarnings.length,
       violations,
     },
   };
@@ -122,19 +119,18 @@ function generateMarkdownReport(data: ReportData): string {
     `| 指标 | 数值 |`,
     `|------|------|`,
     `| 总约束 | ${data.constraints.total} |`,
-    `| Iron Laws | ${data.constraints.ironLaws} |`,
-    `| Guidelines | ${data.constraints.guidelines} |`,
-    `| Prompts | ${data.constraints.prompts} |`,
+    `| error 级 | ${data.constraints.errors} |`,
+    `| warning 级 | ${data.constraints.warnings} |`,
     `| 通过 | ${data.constraints.passed} |`,
     `| 失败 (error) | ${data.constraints.failed} |`,
-    `| 警告 (warning) | ${data.constraints.warnings} |`,
+    `| 警告 (warning) | ${data.constraints.warningViolations} |`,
     ``,
   ];
 
   if (data.constraints.violations.length > 0) {
     lines.push(`### 违规项`, ``);
     data.constraints.violations.forEach(v => {
-      lines.push(`- **${v.id}** (${v.level}): ${v.message}`);
+      lines.push(`- **${v.id}** (${v.severity}): ${v.message}`);
     });
     lines.push(``);
   }

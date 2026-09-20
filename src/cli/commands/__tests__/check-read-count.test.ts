@@ -68,7 +68,7 @@ function write(dir: string, rel: string, content: string): void {
 
 const TABLE = ['| 能力 | 路径 | 说明 |', '|---|---|---|'];
 
-/** 一个「两 checker 都会真评估」的项目：源码根下两个已登记文件 + 自定义约束 + 一条 trace */
+/** 一个「两 checker 都会真评估」的项目：源码根下两个已登记文件 + 一条 trace */
 function fixtureRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-read-count-'));
   git(dir, 'init', '-q');
@@ -76,11 +76,6 @@ function fixtureRepo(): string {
   git(dir, 'config', 'user.name', 'Fixture');
   write(dir, 'README.md', '# fixture\n');
   write(dir, '.harness/config.yml', 'preset: standard\n');
-  write(
-    dir,
-    '.harness/custom-constraints.yml',
-    'custom_constraints:\n  ab_custom_rule:\n    level: guideline\n    rule: 自定义规则\n    message: 自定义提示\n    trigger: manual\n'
-  );
   write(
     dir,
     'CAPABILITIES.md',
@@ -131,25 +126,21 @@ describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () 
     const result = await check({ staged: true, projectPath: dir }, io);
     expect(result.kind).toBe('ok');
     // 正对照：两个吃能力表的 checker 确实跑了（否则下面的断言是空跑）
-    expect(io.outText()).toContain('自定义约束: 1 条');
     expect(io.outText()).toContain('触发条件: module_modification');
 
     expect([...readCounts().entries()].sort()).toEqual(
       [
         // —— 一次运行一份：本 ADR 的承诺面 ——
         ['.harness/config.yml', 1],
-        ['.harness/custom-constraints.yml', 1],
         ['CAPABILITIES.md', 1],
         ['.harness/logs/traces.log', 2],
         ['.harness/.state.json', 1], // ADR-0026：智能提示经 StateIO 读状态，恰一次
+        ['AGENTS.md', 1],
         // —— 已知例外（改动需明写理由）——
         // traces.log = 2：head 50（智能提示的阈值判定，决策 3）与 tail 20（有无失败证据，
         // 决策 4）是两个不同窗口的**有界**读；并成一个窗口就等于回到整读。
-        // AGENTS.md = 3 / CLAUDE.md = 2：决策表明示本 ADR 不处理治理文档的重复读
-        // （1.5–25KB，<1ms）。CLAUDE.md 在本夹具里并不存在，2 = 落点路由与旧落点兜底
-        // 各尝试读一次（读失败的尝试同样计入）。
-        ['AGENTS.md', 3],
-        ['CLAUDE.md', 2],
+        // AGENTS.md = 1：ADR-0029 注入漂移检测与 custom 约束面关停后，治理文档只剩
+        // governance_presence 一处读者（夹具 CLAUDE.md 不存在且不再被探测，归零）。
       ].sort()
     );
   });
@@ -159,8 +150,6 @@ describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () 
 
     const except = new Set([
       path.join('.harness', 'logs', 'traces.log'), // 两个窗口的有界读，见上表理由
-      'AGENTS.md', // 治理文档，ADR-0023 决策表明示不处理
-      'CLAUDE.md',
     ]);
     const offenders = [...readCounts()].filter(
       ([file, n]) => !except.has(file) && n > 1

@@ -1,10 +1,10 @@
 /**
  * 约束检查引擎
  *
- * kind 二元模型（ADR-0001）：
- * - check · Iron Laws：检查失败立即抛出异常
- * - check · Guidelines：检查失败记录警告
- * - prompt：不执行 checker，仅参与注入
+ * severity 显式模型（ADR-0029）：
+ * - severity='error'：检查失败立即抛出异常（block 模式）
+ * - severity='warning'：检查失败记录警告
+ * 全部约束 kind='check'，必须带真实 checker（注册表闭环）。
  */
 
 import {
@@ -12,11 +12,10 @@ import {
   ConstraintContext,
   ConstraintResult,
   ConstraintCheckResult,
-  ConstraintLevel,
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { IRON_LAWS, GUIDELINES, PROMPTS } from './definitions';
+import { CONSTRAINTS } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { matchesTrigger } from './triggers';
 import { join, relative } from 'path';
@@ -74,21 +73,8 @@ export class ConstraintChecker {
    *
    * @param customConfig 可选，per-request 自定义配置；不传则返回内置约束集
    */
-  getConstraints(customConfig?: MergedConstraintsConfig | null): {
-    ironLaws: Record<string, Constraint>;
-    guidelines: Record<string, Constraint>;
-    prompts: Record<string, Constraint>;
-  } {
-    const config = customConfig;
-    const source = config
-      ? { ironLaws: config.ironLaws, guidelines: config.guidelines, prompts: config.prompts ?? PROMPTS }
-      : { ironLaws: IRON_LAWS, guidelines: GUIDELINES, prompts: PROMPTS };
-
-    return {
-      ironLaws: source.ironLaws,
-      guidelines: source.guidelines,
-      prompts: source.prompts,
-    };
+  getConstraints(customConfig?: MergedConstraintsConfig | null): Record<string, Constraint> {
+    return customConfig ? customConfig.constraints : CONSTRAINTS;
   }
 
   /**
@@ -103,17 +89,6 @@ export class ConstraintChecker {
     evidence?: GitEvidence,
     runEnv?: RunEnv
   ): Promise<ConstraintResult> {
-    // prompt 类约束不参与 checker 执行（ADR-0001：仅参与注入）
-    if (constraint.kind === 'prompt') {
-      return {
-        id: constraint.id,
-        level: constraint.level,
-        satisfied: true,
-        constraint,
-        checkedAt: new Date(),
-      };
-    }
-
     // 检查前置条件（'skip' = 约定未采用/证据未接线：satisfied 置 true 但不计 pass/fail）
     const outcome = normalizeCheckOutcome(
       await this.checkPrecondition(constraint, context, evidence, runEnv)
@@ -122,7 +97,7 @@ export class ConstraintChecker {
     if (outcome.skipped) {
       return {
         id: constraint.id,
-        level: constraint.level,
+        severity: constraint.severity,
         satisfied: true,
         skipped: true,
         constraint,
@@ -135,7 +110,7 @@ export class ConstraintChecker {
 
     return {
       id: constraint.id,
-      level: constraint.level,
+      severity: constraint.severity,
       satisfied,
       constraint,
       message: satisfied ? undefined : constraint.message,
@@ -143,22 +118,6 @@ export class ConstraintChecker {
       requiredAction: satisfied ? undefined : constraint.enforcement,
       checkedAt: new Date(),
     };
-  }
-
-  /**
-   * 根据约束层级获取严重性
-   */
-  private getSeverity(level: ConstraintLevel): 'error' | 'warning' | 'info' {
-    switch (level) {
-      case 'iron_law':
-        return 'error';
-      case 'guideline':
-        return 'warning';
-      case 'prompt':
-        return 'info';
-      default:
-        return 'warning';
-    }
   }
 
   /**
@@ -171,11 +130,10 @@ export class ConstraintChecker {
   ): void {
     this.traceRecorder.record({
       constraintId: constraint.id,
-      level: constraint.level,
+      severity: constraint.severity,
       timestamp: Date.now(),
       result: checkResult.skipped ? 'skip' : checkResult.satisfied ? 'pass' : 'fail',
       operation: context.operation,
-      severity: this.getSeverity(constraint.level),
       projectPath: context.projectPath,
       sessionId: context.sessionId,
       evidence: checkResult.evidence,
@@ -186,7 +144,7 @@ export class ConstraintChecker {
    * 检查约束前置条件（工单 21：分发至 checkers/ 注册表）
    *
    * 注册表闭环（ADR-0001）：kind='check' 未注册 checker 直接抛错，
-   * 不再有"未注册默认通过"路径；kind='prompt' 在 check() 入口已短路。
+   * 不再有"未注册默认通过"路径。
    *
    * git 证据（stagedDiff/stagedDiffNames）单一来源 = GitEvidence adapter（#87）：
    * 一次 run 内调用方传同一实例即至多取证一次，run 外调用独占一份。
@@ -202,7 +160,7 @@ export class ConstraintChecker {
     if (!impl) {
       throw new Error(
         `[harness] 约束 "${constraint.id}" (kind='check') 未注册 checker，拒绝静默通过。` +
-        `请在 checkers/ 注册实现，或将约束改为 kind='prompt'。`
+        `请在 checkers/ 注册实现（纯文本提示层已随 ADR-0029 关停，文本规则写入项目治理文档）。`
       );
     }
 
@@ -232,31 +190,27 @@ export class ConstraintChecker {
     context: ConstraintContext,
     customConfig?: MergedConstraintsConfig | null
   ): {
-    ironLaws: Constraint[];
-    guidelines: Constraint[];
-    prompts: Constraint[];
+    errors: Constraint[];
+    warnings: Constraint[];
   } {
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
     const constraints = this.getConstraints(customConfig);
 
-    const filterByTrigger = (constraintSet: Record<string, Constraint>): Constraint[] => {
-      return Object.values(constraintSet).filter(constraint =>
-        matchesTrigger(constraint, operations)
-      );
-    };
+    const applicable = Object.values(constraints).filter(constraint =>
+      matchesTrigger(constraint, operations)
+    );
 
     return {
-      ironLaws: filterByTrigger(constraints.ironLaws),
-      guidelines: filterByTrigger(constraints.guidelines),
-      prompts: filterByTrigger(constraints.prompts),
+      errors: applicable.filter(c => c.severity === 'error'),
+      warnings: applicable.filter(c => c.severity === 'warning'),
     };
   }
 
   /**
    * 执行约束检查
    *
-   * - Iron Laws：检查失败立即抛出异常
-   * - Guidelines：检查失败记录警告
+   * - severity='error'：检查失败立即抛出异常
+   * - severity='warning'：检查失败记录警告
    *
    * @param context 约束上下文
    * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
@@ -279,7 +233,7 @@ export class ConstraintChecker {
    * 收集模式执行约束检查（harness report 的不抛出口，架构评审候选1）
    *
    * 与 checkConstraints 共享同一检查体，唯一差别是不 throw：
-   * 铁律违规照进 result.ironLaws、passed=false，后续铁律与 guidelines 照常执行，
+   * error 级违规照进 result.errors、passed=false，后续 error 与 warning 级照常执行，
    * trace 逐条照记。报告类消费者拿全量视图；阻断语义只属于 checkConstraints
    * （throw 契约是 #119 判定证据的外溢面，逐字不动）。
    */
@@ -294,7 +248,7 @@ export class ConstraintChecker {
 
   /**
    * checkConstraints / collectConstraints 的共享检查体；
-   * mode='block' 首个铁律违规即抛，mode='collect' 全量跑完不抛
+   * mode='block' 首个 error 级违规即抛，mode='collect' 全量跑完不抛
    */
   private async runAllConstraints(
     context: ConstraintContext,
@@ -311,8 +265,8 @@ export class ConstraintChecker {
     const env = runEnv ?? createRunEnv(projectPath);
 
     const result: ConstraintCheckResult = {
-      ironLaws: [],
-      guidelines: [],
+      errors: [],
+      warnings: [],
       passed: true,
       warningCount: 0,
     };
@@ -321,12 +275,12 @@ export class ConstraintChecker {
     // context.operation 为主触发条件，extraTriggers 为次级推断（ADR-0001），任一命中即匹配
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-    // 1. Iron Laws: block 模式首个违规即抛；collect 模式全量收集
-    for (const constraint of Object.values(constraints.ironLaws)) {
+    // 1. error 级: block 模式首个违规即抛；collect 模式全量收集
+    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error')) {
       if (!matchesTrigger(constraint, operations)) continue;
 
       const checkResult = await this.check(constraint, context, run, env);
-      result.ironLaws.push(checkResult);
+      result.errors.push(checkResult);
       this.recordTrace(constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
@@ -337,12 +291,12 @@ export class ConstraintChecker {
       }
     }
 
-    // 2. Guidelines: 记录警告
-    for (const constraint of Object.values(constraints.guidelines)) {
+    // 2. warning 级: 记录警告
+    for (const constraint of Object.values(constraints).filter(c => c.severity === 'warning')) {
       if (!matchesTrigger(constraint, operations)) continue;
 
       const checkResult = await this.check(constraint, context, run, env);
-      result.guidelines.push(checkResult);
+      result.warnings.push(checkResult);
       this.recordTrace(constraint, checkResult, context);
 
       if (!checkResult.satisfied) {
@@ -354,12 +308,12 @@ export class ConstraintChecker {
   }
 
   /**
-   * 执行前检查（仅检查 Iron Laws）
+   * 执行前检查（仅检查 severity='error' 的约束）
    *
    * @param context 约束上下文
    * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
    * @param evidence 可选，本次检查共用的 git 证据 adapter（#87，同 checkConstraints）
-   * @throws ConstraintViolationError 如果有铁律违规
+   * @throws ConstraintViolationError 如果有 error 级违规
    */
   async beforeExecution(
     context: ConstraintContext,
@@ -373,7 +327,7 @@ export class ConstraintChecker {
     const constraints = this.getConstraints(customConfig);
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-    for (const constraint of Object.values(constraints.ironLaws)) {
+    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error')) {
       if (!matchesTrigger(constraint, operations)) continue;
 
       const result = await this.check(constraint, context, run, env);
@@ -401,15 +355,12 @@ export async function checkConstraint(
   const checker = ConstraintChecker.getInstance();
   const constraints = checker.getConstraints(customConfig);
 
-  const constraint =
-    constraints.ironLaws[constraintId] ||
-    constraints.guidelines[constraintId] ||
-    constraints.prompts[constraintId];
+  const constraint = constraints[constraintId];
 
   if (!constraint) {
     return {
       id: constraintId,
-      level: 'guideline',
+      severity: 'warning',
       satisfied: false,
       message: `未知的约束: ${constraintId}`,
       checkedAt: new Date(),
@@ -430,7 +381,7 @@ export interface CheckConstraintsOptions {
 }
 
 /**
- * 快捷函数：执行三层检查
+ * 快捷函数：执行约束检查
  *
  * @param context 约束上下文
  * @param options.onTrace 每条约束检查后的回调（用于记录 trace 到外部存储）
@@ -442,8 +393,8 @@ export async function checkConstraints(
 ): Promise<ConstraintCheckResult> {
   const result = await ConstraintChecker.getInstance().checkConstraints(context, options?.customConfig ?? null);
   if (options?.onTrace) {
-    for (const r of result.ironLaws) options.onTrace(r);
-    for (const r of result.guidelines) options.onTrace(r);
+    for (const r of result.errors) options.onTrace(r);
+    for (const r of result.warnings) options.onTrace(r);
   }
   return result;
 }

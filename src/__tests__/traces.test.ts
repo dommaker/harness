@@ -31,11 +31,10 @@ describe('TraceCollector', () => {
   test('should record a trace', () => {
     collector.record({
       constraintId: 'no_fix_without_root_cause',
-      level: 'iron_law',
+      severity: 'error',
       timestamp: Date.now(),
       result: 'fail',
       operation: 'code_implementation',
-      severity: 'error',
     });
 
     const traces = collector.read();
@@ -46,7 +45,7 @@ describe('TraceCollector', () => {
 
   test('should record multiple traces', () => {
     for (let i = 0; i < 5; i++) {
-      collector.recordPass('test_constraint', 'guideline');
+      collector.recordPass('test_constraint', 'warning');
     }
 
     const traces = collector.read();
@@ -55,9 +54,9 @@ describe('TraceCollector', () => {
   });
 
   test('should filter traces by constraint ID', () => {
-    collector.recordPass('constraint_a', 'iron_law');
-    collector.recordFail('constraint_b', 'guideline');
-    collector.recordFail('constraint_a', 'iron_law');
+    collector.recordPass('constraint_a', 'error');
+    collector.recordFail('constraint_b', 'warning');
+    collector.recordFail('constraint_a', 'error');
 
     const traces = collector.read({ constraintId: 'constraint_a' });
     expect(traces.length).toBe(2);
@@ -70,14 +69,14 @@ describe('TraceCollector', () => {
 
     collector.record({
       constraintId: 'old_trace',
-      level: 'guideline',
+      severity: 'warning',
       timestamp: oneHourAgo - 1000, // 1小时前更早
       result: 'pass',
     });
 
     collector.record({
       constraintId: 'new_trace',
-      level: 'guideline',
+      severity: 'warning',
       timestamp: now,
       result: 'pass',
     });
@@ -95,7 +94,7 @@ describe('TraceCollector', () => {
     for (let i = 0; i < 10; i++) {
       collector.record({
         constraintId: `constraint_${i}`,
-        level: 'guideline',
+        severity: 'warning',
         timestamp: Date.now() - i * 60 * 1000, // 每分钟一个
         result: i % 2 === 0 ? 'pass' : 'fail',
       });
@@ -108,7 +107,7 @@ describe('TraceCollector', () => {
 
   test('should provide stats', () => {
     for (let i = 0; i < 10; i++) {
-      collector.recordPass(`constraint_${i}`, 'guideline');
+      collector.recordPass(`constraint_${i}`, 'warning');
     }
 
     const stats = collector.getStats();
@@ -117,8 +116,8 @@ describe('TraceCollector', () => {
   });
 
   test('should filter traces by result', () => {
-    collector.recordFail('constraint_a', 'guideline');
-    collector.recordPass('constraint_b', 'guideline');
+    collector.recordFail('constraint_a', 'warning');
+    collector.recordPass('constraint_b', 'warning');
 
     const traces = collector.read({ result: 'fail' });
     expect(traces).toHaveLength(1);
@@ -127,12 +126,12 @@ describe('TraceCollector', () => {
 
   test('should filter traces by projectPath', () => {
     collector.record({
-      constraintId: 'c1', level: 'guideline', timestamp: Date.now(),
-      result: 'pass', projectPath: '/project/a', severity: 'info',
+      constraintId: 'c1', severity: 'warning', timestamp: Date.now(),
+      result: 'pass', projectPath: '/project/a',
     });
     collector.record({
-      constraintId: 'c2', level: 'guideline', timestamp: Date.now(),
-      result: 'pass', projectPath: '/project/b', severity: 'info',
+      constraintId: 'c2', severity: 'warning', timestamp: Date.now(),
+      result: 'pass', projectPath: '/project/b',
     });
 
     const traces = collector.read({ projectPath: '/project/a' });
@@ -142,12 +141,12 @@ describe('TraceCollector', () => {
 
   test('should filter traces by sessionId', () => {
     collector.record({
-      constraintId: 'c1', level: 'guideline', timestamp: Date.now(),
-      result: 'pass', sessionId: 'session-1', severity: 'info',
+      constraintId: 'c1', severity: 'warning', timestamp: Date.now(),
+      result: 'pass', sessionId: 'session-1',
     });
     collector.record({
-      constraintId: 'c2', level: 'guideline', timestamp: Date.now(),
-      result: 'pass', sessionId: 'session-2', severity: 'info',
+      constraintId: 'c2', severity: 'warning', timestamp: Date.now(),
+      result: 'pass', sessionId: 'session-2',
     });
 
     const traces = collector.read({ sessionId: 'session-2' });
@@ -215,7 +214,7 @@ describe('TraceAnalyzer', () => {
     for (let i = 0; i < 10; i++) {
       collector.record({
         constraintId: 'constraint_a',
-        level: 'guideline',
+        severity: 'warning',
         timestamp: Date.now() - i * 60 * 1000,
         result: i < 7 ? 'pass' : 'fail',
       });
@@ -224,7 +223,7 @@ describe('TraceAnalyzer', () => {
     for (let i = 0; i < 5; i++) {
       collector.record({
         constraintId: 'constraint_b',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: Date.now() - i * 60 * 1000,
         result: i < 3 ? 'pass' : 'fail',
       });
@@ -253,7 +252,7 @@ describe('TraceAnalyzer', () => {
     for (let i = 0; i < 20; i++) {
       collector.record({
         constraintId: 'rising_fail_constraint',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: now - (40 - i) * 60 * 1000,
         result: 'pass',
       });
@@ -263,7 +262,7 @@ describe('TraceAnalyzer', () => {
     for (let i = 0; i < 20; i++) {
       collector.record({
         constraintId: 'rising_fail_constraint',
-        level: 'iron_law',
+        severity: 'error',
         timestamp: now - i * 60 * 1000,
         result: i < 15 ? 'fail' : 'pass', // 75% 失败率
       });
@@ -284,7 +283,7 @@ describe('TraceAnalyzer', () => {
     for (let i = 0; i < 10; i++) {
       collector.record({
         constraintId: 'stable_constraint',
-        level: 'guideline',
+        severity: 'warning',
         timestamp: now - i * 60 * 1000,
         result: 'pass',
       });
@@ -298,7 +297,7 @@ describe('TraceAnalyzer', () => {
 
   test('should save and load summary', () => {
     for (let i = 0; i < 5; i++) {
-      collector.recordPass('test_constraint', 'guideline');
+      collector.recordPass('test_constraint', 'warning');
     }
 
     const summaries = analyzer.analyzeRecent(1);
@@ -312,8 +311,8 @@ describe('TraceAnalyzer', () => {
 
   test('should generate report', () => {
     for (let i = 0; i < 5; i++) {
-      collector.recordPass('constraint_a', 'guideline');
-      collector.recordFail('constraint_b', 'iron_law');
+      collector.recordPass('constraint_a', 'warning');
+      collector.recordFail('constraint_b', 'error');
     }
 
     const summaries = analyzer.analyzeRecent(1);

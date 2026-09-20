@@ -2,7 +2,7 @@
  * harness constraints -- 约束集合元数据导出
  *
  * 纯数据导出，不调用 LLM，不访问文件系统（除 definitions.ts）。
- * 供 Studio 等消费者获取约束的 hash、计数、文本大小等元数据。
+ * 供 Studio 等消费者获取约束的 hash、计数等元数据。
  */
 
 import { createHash } from 'crypto';
@@ -13,41 +13,27 @@ import { log, processIO, type CommandIO, type CommandResult } from '../command-c
 export interface ConstraintsMeta {
   version: string;
   hash: string;
-  counts: { ironLaws: number; guidelines: number; prompts: number };
-  textSize: { total: number; perConstraint: number };
+  counts: { errors: number; warnings: number };
 }
 
 export function getConstraintsMeta(): ConstraintsMeta {
   const constraints = getAllConstraints();
 
-  const ironLaws = constraints.filter(c => c.level === 'iron_law');
-  const guidelines = constraints.filter(c => c.level === 'guideline');
-  const prompts = constraints.filter(c => c.level === 'prompt');
+  const errors = constraints.filter(c => c.severity === 'error');
+  const warnings = constraints.filter(c => c.severity === 'warning');
 
-  // 计算总 promptInjection 文本长度（字符数，可估算 token）
-  const totalTextSize = constraints
-    .map(c => (c.promptInjection || '').length)
-    .reduce((sum, len) => sum + len, 0);
-
-  // 稳定 JSON 序列化后取 hash
-  const hashInput = JSON.stringify({
-    ironLaws: ironLaws.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
-    guidelines: guidelines.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
-    prompts: prompts.map(c => ({ id: c.id, promptInjection: c.promptInjection })),
-  });
+  // 稳定 JSON 序列化后取 hash（内容面 = id + severity + 规则文本）
+  const hashInput = JSON.stringify(
+    constraints.map(c => ({ id: c.id, severity: c.severity, rule: c.rule, message: c.message, description: c.description }))
+  );
   const hash = createHash('sha256').update(hashInput).digest('hex');
 
   return {
     version: getHarnessPackageVersion(),
     hash,
     counts: {
-      ironLaws: ironLaws.length,
-      guidelines: guidelines.length,
-      prompts: prompts.length,
-    },
-    textSize: {
-      total: totalTextSize,
-      perConstraint: constraints.length > 0 ? Math.round(totalTextSize / constraints.length) : 0,
+      errors: errors.length,
+      warnings: warnings.length,
     },
   };
 }
@@ -62,8 +48,7 @@ export async function constraints(options: { json?: boolean }, io: CommandIO = p
   } else {
     log(io, `version: ${meta.version}`);
     log(io, `hash: ${meta.hash}`);
-    log(io, `ironLaws: ${meta.counts.ironLaws}, guidelines: ${meta.counts.guidelines}, prompts: ${meta.counts.prompts}`);
-    log(io, `textSize: ${meta.textSize.total} chars total, ~${meta.textSize.perConstraint} chars/constraint`);
+    log(io, `errors: ${meta.counts.errors}, warnings: ${meta.counts.warnings}`);
   }
   return { kind: 'ok' };
 }

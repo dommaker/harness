@@ -38,7 +38,7 @@ describe('buildConstraintsUsageReport', () => {
     const report = buildConstraintsUsageReport(root);
 
     expect(report.traceFileExists).toBe(false);
-    expect(report.stats.length).toBe(7); // 3 iron + 4 guideline（harness#174）
+    expect(report.stats.length).toBe(7); // 3 error + 4 warning
     for (const s of report.stats) {
       expect(s.total).toBe(0);
       expect(s.evaluated).toBe(0);
@@ -47,9 +47,6 @@ describe('buildConstraintsUsageReport', () => {
     }
     expect(report.candidates.length).toBe(7);
     expect(report.candidates.every(c => c.kind === 'zero_trigger')).toBe(true);
-    // prompt 注入清单（standard preset、无 scenes → 8 条通用 prompt，harness#174）
-    expect(report.activePromptIds.length).toBe(8);
-    expect(report.activePromptIds).toContain('no_fuzzy_completion_claim');
   });
 
   it('空 trace 文件：与无文件一致，但 traceFileExists=true', () => {
@@ -89,7 +86,7 @@ describe('buildConstraintsUsageReport', () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, 'traces.log'),
-      '{"constraintId":"docs_freshness","timestamp":1,"result":"pass","level":"iron_law"}\n{bad json\n',
+      '{"constraintId":"docs_freshness","timestamp":1,"result":"pass","severity":"error"}\n{bad json\n',
       'utf-8'
     );
     expect(readProjectTraces(root).length).toBe(1);
@@ -151,7 +148,7 @@ describe('buildConstraintsUsageReport', () => {
   it('diagnoseRetireCandidates 优先级：全 skip 不重复计入零拦截', () => {
     const candidates = diagnoseRetireCandidates([
       {
-        id: 'x', level: 'guideline',
+        id: 'x', severity: 'warning',
         total: 60, pass: 0, fail: 0, skip: 60,
         evaluated: 0, failRate: 0,
       },
@@ -171,7 +168,7 @@ describe('buildConstraintsUsageReport', () => {
 });
 
 describe('constraintsReport CLI', () => {
-  it('console 输出包含统计表、候选、注入清单、unknownIds 提示', async () => {
+  it('console 输出包含统计表、候选、unknownIds 提示', async () => {
     const root = createProjectFixture({
       name: 'harness-report-test',
       config: 'constraints:\n  ghost_constraint:\n    enabled: false\n',
@@ -185,7 +182,6 @@ describe('constraintsReport CLI', () => {
     expect(output).toContain('no_hardcoded_credentials');
     expect(output).toContain('total=3');
     expect(output).toContain('退役候选');
-    expect(output).toContain('当前生效 prompt 注入');
     expect(output).toContain('ghost_constraint');
   });
 
@@ -247,7 +243,7 @@ describe('constraintsReport 坏行数透传（harness#100）', () => {
   }
 
   const healthyTrace = (id: string) =>
-    JSON.stringify({ constraintId: id, level: 'iron_law', timestamp: 1700000000000, result: 'pass' });
+    JSON.stringify({ constraintId: id, severity: 'error', timestamp: 1700000000000, result: 'pass' });
   const BAD = '{"constraintId":"ghost","broken';
 
   it('坏行 fixture：文本输出出现坏行数提示，--json 报告体带 skippedLines', async () => {
@@ -288,69 +284,5 @@ describe('constraintsReport 坏行数透传（harness#100）', () => {
     writeRawTraces(clean, [healthyTrace('no_hardcoded_credentials')]);
     await constraintsReport({ projectPath: clean, export: 'report.md' }, captureIO());
     expect(fs.readFileSync(path.join(clean, 'report.md'), 'utf-8')).not.toContain('损坏');
-  });
-});
-
-describe('constraintsReport 注入漂移小节（ADR-0001 决策 7）', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const realVersion = require('../../../../package.json').version as string;
-
-  const writeSyncedClaudeMd = (root: string, version = realVersion) => {
-    const { renderConstraintsSection } = require('../../../core/constraints/injection-renderer');
-    const { getEffectiveConstraints } = require('../../../core/effective-constraints');
-    const section = '## Governance Rules\n' + renderConstraintsSection(getEffectiveConstraints(root), version);
-    fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# Test Project\n\n${section}`, 'utf-8');
-  };
-
-  it('有漂移：输出条目级差异（缺失/多余）与修复指引', async () => {
-    const root = createProjectFixture({ name: 'harness-report-test' });
-    writeSyncedClaudeMd(root, '0.0.1-old');
-    const claudeMdPath = path.join(root, 'CLAUDE.md');
-    const content = fs.readFileSync(claudeMdPath, 'utf-8');
-    const originalLine = content.split('\n').find((l: string) => l.startsWith('- **'))!;
-    const editedLine = originalLine.replace(/: .+$/, ': 手工篡改');
-    fs.writeFileSync(claudeMdPath, content.replace(originalLine, editedLine), 'utf-8');
-
-    await constraintsReport({ projectPath: root }, io);
-
-    const output = io.outText();
-    expect(output).toContain('注入漂移');
-    expect(output).toContain('版本漂移');
-    expect(output).toContain('0.0.1-old');
-    expect(output).toContain(`缺失: ${originalLine}`);
-    expect(output).toContain(`多余: ${editedLine}`);
-    expect(output).toContain('npx @dommaker/harness init');
-  });
-
-  it('重复章节：输出重复章节提示', async () => {
-    const root = createProjectFixture({ name: 'harness-report-test' });
-    writeSyncedClaudeMd(root);
-    fs.appendFileSync(path.join(root, 'CLAUDE.md'), '\n## Governance Rules\n\n旧版遗留\n', 'utf-8');
-
-    await constraintsReport({ projectPath: root }, io);
-
-    const output = io.outText();
-    expect(output).toContain('重复章节');
-  });
-
-  it('无漂移：小节显示无漂移', async () => {
-    const root = createProjectFixture({ name: 'harness-report-test' });
-    writeSyncedClaudeMd(root);
-
-    await constraintsReport({ projectPath: root }, io);
-
-    const output = io.outText();
-    expect(output).toContain('注入漂移');
-    expect(output).toContain('无漂移');
-  });
-
-  it('未注入（无标记段）：一句话提示，不算漂移', async () => {
-    const root = createProjectFixture({ name: 'harness-report-test' });
-    fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Test Project\n', 'utf-8');
-
-    await constraintsReport({ projectPath: root }, io);
-
-    const output = io.outText();
-    expect(output).toContain('未注入');
   });
 });

@@ -22,7 +22,7 @@ import {
 } from '../git-evidence';
 import { buildConstraintContext } from '../context-builder';
 import { ConstraintChecker } from '../checker';
-import { GUIDELINES } from '../definitions';
+import { CONSTRAINTS } from '../definitions';
 import type { MergedConstraintsConfig } from '../../../types/project-config';
 
 /** 建一个真 git fixture：committed src/existing.ts + 一个 staged 修改 */
@@ -181,10 +181,7 @@ describe('git 证据适配器（#87）', () => {
       const context = await buildConstraintContext({ projectPath: dir, staged: true, evidence });
       // capability_sync 经 CheckEnv.stagedDiffNames() 取同一份 git 证据
       const merged: MergedConstraintsConfig = {
-        ironLaws: {},
-        guidelines: { capability_sync: GUIDELINES['capability_sync'] },
-        prompts: {},
-        custom: [],
+        constraints: { capability_sync: CONSTRAINTS['capability_sync'] },
         disabled: [],
         unknownIds: [],
       };
@@ -193,8 +190,8 @@ describe('git 证据适配器（#87）', () => {
       const runResult = await checker.checkConstraints(context, merged, evidence);
 
       // capability_sync 确实被评估（非 skip）→ 它经 env.stagedDiffNames() 取过证据
-      expect(runResult.guidelines.map(r => r.id)).toEqual(['capability_sync']);
-      expect(runResult.guidelines[0].skipped).toBeUndefined();
+      expect(runResult.warnings.map(r => r.id)).toEqual(['capability_sync']);
+      expect(runResult.warnings[0].skipped).toBeUndefined();
       // 两个消费者都从注入的这一份实例取证据（checker 没有另起炉灶）
       expect(calls).toContain('context:changedFileNames');
       expect(calls).toContain('checker:changedFileNames');

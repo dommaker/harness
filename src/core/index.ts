@@ -5,11 +5,9 @@
  * 不再暴露位置参数版。
  */
 
-// 约束系统（三层：Iron Laws / Guidelines / Tips）
+// 约束系统（severity 显式模型，ADR-0029）
 export {
-  IRON_LAWS,
-  GUIDELINES,
-  PROMPTS,
+  CONSTRAINTS,
   getAllConstraints,
   findConstraintsByTrigger,
   getConstraint,
@@ -18,21 +16,16 @@ export {
   checkConstraints,
   checkBeforeExecution,
   constraintChecker,
-  CONSTRAINTS_START_MARKER,
-  CONSTRAINTS_END_MARKER,
-  renderConstraintsSection,
   CheckCache,
-  renderConstraintsByTrigger,
   ConstraintViolationError,
 } from './constraints';
 export type {
   CheckConstraintsOptions,
   CheckCacheConfig,
   CheckSamplingConfig,
-  RenderConstraintsByTriggerOptions,
   ConstraintId,
   ConstraintKind,
-  ConstraintLevel,
+  ConstraintSeverity,
   ConstraintTrigger,
   Constraint,
   ConstraintResult,

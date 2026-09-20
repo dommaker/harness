@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { IRON_LAWS, GUIDELINES } from '../definitions';
+import { CONSTRAINTS } from '../definitions';
 import {
   checkCapabilityCounts,
   updateCapabilityCounts,
@@ -56,10 +56,10 @@ describe('能力清单计数（注入定义源，harness#88）', () => {
       expect(out).toContain('Quality Gates (4)');
     });
 
-    it('Iron Laws / Guidelines 计数仍来自 core 自身定义表（同层，不注入）', () => {
-      const out = updateCapabilityCounts('Iron Laws (999)\nGuidelines (999)\n', SOURCE);
-      expect(out).toContain(`Iron Laws (${Object.keys(IRON_LAWS).length})`);
-      expect(out).toContain(`Guidelines (${Object.keys(GUIDELINES).length})`);
+    it('errors / warnings 计数仍来自 core 自身定义表（同层，不注入）', () => {
+      const out = updateCapabilityCounts('errors (999)\nwarnings (999)\n', SOURCE);
+      expect(out).toContain(`errors (${Object.values(CONSTRAINTS).filter(c => c.severity === 'error').length})`);
+      expect(out).toContain(`warnings (${Object.values(CONSTRAINTS).filter(c => c.severity === 'warning').length})`);
     });
 
     it('不触碰文档中不存在的计数行', () => {

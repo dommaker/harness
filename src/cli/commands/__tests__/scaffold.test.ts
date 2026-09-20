@@ -26,7 +26,6 @@ import {
   preCommitHookFile,
   prePushHookFile,
   harnessCheckCiFile,
-  customConstraintsFile,
   changelogFile,
   contextDocFile,
   governanceWorkflowFile,
@@ -72,12 +71,11 @@ class MemoryFs implements ScaffoldFileSystem {
 const PROJECT = '/srv/project';
 const USER_CONTENT = '用户自己的内容，不许覆盖\n';
 
-/** 全部 9 站点，顺序 = init 的落盘顺序 */
+/** 全部 8 站点，顺序 = init 的落盘顺序 */
 function allSites(): ManagedFile[] {
   return [
     checkpointsFile(PROJECT),
     resolutionsFile(PROJECT),
-    customConstraintsFile(PROJECT),
     preCommitHookFile(PROJECT),
     prePushHookFile(PROJECT),
     harnessCheckCiFile(PROJECT, 'github', ['ci.yml']),
@@ -113,7 +111,7 @@ beforeEach(() => {
 
 describe('writeManagedFile：三态判定', () => {
   it('不在场 → created：建父目录、落盘模板正文、绿字告知', async () => {
-    const file = customConstraintsFile(PROJECT);
+    const file = changelogFile(PROJECT, 'keep-a-changelog');
 
     expect(await writeManagedFile(file, io, fs)).toBe('created');
 
@@ -179,7 +177,7 @@ describe('writeManagedFile：三态判定', () => {
   });
 
   it('runPlan 按顺序逐站点落盘并逐站点回报状态', async () => {
-    const plan = [customConstraintsFile(PROJECT), changelogFile(PROJECT, 'keep-a-changelog')];
+    const plan = [checkpointsFile(PROJECT), changelogFile(PROJECT, 'keep-a-changelog')];
     fs.seed(plan[1].target, USER_CONTENT);
 
     expect(await runPlan(plan, io, fs)).toEqual(['created', 'exists']);
@@ -188,11 +186,10 @@ describe('writeManagedFile：三态判定', () => {
 });
 
 describe('init 的脚手架 plan 站点面', () => {
-  it('9 站点齐备且目标路径逐字冻结（init 7 + validate 2 同源收口）', () => {
+  it('8 站点齐备且目标路径逐字冻结（init 6 + validate 2 同源收口）', () => {
     expect(allSites().map(f => f.target)).toEqual([
       `${PROJECT}/.harness/checkpoints.yml`,
       `${PROJECT}/.harness/resolutions.json`,
-      `${PROJECT}/.harness/custom-constraints.yml`,
       `${PROJECT}/.git/hooks/pre-commit`,
       `${PROJECT}/.git/hooks/pre-push`,
       `${PROJECT}/.github/workflows/harness-check.yml`,
@@ -341,13 +338,6 @@ describe('对外文案逐字冻结（9 站点 × 落盘态 / 在场态）', () =
         '💡 请手动添加以下内容到 jobs 中：',
       ],
       'name: Harness Check',
-    ],
-    [
-      'custom-constraints.yml',
-      () => customConstraintsFile(PROJECT),
-      '✅ 已创建自定义约束示例: custom-constraints.yml',
-      ['custom-constraints.yml 已存在'],
-      '',
     ],
     [
       'checkpoints.yml',

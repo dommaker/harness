@@ -94,8 +94,8 @@ export function summarizeTraces(traces: ExecutionTrace[]): TraceSummary[] {
   const summaries: TraceSummary[] = [];
 
   for (const [constraintId, group] of grouped) {
-    // 提取层级（从第一条 trace）
-    const level = group[0].level;
+    // 提取严重性（从第一条 trace）
+    const severity = group[0].severity;
 
     // 计算时间范围
     const timeRange = timeRangeOf(group.map(t => t.timestamp));
@@ -120,7 +120,7 @@ export function summarizeTraces(traces: ExecutionTrace[]): TraceSummary[] {
 
     summaries.push({
       constraintId,
-      level,
+      severity,
       timeRange,
       totalChecks,
       passCount,
@@ -155,7 +155,7 @@ export function detectTraceAnomalies(
       anomalies.push({
         type: 'rising_fail_rate',
         constraintId: summary.constraintId,
-        level: summary.level,
+        severity: summary.severity,
         message: `约束 ${summary.constraintId} 失败率 ${Math.round(summary.failRate * 100)}% 且趋势上升`,
         data: {
           currentRate: summary.failRate,
@@ -172,7 +172,7 @@ export function detectTraceAnomalies(
       anomalies.push({
         type: 'low_pass_rate',
         constraintId: summary.constraintId,
-        level: summary.level,
+        severity: summary.severity,
         message: `约束 ${summary.constraintId} 通过率 ${Math.round(summary.passRate * 100)}%，低于 30%`,
         data: {
           currentRate: summary.passRate,
@@ -358,14 +358,13 @@ export class TraceAnalyzer {
     lines.push('');
 
     for (const summary of summaries) {
-      const levelEmoji = {
-        iron_law: '🔴',
-        guideline: '🟡',
-        prompt: '🟣',
-        tip: '🔵',
-      }[summary.level];
+      const severityEmoji = {
+        error: '🔴',
+        warning: '🟡',
+        info: '🔵',
+      }[summary.severity];
 
-      lines.push(`${levelEmoji} **${summary.constraintId}**`);
+      lines.push(`${severityEmoji} **${summary.constraintId}**`);
       lines.push(`  - Checks: ${summary.totalChecks}`);
       lines.push(`  - Pass: ${Math.round(summary.passRate * 100)}%`);
       lines.push(`  - Fail: ${Math.round(summary.failRate * 100)}%`);

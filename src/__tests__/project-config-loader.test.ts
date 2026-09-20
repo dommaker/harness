@@ -32,23 +32,18 @@ describe('ProjectConfigLoader', () => {
       const config = loader.load();
 
       expect(config.preset).toBe('standard');
-      expect(config.custom_constraints_file).toBeDefined();
     });
 
     it('应该加载 config.yml', () => {
       fs.writeFileSync(
         path.join(harnessDir, 'config.yml'),
-        `
-preset: custom
-custom_constraints_file: my-constraints.yml
-`
+        `preset: custom`
       );
 
       const loader = new ProjectConfigLoader(tempDir);
       const config = loader.load();
 
       expect(config.preset).toBe('custom');
-      expect(config.custom_constraints_file).toBe('my-constraints.yml');
     });
   });
 
@@ -59,29 +54,8 @@ custom_constraints_file: my-constraints.yml
 
       const merged = loader.mergeConstraints();
 
-      expect(merged.ironLaws).toBeDefined();
-      expect(merged.guidelines).toBeDefined();
-      expect(Object.keys(merged.ironLaws).length).toBeGreaterThan(0);
-    });
-
-    it('应该加载自定义约束', () => {
-      fs.writeFileSync(
-        path.join(harnessDir, 'custom-constraints.yml'),
-        `
-custom_rules:
-  my_rule:
-    rule: MY CUSTOM RULE
-    message: Custom message
-    level: guideline
-    trigger: commit
-`
-      );
-
-      const loader = new ProjectConfigLoader(tempDir);
-      loader.load();
-
-      const merged = loader.mergeConstraints();
-      expect(merged.custom).toBeDefined();
+      expect(merged.constraints).toBeDefined();
+      expect(Object.keys(merged.constraints).length).toBeGreaterThan(0);
     });
   });
 
@@ -96,8 +70,6 @@ custom_rules:
       const config = loader.load();
 
       expect(config.preset).toBe('minimal');
-      // 默认值应该保留
-      expect(config.custom_constraints_file).toBe('custom-constraints.yml');
     });
   });
 
@@ -113,10 +85,10 @@ custom_rules:
       expect(() => loader.load()).toThrow();
     });
 
-    it('自定义约束文件不存在应该不崩溃', () => {
+    it('config.yml 只有无关键时 mergeConstraints 不崩溃', () => {
       fs.writeFileSync(
         path.join(harnessDir, 'config.yml'),
-        `custom_constraints_file: nonexistent.yml`
+        `preset: standard`
       );
 
       const loader = new ProjectConfigLoader(tempDir);

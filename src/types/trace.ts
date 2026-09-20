@@ -31,8 +31,8 @@ export interface ExecutionTrace {
   /** 约束 ID */
   constraintId: string;
 
-  /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'prompt';
+  /** 约束严重性（ADR-0029：显式 severity 取代三层 level 命名） */
+  severity: 'error' | 'warning' | 'info';
 
   /** 检查时间（Unix timestamp） */
   timestamp: number;
@@ -46,9 +46,6 @@ export interface ExecutionTrace {
 
   /** 操作类型（触发条件） */
   operation?: string;
-
-  /** 严重性（从约束定义继承） */
-  severity?: 'error' | 'warning' | 'info';
 
   /** 项目路径（用于区分多项目） */
   projectPath?: string;
@@ -84,8 +81,8 @@ export interface TraceSummary {
   /** 约束 ID */
   constraintId: string;
 
-  /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'prompt';
+  /** 约束严重性 */
+  severity: 'error' | 'warning' | 'info';
 
   /** 统计时间范围 */
   timeRange: {
@@ -148,8 +145,8 @@ export interface TraceAnomaly {
   /** 约束 ID */
   constraintId: string;
 
-  /** 约束层级 */
-  level: 'iron_law' | 'guideline' | 'prompt';
+  /** 约束严重性 */
+  severity: 'error' | 'warning' | 'info';
 
   /** 异常描述 */
   message: string;
@@ -175,8 +172,8 @@ export interface TraceFilter {
   /** 约束 ID（可选，不指定则查全部） */
   constraintId?: string;
 
-  /** 约束层级（可选） */
-  level?: 'iron_law' | 'guideline' | 'prompt';
+  /** 约束严重性（可选） */
+  severity?: 'error' | 'warning' | 'info';
 
   /** 结果类型（可选） */
   result?: 'pass' | 'fail' | 'skip';

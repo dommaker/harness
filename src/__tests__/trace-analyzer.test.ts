@@ -39,9 +39,9 @@ describe('TraceAnalyzer', () => {
   describe('summarize', () => {
     it('应该生成统计汇总', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test1', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'test1', level: 'iron_law', timestamp: 2000, result: 'fail' },
-        { constraintId: 'test2', level: 'guideline', timestamp: 3000, result: 'pass' },
+        { constraintId: 'test1', severity: 'error', timestamp: 1000, result: 'pass' },
+        { constraintId: 'test1', severity: 'error', timestamp: 2000, result: 'fail' },
+        { constraintId: 'test2', severity: 'warning', timestamp: 3000, result: 'pass' },
       ];
 
       const summaries = analyzer.summarize(traces);
@@ -51,9 +51,9 @@ describe('TraceAnalyzer', () => {
 
     it('应该计算通过率', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'test', level: 'iron_law', timestamp: 2000, result: 'pass' },
-        { constraintId: 'test', level: 'iron_law', timestamp: 3000, result: 'fail' },
+        { constraintId: 'test', severity: 'error', timestamp: 1000, result: 'pass' },
+        { constraintId: 'test', severity: 'error', timestamp: 2000, result: 'pass' },
+        { constraintId: 'test', severity: 'error', timestamp: 3000, result: 'fail' },
       ];
 
       const summaries = analyzer.summarize(traces);
@@ -64,8 +64,8 @@ describe('TraceAnalyzer', () => {
 
     it('应该计算失败率', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test', level: 'iron_law', timestamp: 1000, result: 'fail' },
-        { constraintId: 'test', level: 'iron_law', timestamp: 2000, result: 'fail' },
+        { constraintId: 'test', severity: 'error', timestamp: 1000, result: 'fail' },
+        { constraintId: 'test', severity: 'error', timestamp: 2000, result: 'fail' },
       ];
 
       const summaries = analyzer.summarize(traces);
@@ -83,10 +83,10 @@ describe('TraceAnalyzer', () => {
   describe('detectAnomalies', () => {
     it('应该检测失败率异常', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test', level: 'guideline', timestamp: 1000, result: 'fail' },
-        { constraintId: 'test', level: 'guideline', timestamp: 2000, result: 'fail' },
-        { constraintId: 'test', level: 'guideline', timestamp: 3000, result: 'fail' },
-        { constraintId: 'test', level: 'guideline', timestamp: 4000, result: 'pass' },
+        { constraintId: 'test', severity: 'warning', timestamp: 1000, result: 'fail' },
+        { constraintId: 'test', severity: 'warning', timestamp: 2000, result: 'fail' },
+        { constraintId: 'test', severity: 'warning', timestamp: 3000, result: 'fail' },
+        { constraintId: 'test', severity: 'warning', timestamp: 4000, result: 'pass' },
       ];
 
       const summaries = analyzer.summarize(traces);
@@ -97,8 +97,8 @@ describe('TraceAnalyzer', () => {
 
     it('正常数据应该无异常', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'test', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'test', level: 'iron_law', timestamp: 2000, result: 'pass' },
+        { constraintId: 'test', severity: 'error', timestamp: 1000, result: 'pass' },
+        { constraintId: 'test', severity: 'error', timestamp: 2000, result: 'pass' },
       ];
 
       const summaries = analyzer.summarize(traces);
@@ -111,9 +111,9 @@ describe('TraceAnalyzer', () => {
   describe('groupByConstraint', () => {
     it('应该按约束 ID 分组', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'a', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'b', level: 'iron_law', timestamp: 2000, result: 'pass' },
-        { constraintId: 'a', level: 'iron_law', timestamp: 3000, result: 'pass' },
+        { constraintId: 'a', severity: 'error', timestamp: 1000, result: 'pass' },
+        { constraintId: 'b', severity: 'error', timestamp: 2000, result: 'pass' },
+        { constraintId: 'a', severity: 'error', timestamp: 3000, result: 'pass' },
       ];
 
       // 通过 summarize 间接验证分组
@@ -140,9 +140,9 @@ describe('TraceAnalyzer', () => {
   describe('模块级纯函数', () => {
     it('summarizeTraces 不构造 collector 即可汇总，skip 不进 pass/fail 分母', () => {
       const traces: ExecutionTrace[] = [
-        { constraintId: 'pure', level: 'iron_law', timestamp: 1000, result: 'pass' },
-        { constraintId: 'pure', level: 'iron_law', timestamp: 2000, result: 'fail' },
-        { constraintId: 'pure', level: 'iron_law', timestamp: 3000, result: 'skip' },
+        { constraintId: 'pure', severity: 'error', timestamp: 1000, result: 'pass' },
+        { constraintId: 'pure', severity: 'error', timestamp: 2000, result: 'fail' },
+        { constraintId: 'pure', severity: 'error', timestamp: 3000, result: 'skip' },
       ];
 
       const summaries = summarizeTraces(traces);
@@ -160,7 +160,7 @@ describe('TraceAnalyzer', () => {
       // failRate 6/14 ≈ 0.43 且趋势上升：默认阈值 0.5 不触发，0.3 触发
       const summary: TraceSummary = {
         constraintId: 'param_threshold',
-        level: 'iron_law',
+        severity: 'error',
         timeRange: { start: 1000, end: 2400 },
         totalChecks: 14,
         passCount: 8,

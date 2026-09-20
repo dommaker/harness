@@ -22,11 +22,11 @@ import { noHardcodedCredentials } from './no-hardcoded-credentials';
 import { governancePresence } from './governance-presence';
 
 const CHECKS: ConstraintCheck[] = [
-  // Iron Laws
+  // severity='error'
   noCompletionWithoutVerification,
   noTestSimplification,
   docsFreshness,
-  // Guidelines
+  // severity='warning'
   noHardcodedCredentials,
   capabilitySync,
   contextDocSync,
@@ -45,7 +45,7 @@ for (const c of checkConstraints) {
   if (!registry.has(c.id)) {
     throw new Error(
       `[harness] 约束注册表闭环校验失败：kind='check' 的约束 "${c.id}" 未注册 checker。` +
-      `请在 checkers/ 中实现并注册，或将该约束降级为 kind='prompt'。`
+      `请在 checkers/ 中实现并注册（纯文本提示层已随 ADR-0029 关停）。`
     );
   }
 }
@@ -61,7 +61,7 @@ for (const id of registry.keys()) {
 
 /**
  * 按约束 ID 查找检查实现；未注册返回 undefined
- * （编排层对 kind='check' 未注册的情况抛错，kind='prompt' 不查表）
+ * （编排层对 kind='check' 未注册的情况抛错）
  */
 export function getConstraintCheck(id: string): ConstraintCheck | undefined {
   return registry.get(id);

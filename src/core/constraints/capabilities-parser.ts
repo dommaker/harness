@@ -10,7 +10,7 @@
  */
 
 import * as fs from 'fs';
-import { IRON_LAWS, GUIDELINES } from './definitions';
+import { CONSTRAINTS } from './definitions';
 import { FreshnessRunner } from './doc-freshness/runner';
 import type { DocFreshnessCheck } from '../../types/project-config';
 
@@ -79,10 +79,14 @@ export function readCapabilitiesEntries(capabilitiesPath: string, options: Capab
  * checker 与 sync-docs 都应按此跳过条目级比对。
  */
 export function isCapabilityListingFormat(content: string): boolean {
-  // 能力清单格式特征：包含 "CLI Commands (N)" / "Iron Laws (N)" 等计数行
+  // 能力清单格式特征：包含 "CLI Commands (N)" 与约束计数行
+  // （ADR-0029 前为 "Iron Laws (N)" / "Guidelines (N)"，现行为 "errors (N)" / "warnings (N)"，
+  //  新旧行都认——旧文档不因此失去格式身份）
   return /CLI Commands\s*\(\d+\)/.test(content) ||
     /Iron Laws?\s*\(\d+\)/.test(content) ||
-    /Guidelines?\s*\(\d+\)/.test(content);
+    /Guidelines?\s*\(\d+\)/.test(content) ||
+    /errors?\s*\(\d+\)/.test(content) ||
+    /warnings?\s*\(\d+\)/.test(content);
 }
 
 /**
@@ -143,8 +147,16 @@ function capabilityCountRules(source: CapabilityDefinitionSource): CapabilityCou
       actual: source.commands.length + source.gates.filter(g => g.cli).length,
     },
     { label: 'Quality Gates', pattern: 'Quality Gates?\\s*\\((\\d+)\\)', actual: source.gates.length },
-    { label: 'Iron Laws', pattern: 'Iron Laws?\\s*\\((\\d+)\\)', actual: Object.keys(IRON_LAWS).length },
-    { label: 'Guidelines', pattern: 'Guidelines?\\s*\\((\\d+)\\)', actual: Object.keys(GUIDELINES).length },
+    {
+      label: 'errors',
+      pattern: 'errors?\\s*\\((\\d+)\\)',
+      actual: Object.values(CONSTRAINTS).filter(c => c.severity === 'error').length,
+    },
+    {
+      label: 'warnings',
+      pattern: 'warnings?\\s*\\((\\d+)\\)',
+      actual: Object.values(CONSTRAINTS).filter(c => c.severity === 'warning').length,
+    },
   ];
 }
 

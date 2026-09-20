@@ -1,41 +1,26 @@
 /**
- * 治理注入段落点写入器（架构评审候选1，ADR-0011）
+ * 标记区间写入器 + 治理正本探测（架构评审候选1，ADR-0011）
  *
- * 「按渲染 body 替换标记区间 + 尾换行规一」的切片数学此前手抄 4 份
- * （init.ts 三个 writer / constraints-retire 一份），落点路由读写两侧各抄一份。
- * 本模块是唯一 writer：init/retire 退化为「渲染 body + 调 writer」。
+ * ADR-0029：约束注入段（HARNESS_CONSTRAINTS）已整体关停——本模块不再承担
+ * 注入段渲染/落点路由（resolveInjectionTarget / resolveGovernanceLanding 随删），
+ * 保留的是通用机制：
  *
- * 形状两种（排版约定不同，非"算哪些"的差异，故合法分叉）：
+ * 「按渲染 body 替换标记区间 + 尾换行规一」的切片数学。形状两种
+ * （排版约定不同，非"算哪些"的差异，故合法分叉）：
  * - replaceStandaloneRange：区间独立成节，END 标记后折叠为恰好一个空行
- *   （CLAUDE.md 约束段 / Output Style 段 / retire 注入段同步）
+ *   （CLAUDE.md Output Style 段）
  * - replaceEnclosedRange：区间后紧跟外层收口标记（AGENTS.md PRESERVE 段内
- *   的 HARNESS_CONSTRAINTS 区间）——恰好剥一个换行，手写余文原样落回
+ *   区间）——恰好剥一个换行，手写余文原样落回
  *
  * 半标记守护：单边缺失或顺序颠倒 → 'half'，拒写（旧实现此时或追加出双份
  * 正本或产生乱序切片，属二次损坏路径，收紧为告警交人工，见 ADR-0011）。
  *
- * 落点路由同规则一份：
- * - resolveInjectionTarget：读侧（漂移检测/retire 同步）——CLAUDE.md 有完整
- *   标记段优先（旧模型仓豁免），否则 AGENTS.md（新模型仓住 PRESERVE 段内）
- * - resolveGovernanceLanding：写侧（init 落点选择）——额外承认 CLAUDE.md
- *   无标记的 `## Governance Rules` 旧块（续写不制造双份正本）
- *
  * 探测/判定同住本模块（#83，ADR-0011 补注：收口范围含探测器，不只写器）——
- * 「这份文档里有没有治理契约 / 有几个正本标题」此前手抄 4 份且正则已漂移，
- * 见文末 GOVERNANCE_HEADING / hasGovernanceContract / countGovernanceHeadings /
- * hasPreserveBlock。
+ * 「这份文档里有没有治理契约 / 有几个正本标题」，见文末 GOVERNANCE_HEADING /
+ * hasGovernanceContract / countGovernanceHeadings / hasPreserveBlock。
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
-import {
-  CONSTRAINTS_START_MARKER,
-  CONSTRAINTS_END_MARKER,
-} from './injection-renderer';
-
-/** 注入段落点文件名（检测顺序即路由优先级：旧模型仓 CLAUDE.md 优先） */
-export const INJECTION_FILES = ['CLAUDE.md', 'AGENTS.md'] as const;
-export type InjectionFile = (typeof INJECTION_FILES)[number];
 
 /** 标记区间替换结果 */
 export type MarkerWrite =
@@ -112,40 +97,6 @@ export function replaceEnclosedRange(content: string, begin: string, end: string
 }
 
 /**
- * 读侧路由：定位含完整 HARNESS_CONSTRAINTS 标记段的文件（studio #307）。
- * detectInjectionDrift 与 retire 注入段同步共用。
- */
-export function resolveInjectionTarget(
-  projectRoot: string
-): { file: InjectionFile; content: string; startIdx: number; endIdx: number } | null {
-  for (const file of INJECTION_FILES) {
-    const content = readIfExists(path.join(projectRoot, file));
-    if (content === null) continue;
-    const startIdx = content.indexOf(CONSTRAINTS_START_MARKER);
-    const endIdx = content.indexOf(CONSTRAINTS_END_MARKER);
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      return { file, content, startIdx, endIdx };
-    }
-  }
-  return null;
-}
-
-/**
- * 写侧路由（init 落点选择，原 setupGovernanceConstraints 内联判定收于此）：
- * CLAUDE.md 有约束标记段或有旧版 `## Governance Rules` 块 → 续写 CLAUDE.md
- * （旧模型仓豁免，不制造双份正本）；否则 AGENTS.md PRESERVE:governance。
- */
-export function resolveGovernanceLanding(
-  projectRoot: string
-): { target: 'claude-md' | 'agents-md'; claudeContent: string | null } {
-  const claudeContent = readIfExists(path.join(projectRoot, 'CLAUDE.md'));
-  if (claudeContent !== null && hasGovernanceContract(claudeContent)) {
-    return { target: 'claude-md', claudeContent };
-  }
-  return { target: 'agents-md', claudeContent };
-}
-
-/**
  * 治理正本标题字面量（单一来源，#83）：init 的标题写点与下列两个判定谓词
  * 都由它派生，仓内不再本地拼写。字面量无正则元字符，可直接拼入 RegExp。
  *
@@ -164,8 +115,12 @@ const GOVERNANCE_HEADING_LOOSE_RE = new RegExp(`^##\\s+${GOVERNANCE_HEADING_TEXT
 /** 严格标题正则：精确拼写 + 行尾锚定（行尾仅容忍空白） */
 const GOVERNANCE_HEADING_STRICT_RE = new RegExp(`^${GOVERNANCE_HEADING}[ \\t]*$`, 'gm');
 
-/** 约束标记裸文本（去注释壳），宽松谓词按「标记文本在场」判定，容忍壳残缺 */
-const CONSTRAINTS_START_TEXT = CONSTRAINTS_START_MARKER.replace(/^<!--\s*|\s*-->$/g, '');
+/**
+ * 历史注入段标记裸文本（ADR-0029：注入段已关停，此处仅作历史兼容判据——
+ * 旧仓残留的 HARNESS_CONSTRAINTS 段仍算治理契约在场）。宽松谓词按「标记文本
+ * 在场」判定，容忍注释壳残缺。
+ */
+const CONSTRAINTS_START_TEXT = 'HARNESS_CONSTRAINTS_START';
 
 /**
  * 宽松谓词：内容里是否有治理契约在场——标题宽松匹配或 HARNESS 约束标记

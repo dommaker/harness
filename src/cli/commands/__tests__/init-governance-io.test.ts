@@ -1,13 +1,14 @@
 /**
- * 治理链路的 io 注入不逃逸（harness#149）
+ * 治理链路的 io 注入不逃逸（harness#149，ADR-0029 收窄）
  *
- * setupGovernance 手握 io，却在两个调用点把它丢了（`setupClaudeMdOutputStyle(projectPath)`
- * / `setupGovernanceConstraints(projectPath)`），被调方一律 `io: CommandIO = processIO`
- * 兜成真实 stdout。真机输出正常，但注入面的测试看不见那 14 条提示——`⚠️ …标记残缺…`
- * 这类唯一提示写坏了没有测试会红。
+ * setupGovernance 手握 io，曾在调用点把它丢了（`setupClaudeMdOutputStyle(projectPath)`），
+ * 被调方一律 `io: CommandIO = processIO` 兜成真实 stdout。真机输出正常，但注入面的
+ * 测试看不见那些提示——`⚠️ …标记残缺…` 这类唯一提示写坏了没有测试会红。
  *
  * 本文件不 mock 任何 IO：在临时目录里真跑 init，断言治理段提示落在**注入面**。
- * 改造前这些断言逐条为红（文本逃到了 process.stdout）。
+ * ADR-0029：约束注入段 writer（setupAgentsMdConstraints / setupClaudeMdConstraints /
+ * setupGovernanceConstraints）已随文本注入层关停删除，相关用例移除；
+ * Output Style 段（通用 marker 机制）保留。
  */
 
 import * as fs from 'fs/promises';
@@ -63,48 +64,9 @@ describe('init 治理链路的提示落在注入面（harness#149）', () => {
     expect(io.outText()).toContain('✅ 已在 CLAUDE.md 顶部写入 Output Style 段');
   });
 
-  it('治理契约追加到既有 AGENTS.md：`已追加治理契约` 进捕获 stdout', async () => {
-    const io = await runInit({ 'AGENTS.md': '# AGENTS.md\n\n既有导读\n' });
-    expect(io.outText()).toContain('✅ 已追加治理契约 PRESERVE:governance 段到 AGENTS.md');
-  });
-
-  it('标记残缺（唯一提示）：`标记残缺…请人工修复` 进捕获 stdout', async () => {
-    const io = await runInit({ 'AGENTS.md': '# AGENTS.md\n\n<!-- PRESERVE:governance -->\n残缺段\n' });
-    expect(io.outText()).toContain('⚠️  AGENTS.md 中 PRESERVE:governance 标记残缺（只有单边），跳过治理契约写入，请人工修复');
-  });
-
-  // #158 补钉：这类提示在 init.ts 实测有四处，#149 只钉住上面一条——其余三处各补一条
-  // 捕获面断言。四处分支不同文件/不同段位，fixture 各自单建，不共用残缺文件。
-
-  it('标记残缺四处之二：CLAUDE.md 的 HARNESS_OUTPUT_STYLE 单边 → Output Style 注入告警', async () => {
+  it('标记残缺（唯一提示）：HARNESS_OUTPUT_STYLE 单边 → Output Style 注入告警进捕获 stdout', async () => {
     const io = await runInit({ 'CLAUDE.md': '# CLAUDE.md\n\n<!-- HARNESS_OUTPUT_STYLE_START -->\n半残段\n' });
     expect(io.outText()).toContain('⚠️  CLAUDE.md 中 HARNESS_OUTPUT_STYLE 标记残缺（单边或乱序），跳过 Output Style 注入，请人工修复');
-  });
-
-  it('标记残缺四处之三：AGENTS.md 的 PRESERVE 段内 HARNESS_CONSTRAINTS 单边 → 段内告警', async () => {
-    const broken = [
-      '# AGENTS.md',
-      '',
-      '<!-- PRESERVE:governance -->',
-      '手写契约',
-      '',
-      '<!-- HARNESS_CONSTRAINTS_START -->',
-      '半残注入',
-      '<!-- /PRESERVE:governance -->',
-      '',
-    ].join('\n');
-    const io = await runInit({ 'AGENTS.md': broken });
-    expect(io.outText()).toContain('⚠️  AGENTS.md PRESERVE:governance 段内 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理契约写入，请人工修复');
-  });
-
-  it('标记残缺四处之四：CLAUDE.md 的 HARNESS_CONSTRAINTS 单边 → 治理约束注入告警（旧模型仓落点）', async () => {
-    const io = await runInit({ 'CLAUDE.md': '# CLAUDE.md\n\n<!-- HARNESS_CONSTRAINTS_START -->\n半残段\n' });
-    expect(io.outText()).toContain('⚠️  CLAUDE.md 中 HARNESS_CONSTRAINTS 标记残缺（单边或乱序），跳过治理约束注入，请人工修复');
-  });
-
-  it('新仓创建 AGENTS.md 治理段：创建提示进捕获 stdout', async () => {
-    const io = await runInit({});
-    expect(io.outText()).toContain('✅ 已创建 AGENTS.md 并写入治理契约 PRESERVE:governance 段');
   });
 });
 
@@ -115,17 +77,10 @@ describe('writer 层 io 必传（源形状闸，防缺省兜底再回来）', ()
     expect(sites[0]).toMatch(/^export async function init\(/);
   });
 
-  it('三个 writer 与落点路由的 io 均为必传形参', () => {
-    for (const writer of [
-      'setupClaudeMdOutputStyle',
-      'setupAgentsMdConstraints',
-      'setupClaudeMdConstraints',
-      'setupGovernanceConstraints',
-    ]) {
-      expect(INIT_SOURCE).toMatch(
-        new RegExp(`export async function ${writer}\\(projectPath: string, io: CommandIO\\)`),
-      );
-    }
+  it('Output Style writer 的 io 为必传形参', () => {
+    expect(INIT_SOURCE).toMatch(
+      /export async function setupClaudeMdOutputStyle\(projectPath: string, io: CommandIO\)/,
+    );
   });
 
   it('setupGovernance 的调用点逐个传 io（不留裸 projectPath 调用）', () => {
@@ -134,6 +89,5 @@ describe('writer 层 io 必传（源形状闸，防缺省兜底再回来）', ()
       INIT_SOURCE.indexOf('/**\n * 目录 CONTEXT.md 骨架的 plan'),
     );
     expect(governanceBody).toMatch(/await setupClaudeMdOutputStyle\(projectPath, io\)/);
-    expect(governanceBody).toMatch(/await setupGovernanceConstraints\(projectPath, io\)/);
   });
 });

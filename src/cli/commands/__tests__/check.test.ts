@@ -165,13 +165,13 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      expect(io.outText()).toContain('✅ 铁律: 全部通过 (1 条)');
-      expect(io.outText()).toContain('✅ 指导原则: 1/1 通过');
+      expect(io.outText()).toContain('✅ error 级约束: 全部通过 (1 条)');
+      expect(io.outText()).toContain('✅ warning 级约束: 1/1 通过');
       expect(io.outText()).toContain('✅ 约束检查通过');
       expect(result).toEqual({ kind: 'ok' });
     });
 
-    it('无验证证据 → 真铁律拦截，经异常外溢为 fail', async () => {
+    it('无验证证据 → 真 error 级拦截，经异常外溢为 fail', async () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       write(dir, '.harness/logs/traces.log', '{"constraintId":"fixture","result":"fail"}\n');
@@ -204,7 +204,7 @@ describe('check command（真 git fixture）', () => {
       expect(result.kind).toBe('fail');
     });
 
-    it('staged 硬编码凭证 → 指导原则警告但不阻断', async () => {
+    it('staged 硬编码凭证 → warning 级警告但不阻断', async () => {
       const dir = gitRepo();
       stageChange(
         dir,
@@ -220,7 +220,7 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      expect(io.outText()).toContain('⚠️  指导原则警告: 1 条');
+      expect(io.outText()).toContain('⚠️  warning 级约束警告: 1 条');
       expect(io.outText()).toContain('- no_hardcoded_credentials');
       expect(io.outText()).toContain('✅ 约束检查通过');
       expect(result).toEqual({ kind: 'ok' });
@@ -310,8 +310,8 @@ describe('check command（真 git fixture）', () => {
       );
 
       const out = io.outText();
-      expect(out).toContain('✅ 指导原则: 1/1 通过');
-      expect(out).not.toContain('指导原则警告');
+      expect(out).toContain('✅ warning 级约束: 1/1 通过');
+      expect(out).not.toContain('warning 级约束警告');
       expect(out).toContain('💡 提示: 1 条（不判违规，供参考）');
       expect(out).toContain('- capability_sync:');
       expect(out).toContain('src/nested/deep.ts');
@@ -459,7 +459,7 @@ describe('check command（真 git fixture）', () => {
   });
 
   describe('生效集来自真 .harness/config.yml', () => {
-    it('报告自定义、禁用与未知约束 id', async () => {
+    it('报告禁用与未知约束 id', async () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
@@ -467,12 +467,6 @@ describe('check command（真 git fixture）', () => {
         dir,
         '.harness/config.yml',
         [
-          'custom_constraints:',
-          '  fixture_rule:',
-          '    id: fixture_rule',
-          '    level: guideline',
-          '    trigger: manual',
-          '    message: fixture 自定义约束',
           'constraints:',
           '  capability_sync:',
           '    enabled: false',
@@ -487,7 +481,6 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      expect(io.outText()).toContain('自定义约束: 1 条');
       expect(io.outText()).toContain('已禁用约束: capability_sync, no_such_rule');
       expect(io.outText()).toContain('配置中存在未知约束 id（已忽略，可清理）: no_such_rule');
     });
@@ -543,24 +536,17 @@ describe('check command（真 git fixture）', () => {
       expect(result).toEqual({ kind: 'ok' });
     });
 
-    it('应该列出铁律', () => {
+    it('应该列出 error 级约束', () => {
       const result = listLaws({}, io);
 
-      expect(io.outText()).toContain('铁律');
+      expect(io.outText()).toContain('error 级');
       expect(result).toEqual({ kind: 'ok' });
     });
 
-    it('应该列出指导原则', () => {
+    it('应该列出 warning 级约束', () => {
       const result = listLaws({}, io);
 
-      expect(io.outText()).toContain('指导原则');
-      expect(result).toEqual({ kind: 'ok' });
-    });
-
-    it('应该列出提示', () => {
-      const result = listLaws({}, io);
-
-      expect(io.outText()).toContain('提示');
+      expect(io.outText()).toContain('warning 级');
       expect(result).toEqual({ kind: 'ok' });
     });
   });

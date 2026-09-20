@@ -1,57 +1,11 @@
 /**
- * 项目级自定义约束配置
+ * 项目级约束配置
  *
- * 允许项目定义自己的约束，扩展或覆盖 harness 内置约束
+ * 允许项目启用/禁用 harness 内置约束（ADR-0029：项目自定义纯文本约束
+ * 已随文本注入层关停一并退役，文本规则由项目手写治理段承接）
  */
 
-import type { Constraint, ConstraintLevel } from './constraint';
-
-/**
- * 自定义约束定义
- */
-export interface CustomConstraintDefinition {
-  /** 约束 ID */
-  id: string;
-
-  /** 约束层级（可选，缺省 guideline） */
-  level?: ConstraintLevel;
-
-  /** 约束规则（可选） */
-  rule?: string;
-
-  /** 约束消息（可选） */
-  message?: string;
-
-  /** 触发条件（可选） */
-  trigger?: string | string[];
-
-  /** 描述（可选） */
-  description?: string;
-
-  /**
-   * Prompt 注入文本（可选）
-   *
-   * 自定义约束统一 kind='prompt'（无 checker），该字段是进入 CLAUDE.md
-   * 注入段（renderConstraintsSection）的唯一通道——缺省不出现在注入段，
-   * 与内置无 promptInjection 的 check 条目行为一致。
-   */
-  promptInjection?: string;
-
-  /** 是否启用（可选，默认 true） */
-  enabled?: boolean;
-
-  /**
-   * 退役元数据（studio#82 D6 统一落点）
-   *
-   * 存在即视为已退役：不进生效集、不注入 CLAUDE.md。恢复 = 删除该段。
-   * 落点在 custom-constraints.yml 条目内（一处真相，不拆 config.yml 第二处）。
-   */
-  retired?: {
-    at?: string;
-    reason?: string;
-    stats?: { total: number; fail: number; failRate: number };
-  };
-}
+import type { Constraint } from './constraint';
 
 /**
  * 文档同步配置
@@ -257,25 +211,11 @@ export interface ProjectConfig {
   /** CI 接线平台（harness#143，缺省 github） */
   ci?: CiConfig;
 
-  /**
-   * 项目适用场景标签（ADR-0001，如 'agent-skill'、'llm-app'）
-   *
-   * 带 appliesTo 标签的 prompt 仅当 scenes 与其交集非空时进入生效集；
-   * 无 appliesTo 的条目不受影响。缺省为空 = 场景专属 prompt 默认不注入。
-   */
-  scenes?: string[];
-
   /** 治理配置 */
   governance?: GovernanceConfig;
 
   /** 内置约束启用/禁用配置 */
   constraints?: Record<string, { enabled?: boolean }>;
-
-  /** 自定义约束文件路径 */
-  custom_constraints_file?: string;
-
-  /** 自定义约束（直接定义） */
-  custom_constraints?: Record<string, CustomConstraintDefinition>;
 
   /** Spec 验证配置 */
   spec?: {
@@ -291,26 +231,17 @@ export interface ProjectConfig {
 }
 
 /**
- * 完整的约束配置（合并内置 + 自定义）
+ * 完整的约束配置（合并内置 + preset 裁剪 + config.yml 禁用）
  */
 export interface MergedConstraintsConfig {
-  /** Iron Laws（合并后） */
-  ironLaws: Record<string, Constraint>;
-
-  /** Guidelines（合并后） */
-  guidelines: Record<string, Constraint>;
-
-  /** Prompts（合并后，ADR-0001 新增；可选以兼容旧调用方，缺省回落内置 PROMPTS） */
-  prompts?: Record<string, Constraint>;
+  /** 生效的约束（合并后，单桶；severity 在条目上） */
+  constraints: Record<string, Constraint>;
 
   /** 禁用的约束 ID */
   disabled: string[];
 
-  /** 自定义约束 ID */
-  custom: string[];
-
   /**
-   * config.yml `constraints.<id>` 中既非内置也非自定义的未知 id（ADR-0001）
+   * config.yml `constraints.<id>` 中非内置的未知 id
    *
    * 例如禁用了已被本版移除的约束 id 的残留配置。生效集计算静默忽略，
    * 在此列出供诊断（lintEffectiveConfig / report）使用。

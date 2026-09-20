@@ -249,42 +249,6 @@ ${docsCheckStep}
 `;
 }
 
-/** custom-constraints.yml 示例正文 */
-export const CUSTOM_CONSTRAINTS_TEMPLATE = `# 自定义约束配置
-#
-# 此文件定义项目特定的约束，扩展或覆盖 harness 内置约束
-
-# ========================================
-# 自定义约束示例
-# ========================================
-
-custom_constraints:
-  # 示例 1：禁止 console.log
-  # my_project_no_console_log:
-  #   id: my_project_no_console_log
-  #   level: guideline
-  #   rule: "NO CONSOLE.LOG IN PRODUCTION CODE"
-  #   message: "生产代码禁止使用 console.log，请使用 logger 模块"
-  #   trigger: ["code_implementation"]
-  #   description: "使用项目统一的 logger 模块代替 console.log"
-
-  # 示例 2：禁止特定的导入
-  # my_project_no_moment_js:
-  #   id: my_project_no_moment_js
-  #   level: guideline
-  #   rule: "NO MOMENT.JS IMPORTS"
-  #   message: "禁止使用 moment.js，请使用 date-fns 或 dayjs"
-  #   trigger: ["code_implementation"]
-
-  # 示例 3：要求特定的文件命名
-  # my_project_component_naming:
-  #   id: my_project_component_naming
-  #   level: tip
-  #   rule: "REACT COMPONENTS SHOULD BE PASCAL CASE"
-  #   message: "React 组件文件名应使用 PascalCase"
-  #   trigger: ["file_creation"]
-`;
-
 /** CHANGELOG.md 正文（`format` 来自治理配置的 changelog.format） */
 export function renderChangelog(format: string): string {
   return format === 'keep-a-changelog'
@@ -386,7 +350,7 @@ export function renderCheckpoints(): string {
 
 /** 默认 Resolutions（RKB — 约束 → 已知解法映射） */
 const DEFAULT_RESOLUTIONS = {
-  no_fuzzy_completion_claim: {
+  no_completion_without_verification: {
     title: 'commit message 缺少验证证据',
     fix: '在 commit message body 中附上验证输出:\n`npx @dommaker/harness check --staged` | `npx @dommaker/harness validate` | `npm test -- --coverage`\n确认全部通过后重新 commit。',
   },

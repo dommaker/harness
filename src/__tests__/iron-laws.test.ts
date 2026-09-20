@@ -1,12 +1,10 @@
 /**
- * 约束系统测试（ADR-0001：kind 二元模型；harness#174：26 → 16 条清单构成 + 注册表闭环）
+ * 约束系统测试（ADR-0029：severity 显式模型——三层命名废弃、prompt 面删除、注册表闭环保留）
  */
 
 import { describe, it, expect } from '@jest/globals';
 import {
-  IRON_LAWS,
-  GUIDELINES,
-  PROMPTS,
+  CONSTRAINTS,
   getAllConstraints,
   findConstraintsByTrigger,
   getConstraint
@@ -16,32 +14,28 @@ import { getConstraintCheck, registeredCheckCount } from '../core/constraints/ch
 import type { ConstraintContext } from '../types/constraint';
 
 describe('Constraint System', () => {
-  describe('清单构成（ADR-0001：42 → 26；harness#174：26 → 16）', () => {
-    it('getAllConstraints 返回 16 条：7 check + 9 prompt', () => {
+  describe('清单构成（ADR-0029：16 → 7，全部 kind=check）', () => {
+    it('getAllConstraints 返回 7 条 check 约束', () => {
       const all = getAllConstraints();
-      expect(all).toHaveLength(16);
-      expect(all.filter(c => c.kind === 'check')).toHaveLength(7);
-      expect(all.filter(c => c.kind === 'prompt')).toHaveLength(9);
+      expect(all).toHaveLength(7);
+      expect(all.every(c => c.kind === 'check')).toBe(true);
     });
 
-    it('check 层 = 3 iron + 4 guideline', () => {
-      expect(Object.keys(IRON_LAWS)).toHaveLength(3);
-      expect(Object.keys(GUIDELINES)).toHaveLength(4);
-      Object.values(IRON_LAWS).forEach(c => {
+    it('severity 分桶 = 3 error + 4 warning', () => {
+      const errors = Object.values(CONSTRAINTS).filter(c => c.severity === 'error');
+      const warnings = Object.values(CONSTRAINTS).filter(c => c.severity === 'warning');
+      expect(errors).toHaveLength(3);
+      expect(warnings).toHaveLength(4);
+      Object.values(CONSTRAINTS).forEach(c => {
         expect(c.kind).toBe('check');
-        expect(c.level).toBe('iron_law');
-      });
-      Object.values(GUIDELINES).forEach(c => {
-        expect(c.kind).toBe('check');
-        expect(c.level).toBe('guideline');
       });
     });
 
-    it('prompt 层 9 条，level 统一为 prompt', () => {
-      expect(Object.keys(PROMPTS)).toHaveLength(9);
-      Object.values(PROMPTS).forEach(c => {
-        expect(c.kind).toBe('prompt');
-        expect(c.level).toBe('prompt');
+    it('prompt 面字段已删除（promptInjection / injectPrompt / appliesTo 不存在）', () => {
+      Object.values(CONSTRAINTS).forEach(c => {
+        expect('promptInjection' in c).toBe(false);
+        expect('injectPrompt' in c).toBe(false);
+        expect('appliesTo' in c).toBe(false);
       });
     });
 
@@ -97,30 +91,29 @@ describe('Constraint System', () => {
       }
     });
 
-    it('harness#174：no_test_simplification / no_hardcoded_credentials 保留定义但清除 promptInjection', () => {
-      expect(getConstraint('no_test_simplification')).toBeDefined();
-      expect(getConstraint('no_hardcoded_credentials')).toBeDefined();
-      expect(IRON_LAWS['no_test_simplification'].promptInjection).toBeUndefined();
-      expect(GUIDELINES['no_hardcoded_credentials'].promptInjection).toBeUndefined();
-    });
-
-    it('场景标签：仅剩 no_model_for_deterministic 带 appliesTo', () => {
-      expect(PROMPTS['no_model_for_deterministic'].appliesTo).toEqual(['llm-app']);
-      // agent-skill 场景已无条目（唯一条目 no_skill_without_test 已删）
-      expect(
-        getAllConstraints().filter(c => c.appliesTo?.includes('agent-skill'))
-      ).toHaveLength(0);
+    it('ADR-0029：prompt 类 9 条随文本注入层关停删除', () => {
+      const removed = [
+        'no_fuzzy_completion_claim',
+        'no_fix_without_root_cause',
+        'no_code_without_test',
+        'fix_the_problem_not_the_gate',
+        'verify_external_capability',
+        'no_delete_without_context',
+        'design_decision_requires_discussion',
+        'surgical_changes_only',
+        'no_model_for_deterministic',
+      ];
+      for (const id of removed) {
+        expect(getConstraint(id)).toBeUndefined();
+        expect(getConstraintCheck(id)).toBeUndefined();
+      }
     });
 
     it('no_completion_without_verification 不硬编码具体命令示例（#25：口径由项目声明）', () => {
-      const law = IRON_LAWS['no_completion_without_verification'];
-      expect(law.promptInjection).not.toMatch(/npm test|npm run build/);
+      const law = CONSTRAINTS['no_completion_without_verification'];
       expect(law.description).not.toMatch(/npm test|npm run build/);
-      expect(law.promptInjection).not.toContain('完整');
       expect(law.description).not.toContain('完整');
-      expect(law.promptInjection).toContain('项目声明的测试');
       expect(law.description).toContain('项目声明的测试');
-      expect(law.promptInjection).toContain('不得凭记忆声称完成');
     });
   });
 
@@ -136,12 +129,6 @@ describe('Constraint System', () => {
       const checkCount = getAllConstraints().filter(c => c.kind === 'check').length;
       expect(registeredCheckCount()).toBe(checkCount);
     });
-
-    it('prompt 约束不注册 checker', () => {
-      for (const c of Object.values(PROMPTS)) {
-        expect(getConstraintCheck(c.id)).toBeUndefined();
-      }
-    });
   });
 
   describe('Helper Functions', () => {
@@ -151,10 +138,10 @@ describe('Constraint System', () => {
     });
 
     it('should get single constraint by id', () => {
-      const constraint = getConstraint('no_fix_without_root_cause');
+      const constraint = getConstraint('no_completion_without_verification');
       expect(constraint).toBeDefined();
-      expect(constraint?.kind).toBe('prompt');
-      expect(constraint?.level).toBe('prompt');
+      expect(constraint?.kind).toBe('check');
+      expect(constraint?.severity).toBe('error');
     });
 
     it('should return undefined for unknown constraint', () => {
@@ -176,16 +163,7 @@ describe('Constraint Checker', () => {
     };
 
     const result = constraintChecker.findApplicableConstraints(context);
-    expect(result.ironLaws.length + result.guidelines.length).toBeGreaterThan(0);
-  });
-
-  it('prompt 约束 check() 短路 satisfied，不查注册表', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-    };
-
-    const result = await constraintChecker.check(PROMPTS['no_fix_without_root_cause'], context);
-    expect(result.satisfied).toBe(true);
+    expect(result.errors.length + result.warnings.length).toBeGreaterThan(0);
   });
 
   it('kind=check 但未注册 checker 的约束应抛错（不许静默 pass）', async () => {
@@ -198,7 +176,7 @@ describe('Constraint Checker', () => {
         {
           id: 'ghost_check_constraint',
           kind: 'check',
-          level: 'guideline',
+          severity: 'warning',
           rule: 'GHOST',
           message: 'test',
           trigger: 'code_implementation',
@@ -218,7 +196,7 @@ describe('Constraint Checker', () => {
     };
 
     const result = await constraintChecker.checkConstraints(context);
-    expect(result.ironLaws.length + result.guidelines.length).toBeGreaterThan(0);
+    expect(result.errors.length + result.warnings.length).toBeGreaterThan(0);
   });
 
   it('should skip no_completion_without_verification when hasVerificationEvidence is undefined（未接线不评估）', async () => {
@@ -226,7 +204,7 @@ describe('Constraint Checker', () => {
       operation: 'code_implementation',
     };
 
-    const result = await constraintChecker.check(IRON_LAWS['no_completion_without_verification'], context);
+    const result = await constraintChecker.check(CONSTRAINTS['no_completion_without_verification'], context);
     expect(result.skipped).toBe(true);
     expect(result.satisfied).toBe(true);
   });
@@ -237,27 +215,21 @@ describe('Constraint Checker', () => {
       hasVerificationEvidence: true,
     };
 
-    const result = await constraintChecker.check(IRON_LAWS['no_completion_without_verification'], context);
+    const result = await constraintChecker.check(CONSTRAINTS['no_completion_without_verification'], context);
     expect(result.satisfied).toBe(true);
   });
 });
 
-describe('Constraint Levels', () => {
-  it('should have correct level for iron laws', () => {
-    Object.values(IRON_LAWS).forEach(law => {
-      expect(law.level).toBe('iron_law');
+describe('Constraint Severity', () => {
+  it('error 级约束 severity 均为 error', () => {
+    ['no_completion_without_verification', 'no_test_simplification', 'docs_freshness'].forEach(id => {
+      expect(CONSTRAINTS[id].severity).toBe('error');
     });
   });
 
-  it('should have correct level for guidelines', () => {
-    Object.values(GUIDELINES).forEach(guideline => {
-      expect(guideline.level).toBe('guideline');
-    });
-  });
-
-  it('should have correct level for prompts', () => {
-    Object.values(PROMPTS).forEach(prompt => {
-      expect(prompt.level).toBe('prompt');
+  it('warning 级约束 severity 均为 warning', () => {
+    ['no_hardcoded_credentials', 'capability_sync', 'context_doc_sync', 'governance_presence'].forEach(id => {
+      expect(CONSTRAINTS[id].severity).toBe('warning');
     });
   });
 });

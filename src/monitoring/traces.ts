@@ -38,8 +38,8 @@ const DEFAULT_CONFIG: TraceCollectorConfig = {
  * ```typescript
  * const collector = new TraceCollector({ projectPath: '/path/to/project' });
  * collector.record({
- *   constraintId: 'no_fix_without_root_cause',
- *   level: 'iron_law',
+ *   constraintId: 'no_completion_without_verification',
+ *   severity: 'error',
  *   timestamp: Date.now(),
  *   result: 'fail',
  * });
@@ -92,12 +92,12 @@ export class TraceCollector {
    */
   recordPass(
     constraintId: string,
-    level: 'iron_law' | 'guideline',
+    severity: 'error' | 'warning',
     options?: Partial<ExecutionTrace>
   ): void {
     this.record({
       constraintId,
-      level,
+      severity,
       timestamp: Date.now(),
       result: 'pass',
       ...options,
@@ -109,12 +109,12 @@ export class TraceCollector {
    */
   recordFail(
     constraintId: string,
-    level: 'iron_law' | 'guideline',
+    severity: 'error' | 'warning',
     options?: Partial<ExecutionTrace>
   ): void {
     this.record({
       constraintId,
-      level,
+      severity,
       timestamp: Date.now(),
       result: 'fail',
       ...options,
@@ -184,8 +184,8 @@ export class TraceCollector {
         return false;
       }
 
-      // 层级
-      if (filter.level && trace.level !== filter.level) {
+      // 严重性
+      if (filter.severity && trace.severity !== filter.severity) {
         return false;
       }
 

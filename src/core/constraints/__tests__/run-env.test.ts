@@ -47,7 +47,7 @@ function writeTraces(projectPath: string, lines: string[]): void {
 }
 
 const traceLine = (id: string, result: 'pass' | 'fail'): string =>
-  JSON.stringify({ constraintId: id, level: 'iron_law', timestamp: 1, result });
+  JSON.stringify({ constraintId: id, severity: 'error', timestamp: 1, result });
 
 const CORRUPT = '{"constraintId":"broken"';
 
@@ -125,17 +125,10 @@ describe('createRunEnv', () => {
   });
 });
 
-describe('配置一次装载 — rawConfig / customConstraints（ADR-0023 决策 2）', () => {
+describe('配置一次装载 — rawConfig（ADR-0023 决策 2）', () => {
   let dir: string;
 
   const writeConfig = (content: string) => writeProjectConfig(dir, content);
-
-  /** 落 `.harness/<fileName>`（夹具可能还没有 .harness 目录，先补上） */
-  const writeHarnessFile = (fileName: string, body: string) => {
-    const target = path.join(dir, '.harness', fileName);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, body, 'utf-8');
-  };
 
   beforeEach(() => {
     dir = createProjectFixture({ name: 'run-env-config' });
@@ -191,27 +184,6 @@ describe('配置一次装载 — rawConfig / customConstraints（ADR-0023 决策
     expect(resolveRunEnv().projectPath).toBe(process.cwd());
   });
 
-  it('customConstraints 取 custom_constraints 段，run 内同名文件至多读一次', () => {
-    const write = (body: string) => writeHarnessFile('custom-constraints.yml', body);
-    write('custom_constraints:\n  a:\n    level: iron_law\n    rule: 只此一份\n');
-    const env = createRunEnv(dir);
-    expect(Object.keys(env.customConstraints('custom-constraints.yml'))).toEqual(['a']);
-
-    write('custom_constraints:\n  b:\n    level: guideline\n    rule: 后来的\n');
-    expect(Object.keys(env.customConstraints('custom-constraints.yml'))).toEqual(['a']);
-  });
-
-  it('customConstraints：文件缺失 = {}；不同文件名各自 memo', () => {
-    const env = createRunEnv(dir);
-    expect(env.customConstraints('missing.yml')).toEqual({});
-
-    writeHarnessFile(
-      'other.yml',
-      'custom_constraints:\n  c:\n    level: guideline\n    rule: r\n'
-    );
-    expect(Object.keys(env.customConstraints('other.yml'))).toEqual(['c']);
-    expect(env.customConstraints('missing.yml')).toEqual({});
-  });
 });
 
 describe('context-builder 经注入的观察面取证据', () => {
@@ -235,7 +207,6 @@ describe('context-builder 经注入的观察面取证据', () => {
       },
       sourceRoots: () => ['src'],
       rawConfig: () => undefined,
-      customConstraints: () => ({}),
       capabilities: () => undefined,
     };
     return { env, limits };
@@ -251,8 +222,8 @@ describe('context-builder 经注入的观察面取证据', () => {
 
   it('hasFailingTest / hasVerificationEvidence 各按自己的窗口向 env 取数，不另开读', async () => {
     const { env, limits } = countingEnv([
-      { constraintId: 'p', level: 'iron_law', timestamp: 1, result: 'pass' },
-      { constraintId: 'f', level: 'iron_law', timestamp: 2, result: 'fail' },
+      { constraintId: 'p', severity: 'error', timestamp: 1, result: 'pass' },
+      { constraintId: 'f', severity: 'error', timestamp: 2, result: 'fail' },
     ]);
     const ctx = await buildConstraintContext({
       projectPath: dir,
@@ -268,7 +239,7 @@ describe('context-builder 经注入的观察面取证据', () => {
 
   it('窗口里没有 pass 时验证证据为 false（合并读取不改判定）', async () => {
     const { env } = countingEnv([
-      { constraintId: 'f', level: 'iron_law', timestamp: 2, result: 'fail' },
+      { constraintId: 'f', severity: 'error', timestamp: 2, result: 'fail' },
     ]);
     const ctx = await buildConstraintContext({
       projectPath: dir,

@@ -3,7 +3,7 @@
  *
  * `harness constraints report` 与 `harness constraints retire`（交互模式）共用的
  * 数据层：读取项目 traces.log，与生效集（getEffectiveConstraints）对齐，
- * 产出 check 层统计表与四类退役候选诊断。
+ * 产出 check 约束统计表与四类退役候选诊断。
  *
  * 只读：不创建目录、不写任何文件。
  */
@@ -30,7 +30,7 @@ export const FLAG_EVIDENCE_CONSTRAINT_IDS: ReadonlySet<string> = new Set([
  */
 export interface ConstraintUsageStats {
   id: string;
-  level: Constraint['level'];
+  severity: Constraint['severity'];
 
   /** trace 总行数（含 skip） */
   total: number;
@@ -96,12 +96,10 @@ export const DEFAULT_DIAGNOSE_THRESHOLDS: DiagnoseThresholds = {
  * report 数据模型
  */
 export interface ConstraintsUsageReport {
-  /** check 层统计表（生效集内每条 check 约束一行，零出现 total=0） */
+  /** check 约束统计表（生效集内每条约束一行，零出现 total=0） */
   stats: ConstraintUsageStats[];
   /** 退役候选诊断（按 zero_trigger → unevaluable → high_noise → zero_intercept 排序） */
   candidates: RetireCandidate[];
-  /** 当前生效的 prompt 条目 id（注入清单） */
-  activePromptIds: string[];
   /** 配置健康诊断（unknownIds 等） */
   lint: EffectiveConfigLint;
   /** trace 文件是否存在 */
@@ -143,7 +141,7 @@ export function readProjectTraces(projectRoot: string): ExecutionTrace[] {
  */
 export function collectUsageByConstraint(
   traces: ExecutionTrace[]
-): Map<string, Omit<ConstraintUsageStats, 'id' | 'level' | 'evaluated' | 'failRate'>> {
+): Map<string, Omit<ConstraintUsageStats, 'id' | 'severity' | 'evaluated' | 'failRate'>> {
   const map = new Map<string, { total: number; pass: number; fail: number; skip: number; firstAt?: number; lastAt?: number }>();
   for (const t of traces) {
     let agg = map.get(t.constraintId);
@@ -161,12 +159,12 @@ export function collectUsageByConstraint(
   return map;
 }
 
-function toStats(id: string, level: Constraint['level'], agg: { total: number; pass: number; fail: number; skip: number; firstAt?: number; lastAt?: number } | undefined): ConstraintUsageStats {
+function toStats(id: string, severity: Constraint['severity'], agg: { total: number; pass: number; fail: number; skip: number; firstAt?: number; lastAt?: number } | undefined): ConstraintUsageStats {
   const a = agg ?? { total: 0, pass: 0, fail: 0, skip: 0 };
   const evaluated = a.total - a.skip;
   return {
     id,
-    level,
+    severity,
     total: a.total,
     pass: a.pass,
     fail: a.fail,
@@ -181,7 +179,7 @@ function toStats(id: string, level: Constraint['level'], agg: { total: number; p
 /**
  * 退役候选诊断（纯函数）
  *
- * 每条 check 约束最多归入一个类别，优先级：
+ * 每条约束最多归入一个类别，优先级：
  * zero_trigger → unevaluable → high_noise → zero_intercept
  */
 export function diagnoseRetireCandidates(
@@ -246,21 +244,18 @@ export function buildConstraintsUsageReport(
   thresholds: Partial<DiagnoseThresholds> = {}
 ): ConstraintsUsageReport {
   const effective = getEffectiveConstraints(projectRoot);
-  const checkConstraints = effective.filter(c => c.kind === 'check');
-  const activePromptIds = effective.filter(c => c.kind === 'prompt').map(c => c.id);
 
   const tracePath = path.join(projectRoot, DEFAULT_TRACE_FILE);
   const { traces, skippedLines } = readProjectTracesReport(projectRoot);
   const usage = collectUsageByConstraint(traces);
 
-  const stats = checkConstraints.map(c => toStats(c.id, c.level, usage.get(c.id)));
+  const stats = effective.map(c => toStats(c.id, c.severity, usage.get(c.id)));
   const candidates = diagnoseRetireCandidates(stats, thresholds);
   const lint = lintEffectiveConfig(projectRoot);
 
   return {
     stats,
     candidates,
-    activePromptIds,
     lint,
     traceFileExists: fs.existsSync(tracePath),
     skippedLines,

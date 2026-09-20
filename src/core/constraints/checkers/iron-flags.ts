@@ -1,5 +1,5 @@
 /**
- * 铁律层轻量检查（工单 21）：纯上下文证据标志判定，无 I/O
+ * error 级轻量检查（工单 21）：纯上下文证据标志判定，无 I/O
  *
  * harness#174 后仅存活的 flag：hasVerificationEvidence
  *（incremental_progress / no_implementation_without_requirement 已随定义一并删除）

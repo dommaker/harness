@@ -101,7 +101,7 @@ export interface CommandDefinition {
 export const COMMAND_DEFINITIONS: CommandDefinition[] = [
   {
     command: 'check',
-    description: '检查铁律是否满足',
+    description: '检查约束是否满足',
     options: [
       // 不给缺省值：「没传 -p」与「传了 standard」必须可区分，否则生效集侧的覆盖规则恒触发、
       // config.yml 的 preset 静默失效（漂移检测侧按 config.yml 算，两边就会稳定对不上）
@@ -109,7 +109,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-s, --staged', description: '只检查暂存文件', defaultValue: false },
       { flags: '-t, --trigger <trigger>', description: '触发条件' },
       { flags: '--project-path <path>', description: '项目路径' },
-      { flags: '--list', description: '列出所有铁律' },
+      { flags: '--list', description: '列出所有约束' },
     ],
     action: { module: 'check', export: 'check' },
     optionRoutes: [

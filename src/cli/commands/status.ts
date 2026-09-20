@@ -109,11 +109,11 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
   log(io, chalk.blue('📈 约束统计:'));
   log(io);
 
-  // Iron Laws
-  const ironLawSummaries = summaries.filter((s: TraceSummary) => s.level === 'iron_law');
-  if (ironLawSummaries.length > 0) {
-    log(io, chalk.red('🔴 Iron Laws:'));
-    ironLawSummaries.forEach((s: TraceSummary) => {
+  // severity='error'
+  const errorSummaries = summaries.filter((s: TraceSummary) => s.severity === 'error');
+  if (errorSummaries.length > 0) {
+    log(io, chalk.red('🔴 error 级约束:'));
+    errorSummaries.forEach((s: TraceSummary) => {
       const status = s.passRate >= 1 ? '✅' : '❌';
       log(io, `  ${status} ${s.constraintId}`);
       if (options.detail) {
@@ -123,11 +123,11 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
     log(io);
   }
 
-  // Guidelines
-  const guidelineSummaries = summaries.filter((s: TraceSummary) => s.level === 'guideline');
-  if (guidelineSummaries.length > 0) {
-    log(io, chalk.yellow('🟡 Guidelines:'));
-    guidelineSummaries.forEach((s: TraceSummary) => {
+  // severity='warning'
+  const warningSummaries = summaries.filter((s: TraceSummary) => s.severity === 'warning');
+  if (warningSummaries.length > 0) {
+    log(io, chalk.yellow('🟡 warning 级约束:'));
+    warningSummaries.forEach((s: TraceSummary) => {
       const status = s.passRate >= 0.8 ? '✅' : s.passRate >= 0.5 ? '⚠️' : '❌';
       log(io, `  ${status} ${s.constraintId}`);
       if (options.detail) {

@@ -1,13 +1,11 @@
 /**
  * checker.ts 测试
  *
- * ADR-0001：只覆盖存活 check 约束的 checker 行为；
- * prompt 类约束的短路语义见 'Prompt constraints' 一节；
- * 已退役/被吸收约束的用例随之移除。
+ * ADR-0029：只覆盖存活 check 约束的 checker 行为；
+ * prompt 面已删除，其短路用例随之移除。
  */
 
 import { ConstraintChecker, checkConstraint } from '../core/constraints/checker';
-import { PROMPTS } from '../core/constraints/definitions';
 import type { ConstraintContext } from '../types/constraint';
 import { rmSync, mkdtempSync } from 'fs';
 import { join } from 'path';
@@ -31,7 +29,7 @@ describe('ConstraintChecker', () => {
     }
   });
 
-  describe('Iron Laws', () => {
+  describe('error 级约束', () => {
     it('should check no_completion_without_verification', async () => {
       const contextWithEvidence: ConstraintContext = {
         operation: 'code_implementation',
@@ -44,12 +42,12 @@ describe('ConstraintChecker', () => {
       };
 
       const resultWithEvidence = await checker.check(
-        { id: 'no_completion_without_verification', kind: 'check', level: 'iron_law', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'no_completion_without_verification', kind: 'check', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithEvidence
       );
 
       const resultWithoutEvidence = await checker.check(
-        { id: 'no_completion_without_verification', kind: 'check', level: 'iron_law', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'no_completion_without_verification', kind: 'check', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutEvidence
       );
 
@@ -58,7 +56,7 @@ describe('ConstraintChecker', () => {
     });
   });
 
-  describe('Guidelines', () => {
+  describe('warning 级约束', () => {
     it('should check capability_sync without CAPABILITIES.md', async () => {
       // 注意：tempDir 在 harness 仓库内，如果有缓存的变更，会检查到代码变更
       // 所以需要创建一个无代码变更的场景或创建 CAPABILITIES.md
@@ -74,7 +72,7 @@ describe('ConstraintChecker', () => {
       fs.writeFileSync(capabilitiesPath, '# Capabilities\n');
 
       const result = await checker.check(
-        { id: 'capability_sync', kind: 'check', level: 'guideline', rule: 'CAPABILITY SYNC', message: 'test', trigger: 'commit', enforcement: 'test' },
+        { id: 'capability_sync', kind: 'check', severity: 'warning', rule: 'CAPABILITY SYNC', message: 'test', trigger: 'commit', enforcement: 'test' },
         context
       );
 
@@ -83,24 +81,6 @@ describe('ConstraintChecker', () => {
 
       // 清理
       fs.unlinkSync(capabilitiesPath);
-    });
-  });
-
-  describe('Prompt constraints（ADR-0001：不执行 checker，check() 短路 satisfied）', () => {
-    it('所有内置 prompt 约束 check() 均短路通过', async () => {
-      const context: ConstraintContext = { operation: 'code_implementation' };
-      for (const prompt of Object.values(PROMPTS)) {
-        const result = await checker.check(prompt, context);
-        expect(result.satisfied).toBe(true);
-      }
-    });
-
-    it('prompt 短路不产生 requiredAction/message', async () => {
-      const context: ConstraintContext = { operation: 'code_implementation' };
-      const result = await checker.check(PROMPTS['no_fix_without_root_cause'], context);
-      expect(result.satisfied).toBe(true);
-      expect(result.message).toBeUndefined();
-      expect(result.requiredAction).toBeUndefined();
     });
   });
 
@@ -120,8 +100,8 @@ describe('ConstraintChecker', () => {
         operation: 'code_implementation',
       };
 
-      const result = await checkConstraint('no_fuzzy_completion_claim', context);
-      expect(result.id).toBe('no_fuzzy_completion_claim');
+      const result = await checkConstraint('no_completion_without_verification', context);
+      expect(result.id).toBe('no_completion_without_verification');
       expect(result.satisfied).toBe(true);
     });
 

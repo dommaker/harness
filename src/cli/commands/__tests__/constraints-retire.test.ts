@@ -1,10 +1,13 @@
 /**
- * harness constraints retire 测试（ADR-0001 P5）
+ * harness constraints retire 测试（ADR-0001 P5，ADR-0029 收窄）
  *
  * 执行逻辑（retireConstraint，纯函数化）：config.yml 写入形态、
- * KnowledgeStore 记录、治理注入段同步（CLAUDE.md / AGENTS.md 落点路由）、重复 retire / 未知 id 保护。
+ * KnowledgeStore 记录、重复 retire / 未知 id 保护。
  * 交互流程（runRetireInteractive）：注入 stdin 流测核心分支
- * （候选选择 + iron 二次确认拒绝；无候选手动输入 + 确认执行）。
+ * （候选选择 + error 级二次确认拒绝；无候选手动输入 + 确认执行）。
+ *
+ * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役，
+ * 相关用例移除。
  *
  * 使用真实临时目录。
  */
@@ -16,7 +19,6 @@ import { PassThrough, Writable } from 'stream';
 import * as yaml from 'js-yaml';
 import { getConstraint } from '../../../core/constraints/definitions';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
-import { renderConstraintsSection } from '../../../core/constraints/injection-renderer';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import { retireConstraint, constraintsRetire, runRetireInteractive, printRetireResult } from '../constraints-retire';
 import { createProjectFixture, writeProjectTraces } from '../../../test-setup/project-fixture';
@@ -26,27 +28,6 @@ const FIXED_NOW = new Date('2026-08-08T12:00:00.000Z');
 function readConfig(root: string): any {
   return yaml.load(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8'));
 }
-
-const CUSTOM_YML = `
-custom_constraints:
-  my_custom_rule:
-    level: iron_law
-    rule: 禁止引入 X
-    message: X 已由平台能力替代
-    promptInjection: 禁止引入 X
-`;
-
-function writeCustom(root: string, yml: string): void {
-  fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
-  fs.writeFileSync(path.join(root, '.harness', 'custom-constraints.yml'), yml, 'utf-8');
-}
-
-function readCustom(root: string): any {
-  return yaml.load(fs.readFileSync(path.join(root, '.harness', 'custom-constraints.yml'), 'utf-8'));
-}
-
-beforeEach(() => {
-});
 
 let io: CapturingIO;
 beforeEach(() => {
@@ -68,7 +49,7 @@ describe('retireConstraint 执行逻辑', () => {
     });
 
     expect(result.status).toBe('retired');
-    expect(result.isIronLaw).toBe(false);
+    expect(result.isError).toBe(false);
     expect(result.stats).toEqual({ total: 3, fail: 1, failRate: 1 / 3 });
 
     const config = readConfig(root);
@@ -84,14 +65,14 @@ describe('retireConstraint 执行逻辑', () => {
   it('config.yml 不存在时创建；已有其他配置时保留', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     fs.mkdirSync(path.join(root, '.harness'), { recursive: true });
-    fs.writeFileSync(path.join(root, '.harness', 'config.yml'), 'preset: strict\nscenes:\n  - llm-app\n', 'utf-8');
+    fs.writeFileSync(path.join(root, '.harness', 'config.yml'), 'preset: strict\nci:\n  platform: gitlab\n', 'utf-8');
 
     const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
 
     const config = readConfig(root);
     expect(config.preset).toBe('strict');
-    expect(config.scenes).toEqual(['llm-app']);
+    expect(config.ci.platform).toBe('gitlab');
     expect(config.constraints.capability_sync.enabled).toBe(false);
     expect(config.constraints.capability_sync.retired.reason).toBe('');
   });
@@ -123,77 +104,15 @@ describe('retireConstraint 执行逻辑', () => {
     expect(entry!.content).toContain(FIXED_NOW.toISOString());
   });
 
-  it('CLAUDE.md 含标记段时同步重渲染（退役条目消失、标记保留）', () => {
+  it('退役结果打印含回滚语义提示（恢复 = 删 config.yml 段）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    // 先用当前生效集渲染一个合法注入段
-    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
-    expect(before).toContain('no_completion_without_verification');
-    fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}\n其他内容\n`, 'utf-8');
-
-    const result = retireConstraint(root, 'no_completion_without_verification', { now: FIXED_NOW });
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
-    expect(result.injectionSynced).toBe(true);
-
-    const after = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8');
-    expect(after).toContain('HARNESS_CONSTRAINTS_START');
-    expect(after).toContain('HARNESS_CONSTRAINTS_END');
-    expect(after).not.toContain('**no_completion_without_verification**');
-    expect(after).toContain('其他内容');
 
     printRetireResult(result, io);
     const output = io.outText();
-    expect(output).toContain('已同步 CLAUDE.md 注入段');
     expect(output).toContain('恢复方法');
-  });
-
-  it('CLAUDE.md 无标记段或不存在时不创建、不同步', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# 用户自写\n', 'utf-8');
-    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
-    expect(result.status).toBe('retired');
-    expect(result.injectionSynced).toBe(false);
-    expect(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8')).toBe('# 用户自写\n');
-  });
-
-  it('新模型仓：AGENTS.md PRESERVE:governance 内含标记段时同步重渲染（无 CLAUDE.md）', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
-    expect(before).toContain('no_completion_without_verification');
-    fs.writeFileSync(
-      path.join(root, 'AGENTS.md'),
-      `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n\n其他内容\n`,
-      'utf-8'
-    );
-
-    const result = retireConstraint(root, 'no_completion_without_verification', { now: FIXED_NOW });
-    expect(result.status).toBe('retired');
-    expect(result.injectionSynced).toBe(true);
-    expect(result.injectionFile).toBe('AGENTS.md');
-
-    const after = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf-8');
-    expect(after).toContain('HARNESS_CONSTRAINTS_START');
-    expect(after).toContain('HARNESS_CONSTRAINTS_END');
-    expect(after).not.toContain('**no_completion_without_verification**');
-    expect(after).toContain('PRESERVE:governance');
-    expect(after).toContain('其他内容');
-    // 不制造 CLAUDE.md
-    expect(fs.existsSync(path.join(root, 'CLAUDE.md'))).toBe(false);
-  });
-
-  it('两文件均有标记段时旧模型仓豁免：只同步 CLAUDE.md，AGENTS.md 不动', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
-    fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}`, 'utf-8');
-    const agentsMd = `# AGENTS.md\n\n<!-- PRESERVE:governance -->\n## Governance Rules\n${before}<!-- /PRESERVE:governance -->\n`;
-    fs.writeFileSync(path.join(root, 'AGENTS.md'), agentsMd, 'utf-8');
-
-    const result = retireConstraint(root, 'no_completion_without_verification', { now: FIXED_NOW });
-    expect(result.status).toBe('retired');
-    expect(result.injectionSynced).toBe(true);
-    expect(result.injectionFile).toBe('CLAUDE.md');
-
-    expect(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8')).not.toContain('**no_completion_without_verification**');
-    expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf-8')).toBe(agentsMd);
+    expect(output).toContain('constraints.capability_sync');
   });
 
   it('重复 retire：already_retired，不覆盖原 retired 元数据', () => {
@@ -217,11 +136,11 @@ describe('retireConstraint 执行逻辑', () => {
     expect(fs.existsSync(path.join(root, '.harness'))).toBe(false);
   });
 
-  it('check 层 iron：isIronLaw 标记为 true（供交互模式二次确认）', () => {
+  it('severity=error：isError 标记为 true（供交互模式二次确认）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     const result = retireConstraint(root, 'docs_freshness', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
-    expect(result.isIronLaw).toBe(true);
+    expect(result.isError).toBe(true);
   });
 
   it('退役后生效集不再包含该约束', () => {
@@ -231,85 +150,16 @@ describe('retireConstraint 执行逻辑', () => {
     expect(getEffectiveConstraints(root).some(c => c.id === 'capability_sync')).toBe(false);
   });
 
-  it('custom 约束退役：落 custom-constraints.yml retired 段（不写 config.yml），生效集与注入段移除', () => {
+  it('恢复：删除 config.yml constraints.<id> 段后回到生效集', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
-    const before = renderConstraintsSection(getEffectiveConstraints(root), '0.0.0-test');
-    expect(before).toContain('**my_custom_rule**');
-    fs.writeFileSync(path.join(root, 'CLAUDE.md'), `# 项目\n\n## Governance Rules\n${before}\n其他内容\n`, 'utf-8');
+    retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+    expect(getEffectiveConstraints(root).some(c => c.id === 'capability_sync')).toBe(false);
 
-    const result = retireConstraint(root, 'my_custom_rule', { reason: '作用对象已从代码库消失', now: FIXED_NOW });
+    const config = readConfig(root);
+    delete config.constraints.capability_sync;
+    fs.writeFileSync(path.join(root, '.harness', 'config.yml'), yaml.dump(config), 'utf-8');
 
-    expect(result.status).toBe('retired');
-    expect(result.landing).toBe('custom-constraints.yml');
-    expect(result.injectionSynced).toBe(true);
-    // config.yml 不产生该 id 段
-    expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
-    // yml 保留规则原文 + retired 元数据
-    const custom = readCustom(root).custom_constraints.my_custom_rule;
-    expect(custom.rule).toBe('禁止引入 X');
-    expect(custom.promptInjection).toBe('禁止引入 X');
-    expect(custom.retired.at).toBe(FIXED_NOW.toISOString());
-    expect(custom.retired.reason).toBe('作用对象已从代码库消失');
-    // 生效集移除
-    expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(false);
-    // 注入段同步移除
-    const after = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf-8');
-    expect(after).not.toContain('**my_custom_rule**');
-    expect(after).toContain('其他内容');
-    // 打印的恢复提示指向 yml
-    printRetireResult(result, io);
-    const output = io.outText();
-    expect(output).toContain('custom_constraints.my_custom_rule.retired');
-  });
-
-  it('custom 重复退役：yml 已带 retired → already_retired，不覆盖原元数据', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
-    const first = retireConstraint(root, 'my_custom_rule', { reason: '第一次', now: FIXED_NOW });
-    expect(first.status).toBe('retired');
-
-    const later = new Date('2026-08-09T00:00:00.000Z');
-    const second = retireConstraint(root, 'my_custom_rule', { reason: '第二次', now: later });
-    expect(second.status).toBe('already_retired');
-
-    const custom = readCustom(root).custom_constraints.my_custom_rule;
-    expect(custom.retired.at).toBe(FIXED_NOW.toISOString());
-    expect(custom.retired.reason).toBe('第一次');
-  });
-
-  it('custom 历史落点（config.yml enabled:false）仍判定 already_retired', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
-    fs.writeFileSync(path.join(root, '.harness', 'config.yml'), 'constraints:\n  my_custom_rule:\n    enabled: false\n', 'utf-8');
-    const result = retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
-    expect(result.status).toBe('already_retired');
-  });
-
-  it('custom 退役 KnowledgeStore 记录包含 promptInjection（规则原文完整）', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
-    const result = retireConstraint(root, 'my_custom_rule', { reason: '由新机制覆盖', now: FIXED_NOW });
-    expect(result.status).toBe('retired');
-
-    const store = new FileKnowledgeStore({ baseDir: path.join(root, '.harness', 'knowledge') });
-    const entry = store.get('constraint-retired-my_custom_rule');
-    expect(entry).toBeDefined();
-    expect(entry!.content).toContain('禁止引入 X');
-    expect(entry!.content).toContain('promptInjection: 禁止引入 X');
-  });
-
-  it('custom 恢复：删除 yml retired 段后回到生效集', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
-    retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
-    expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(false);
-
-    const custom = readCustom(root);
-    delete custom.custom_constraints.my_custom_rule.retired;
-    fs.writeFileSync(path.join(root, '.harness', 'custom-constraints.yml'), yaml.dump(custom), 'utf-8');
-
-    expect(getEffectiveConstraints(root).some(c => c.id === 'my_custom_rule')).toBe(true);
+    expect(getEffectiveConstraints(root).some(c => c.id === 'capability_sync')).toBe(true);
   });
 });
 
@@ -322,44 +172,29 @@ describe('落盘字节与装载次数冻结（harness#137）', () => {
   it('内置退役落 config.yml：逐字节冻结', () => {
     const root = createProjectFixture({
       name: 'harness-retire-test',
-      config: '# 项目配置\npreset: standard\nscenes:\n  - llm-app\n',
+      config: '# 项目配置\npreset: standard\nci:\n  platform: gitlab\n',
     });
 
     retireConstraint(root, 'capability_sync', { reason: '逐字节冻结', now: FIXED_NOW });
 
     expect(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8')).toBe(
-      'preset: standard\nscenes:\n  - llm-app\nconstraints:\n  capability_sync:\n    enabled: false\n' +
+      'preset: standard\nci:\n  platform: gitlab\nconstraints:\n  capability_sync:\n    enabled: false\n' +
         "    retired:\n      at: '2026-08-08T12:00:00.000Z'\n      reason: 逐字节冻结\n" +
         '      stats:\n        total: 0\n        fail: 0\n        failRate: 0\n'
     );
   });
 
-  it('custom 退役落 custom-constraints.yml：逐字节冻结（规则原文保留、retired 段追加在末尾）', () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, `# 自定义约束\n${CUSTOM_YML}`);
-
-    retireConstraint(root, 'my_custom_rule', { reason: '逐字节冻结', now: FIXED_NOW });
-
-    expect(fs.readFileSync(path.join(root, '.harness', 'custom-constraints.yml'), 'utf-8')).toBe(
-      'custom_constraints:\n  my_custom_rule:\n    level: iron_law\n    rule: 禁止引入 X\n' +
-        '    message: X 已由平台能力替代\n    promptInjection: 禁止引入 X\n' +
-        "    retired:\n      at: '2026-08-08T12:00:00.000Z'\n      reason: 逐字节冻结\n" +
-        '      stats:\n        total: 0\n        fail: 0\n        failRate: 0\n'
-    );
-  });
-
-  it('一次 retireConstraint 只装载一次项目配置（此前 custom 路径走 3 次 load）', async () => {
+  it('一次 retireConstraint 只装载一次项目配置', async () => {
     const { ProjectConfigLoader } = await import('../../../core/project-config-loader');
     const loadSpy = jest.spyOn(ProjectConfigLoader.prototype, 'load');
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
     loadSpy.mockClear();
 
-    retireConstraint(root, 'my_custom_rule', { now: FIXED_NOW });
+    retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(loadSpy).toHaveBeenCalledTimes(1);
 
     loadSpy.mockClear();
-    retireConstraint(root, 'my_custom_rule', { now: new Date('2026-08-09T00:00:00.000Z') });
+    retireConstraint(root, 'capability_sync', { now: new Date('2026-08-09T00:00:00.000Z') });
     expect(loadSpy).toHaveBeenCalledTimes(1);
     loadSpy.mockRestore();
   });
@@ -380,24 +215,24 @@ describe('constraintsRetire 非交互直达', () => {
     }
   });
 
-  it('--yes 直达 iron 退役：打印额外警示并落盘', async () => {
+  it('--yes 直达 error 级退役：打印额外警示并落盘', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
-    expect(output).toContain('Iron Law');
+    expect(output).toContain('error 级约束');
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
     expect(config.constraints.docs_freshness.enabled).toBe(false);
   });
 
-  it('--yes 直达非 iron（guideline）退役：不打印 iron 警示并落盘', async () => {
+  it('--yes 直达 warning 级退役：不打印 error 级警示并落盘', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
-    expect(output).not.toContain('Iron Law');
+    expect(output).not.toContain('是一条 error 级约束');
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
@@ -442,10 +277,10 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     return { input, output, text: () => chunks.join(''), done: () => clearInterval(timer) };
   }
 
-  it('候选编号选择 + iron 二次确认拒绝 → 不落盘', async () => {
+  it('候选编号选择 + error 级二次确认拒绝 → 不落盘', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    // 无 trace → 候选全部为零触发，1 号候选是第一条 iron（no_completion_without_verification）
-    const streams = makeIo(['1', 'n']); // 选 1 号 → iron 确认拒绝
+    // 无 trace → 候选全部为零触发，1 号候选是第一条 error 级（no_completion_without_verification）
+    const streams = makeIo(['1', 'n']); // 选 1 号 → error 级确认拒绝
     const printed = captureLog();
 
     await runRetireInteractive(root, streams);
@@ -463,7 +298,6 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     // 所有 check 约束给少量健康数据（低于一切候选阈值）
     const healthy = getEffectiveConstraints(root)
-      .filter(c => c.kind === 'check')
       .flatMap(c => [
         { constraintId: c.id, result: 'pass' as const },
         { constraintId: c.id, result: 'pass' as const, timestamp: 1700000001000 },
@@ -492,7 +326,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, 'traces.log'),
-      '{"constraintId":"a","level":"iron_law","timestamp":1700000000000,"result":"pass"}\n{bad json\n{also bad\n',
+      '{"constraintId":"a","severity":"error","timestamp":1700000000000,"result":"pass"}\n{bad json\n{also bad\n',
       'utf-8'
     );
 
@@ -538,7 +372,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, 'traces.log'),
-      '{"constraintId":"a","level":"iron_law","timestamp":1700000000000,"result":"pass"}\n{bad json\n',
+      '{"constraintId":"a","severity":"error","timestamp":1700000000000,"result":"pass"}\n{bad json\n',
       'utf-8'
     );
 
@@ -551,32 +385,9 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     expect(readConfig(root).constraints.no_hardcoded_credentials.enabled).toBe(false);
   });
 
-  it('无候选 → 手动输入 custom id → 确认执行 → 落 custom-constraints.yml', async () => {
-    const root = createProjectFixture({ name: 'harness-retire-test' });
-    writeCustom(root, CUSTOM_YML);
-    // 所有 check 约束给少量健康数据（低于一切候选阈值）
-    const healthy = getEffectiveConstraints(root)
-      .filter(c => c.kind === 'check')
-      .flatMap(c => [
-        { constraintId: c.id, result: 'pass' as const },
-        { constraintId: c.id, result: 'pass' as const, timestamp: 1700000001000 },
-        { constraintId: c.id, result: 'fail' as const, timestamp: 1700000002000 },
-      ]);
-    writeProjectTraces(root, healthy);
-
-    const streams = makeIo(['my_custom_rule', '作用对象消失', 'y']);
-    await runRetireInteractive(root, streams);
-    streams.done();
-
-    const custom = readCustom(root).custom_constraints.my_custom_rule;
-    expect(custom.retired.reason).toBe('作用对象消失');
-    expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
-  });
-
   it('无候选 → 手动输入未知 id → 提示不存在并取消', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     const healthy = getEffectiveConstraints(root)
-      .filter(c => c.kind === 'check')
       .flatMap(c => [{ constraintId: c.id, result: 'pass' as const }]);
     writeProjectTraces(root, healthy);
 

@@ -39,7 +39,7 @@ describe('collectConstraints（收集模式，不抛）', () => {
 
   it('违规铁律如实进 ironLaws：satisfied=false 且 passed=false', async () => {
     const result = await checker.collectConstraints(VIOLATING);
-    const violated = result.ironLaws.find((r: ConstraintResult) => r.id === 'no_completion_without_verification');
+    const violated = result.errors.find((r: ConstraintResult) => r.id === 'no_completion_without_verification');
     expect(violated).toBeDefined();
     expect(violated!.satisfied).toBe(false);
     expect(result.passed).toBe(false);
@@ -52,20 +52,20 @@ describe('collectConstraints（收集模式，不抛）', () => {
       ...VIOLATING,
       extraTriggers: ['test_creation'],
     });
-    const ids = result.ironLaws.map((r: ConstraintResult) => r.id);
+    const ids = result.errors.map((r: ConstraintResult) => r.id);
     expect(ids).toContain('no_completion_without_verification');
     expect(ids).toContain('no_test_simplification');
   });
 
   it('guidelines 照常执行，warningCount 与不满意条目同口径', async () => {
     const result = await checker.collectConstraints(VIOLATING);
-    expect(result.guidelines.length).toBeGreaterThan(0);
-    expect(result.warningCount).toBe(result.guidelines.filter((g: ConstraintResult) => !g.satisfied).length);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warningCount).toBe(result.warnings.filter((g: ConstraintResult) => !g.satisfied).length);
   });
 
   it('干净上下文对照：passed=true、ironLaws 全满意', async () => {
     const result = await checker.collectConstraints(CLEAN);
     expect(result.passed).toBe(true);
-    expect(result.ironLaws.every((r: ConstraintResult) => r.satisfied)).toBe(true);
+    expect(result.errors.every((r: ConstraintResult) => r.satisfied)).toBe(true);
   });
 });

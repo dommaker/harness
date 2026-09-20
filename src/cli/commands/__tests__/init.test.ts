@@ -308,17 +308,6 @@ describe('init command', () => {
     });
   });
 
-  describe('custom-constraints', () => {
-    it('应该跳过创建当已存在', async () => {
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-      existingFiles.add(`${PROJECT}/.harness/custom-constraints.yml`);
-
-      await init({ preset: 'standard', projectPath: PROJECT }, io);
-      expect(io.outText()).toContain('custom-constraints.yml 已存在');
-    });
-  });
-
   describe('governance', () => {
     it('应该在配置中包含 governance 段', async () => {
       mockFs.mkdir.mockResolvedValue(undefined);

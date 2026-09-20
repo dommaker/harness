@@ -49,8 +49,6 @@ export interface GovernanceInfo {
   hasConfig: boolean;
   preset?: string;
   hasClaudeGovernance: boolean;
-  ironLaws?: number;
-  guidelines?: number;
 }
 
 /**
@@ -114,11 +112,7 @@ export async function buildAgentsMd(projectPath: string, srcDirs: string[]): Pro
     lines.push(`- 治理配置：\`.harness/config.yml\`${governance.preset ? `（preset: ${governance.preset}）` : ''}`);
   }
   if (governance.hasClaudeGovernance) {
-    const counts = [
-      governance.ironLaws !== undefined ? `Iron Laws ${governance.ironLaws} 条` : null,
-      governance.guidelines !== undefined ? `Guidelines ${governance.guidelines} 条` : null,
-    ].filter(Boolean).join('、');
-    lines.push(`- 约束清单：\`CLAUDE.md\` Governance Rules 块${counts ? `（${counts}）` : ''}`);
+    lines.push('- 约束清单：`CLAUDE.md` Governance Rules 块');
   }
   if (!governance.hasConfig && !governance.hasClaudeGovernance) {
     lines.push('- 未检测到 harness 治理配置，可运行 `harness init` 初始化');
@@ -208,7 +202,7 @@ async function listWorkspaceMembers(dir: string): Promise<string[]> {
   }
 }
 
-/** 收集治理信息：.harness/config.yml 与 CLAUDE.md 治理块（含铁律/指南计数） */
+/** 收集治理信息：.harness/config.yml 与 CLAUDE.md 治理块 */
 async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
   const info: GovernanceInfo = { hasConfig: false, hasClaudeGovernance: false };
 
@@ -224,28 +218,13 @@ async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
 
   try {
     const claude = await fs.readFile(path.join(projectPath, 'CLAUDE.md'), 'utf-8');
-    // 契约在场判定收口 injection-writer.hasGovernanceContract（#83，与 presence/landing 同谓词）
-    if (hasGovernanceContract(claude)) {
-      info.hasClaudeGovernance = true;
-      info.ironLaws = countConstraintBullets(claude, 'Iron Laws');
-      info.guidelines = countConstraintBullets(claude, 'Guidelines');
-    }
+    // 契约在场判定收口 injection-writer.hasGovernanceContract（#83，与 presence 同谓词）
+    info.hasClaudeGovernance = hasGovernanceContract(claude);
   } catch {
     // CLAUDE.md 不存在
   }
 
   return info;
-}
-
-/** 统计 CLAUDE.md 指定约束分节下的条目数（`- **key**:` 行），分节不存在时返回 undefined */
-function countConstraintBullets(content: string, section: string): number | undefined {
-  const heading = new RegExp(`^###\\s+${section}[^\\n]*$`, 'm').exec(content);
-  if (!heading) return undefined;
-  const rest = content.slice(heading.index + heading[0].length);
-  const end = rest.search(/^###\s|^\s*<!--\s*HARNESS_CONSTRAINTS_END/m);
-  const block = end === -1 ? rest : rest.slice(0, end);
-  const items = block.match(/^-\s+\*\*[A-Za-z0-9_]+\*\*/gm);
-  return items ? items.length : 0;
 }
 
 /** 判断 .harness/knowledge 目录是否存在（只判存在性，不统计条数——条数易变，见 buildAgentsMd 注释） */

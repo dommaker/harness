@@ -1,10 +1,9 @@
 /**
- * harness constraints report —— 约束使用报告（ADR-0001 决策 3/4）
+ * harness constraints report —— 约束使用报告（ADR-0001 决策 3/4，ADR-0029 收窄）
  *
  * 只读。面向"人审约束"场景：
- * - check 层统计表（total/pass/fail/skip、fail 率、首次/最近触发）
+ * - check 约束统计表（total/pass/fail/skip、fail 率、首次/最近触发）
  * - 退役候选诊断（零触发/零拦截/不可评估/高噪），retire 交互模式的数据源
- * - 当前生效 prompt 注入清单
  * - 配置健康（unknownIds 残留提示）
  * - --export [file]：脱敏 markdown 摘要（不含项目路径）
  */
@@ -21,8 +20,6 @@ import {
   type DiagnoseThresholds,
 } from '../../core/constraints/usage-report';
 import { getConstraintsMeta } from './constraints';
-import { detectInjectionDrift, type InjectionDrift } from '../../core/constraints/injection-drift';
-import { GOVERNANCE_HEADING } from '../../core/constraints/injection-writer';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ConstraintsReportOptions {
@@ -75,7 +72,7 @@ export function renderExportMarkdown(
   }
   lines.push('');
 
-  lines.push('## 统计表（check 层）');
+  lines.push('## 统计表');
   lines.push('');
   lines.push('| id | total | pass | fail | skip | fail 率 | 首次触发 | 最近触发 |');
   lines.push('| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |');
@@ -110,43 +107,6 @@ export function renderExportMarkdown(
 }
 
 /**
- * 渲染"注入漂移"小节的文本行（ADR-0001 决策 7：详细条目级差异进 report）
- *
- * 返回纯文本行数组（不含 chalk 着色），调用方逐行 console.log。
- */
-export function renderInjectionDriftLines(drift: InjectionDrift): string[] {
-  const lines: string[] = [];
-  if (drift.notInjected) {
-    lines.push('  CLAUDE.md / AGENTS.md 均无约束注入标记段（未注入，不算漂移）；可运行 npx @dommaker/harness init 注入');
-    if (drift.duplicateHeading) {
-      lines.push(`  另检测到多个 "${GOVERNANCE_HEADING}" 标题（历史遗留重复章节），建议手工清理后重跑 npx @dommaker/harness init`);
-    }
-    return lines;
-  }
-  if (!drift.hasDrift) {
-    lines.push('  无漂移');
-    return lines;
-  }
-  if (drift.versionDrift) {
-    lines.push(`  版本漂移: 注入段版本 (${drift.versionDrift.actual}) ≠ 当前 harness 版本 (${drift.versionDrift.expected})`);
-  }
-  if (drift.contentDrift) {
-    lines.push('  内容漂移（条目级差异）:');
-    for (const l of drift.contentDrift.missing) {
-      lines.push(`    缺失: ${l}`);
-    }
-    for (const l of drift.contentDrift.extra) {
-      lines.push(`    多余: ${l}`);
-    }
-  }
-  if (drift.duplicateHeading) {
-    lines.push(`  重复章节: 标记段之外还存在另一个 "${GOVERNANCE_HEADING}" 标题`);
-  }
-  lines.push(`  修复: ${drift.fixHint}`);
-  return lines;
-}
-
-/**
  * CLI handler: harness constraints report
  */
 export async function constraintsReport(options: ConstraintsReportOptions = {}, io: CommandIO = processIO): Promise<CommandResult> {
@@ -173,7 +133,7 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
   log(io);
 
   // 统计表
-  log(io, chalk.bold('统计表（check 层）:'));
+  log(io, chalk.bold('统计表:'));
   for (const s of report.stats) {
     log(io, `  ${renderStatsRow(s)}`);
   }
@@ -191,13 +151,6 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
   }
   log(io);
 
-  // 注入清单
-  log(io, chalk.bold(`当前生效 prompt 注入（${report.activePromptIds.length} 条）:`));
-  for (const id of report.activePromptIds) {
-    log(io, `  ${id}`);
-  }
-  log(io);
-
   // 配置健康
   if (report.lint.unknownIds.length > 0) {
     log(io, chalk.yellow('⚠️  配置健康:'));
@@ -206,14 +159,6 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
     }
     log(io);
   }
-
-  // 注入漂移（ADR-0001 决策 7：条目级差异 + 修复指引；--export 摘要不含本地漂移状态）
-  log(io, chalk.bold('注入漂移:'));
-  const drift = detectInjectionDrift(projectRoot);
-  for (const line of renderInjectionDriftLines(drift)) {
-    log(io, drift.hasDrift ? chalk.yellow(line) : line);
-  }
-  log(io);
 
   // --export
   if (options.export !== undefined && options.export !== false) {

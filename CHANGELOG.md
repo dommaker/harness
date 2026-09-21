@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-21
+
+### Changes
+- fix(knowledge): lint run() 接存量枚举校验 + CONTEXT 值域改正本指针（M1 复审收口）
+- test(constraints): usage-report 包根导出补冻结清单 + ADR-0030 记名（E1 复盘修正 M3.4）
+- fix(cli): constraints report JSON 分支不可达——子命令 --json 换名 --json-output（E1 复盘修正 M3.1）
+- feat(knowledge): maturity/layer 枚举写入闸 + lint 校验（E1 复盘修正 M1）
+- docs(core): CONTEXT.md 补 usage-report 公共导出说明（#602）
+- feat(constraints): usage-report 数据层加入包根公共导出（studio#602 E1 (a) 链路）
+- chore(cli): 移除 posteval-plan 死命令及脚手架 plan coverage 段（#173）
+
 ## [1.10.0] - 2026-09-20
 
 ### Changes

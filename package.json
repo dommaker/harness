@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/harness",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "通用工程约束框架 - 约束检查（severity 分级）、检查点验证、测试门控",
   "keywords": [
     "harness",

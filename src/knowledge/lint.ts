@@ -47,6 +47,7 @@ export class KnowledgeLinter {
     issues.push(...this.checkOutdated(entries));
     issues.push(...this.checkDuplicates(entries));
     issues.push(...this.checkContradictions(entries));
+    issues.push(...this.checkInvalidEnums(entries));
 
     // 自动修复
     let fixed = 0;
@@ -207,6 +208,55 @@ export class KnowledgeLinter {
   }
 
   /**
+   * 检查存量条目的 maturity/layer 枚举值域（E1 复盘修正 M1 收口：
+   * 写入闸只挡新写，存量脏值由本检查进 lint 报告；缺字段在存量侧算脏值）。
+   * 与 validateEntry 共用同一判定正本（invalidEnumIssues），autoFix 不动此类
+   * issue——枚举映射需人工裁定，不自动改。
+   */
+  checkInvalidEnums(entries: KnowledgeEntry[]): LintIssue[] {
+    const issues: LintIssue[] = [];
+    for (const entry of entries) {
+      issues.push(...this.invalidEnumIssues(entry, true, entry.id));
+    }
+    return issues;
+  }
+
+  /**
+   * maturity/layer 枚举判定正本。missingIsDirty=false 时字段缺省跳过
+   * （pre-ingest 调用方只传四字段的兼容面）；存量扫描传 true（缺字段即脏）。
+   */
+  private invalidEnumIssues(
+    fields: { maturity?: string; layer?: string },
+    missingIsDirty: boolean,
+    entryId?: string
+  ): LintIssue[] {
+    const issues: LintIssue[] = [];
+    if ((missingIsDirty || fields.maturity !== undefined) && !(MATURITY_LEVELS as readonly string[]).includes(fields.maturity as string)) {
+      issues.push({
+        type: 'invalid_enum',
+        entryId,
+        severity: 'high',
+        description: fields.maturity === undefined
+          ? `maturity is missing (declared values: ${MATURITY_LEVELS.join(' | ')}).`
+          : `maturity "${fields.maturity}" is not a declared value (${MATURITY_LEVELS.join(' | ')}).`,
+        suggestion: 'Map to a declared maturity (e.g. pending → draft) before writing; the store write gate rejects undeclared values.',
+      });
+    }
+    if ((missingIsDirty || fields.layer !== undefined) && !(STORAGE_LAYERS as readonly string[]).includes(fields.layer as string)) {
+      issues.push({
+        type: 'invalid_enum',
+        entryId,
+        severity: 'high',
+        description: fields.layer === undefined
+          ? `layer is missing (declared values: ${STORAGE_LAYERS.join(' | ')}).`
+          : `layer "${fields.layer}" is not a declared value (${STORAGE_LAYERS.join(' | ')}).`,
+        suggestion: 'Map to a declared layer or drop the field; the store write gate rejects undeclared values.',
+      });
+    }
+    return issues;
+  }
+
+  /**
    * 检查矛盾（同主题相反结论）
    *
    * 简单实现：同 tag 组合下成熟度冲突
@@ -269,23 +319,9 @@ export class KnowledgeLinter {
   validateEntry(entry: { title: string; content: string; tags: string[]; type: string; maturity?: string; layer?: string }): LintIssue[] {
     const issues: LintIssue[] = [];
 
-    // Undeclared maturity/layer enum values (实盘脏值：pending/canonical/L3_tool_behavior)
-    if (entry.maturity !== undefined && !(MATURITY_LEVELS as readonly string[]).includes(entry.maturity)) {
-      issues.push({
-        type: 'invalid_enum',
-        severity: 'high',
-        description: `maturity "${entry.maturity}" is not a declared value (${MATURITY_LEVELS.join(' | ')}).`,
-        suggestion: 'Map to a declared maturity (e.g. pending → draft) before writing; the store write gate rejects undeclared values.',
-      });
-    }
-    if (entry.layer !== undefined && !(STORAGE_LAYERS as readonly string[]).includes(entry.layer)) {
-      issues.push({
-        type: 'invalid_enum',
-        severity: 'high',
-        description: `layer "${entry.layer}" is not a declared value (${STORAGE_LAYERS.join(' | ')}).`,
-        suggestion: 'Map to a declared layer or drop the field; the store write gate rejects undeclared values.',
-      });
-    }
+    // Undeclared maturity/layer enum values（判定正本 = invalidEnumIssues；字段缺省跳过，
+    // 兼容只传四字段的 pre-ingest 调用方；存量扫描走 run() → checkInvalidEnums）
+    issues.push(...this.invalidEnumIssues(entry, false));
 
     // Content too short
     if ((entry.content || '').length < 20) {

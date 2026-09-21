@@ -29,7 +29,7 @@
 - `tree-walker`（包内，不进导出面）— 知识树排除口径单点（harness#134）：`isEntryFile()` / `isInfraDir()` / `INDEX_MD_FILE` / `SNAPSHOTS_DIR`，由 store 顶层扫描、migration 顶层扫描、index-generator 递归扫描三处共同消费
 - `flywheel-metrics`（包内，不进导出面）— 知识飞轮指标唯一实现：`evaluateFlywheel(env)` 出 canonical 比例、`genuineRefs()` 出 synthetic 过滤口径，audit D6 / `knowledge stats` / `knowledge health` 三处共消费（ADR-0013）
 - `ReferenceTracker` — 知识引用关系图谱
-- `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)；`validateEntry()` 覆盖 maturity/layer 枚举校验（`invalid_enum` 类型 issue，字段缺省跳过以兼容 pre-ingest 调用方；存量报告由调用方显式传入条目字段触发）
+- `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)；maturity/layer 枚举校验两个入口共用判定正本 `invalidEnumIssues`：`run()` 经 `checkInvalidEnums()` 扫存量（缺字段即脏、issue 带 entryId，`invalid_enum` 无 autoFix 分支——映射需人工裁定），`validateEntry()` 管摄入前（字段缺省跳过以兼容只传四字段的 pre-ingest 调用方）
 - `ColdStartImporter` — 冷启动知识导入
 - `KnowledgeHealthScorer` — 知识健康评分（doctor.ts）
 
@@ -57,7 +57,7 @@
 ## 注意事项
 - Phase 1+4 实现的知识引擎核心
 - 约束"退役不删除"——retire 落盘 config.yml `enabled: false` + retired 元数据，保留规则原文 + 退役原因 + 历史统计（可回滚）
-- `MaturityLevel` 包含 6 个值: draft/verified/proven/archived/active/deprecated
+- `MaturityLevel` / `StorageLayer` 的值域不抄清单——运行时正本是 `types.ts` 的 `MATURITY_LEVELS` / `STORAGE_LAYERS` 常量（写入闸与 lint 枚举校验共用）
 - `excludeArchived` 同时排除 archived 和 deprecated
 - 仍有两处按**原始** `referencedBy.length` 判定，不属飞轮指标、ADR-0013 明确列为范围外：`lifecycle.ts` 的 signal 饱和 / reference 激活（退役阈值调整另票）、`knowledge health` 的 D1「verified 零引用」线索提示（逐条 issue 线索，非聚合分子）
 - #134 收口后仍在的逐条写点（同型问题，本票裁决点名的循环之外，需要时另票）：`lint.ts` 的三处 autoFix `store.update()`、`lifecycle.recordReference()`（逐事件调用，返回更新后条目并触发回调，批量化会改它的契约）、`ingest.mergeEntries()`；`store.list()` 每条一次 `findFile()` 线性扫索引的 O(N²) 按 #134 裁决**未动**，待把知识树实际规模重新量一次再判是否单开票

@@ -57,6 +57,7 @@ describe('KnowledgeLinter', () => {
       expect(report.fixed).toBe(0);
     });
 
+
     it('应该检测所有问题类型', () => {
       // 孤儿条目
       saveEntry({ id: 'orphan-1', title: 'Orphan', maturity: 'draft', contributors: [], projects: [] });
@@ -76,6 +77,39 @@ describe('KnowledgeLinter', () => {
       expect(report.summary.orphan).toBeGreaterThan(0);
       expect(report.summary.outdated).toBeGreaterThan(0);
       expect(report.summary.duplicate).toBeGreaterThan(0);
+    });
+  });
+
+  // M1 收口：run() 存量扫描必须报出 maturity/layer 脏值（spec：lint 能报出存量脏条目）
+  describe('run 存量枚举校验', () => {
+    /** 绕过写入闸直写脏条目（模拟实盘直写路径） */
+    function writeDirtyFile(name: string, fm: string) {
+      const dir = path.join(tmpDir, 'knowledge');
+      fs.writeFileSync(path.join(dir, name), `---\n${fm}\n---\n\nbody content long enough.\n`, 'utf-8');
+      store.rebuildIndex();
+    }
+
+    it('盘上脏 maturity / 脏 layer 的存量条目 → run() 报 invalid_enum', () => {
+      writeDirtyFile('resolution-res_a.md',
+        'id: res_a\ntype: resolution\ntitle: Dirty M\nmaturity: pending\nlayer: project\ncreated: 2026-09-01T00:00:00.000Z');
+      writeDirtyFile('resolution-res_b.md',
+        'id: res_b\ntype: resolution\ntitle: Dirty L\nmaturity: draft\nlayer: L3_tool_behavior\ncreated: 2026-09-01T00:00:00.000Z');
+      writeDirtyFile('resolution-res_c.md',
+        'id: res_c\ntype: resolution\ntitle: Missing Layer\nmaturity: draft\ncreated: 2026-09-01T00:00:00.000Z');
+
+      const report = linter.run();
+      const enumIssues = report.issues.filter(i => i.type === 'invalid_enum');
+      expect(enumIssues).toHaveLength(3);
+      expect(enumIssues.map(i => i.entryId).sort()).toEqual(['res_a', 'res_b', 'res_c']);
+      expect(report.summary.invalid_enum).toBe(3);
+    });
+
+    it('全合法条目库 → 零 invalid_enum（存量合法条目无新噪音）', () => {
+      saveEntry({ id: 'clean-1', maturity: 'verified', layer: 'project' });
+      saveEntry({ id: 'clean-2', maturity: 'active', layer: 'tech', title: 'Another' });
+
+      const report = linter.run();
+      expect(report.summary.invalid_enum).toBe(0);
     });
   });
 

@@ -13,6 +13,7 @@
 import type { KnowledgeStore } from './store';
 import { ReferenceTracker } from './reference-tracker';
 import type { KnowledgeEntry, LintIssue, LintIssueType, MaturityLevel } from './types';
+import { MATURITY_LEVELS, STORAGE_LAYERS } from './types';
 
 const MAX_SOURCE_REFS = 20;
 
@@ -60,6 +61,7 @@ export class KnowledgeLinter {
       outdated: 0,
       duplicate: 0,
       index_inconsistent: 0,
+      invalid_enum: 0,
     };
     for (const issue of issues) {
       summary[issue.type]++;
@@ -260,9 +262,30 @@ export class KnowledgeLinter {
    * - Title too vague (common stop words only) → flag
    * - Contradicts a proven entry with same tags → reject
    * - Near-duplicate of existing entry (title similarity > 80%) → flag merge
+   * - maturity/layer 未声明枚举值 → reject（E1 复盘修正 M1；字段缺省则跳过，
+   *   兼容只传 title/content/tags/type 的 pre-ingest 调用方；存量报告由调用方
+   *   把条目字段显式传入触发）
    */
-  validateEntry(entry: { title: string; content: string; tags: string[]; type: string }): LintIssue[] {
+  validateEntry(entry: { title: string; content: string; tags: string[]; type: string; maturity?: string; layer?: string }): LintIssue[] {
     const issues: LintIssue[] = [];
+
+    // Undeclared maturity/layer enum values (实盘脏值：pending/canonical/L3_tool_behavior)
+    if (entry.maturity !== undefined && !(MATURITY_LEVELS as readonly string[]).includes(entry.maturity)) {
+      issues.push({
+        type: 'invalid_enum',
+        severity: 'high',
+        description: `maturity "${entry.maturity}" is not a declared value (${MATURITY_LEVELS.join(' | ')}).`,
+        suggestion: 'Map to a declared maturity (e.g. pending → draft) before writing; the store write gate rejects undeclared values.',
+      });
+    }
+    if (entry.layer !== undefined && !(STORAGE_LAYERS as readonly string[]).includes(entry.layer)) {
+      issues.push({
+        type: 'invalid_enum',
+        severity: 'high',
+        description: `layer "${entry.layer}" is not a declared value (${STORAGE_LAYERS.join(' | ')}).`,
+        suggestion: 'Map to a declared layer or drop the field; the store write gate rejects undeclared values.',
+      });
+    }
 
     // Content too short
     if ((entry.content || '').length < 20) {

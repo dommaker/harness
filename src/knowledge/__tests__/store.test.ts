@@ -174,6 +174,76 @@ describe('KnowledgeStore', () => {
     });
   });
 
+  // 写入闸（E1 复盘修正 M1）：maturity/layer 是声明枚举，未声明值拒写报错，不静默降级
+  describe('schema gate: maturity/layer 枚举校验', () => {
+    it('save 拒绝未声明的 maturity 值，不落盘', () => {
+      expect(() => store.save(makeEntry({ maturity: 'pending' as KnowledgeEntry['maturity'] })))
+        .toThrow(/maturity.*pending/);
+      expect(store.get('DEC-001')).toBeUndefined();
+      expect(store.readIndex()).toHaveLength(0);
+    });
+
+    it('save 拒绝未声明的 layer 值，不落盘', () => {
+      expect(() => store.save(makeEntry({ layer: 'L3_tool_behavior' as KnowledgeEntry['layer'] })))
+        .toThrow(/layer.*L3_tool_behavior/);
+      expect(store.get('DEC-001')).toBeUndefined();
+    });
+
+    it('save 拒绝缺失 layer 的条目', () => {
+      const entry = makeEntry();
+      delete (entry as Partial<KnowledgeEntry>).layer;
+      expect(() => store.save(entry)).toThrow(/layer/);
+      expect(store.get('DEC-001')).toBeUndefined();
+    });
+
+    it('update 传入脏 maturity 值 → 拒写，既有条目不变', () => {
+      store.save(makeEntry());
+      expect(() => store.update('DEC-001', { maturity: 'canonical' as KnowledgeEntry['maturity'] }))
+        .toThrow(/maturity.*canonical/);
+      expect(store.get('DEC-001')!.maturity).toBe('draft');
+    });
+
+    it('存量脏条目（绕过闸直写文件）经 update 修补其他字段 → 拒写报错', () => {
+      // 模拟实盘脏条目：resolution.service 直写文件的形状（maturity/layer 均未声明）
+      fs.writeFileSync(
+        path.join(tempDir, 'resolution-res_1.md'),
+        '---\nid: res_1\ntype: resolution\ntitle: Dirty\nmaturity: pending\nlayer: L3_tool_behavior\ncreated: 2026-09-01T00:00:00.000Z\n---\n\nbody\n',
+        'utf-8'
+      );
+      store.rebuildIndex();
+      expect(() => store.update('res_1', { tags: ['touched'] })).toThrow(/maturity.*pending/);
+    });
+
+    it('存量脏条目经 update 把脏字段修成合法值 → 放行（清洗路径）', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'resolution-res_2.md'),
+        '---\nid: res_2\ntype: resolution\ntitle: Dirty\nmaturity: pending\nlayer: L3_tool_behavior\ncreated: 2026-09-01T00:00:00.000Z\n---\n\nbody\n',
+        'utf-8'
+      );
+      store.rebuildIndex();
+      const updated = store.update('res_2', { maturity: 'draft', layer: 'project' });
+      expect(updated!.maturity).toBe('draft');
+      expect(store.get('res_2')!.layer).toBe('project');
+    });
+
+    it('saveAll 含一条脏值 → 整批拒写（合法条目也不落盘）', () => {
+      expect(() => store.saveAll([
+        makeEntry({ id: 'DEC-001' }),
+        makeEntry({ id: 'DEC-002', layer: 'process' as KnowledgeEntry['layer'] }),
+      ])).toThrow(/layer.*process/);
+      expect(store.get('DEC-001')).toBeUndefined();
+      expect(store.readIndex()).toHaveLength(0);
+    });
+
+    it('applyAll 部分更新把 maturity 改成脏值 → 拒写', () => {
+      store.save(makeEntry());
+      expect(() => store.applyAll([
+        { id: 'DEC-001', partial: { maturity: 'pending' as KnowledgeEntry['maturity'] } },
+      ])).toThrow(/maturity.*pending/);
+      expect(store.get('DEC-001')!.maturity).toBe('draft');
+    });
+  });
+
   describe('rebuildIndex', () => {
     it('should rebuild index from files', () => {
       store.save(makeEntry({ id: 'DEC-001' }));

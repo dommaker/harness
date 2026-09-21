@@ -370,6 +370,56 @@ describe('KnowledgeLinter', () => {
       });
       expect(issues.some(i => i.type === 'duplicate')).toBe(true);
     });
+
+    // E1 复盘修正 M1：maturity/layer 枚举值域校验（实盘脏值：pending/canonical/L3_tool_behavior）
+    it('flags undeclared maturity value', () => {
+      const issues = linter.validateEntry({
+        title: 'Specific Entry With Valid Title',
+        content: 'This is a sufficiently long content for the enum check test case.',
+        tags: [],
+        type: 'decision',
+        maturity: 'pending',
+      });
+      const issue = issues.find(i => i.type === 'invalid_enum');
+      expect(issue).toBeDefined();
+      expect(issue!.severity).toBe('high');
+      expect(issue!.description).toContain('pending');
+    });
+
+    it('flags undeclared layer value', () => {
+      const issues = linter.validateEntry({
+        title: 'Specific Entry With Valid Title',
+        content: 'This is a sufficiently long content for the enum check test case.',
+        tags: [],
+        type: 'decision',
+        layer: 'L3_tool_behavior',
+      });
+      const issue = issues.find(i => i.type === 'invalid_enum');
+      expect(issue).toBeDefined();
+      expect(issue!.description).toContain('L3_tool_behavior');
+    });
+
+    it('accepts declared maturity/layer values', () => {
+      const issues = linter.validateEntry({
+        title: 'Specific Entry With Valid Title',
+        content: 'This is a sufficiently long content for the enum check test case.',
+        tags: [],
+        type: 'decision',
+        maturity: 'verified',
+        layer: 'project',
+      });
+      expect(issues.filter(i => i.type === 'invalid_enum')).toHaveLength(0);
+    });
+
+    it('skips enum check when maturity/layer are not provided (pre-ingest caller compat)', () => {
+      const issues = linter.validateEntry({
+        title: 'Specific Entry With Valid Title',
+        content: 'This is a sufficiently long content for the enum check test case.',
+        tags: [],
+        type: 'decision',
+      });
+      expect(issues.filter(i => i.type === 'invalid_enum')).toHaveLength(0);
+    });
   });
 
   describe('autoFix', () => {

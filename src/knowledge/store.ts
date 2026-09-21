@@ -18,6 +18,7 @@ import type {
   SnapshotSurvival,
   StoreUpdate,
 } from './types';
+import { MATURITY_LEVELS, STORAGE_LAYERS } from './types';
 
 const DEFAULT_DIR = '.harness/knowledge';
 const INDEX_FILE = 'index.json';
@@ -109,12 +110,36 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   save(entry: KnowledgeEntry): void {
+    this.assertEnumFields(entry);
     this.writeEntryFile(entry);
     this.updateIndexEntry(entry);
   }
 
+  /**
+   * 写入闸（E1 复盘修正 M1）：maturity/layer 是声明枚举（值域正本在 types.ts），
+   * 未声明值拒写报错，不静默降级。save/saveAll/applyAll 三条落盘路径共用；
+   * update 经 save 继承同一闸。存量脏条目（绕过本 store 直写文件的）在被
+   * 任一写入路径触及时抛错——先修脏值再写。
+   */
+  private assertEnumFields(entry: KnowledgeEntry): void {
+    if (!MATURITY_LEVELS.includes(entry.maturity)) {
+      throw new Error(
+        `[harness] 知识条目 ${entry.id} 的 maturity 值 "${entry.maturity}" 未声明` +
+        `（允许: ${MATURITY_LEVELS.join(' | ')}），拒写`
+      );
+    }
+    if (!STORAGE_LAYERS.includes(entry.layer)) {
+      throw new Error(
+        `[harness] 知识条目 ${entry.id} 的 layer 值 "${entry.layer}" 未声明` +
+        `（允许: ${STORAGE_LAYERS.join(' | ')}），拒写`
+      );
+    }
+  }
+
   saveAll(entries: KnowledgeEntry[]): void {
     if (entries.length === 0) return;
+    // 整批预校验（写入闸）：任一脏值全批拒写，不落半个批次
+    for (const entry of entries) this.assertEnumFields(entry);
     const index = this.readIndex();
     const position = new Map(index.map((e, i) => [e.id, i]));
     for (const entry of entries) {
@@ -133,25 +158,37 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   applyAll(updates: StoreUpdate[]): void {
     if (updates.length === 0) return;
+    // 先合并再整批预校验（写入闸）：任一合并结果脏值全批拒写，不落半个批次。
+    // 批内同 id 多条按序累积合并（后者基于前者的合并结果，与逐条 update 同语义）。
+    const merged: KnowledgeEntry[] = [];
+    const pending = new Map<string, number>(); // id → merged 下标
+    for (const { id, partial } of updates) {
+      const idx = pending.get(id);
+      const base = idx !== undefined ? merged[idx] : this.get(id);
+      if (!base) continue;
+      const next: KnowledgeEntry = { ...base, ...partial, id };
+      if (idx !== undefined) {
+        merged[idx] = next;
+      } else {
+        pending.set(id, merged.length);
+        merged.push(next);
+      }
+    }
+    if (merged.length === 0) return;
+    for (const entry of merged) this.assertEnumFields(entry);
     const index = this.readIndex();
     const position = new Map(index.map((e, i) => [e.id, i]));
-    let applied = 0;
-    for (const { id, partial } of updates) {
-      const existing = this.get(id);
-      if (!existing) continue;
-      const updated: KnowledgeEntry = { ...existing, ...partial, id };
-      this.writeEntryFile(updated);
-      const indexEntry = this.toIndexEntry(updated);
-      const idx = position.get(id);
+    for (const entry of merged) {
+      this.writeEntryFile(entry);
+      const indexEntry = this.toIndexEntry(entry);
+      const idx = position.get(entry.id);
       if (idx !== undefined) {
         index[idx] = indexEntry;
       } else {
-        position.set(id, index.length);
+        position.set(entry.id, index.length);
         index.push(indexEntry);
       }
-      applied++;
     }
-    if (applied === 0) return;
     this.writeIndex(index);
   }
 

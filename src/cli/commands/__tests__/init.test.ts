@@ -105,8 +105,7 @@ describe('init command', () => {
     it('应该输出代码片段模式', async () => {
       await init({ preset: 'standard', printSnippets: true }, io);
       expect(io.outText()).not.toBe('');
-      // 打印版与落盘版 plan 匹配模式须一致（#35：模板字面量 \. 运行期退化为 .）
-      expect(io.outText()).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
+      expect(io.outText()).toContain('npx @dommaker/harness check --staged');
     });
   });
 
@@ -153,10 +152,7 @@ describe('init command', () => {
       const hookCall = writeCalls.find((c: any[]) => String(c[0]).includes('pre-commit'));
       expect(hookCall).toBeDefined();
       expect(hookCall![1]).toContain('npx @dommaker/harness check --staged');
-      expect(hookCall![1]).toContain('npx @dommaker/harness posteval-plan');
       expect(hookCall![1]).not.toMatch(/npx harness /);
-      // plan 匹配模式须为转义点（#35：模板字面量 \. 运行期退化为 .）
-      expect(hookCall![1]).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
     });
 
     it('pre-commit 片段与落盘 hook 同源（#103：差异行并入共享片段，无第二份文本）', async () => {

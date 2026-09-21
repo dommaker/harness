@@ -296,14 +296,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     },
   },
   {
-    command: 'posteval-plan',
-    argument: '<planPath>',
-    description: '验证 plan 文件的 checklist items 是否都有对应的 staged diff',
-    options: [],
-    action: { module: 'posteval-plan', export: 'postevalPlan' },
-    mapActionArgs: (positionals) => [{ planPath: positionals[0] }],
-  },
-  {
     command: 'release',
     description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。不依赖 Studio API。',
     options: [

@@ -1,7 +1,7 @@
 # cli/commands/
 
 ## 职责
-CLI 子命令实现：21 个顶层命令 + constraints 治理子命令 report/retire，覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布等。
+CLI 子命令实现：20 个顶层命令 + constraints 治理子命令 report/retire，覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布等。
 
 H5（#44）起：
 - **命令定义即注册**：`definitions.ts` 的 `COMMAND_DEFINITIONS` 是命令形状（名称/别名/位置参数/选项/子命令/实现引用）的单一来源；bin/harness.js 遍历本表注册表驱动生成，不再手写 commander 命令块，不再有 index.ts barrel 两处同步（R6）
@@ -14,7 +14,7 @@ H5（#44）起：
 - 门禁命令共享面（`src/cli/gate-command.ts`，上层目录）— `GateDecision → CommandResult` 的唯一映射 `gateCommandResult`，加 ✓/✗ 输出骨架 `reportGateDecision` 与出错横幅 `reportGateError`。同一句失败措辞此前抄在 6 个 handler 里（「`<id>` gate denied」×6 / 「`<id>` gate error」×4），门禁特有的指标行经 `onPass`/`onFail` 闭包传入（架构评审候选1）
 - 脚手架落盘面（`src/cli/commands/scaffold.ts`）— 受管文件（managed file）三态判定 `writeManagedFile` / 一组落盘 `runPlan` + 8 个站点工厂（含对外文案；ADR-0029：custom-constraints.yml 示例站随 custom 约束面退役移除）；模板正文住 `scaffold-templates.ts`，落盘注入面 `ScaffoldFileSystem` 可换内存替身（harness#132）；CI 站点工厂 `harnessCheckCiFile` 带平台维度（github / gitlab，harness#143）；两道 Git hook 工厂 `preCommitHookFile` / `prePushHookFile`（后者 harness#144，带可执行位）
 - knowledge 投影面（`src/cli/commands/knowledge-view.ts`）— 11 个 knowledge 子操作的**display model** 渲染与出口：`emitKnowledgeView`（json/人读唯一分派 + 退出码）、`announce`（取数期进度行，`--json` 下静默）、`TONE_STYLES` 角色→样式单表、维度/规则 label 与 `toneForMaturity`/`toneForScore`/`toneForSeverity` 三张映射、`resolveKnowledgeBaseDir` + `openKnowledgeStore`（路径兜底与 store 构造单点）（harness#133）
-- 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / posteval-plan / release / constraints / spec-baseline-check
+- 各命令文件：check / validate / passes-gate / init / report / status / spec / sync-docs / knowledge / sdd / failure / release / constraints / spec-baseline-check
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）；**判定一律穿过统一接口 `evaluate()`**，成败与措辞由共享面映射。`command` 只复用映射、保留自己的单行 ✓/✗ 输出（已对外的机器友好形状）；`security audit` / `acceptance list` / `contract validate-schema` / `review status` / `command --list/--level` 是只展示不判断的子命令，直读报告面（`scan()` 等），不套骨架
 - CLI 子命令 `command` 的两个分支共用同一台 gate 实例（#135/ADR-0024）：默认分支经 `evaluate()` 取裁决、`--level` 经同一实例的 `getRiskLevel()` 取等级，命令侧不再引用模块级单例出口——「配置传进去却到不了判定」的那条路已封。`--strict` 旗帜随 `CommandGateConfig.strict`（零消费者、从不生效）一并删除
 

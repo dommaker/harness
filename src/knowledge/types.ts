@@ -15,6 +15,12 @@ export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived' | 'acti
 
 export type StorageLayer = 'personal' | 'team' | 'tech' | 'domain' | 'project' | 'system';
 
+/** MaturityLevel 的运行时值域正本（store 写入闸与 lint 枚举校验共用） */
+export const MATURITY_LEVELS: readonly MaturityLevel[] = ['draft', 'verified', 'proven', 'archived', 'active', 'deprecated'];
+
+/** StorageLayer 的运行时值域正本（store 写入闸与 lint 枚举校验共用） */
+export const STORAGE_LAYERS: readonly StorageLayer[] = ['personal', 'team', 'tech', 'domain', 'project', 'system'];
+
 /** How agent consumes this knowledge — drives injection strategy and lifecycle */
 export type ConsumptionMode = 'rule' | 'reference' | 'context' | 'signal';
 
@@ -101,7 +107,7 @@ export interface QueryFilter {
 
 // ── Lint ────────────────────────────────────────────────────
 
-export type LintIssueType = 'orphan' | 'contradiction' | 'outdated' | 'duplicate' | 'index_inconsistent';
+export type LintIssueType = 'orphan' | 'contradiction' | 'outdated' | 'duplicate' | 'index_inconsistent' | 'invalid_enum';
 
 export interface LintIssue {
   type: LintIssueType;

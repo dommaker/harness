@@ -57,7 +57,7 @@ const performanceCli = GATE_DEFINITIONS.find(g => g.id === 'performance')!.cli;
 const reviewCli = GATE_DEFINITIONS.find(g => g.id === 'review')!.cli;
 
 describe('constraints report 三阈值：装配点 fail-loud', () => {
-  const valid = { json: false, zeroInterceptMin: '50', noiseFailRate: '0.8', noiseMinTotal: '20' };
+  const valid = { jsonOutput: false, zeroInterceptMin: '50', noiseFailRate: '0.8', noiseMinTotal: '20' };
 
   it('缺省字符串 → 数值（int/int/float 各归其形）', () => {
     expect(reportDef.mapActionArgs!([], valid)).toEqual([{

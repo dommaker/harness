@@ -1,7 +1,7 @@
 # Harness Capabilities
 
-## CLI Commands (21)
-check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, posteval-plan, release, constraints, spec-baseline-check
+## CLI Commands (20)
+check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, release, constraints, spec-baseline-check
 
 约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；写 config.yml retired 元数据 + KnowledgeStore 沉淀，可回滚。ADR-0029：custom 纯文本约束与注入段同步已随文本注入层关停一并退役）。
 

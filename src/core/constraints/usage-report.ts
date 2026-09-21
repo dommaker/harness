@@ -117,7 +117,7 @@ export interface ConstraintsUsageReport {
  *
  * 坏行策略：skip（原语义不变——report 只读，不因单行损坏失败）；
  * 计数去向：透传——`skippedLines` 随本方法返回，进 `ConstraintsUsageReport.skippedLines`，
- * 消费面为 `constraints report` 的文本行 / `--json` 字段 / `--export` 摘要。
+ * 消费面为 `constraints report` 的文本行 / `--json-output` 字段 / `--export` 摘要。
  */
 export function readProjectTracesReport(projectRoot: string): { traces: ExecutionTrace[]; skippedLines: number } {
   const { records, skippedLines } = readJsonl<ExecutionTrace>(

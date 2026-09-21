@@ -55,6 +55,26 @@ export {
 export type { EffectiveConfigLint } from './core/effective-constraints';
 
 // ========================================
+// 约束使用报告（退役候选诊断数据层，studio#602 E1 (a) 链路消费）
+// ========================================
+export {
+  buildConstraintsUsageReport,
+  diagnoseRetireCandidates,
+  collectUsageByConstraint,
+  readProjectTraces,
+  readProjectTracesReport,
+  CANDIDATE_KIND_LABEL,
+  DEFAULT_DIAGNOSE_THRESHOLDS,
+} from './core/constraints/usage-report';
+export type {
+  ConstraintUsageStats,
+  RetireCandidate,
+  RetireCandidateKind,
+  DiagnoseThresholds,
+  ConstraintsUsageReport,
+} from './core/constraints/usage-report';
+
+// ========================================
 // 约束检查引擎（便捷 API；options 统一签名，ADR-0003）
 // ========================================
 export {

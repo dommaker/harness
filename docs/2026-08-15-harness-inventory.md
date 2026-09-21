@@ -38,7 +38,7 @@ studio 侧 import 面（生产代码，非测试）来源：`grep -rn "@dommaker
 
 ---
 
-## 二、CLI 命令审计（26 个）
+## 二、CLI 命令审计（25 个）
 
 studio 程序化调用（spawn/exec/scripts，非注释）实测只有 5 个命令：`constraints --json`（`studio-agent/src/services/output-capture.ts:220`）、`sync-docs`（`.github/workflows/ci.yml:29`、`scripts/release.ts:49`、`package.json:46`）、`check`（`ci.yml:29`、`scripts/release.ts:53`）、`init`（`scripts/harness-sync.js:40`）、`update-user-model`（`agents/monitor/monitor-system-probes.ts:197`，**但传了不存在的 `--days` flag，见下**）。另有 `apps/api/src/cli/data.ts:93` 的 `studioHarnessCli` 通用透传（`npx harness ${args}`），任意命令都可由人经 `studio harness <args>` 手动触发。
 
@@ -65,7 +65,6 @@ studio 程序化调用（spawn/exec/scripts，非注释）实测只有 5 个命�
 | knowledge | knowledge.ts | 712 | 否（仅 skill 字符串提及） | 有 | |
 | sdd | sdd.ts | 44 | 否 | 逻辑有测（`sdd/__tests__/index-generator.test.ts`），CLI 壳无测 | |
 | failure | failure.ts | 117 | 否 | 有 | |
-| posteval-plan | posteval-plan.ts | 84 | 否 | 有 | |
 | release | release.ts | 233 | 否 | **无测试** | 自用发布流水线 |
 | analyze-sessions | analyze-sessions.ts | 334 | 否 | **无测试** | |
 | doc-freshness-check | doc-freshness-check.ts | 386 | 否 | 有 | |

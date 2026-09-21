@@ -17,7 +17,7 @@
 - 所有模式支持 `decayAt` 硬过期
 
 ## 核心导出
-- `KnowledgeStore`（类型面）/ `FileKnowledgeStore`（`store.ts`，barrel 与包根交出的**值**符号——store 的文件系统实现，构造收 `{ baseDir }`；仓内构造点两处：`cli/commands/knowledge-view.ts` 的 `openKnowledgeStore()`（knowledge 各子命令的取数口）与 `cli/commands/constraints-retire.ts` 的退役沉淀写入）— 知识条目 CRUD + 结构化存储；`saveAll()` 全量批量写入（循环内只更新内存索引、结束一次 writeIndex，harness#107）、`applyAll()` 按 id 部分更新的批量出口（`update(id, partial)` 的批量形，语义含未知 id 逐条跳过与空批零读写，harness#134）、`getConsumptionStats()` 读 `.consumption-stats.json` 的当日消费计数（打分核心唯一的消费统计取数口，harness#134）
+- `KnowledgeStore`（类型面）/ `FileKnowledgeStore`（`store.ts`，barrel 与包根交出的**值**符号——store 的文件系统实现，构造收 `{ baseDir }`；仓内构造点两处：`cli/commands/knowledge-view.ts` 的 `openKnowledgeStore()`（knowledge 各子命令的取数口）与 `cli/commands/constraints-retire.ts` 的退役沉淀写入）— 知识条目 CRUD + 结构化存储；`saveAll()` 全量批量写入（循环内只更新内存索引、结束一次 writeIndex，harness#107）、`applyAll()` 按 id 部分更新的批量出口（`update(id, partial)` 的批量形，语义含未知 id 逐条跳过与空批零读写，harness#134）、`getConsumptionStats()` 读 `.consumption-stats.json` 的当日消费计数（打分核心唯一的消费统计取数口，harness#134）。**写入闸（E1 复盘修正 M1）**：save/saveAll/applyAll 落盘前校验 maturity/layer 枚举（update 经 save 继承），未声明值拒写抛错不静默降级；值域正本 = `types.ts` 的 `MATURITY_LEVELS`/`STORAGE_LAYERS` 常量（不进 barrel）。批量路径先整批预校验再落盘（任一脏值全批拒写）；applyAll 批内同 id 多条按序累积合并语义不变
 - `KnowledgeQuery` — 语义搜索 + 类型/标签过滤 + `queryByMode()` + `consume(taskContext)`；`query()` 是 budget 截断管线（仅用于 prompt 注入），`search()` 是全语料文本搜索（先匹配→排序→limit，交互搜索专用，勿用 query() 代替）
 - `KnowledgeLifecycle` — per-mode 生命周期管理；缺省阈值常量 `DEFAULT_DECAY_CONFIG`（`provenDecayMonths: 12` / `verifiedDecayMonths: 6` / `draftDecayMonths: 3` / `autoPromoteSources: []`，正本 `types.ts`）经构造器 `{...DEFAULT_DECAY_CONFIG, ...config}` 合并，barrel 与包根一并交出
 - `extractCodeStructure(dir)`（`primitives/code-structure.ts`，配 `CodeStructure`/`DeclarationInfo`/`ImportInfo` 三类型对外）— 目录代码结构提取；仓内零调用方，是留给下游的公开面
@@ -29,7 +29,7 @@
 - `tree-walker`（包内，不进导出面）— 知识树排除口径单点（harness#134）：`isEntryFile()` / `isInfraDir()` / `INDEX_MD_FILE` / `SNAPSHOTS_DIR`，由 store 顶层扫描、migration 顶层扫描、index-generator 递归扫描三处共同消费
 - `flywheel-metrics`（包内，不进导出面）— 知识飞轮指标唯一实现：`evaluateFlywheel(env)` 出 canonical 比例、`genuineRefs()` 出 synthetic 过滤口径，audit D6 / `knowledge stats` / `knowledge health` 三处共消费（ADR-0013）
 - `ReferenceTracker` — 知识引用关系图谱
-- `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)
+- `KnowledgeLinter` — 知识质量检查(完整性/一致性/时效性)；maturity/layer 枚举校验两个入口共用判定正本 `invalidEnumIssues`：`run()` 经 `checkInvalidEnums()` 扫存量（缺字段即脏、issue 带 entryId，`invalid_enum` 无 autoFix 分支——映射需人工裁定），`validateEntry()` 管摄入前（字段缺省跳过以兼容只传四字段的 pre-ingest 调用方）
 - `ColdStartImporter` — 冷启动知识导入
 - `KnowledgeHealthScorer` — 知识健康评分（doctor.ts）
 
@@ -43,6 +43,7 @@
 - 知识条目文件的 frontmatter 语法只由 `src/utils/frontmatter` 定义（harness#89）：缺头/空 meta = `absent`（合法输入，按非条目静默处理、不上报——migration 对 `absent` 不计 `errors`、不迁移，只计 `skipped` 保证 `total` 计数闭环，harness#161 对齐 #89 裁决 2）；未闭合/YAML 非法 = `malformed`（必须显式上报后按消费方语义恢复——migration 落 `errors`、store 与 index-generator 打一行 stderr 后跳过或走 best-effort），禁止静默丢条目；canonical 字段序是 `store.toFrontmatter` 的私有策略，`join` 只管包裹格式
 - **知识树的排除口径只有一个正本 `tree-walker`**（harness#134）：`_index.md`（索引生成物）、`.snapshots`、`.archive` / `archived`、`resolutions` 是树基建、不是条目人口。store 与 migration 的顶层扫描、index-generator 的递归扫描三处都走它；新增 walker 禁止另立排除清单。统一的是**排除口径**不是遍历深度（store/migration 顶层、index-generator 递归）。例外须原地记名理由：`import.ts` 的 docs 扫描吃的是**项目文档树**，本口径在它那里没有对应物
 - **循环内禁止逐条 `store.update()`**（harness#134）：`update()` 的形状是 get→save、`save()` 每次全量重写 index.json，N 条修复 = N 次全量重写。批量形是 `applyAll(id → partial)`；一次 `audit --fix`、一轮 `runDecayCycle()`、一次 `updateReferencedBy()` 各只重写一次索引，计数闸见 `audit-write-count.test.ts` 与 `lifecycle.test.ts` / `reference-tracker.test.ts` 的 stringify 计数项
+- **写入闸不管读**（E1 复盘修正 M1）：枚举校验只在 save/saveAll/applyAll/update 落盘前执行，读取（parseFile）不校验——盘上脏条目可读可列，但任一写入路径触及即抛错（含「只改其他字段」的部分更新），先修脏值再写；绕过本 store 直写文件的外部写入方不受闸约束
 - **审计判定脱离文件系统可测**（harness#134）：规则表与 D1–D7 打分住 `audit-scoring.ts`，零 fs（源形状闸钉在 `audit-scoring.test.ts`）；引擎 `audit.ts` 只做 store 装配，环境数据经 `store.getConsumptionStats()` / `getSurvivalRate()` 取好喂入
 - 知识条目有明确的生命周期状态（按 consumptionMode 分化）
 - 约束退役（`harness constraints retire`，人确认）时写入 KnowledgeStore：规则原文 + 退役原因 + 历史统计
@@ -56,7 +57,7 @@
 ## 注意事项
 - Phase 1+4 实现的知识引擎核心
 - 约束"退役不删除"——retire 落盘 config.yml `enabled: false` + retired 元数据，保留规则原文 + 退役原因 + 历史统计（可回滚）
-- `MaturityLevel` 包含 6 个值: draft/verified/proven/archived/active/deprecated
+- `MaturityLevel` / `StorageLayer` 的值域不抄清单——运行时正本是 `types.ts` 的 `MATURITY_LEVELS` / `STORAGE_LAYERS` 常量（写入闸与 lint 枚举校验共用）
 - `excludeArchived` 同时排除 archived 和 deprecated
 - 仍有两处按**原始** `referencedBy.length` 判定，不属飞轮指标、ADR-0013 明确列为范围外：`lifecycle.ts` 的 signal 饱和 / reference 激活（退役阈值调整另票）、`knowledge health` 的 D1「verified 零引用」线索提示（逐条 issue 线索，非聚合分子）
 - #134 收口后仍在的逐条写点（同型问题，本票裁决点名的循环之外，需要时另票）：`lint.ts` 的三处 autoFix `store.update()`、`lifecycle.recordReference()`（逐事件调用，返回更新后条目并触发回调，批量化会改它的契约）、`ingest.mergeEntries()`；`store.list()` 每条一次 `findFile()` 线性扫索引的 O(N²) 按 #134 裁决**未动**，待把知识树实际规模重新量一次再判是否单开票

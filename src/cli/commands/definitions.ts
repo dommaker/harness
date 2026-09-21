@@ -296,14 +296,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     },
   },
   {
-    command: 'posteval-plan',
-    argument: '<planPath>',
-    description: '验证 plan 文件的 checklist items 是否都有对应的 staged diff',
-    options: [],
-    action: { module: 'posteval-plan', export: 'postevalPlan' },
-    mapActionArgs: (positionals) => [{ planPath: positionals[0] }],
-  },
-  {
     command: 'release',
     description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。不依赖 Studio API。',
     options: [
@@ -327,7 +319,10 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         options: [
           { flags: '-p, --project-path <path>', description: '项目路径' },
           { flags: '--export [file]', description: '导出脱敏 markdown 摘要（缺省 .harness/reports/constraints-<YYYYMMDD>.md）' },
-          { flags: '--json', description: '输出 JSON 格式', defaultValue: false },
+          // E1 复盘修正 M3.1：原名 --json 与父命令 constraints 同名相撞，
+          // commander 把 flag 消费在父命令上导致 JSON 分支不可达；子命令换名
+          // --json-output（父 --json 有活跃消费者，子 --json 零消费者，换名零破坏）
+          { flags: '--json-output', description: '输出 JSON 格式', defaultValue: false },
           { flags: '--zero-intercept-min <n>', description: '零拦截候选的最小评估样本数', defaultValue: '50' },
           { flags: '--noise-fail-rate <rate>', description: '高噪候选 fail 率阈值', defaultValue: '0.8' },
           { flags: '--noise-min-total <n>', description: '高噪候选最小评估样本数', defaultValue: '20' },
@@ -336,7 +331,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         mapActionArgs: (_pos, options) => [{
           projectPath: options.projectPath,
           export: options.export,
-          json: options.json,
+          json: options.jsonOutput,
           zeroInterceptMin: requireNumericFlag('--zero-intercept-min', options.zeroInterceptMin as string | undefined, 'int'),
           noiseFailRate: requireNumericFlag('--noise-fail-rate', options.noiseFailRate as string | undefined, 'float'),
           noiseMinTotal: requireNumericFlag('--noise-min-total', options.noiseMinTotal as string | undefined, 'int'),

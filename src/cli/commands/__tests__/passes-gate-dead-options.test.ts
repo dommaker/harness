@@ -85,7 +85,7 @@ describe('passes-gate 重试选项已删除（A1）', () => {
   it('采集面确实覆盖三类命令位（前提，防空扫致闸失效）', () => {
     const rendered = ALL_CLI_SITES.map(s => `${s.slot} ${s.token}`);
     expect(rendered).toContain('passes-gate --coverage-threshold'); // 通用表叶子命令的旗帜
-    expect(rendered).toContain('constraints report --json'); // children 递归（嵌套命令位）
+    expect(rendered).toContain('constraints report --json-output'); // children 递归（嵌套命令位）
     expect(rendered).toContain('acceptance --task-id'); // 门禁表命令位（GATE_DEFINITIONS.cli）
     expect(rendered).toContain('check list'); // 选项路由键（commander camelCase 键位）
   });

@@ -35,7 +35,7 @@ function collectRefs(defs: CommandDefinition[]): CommandImplRef[] {
 
 const EXPECTED_TOP_LEVEL_COMMANDS = [
   'check', 'validate', 'passes-gate', 'init', 'report', 'status', 'spec',
-  'sync-docs', 'knowledge', 'sdd', 'failure', 'posteval-plan',
+  'sync-docs', 'knowledge', 'sdd', 'failure',
   'release', 'constraints',
   'spec-baseline-check',
   // 6 门禁命令（GATE_DEFINITIONS 驱动）

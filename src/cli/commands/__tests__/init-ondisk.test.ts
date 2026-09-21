@@ -156,7 +156,7 @@ describe('init 真落盘（无 IO mock）', () => {
     const hook = await read('.git/hooks/pre-commit');
     expect(hook.startsWith('#!/bin/sh\n# Harness pre-commit hook\n')).toBe(true);
     expect(hook).toContain('echo "🔍 Running harness checks..."');
-    expect(hook).toContain("grep -E 'plans/.*\\.md$|\\.plan\\.md$'");
+    expect(hook).toContain('npx @dommaker/harness check --staged');
     expect(hook.endsWith('echo "✅ All checks passed"\n')).toBe(true);
 
     // 第 9 站点（#144）：字节级冻结，改模板必须同步改这份基线（同 GITLAB_PLAIN 手法）

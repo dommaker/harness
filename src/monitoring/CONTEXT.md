@@ -22,7 +22,7 @@
 - 零 Token 成本：不调用 LLM
 - **凡以 `skip` 策略读 JSONL，坏行计数必须到达该消费面的用户可见输出，或在该调用点显式记名豁免并写明理由（harness#100）**——静默吞掉「数据不全」不是一种可选项。承载方式纯增量：新报告入口带计数，旧入口退化为丢计数的薄包装（#82 裁决 4 的兼容约束继续成立），不另立第二份计数概念、不把 `JsonlReadResult` 提升进包根（ADR-0003）
   - 机器可检：`src/utils/__tests__/jsonl-skip-disposition.test.ts` 三道闸——每个 `readJsonl` 调用点必须判得出策略（判不出即形状逃逸，失败）、skip 读点集合冻结（新增未声明即失败，站点消失却不删条目也失败）、每个读点上方 6 行内有 `计数去向：` 声明且邻居声明不得顶替
-  - 三类去向（逐条对得上代码）：**报告体内部的降级位**随报告体走 stdout——`constraints report` 的坏行提示紧挨既有的 `traceFileExists` 说明；**不挤动既有输出的诊断告知**走 stderr——`status`（`logError`，stdout 的 `记录数` 口径与字节不变）、`failure list`（#96 定稿的 `console.error`）、`constraints retire`（交互与 `--yes` 直达两条路径各自告知）；**结构化面用字段**——`constraints report --json` 的 `skippedLines`、`--export` markdown 的警示行、studio 端点响应体（配套票 studio#451）
+  - 三类去向（逐条对得上代码）：**报告体内部的降级位**随报告体走 stdout——`constraints report` 的坏行提示紧挨既有的 `traceFileExists` 说明；**不挤动既有输出的诊断告知**走 stderr——`status`（`logError`，stdout 的 `记录数` 口径与字节不变）、`failure list`（#96 定稿的 `console.error`）、`constraints retire`（交互与 `--yes` 直达两条路径各自告知）；**结构化面用字段**——`constraints report --json-output` 的 `skippedLines`、`--export` markdown 的警示行、studio 端点响应体（配套票 studio#451）
 
 ## 注意事项
 - 追踪数据供 `harness constraints report` 统计与退役候选诊断消费（观测用途，不做自动降级）

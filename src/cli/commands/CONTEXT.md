@@ -1,7 +1,7 @@
 # cli/commands/
 
 ## 职责
-CLI 子命令实现：20 个顶层命令 + constraints 治理子命令 report/retire/reactivate，覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布等。
+CLI 子命令实现：20 个顶层命令 + constraints 治理子命令 report/retire/reactivate/pack-proposal，覆盖约束检查/门禁验证/文档同步/知识管理/失败诊断/发布等。
 
 H5（#44）起：
 - **命令定义即注册**：`definitions.ts` 的 `COMMAND_DEFINITIONS` 是命令形状（名称/别名/位置参数/选项/子命令/实现引用）的单一来源；bin/harness.js 遍历本表注册表驱动生成，不再手写 commander 命令块，不再有 index.ts barrel 两处同步（R6）
@@ -19,7 +19,7 @@ H5（#44）起：
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）；**判定一律穿过统一接口 `evaluate()`**，成败与措辞由共享面映射。`command` 只复用映射、保留自己的单行 ✓/✗ 输出（已对外的机器友好形状）；`security audit` / `acceptance list` / `contract validate-schema` / `review status` / `command --list/--level` 是只展示不判断的子命令，直读报告面（`scan()` 等），不套骨架
 - CLI 子命令 `command` 的两个分支共用同一台 gate 实例（#135/ADR-0024）：默认分支经 `evaluate()` 取裁决、`--level` 经同一实例的 `getRiskLevel()` 取等级，命令侧不再引用模块级单例出口——「配置传进去却到不了判定」的那条路已封。`--strict` 旗帜随 `CommandGateConfig.strict`（零消费者、从不生效）一并删除
 
-`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏；JSON 输出走 `--json-output`——原名 `--json` 与父命令同名会被 commander 消费在父侧、JSON 分支不可达，E1 复盘修正 M3.1 换名，闸见 `__tests__/constraints-report-json-flag.test.ts`）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；落 config.yml retired 墓碑 + KnowledgeStore 沉淀——沉淀写口的 baseDir 走 knowledge-view `openKnowledgeStore` 同一解析点，与 knowledge 读口同根，不再硬编码 projectRoot 拼接（harness#177）。ADR-0029：注入漂移小节、prompt 注入清单、custom 落点与治理注入段同步已随文本注入层关停移除。ADR-0032：already_retired 只认 retired 墓碑，裸 enabled:false 由退休流程接管补墓碑+沉淀（票 02 断点 6）；落盘后 git 仓内附 commit 提示，不替用户动 git（断点 4）。ADR-0033：findRetireTarget 扩到内置 + 应用层（`.harness/constraints.yml`）——应用层退休墓碑同写 config.yml（enabled:false + retired 同形），constraints.yml 条文保留不删，沉淀条目 tags 加 `source:app`）、`constraints reactivate`（点对点复活：删 retired 墓碑段 + 写 `constraint-reactivated-<id>` 新沉淀，不改历史（ADR-0032 决策 6.5，票 02 断点 5）；直达同需 `--yes`，无交互模式；ADR-0033 起对应用层约束同路径可用）。
+`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏；JSON 输出走 `--json-output`——原名 `--json` 与父命令同名会被 commander 消费在父侧、JSON 分支不可达，E1 复盘修正 M3.1 换名，闸见 `__tests__/constraints-report-json-flag.test.ts`）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；落 config.yml retired 墓碑 + KnowledgeStore 沉淀——沉淀写口的 baseDir 走 knowledge-view `openKnowledgeStore` 同一解析点，与 knowledge 读口同根，不再硬编码 projectRoot 拼接（harness#177）。ADR-0029：注入漂移小节、prompt 注入清单、custom 落点与治理注入段同步已随文本注入层关停移除。ADR-0032：already_retired 只认 retired 墓碑，裸 enabled:false 由退休流程接管补墓碑+沉淀（票 02 断点 6）；落盘后 git 仓内附 commit 提示，不替用户动 git（断点 4）。ADR-0033：findRetireTarget 扩到内置 + 应用层（`.harness/constraints.yml`）——应用层退休墓碑同写 config.yml（enabled:false + retired 同形），constraints.yml 条文保留不删，沉淀条目 tags 加 `source:app`）、`constraints reactivate`（点对点复活：删 retired 墓碑段 + 写 `constraint-reactivated-<id>` 新沉淀，不改历史（ADR-0032 决策 6.5，票 02 断点 5）；直达同需 `--yes`，无交互模式；ADR-0033 起对应用层约束同路径可用）、`constraints pack-proposal`（升级提案材料打包，ADR-0033 决策 4，块 3 子项 5：条文 + checker 模板与参数 + traces 使用统计 + 升级理由留白的脱敏 markdown，缺省落 `.harness/reports/proposal-<id>-<YYYYMMDD>.md`，`--stdout` 打印不落盘；脱敏只做项目根路径→`<repoRoot>` 替换，params 原文带出并标注人工确认——打包是质量前置不是保密闸门，人拿材料去 harness 仓开 issue）。
 
 ## 依赖关系
 - 依赖 `src/core/constraints/` 约束引擎

@@ -199,8 +199,10 @@ export class KnowledgeLifecycle {
     this.store.update(entryId, { maturity: target });
 
     // AC-8a: After promotion, check skillCandidate eligibility
+    // 块 3 子项 6（ADR-0033）：同位触发 constraintCandidate 判定——两标独立，可同挂
     if (target === 'proven') {
       this.checkSkillCandidate(entryId);
+      this.checkConstraintCandidate(entryId);
     }
 
     return change;
@@ -249,6 +251,53 @@ export class KnowledgeLifecycle {
 
     const execRate = this.getExecutionSuccessRate(entry.id);
     if (!execRate || execRate.rate < 0.7) return false;
+
+    return true;
+  }
+
+  /**
+   * 块 3 子项 6（ADR-0033）：Check if a proven entry qualifies as a constraintCandidate.
+   * Marks with 'constraintCandidate' tag and emits event if eligible.
+   * Returns true if newly marked.
+   *
+   * 判定口径（人类已批准，设计稿 Q4）：proven + 未打过标 + references≥5
+   * （referencedBy 条数，与 recordReference 的 refKey 口径一致）+ ≥3 个不同来源会话
+   * （contributors，与 skill 候选同字段）。与 skillCandidate 互不干扰，可同挂两标。
+   */
+  checkConstraintCandidate(entryId: string): boolean {
+    const entry = this.store.get(entryId);
+    if (!entry) return false;
+    if (!this.isConstraintCandidate(entry)) return false;
+
+    // Mark as constraintCandidate
+    this.store.update(entryId, {
+      tags: [...entry.tags, 'constraintCandidate'],
+    });
+
+    // Emit event for downstream consumers
+    const now = new Date().toISOString();
+    for (const cb of this.onReferenceCallbacks) {
+      try {
+        cb({
+          entryId,
+          contributor: 'lifecycle',
+          timestamp: now,
+          context: 'constraintCandidate:marked',
+        });
+      } catch { /* non-blocking */ }
+    }
+
+    return true;
+  }
+
+  /**
+   * 块 3 子项 6：Check if an entry meets constraintCandidate criteria.
+   */
+  private isConstraintCandidate(entry: KnowledgeEntry): boolean {
+    if (entry.maturity !== 'proven') return false;
+    if (entry.tags.includes('constraintCandidate')) return false;
+    if (entry.referencedBy.length < 5) return false;
+    if (entry.contributors.length < 3) return false;
 
     return true;
   }

@@ -116,7 +116,7 @@ describe('retireConstraint 执行逻辑', () => {
     expect(entry!.content).toContain(FIXED_NOW.toISOString());
   });
 
-  it('退役结果打印含回滚语义提示（恢复 = 删 config.yml 段）', () => {
+  it('退役结果打印含回滚语义提示（恢复 = constraints reactivate 命令）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
@@ -124,7 +124,38 @@ describe('retireConstraint 执行逻辑', () => {
     printRetireResult(result, io);
     const output = io.outText();
     expect(output).toContain('恢复方法');
-    expect(output).toContain('constraints.capability_sync');
+    expect(output).toContain('harness constraints reactivate capability_sync');
+  });
+
+  it('退役结果打印：git 仓内附 commit 提示，非 git 目录不提示（票 02 断点 4）', () => {
+    const gitRoot = createProjectFixture({ name: 'harness-retire-test', files: { '.git/HEAD': 'ref: refs/heads/master\n' } });
+    const inGit = retireConstraint(gitRoot, 'capability_sync', { now: FIXED_NOW });
+    printRetireResult(inGit, io, gitRoot);
+    expect(io.outText()).toContain('git add .harness/config.yml');
+
+    const plainRoot = createProjectFixture({ name: 'harness-retire-test' });
+    const plainIo = captureIO();
+    const notInGit = retireConstraint(plainRoot, 'capability_sync', { now: FIXED_NOW });
+    printRetireResult(notInGit, plainIo, plainRoot);
+    expect(plainIo.outText()).not.toContain('git add');
+  });
+
+  it('裸 disable 不吞退休：enabled:false 无墓碑时 retire 照常落墓碑 + 沉淀（ADR-0032 决策 6.6，票 02 断点 6）', () => {
+    const root = createProjectFixture({
+      name: 'harness-retire-test',
+      config: 'constraints:\n  capability_sync:\n    enabled: false\n',
+    });
+
+    const result = retireConstraint(root, 'capability_sync', { reason: '升级裸 disable 为退休', now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    const config = readConfig(root);
+    expect(config.constraints.capability_sync.enabled).toBe(false);
+    expect(config.constraints.capability_sync.retired.at).toBe(FIXED_NOW.toISOString());
+    expect(config.constraints.capability_sync.retired.reason).toBe('升级裸 disable 为退休');
+    // 沉淀照写，不被裸 disable 吞掉
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    expect(store.get('constraint-retired-capability_sync')).toBeDefined();
   });
 
   it('重复 retire：already_retired，不覆盖原 retired 元数据', () => {

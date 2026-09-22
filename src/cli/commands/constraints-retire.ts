@@ -18,7 +18,10 @@ baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点
  * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役，
  * retire 只处理内置 check 约束。
  *
- * retire 不是删除——恢复方法：删 config.yml 中 constraints.<id> 段。
+ * retire 不是删除——恢复走 `harness constraints reactivate <id>`（ADR-0032 决策 6.5：
+ * 复活不改历史，写 constraint-reactivated-<id> 新条目；手动删段无沉淀，不提倡）。
+ * already_retired 幂等只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）：
+ * 裸 enabled:false 是"禁用"不是"退休"，会被退休流程接管补上墓碑与沉淀。
  *
  * 交互与执行分离：retireConstraint 为纯执行逻辑（同步、可测），
  * runRetireInteractive 只做 readline 交互，IO 流可注入。
@@ -73,7 +76,7 @@ export interface ConstraintsRetireOptions {
   yes?: boolean;
 }
 
-interface RetireTargetInfo {
+export interface RetireTargetInfo {
   severity: Constraint['severity'];
   description?: string;
   rule?: string;
@@ -85,8 +88,10 @@ interface RetireTargetInfo {
  *
  * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
  * 不再自造 ProjectConfigLoader。
+ *
+ * 导出给 constraints-reactivate 复用（复活同样只认内置 check 约束）。
  */
-function findRetireTarget(id: string): RetireTargetInfo | undefined {
+export function findRetireTarget(id: string): RetireTargetInfo | undefined {
   const builtIn = getConstraint(id);
   if (!builtIn) return undefined;
   return {
@@ -130,6 +135,31 @@ function setYamlEntry(
   if (hadComments) {
     console.log(chalk.yellow(`   ⚠️  ${label} 已重写：js-yaml 不保留原文件注释`));
   }
+}
+
+/**
+ * YAML 条目的删除单点（constraints reactivate 用，与 setYamlEntry 同一读-改-写口径）
+ *
+ * 删除 config.yml `section.id` 整个 key；段/条目不存在时零写盘。返回是否实际删除。
+ */
+export function removeYamlEntry(filePath: string, section: string, id: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  const raw = (yaml.load(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>) ?? {};
+  const entries = (raw[section] ?? {}) as Record<string, unknown>;
+  if (!(id in entries)) return false;
+  delete entries[id];
+  raw[section] = entries;
+  fs.writeFileSync(filePath, yaml.dump(raw, { lineWidth: 120 }), 'utf-8');
+  return true;
+}
+
+/**
+ * 落盘后 commit 提示（票 02 断点 4）：仅 git 仓内提示，不替用户动 git。
+ * studio 审卡通道由 applier 自动 commit，本提示面向 CLI 直达/裸项目场景。
+ */
+export function logCommitHint(projectRoot: string, io: CommandIO): void {
+  if (!fs.existsSync(path.join(projectRoot, '.git'))) return;
+  log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（studio 审卡通道会自动 commit）'));
 }
 
 /**
@@ -219,8 +249,11 @@ export function retireConstraint(
   }
   const isError = target.severity === 'error';
 
-  // 已退役保护：退役落点只有 config.yml constraints.<id>.enabled:false 一处
-  if (loader.getConfig().constraints?.[id]?.enabled === false) {
+  // 已退役保护：只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）——
+  // 裸 enabled:false 是"禁用"不是"退休"，落到下面正常退休流程：覆写墓碑 + 补写沉淀，
+  // 不让一次裸 disable 吞掉 retire 的知识沉淀。
+  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
+  if (existing?.enabled === false && existing.retired) {
     return { id, status: 'already_retired', isError, stats: emptyStats };
   }
 
@@ -269,19 +302,20 @@ export function retireConstraint(
 /**
  * 打印单条退役结果（含回滚语义提示）
  */
-export function printRetireResult(result: RetireResult, io: CommandIO = processIO): CommandResult {
+export function printRetireResult(result: RetireResult, io: CommandIO = processIO, projectRoot?: string): CommandResult {
   switch (result.status) {
     case 'unknown_id':
       log(io, chalk.red(`❌ ${result.id}: 约束不存在（非内置约束），未做任何变更`));
       return { kind: 'skip', reason: `${result.id}: 约束不存在，未做任何变更` };
     case 'already_retired':
-      log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 中 enabled: false），跳过`));
+      log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 有 retired 墓碑），跳过`));
       return { kind: 'skip', reason: `${result.id}: 已处于退役状态，跳过` };
     case 'retired': {
       log(io, chalk.green(`✅ ${result.id}: 已退役`));
       log(io, `   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
       log(io, `   知识沉淀: ${result.knowledgeEntryId}（${result.knowledgeBaseDir}）`);
-      log(io, chalk.gray(`   retire 不是删除——恢复方法：删除 config.yml 中 constraints.${result.id} 段`));
+      log(io, chalk.gray(`   retire 不是删除——恢复方法：harness constraints reactivate ${result.id}（会写复活沉淀；手动删 config.yml 段则无沉淀）`));
+      if (projectRoot) logCommitHint(projectRoot, io);
       break;
     }
   }
@@ -398,7 +432,7 @@ export async function runRetireInteractive(
     console.log();
     for (const p of plan) {
       const result = retireConstraint(projectRoot, p.id, { reason: p.reason, io: out });
-      printRetireResult(result, out);
+      printRetireResult(result, out, projectRoot);
     }
   } finally {
     close();
@@ -442,7 +476,7 @@ export async function constraintsRetire(
     if (result.status === 'retired' && result.isError) {
       log(io, chalk.yellow(`⚠️  ${id} 是一条 error 级约束，已通过 --yes 直达退役（交互模式会要求二次确认）`));
     }
-    return printRetireResult(result, io);
+    return printRetireResult(result, io, projectRoot);
   }
 
   return runRetireInteractive(projectRoot);

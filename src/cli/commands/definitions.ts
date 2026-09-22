@@ -340,13 +340,29 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       {
         command: 'retire',
         argument: '[id]',
-        description: '退役约束：无 id 进入交互式候选选择（人确认）；带 id 直达退役需显式 --yes（写 config.yml + KnowledgeStore + 同步 CLAUDE.md 注入段）',
+        description: '退役约束：无 id 进入交互式候选选择（人确认）；带 id 直达退役需显式 --yes（写 config.yml retired 墓碑 + KnowledgeStore 沉淀）',
         options: [
           { flags: '-p, --project-path <path>', description: '项目路径' },
           { flags: '--reason <text>', description: '退役原因' },
           { flags: '-y, --yes', description: '显式确认直达退役（人确认闸门；无此 flag 直达报错并提示改走交互模式）', defaultValue: false },
         ],
         action: { module: 'constraints-retire', export: 'constraintsRetire' },
+        mapActionArgs: (positionals, options) => [positionals[0], {
+          projectPath: options.projectPath,
+          reason: options.reason,
+          yes: options.yes,
+        }],
+      },
+      {
+        command: 'reactivate',
+        argument: '<id>',
+        description: '复活已退役约束：删 config.yml retired 墓碑段 + 写 constraint-reactivated-<id> 沉淀（不改历史）；直达需显式 --yes',
+        options: [
+          { flags: '-p, --project-path <path>', description: '项目路径' },
+          { flags: '--reason <text>', description: '复活原因' },
+          { flags: '-y, --yes', description: '显式确认直达复活（与 retire 同一道人确认闸门）', defaultValue: false },
+        ],
+        action: { module: 'constraints-reactivate', export: 'constraintsReactivate' },
         mapActionArgs: (positionals, options) => [positionals[0], {
           projectPath: options.projectPath,
           reason: options.reason,

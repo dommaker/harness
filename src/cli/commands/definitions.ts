@@ -340,7 +340,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       {
         command: 'retire',
         argument: '[id]',
-        description: '退役约束：无 id 进入交互式候选选择（人确认）；带 id 直达退役需显式 --yes（写 config.yml + KnowledgeStore + 同步 CLAUDE.md 注入段）',
+        description: '退役约束：无 id 进入交互式候选选择（人确认）；带 id 直达退役需显式 --yes（写 config.yml retired 墓碑 + KnowledgeStore 沉淀）',
         options: [
           { flags: '-p, --project-path <path>', description: '项目路径' },
           { flags: '--reason <text>', description: '退役原因' },
@@ -351,6 +351,36 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
           projectPath: options.projectPath,
           reason: options.reason,
           yes: options.yes,
+        }],
+      },
+      {
+        command: 'reactivate',
+        argument: '<id>',
+        description: '复活已退役约束：删 config.yml retired 墓碑段 + 写 constraint-reactivated-<id> 沉淀（不改历史）；直达需显式 --yes',
+        options: [
+          { flags: '-p, --project-path <path>', description: '项目路径' },
+          { flags: '--reason <text>', description: '复活原因' },
+          { flags: '-y, --yes', description: '显式确认直达复活（与 retire 同一道人确认闸门）', defaultValue: false },
+        ],
+        action: { module: 'constraints-reactivate', export: 'constraintsReactivate' },
+        mapActionArgs: (positionals, options) => [positionals[0], {
+          projectPath: options.projectPath,
+          reason: options.reason,
+          yes: options.yes,
+        }],
+      },
+      {
+        command: 'pack-proposal',
+        argument: '<id>',
+        description: '打包升级提案材料（ADR-0033 决策 4）：条文 + checker 模板与参数 + traces 使用统计 + 升级理由留白，脱敏 markdown 落 .harness/reports/proposal-<id>-<YYYYMMDD>.md（--stdout 打印不落盘）',
+        options: [
+          { flags: '-p, --project-path <path>', description: '项目路径' },
+          { flags: '--stdout', description: '打印到 stdout 而不落盘', defaultValue: false },
+        ],
+        action: { module: 'constraints-pack-proposal', export: 'constraintsPackProposal' },
+        mapActionArgs: (positionals, options) => [positionals[0], {
+          projectPath: options.projectPath,
+          stdout: options.stdout,
         }],
       },
     ],

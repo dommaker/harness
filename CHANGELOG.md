@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-23
+
+### Changes
+- docs(capabilities): sync-docs 修正 severity 计数——no_hardcoded_credentials 升 error 级后 errors 4 / warnings 3
+- feat(gates): 命令黑名单补 git 破坏类 7 条——强推/clean -f 阻断，reset --hard 等警告（ADR-0031，wayfinder 票08 P1-6）
+- feat(knowledge): checkConstraintCandidate 知识→约束候选判定（ADR-0033，块3 子项6）
+- feat(constraints): constraints pack-proposal 升级提案打包命令（ADR-0033，块3 子项5）
+- feat(constraints): 零拦截观察名单中间态——列入挂 90 天，期满且样本足才转退役候选（ADR-0032/0033，块3 子项4）
+- test(constraints): 修预存红——32c07ed 升 error 级后 code_implementation 域无 warning 约束，改 module_modification 域
+- feat(constraints): 退休/报告执行面覆盖应用层约束（ADR-0033，块3 子项3）
+- feat(constraints): 填空式 checker 模板 regex-scan / file-exists（ADR-0033，块3 子项2）
+- feat(constraints): 两层约束模型——类型扩展 + .harness/constraints.yml 加载链 + 模板注册表闭环（ADR-0033，块3 子项1）
+- refactor(knowledge): 知识库目录收编——旧 ~/.studio/knowledge 兼容沿用退役（ADR-0034，票 02 断点 1）
+- feat(constraints): 退休幂等只认墓碑 + constraints reactivate 复活命令 + 落盘 commit 提示（ADR-0032 决策 6.4-6.6，票 02 断点 4/5/6）
+- docs(adr-0031): 修订——撤销'高危不派 kimi'派单策略，改一视同仁（能力快照会烂 + 主流 CLI 信任模型）
+- feat(constraints)!: no_hardcoded_credentials 升 error 级——安全底线 warning 不阻断等于没有（ADR-0032，wayfinder 票08 P0-1）
+- docs(positioning): harness 重新定位——一页纸原则 + ADR-0031~0034（wayfinder harness-repositioning 地图 9 票定案）
+- fix(constraints): constraints retire 知识沉淀写口走 openKnowledgeStore 统一解析点（#177）
+- docs(knowledge): 沉淀 list() 过滤层=index.json 与 tag append 去重纪律（studio#614 审计连带）
+
 ## [1.11.0] - 2026-09-21
 
 ### Changes

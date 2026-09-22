@@ -3,7 +3,8 @@
  *
  * `.harness/.state.json` 是 harness **自身**的运行期状态（与 RunEnv 观察的项目上行
  * 数据不是一类东西，RunEnv 保持 ADR-0023 的只读契约）。本模块是它读-改-写的唯一
- * 入口：`check` 的智能提示与 `status` 两个写者都经本接缝，命令函数以可选参数注入，
+ * 入口：`check` 的智能提示、`status` 与 `constraints report`/`retire` 的观察名单
+ * （块 3 子项 4）都经本接缝，命令函数以可选参数注入，
  * 缺省 = 真实 fs 实现（照 `CommandIO` 的注入模式，但不扩 `CommandIO`——输出面与
  * 状态面是两个概念）。
  *
@@ -12,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import type { ConstraintWatchlistState } from '../core/constraints/usage-report';
 
 /**
  * `.harness/.state.json` 的具名类型（从 check.ts 内联类型提出，ADR-0026 决策 1）。
@@ -23,6 +25,11 @@ export interface HarnessState {
   shownHints?: string[];
   /** 最近一次 `harness status` 运行时刻（ISO 串） */
   lastStatusRun?: string;
+  /**
+   * 零拦截观察名单（ADR-0032，块 3 子项 4）：constraintId → 列入时刻。
+   * `constraints report` / `constraints retire` 经本接缝读-改-写（只增不删）。
+   */
+  constraintWatchlist?: ConstraintWatchlistState;
 }
 
 /** harness 自身运行期状态文件的可注入接缝（读-改-写的唯一入口） */

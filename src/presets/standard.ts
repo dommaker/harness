@@ -47,16 +47,15 @@ export const STANDARD_PRESET: PresetConfig = {
 /**
  * 宽松预设
  *
- * 仅启用核心 error 级与凭证扫描
+ * 仅启用核心 error 级与凭证扫描（ADR-0032 起凭证扫描为 error 级，同桶）
  */
 export const RELAXED_PRESET: PresetConfig = {
   name: 'relaxed',
   errors: [
     'no_completion_without_verification',
-  ],
-  warnings: [
     'no_hardcoded_credentials',
   ],
+  warnings: [],
 };
 
 /**

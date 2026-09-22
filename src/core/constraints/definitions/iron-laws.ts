@@ -26,6 +26,22 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
   },
 
   /**
+   * 禁止硬编码凭证
+   * 原因：密码/token/密钥泄露是最严重的安全漏洞，一旦提交到版本控制即不可逆。
+   * ADR-0032：安全底线类约束，warning 不阻断等于没有——升级为 error（违规即阻断）。
+   */
+  no_hardcoded_credentials: {
+    id: 'no_hardcoded_credentials',
+    kind: 'check',
+    rule: 'NO HARDCODED PASSWORDS, TOKENS, SECRETS, OR CREDENTIALS IN ANY SOURCE FILE',
+    message: '禁止在代码/文档/配置文件中硬编码密码、token、密钥、API key',
+    severity: 'error',
+    trigger: ['code_implementation', 'doc_update', 'config_change', 'commit'],
+    enforcement: 'credential-scan',
+    description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、Markdown 文档、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。建议配合 pre-commit hook 做自动扫描。`,
+  },
+
+  /**
    * 禁止简化测试
    * 原因：质量底线，测试困难必须解决
    * （harness#174：checker 承载执行）

@@ -956,4 +956,85 @@ describe('KnowledgeLifecycle', () => {
       expect(lifecycle.checkEntryDecay('SIG-001')).toBeUndefined();
     });
   });
+
+  describe('checkConstraintCandidate（块 3 子项 6，ADR-0033）', () => {
+    /** 达标基线：proven + 5 条引用 + 3 个不同来源会话 */
+    const eligible = (overrides?: Partial<KnowledgeEntry>): KnowledgeEntry => makeEntry({
+      maturity: 'proven',
+      referencedBy: ['a:2026-05-01', 'b:2026-05-02', 'c:2026-05-03', 'a:2026-05-04', 'b:2026-05-05'],
+      contributors: ['a', 'b', 'c'],
+      ...overrides,
+    });
+
+    it('达标：打 constraintCandidate 标 + 触发 constraintCandidate:marked 事件，返回 true', () => {
+      const events: Array<{ entryId: string; context?: string }> = [];
+      lifecycle.onReference(e => events.push({ entryId: e.entryId, context: e.context }));
+      store.save(eligible());
+
+      expect(lifecycle.checkConstraintCandidate('DEC-001')).toBe(true);
+      expect(store.get('DEC-001')!.tags).toContain('constraintCandidate');
+      expect(events).toEqual([{ entryId: 'DEC-001', context: 'constraintCandidate:marked' }]);
+    });
+
+    it('不达标不打标：非 proven / 引用不足 5 / 来源会话不足 3', () => {
+      store.save(eligible({ id: 'E-1', maturity: 'verified' }));
+      store.save(eligible({ id: 'E-2', referencedBy: ['a:2026-05-01', 'b:2026-05-02', 'c:2026-05-03', 'a:2026-05-04'] }));
+      store.save(eligible({ id: 'E-3', contributors: ['a', 'b'] }));
+
+      for (const id of ['E-1', 'E-2', 'E-3']) {
+        expect(lifecycle.checkConstraintCandidate(id)).toBe(false);
+        expect(store.get(id)!.tags).not.toContain('constraintCandidate');
+      }
+    });
+
+    it('幂等：已打标不重复打、不重复触发事件', () => {
+      const events: string[] = [];
+      lifecycle.onReference(e => { if (e.context) events.push(e.context); });
+      store.save(eligible({ tags: ['constraintCandidate'] }));
+
+      expect(lifecycle.checkConstraintCandidate('DEC-001')).toBe(false);
+      expect(store.get('DEC-001')!.tags.filter(t => t === 'constraintCandidate')).toHaveLength(1);
+      expect(events).toEqual([]);
+    });
+
+    it('不存在的条目返回 false', () => {
+      expect(lifecycle.checkConstraintCandidate('NON-EXISTENT')).toBe(false);
+    });
+
+    it('与 skillCandidate 互不干扰：达标条目可同时挂两标', () => {
+      store.save(eligible({
+        content: 'a'.repeat(200),
+        executionResults: [
+          { contributor: 'a', success: true, timestamp: '2026-05-01' },
+          { contributor: 'b', success: true, timestamp: '2026-05-02' },
+          { contributor: 'c', success: true, timestamp: '2026-05-03' },
+          { contributor: 'a', success: true, timestamp: '2026-05-04' },
+          { contributor: 'b', success: true, timestamp: '2026-05-05' },
+        ],
+      }));
+
+      expect(lifecycle.checkSkillCandidate('DEC-001')).toBe(true);
+      expect(lifecycle.checkConstraintCandidate('DEC-001')).toBe(true);
+      const tags = store.get('DEC-001')!.tags;
+      expect(tags).toContain('skillCandidate');
+      expect(tags).toContain('constraintCandidate');
+    });
+
+    it('tryPromote 升到 proven 后自动触发判定（与 checkSkillCandidate 同位）', () => {
+      const events: string[] = [];
+      lifecycle.onReference(e => { if (e.context) events.push(e.context); });
+      store.save(makeEntry({
+        maturity: 'verified',
+        content: 'a'.repeat(100),
+        contributors: ['a', 'b', 'c'],
+        projects: ['p1', 'p2'],
+        referencedBy: ['a:2026-05-01', 'b:2026-05-02', 'c:2026-05-03', 'a:2026-05-04', 'b:2026-05-05'],
+      }));
+
+      const change = lifecycle.tryPromote('DEC-001');
+      expect(change?.to).toBe('proven');
+      expect(store.get('DEC-001')!.tags).toContain('constraintCandidate');
+      expect(events).toContain('constraintCandidate:marked');
+    });
+  });
 });

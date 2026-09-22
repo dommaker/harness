@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import * as os from 'os';
 import * as path from 'path';
 import { PassThrough, Writable } from 'stream';
 import * as yaml from 'js-yaml';
@@ -21,6 +22,7 @@ import { getConstraint } from '../../../core/constraints/definitions';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import { retireConstraint, constraintsRetire, runRetireInteractive, printRetireResult } from '../constraints-retire';
+import { openKnowledgeStore } from '../knowledge-view';
 import { createProjectFixture, writeProjectTraces } from '../../../test-setup/project-fixture';
 
 const FIXED_NOW = new Date('2026-08-08T12:00:00.000Z');
@@ -32,6 +34,12 @@ function readConfig(root: string): any {
 let io: CapturingIO;
 beforeEach(() => {
   io = captureIO();
+  // retire 的 KnowledgeStore 写口走统一解析点（harness#177）：不隔离会写进真实用户主目录
+  process.env.KNOWLEDGE_BASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-retire-kb-'));
+});
+afterEach(() => {
+  fs.rmSync(process.env.KNOWLEDGE_BASE_DIR!, { recursive: true, force: true });
+  delete process.env.KNOWLEDGE_BASE_DIR;
 });
 
 describe('retireConstraint 执行逻辑', () => {
@@ -49,7 +57,7 @@ describe('retireConstraint 执行逻辑', () => {
     });
 
     expect(result.status).toBe('retired');
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.stats).toEqual({ total: 3, fail: 1, failRate: 1 / 3 });
 
     const config = readConfig(root);
@@ -77,7 +85,7 @@ describe('retireConstraint 执行逻辑', () => {
     expect(config.constraints.capability_sync.retired.reason).toBe('');
   });
 
-  it('KnowledgeStore 写入退役记录：规则原文 + 原因 + 统计 + signal 模式', () => {
+  it('KnowledgeStore 写入退役记录：规则原文 + 原因 + 统计 + signal 模式，落点为 knowledge 读口同一解析根（harness#177）', () => {
     const root = createProjectFixture({
       name: 'harness-retire-test',
       traces: [{ constraintId: 'no_completion_without_verification', result: 'fail' }],
@@ -86,8 +94,12 @@ describe('retireConstraint 执行逻辑', () => {
     const result = retireConstraint(root, 'no_completion_without_verification', { reason: '流程已内置门禁', now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.knowledgeEntryId).toBe('constraint-retired-no_completion_without_verification');
+    // 写口与读口同一解析点：KNOWLEDGE_BASE_DIR 覆盖对写口同步生效
+    expect(result.knowledgeBaseDir).toBe(process.env.KNOWLEDGE_BASE_DIR);
+    // 缺省解析（无 -p/--dir）构造的 store 直接可读——修复前写口硬编码 projectRoot，此处读不到
+    expect(openKnowledgeStore({}, io).get('constraint-retired-no_completion_without_verification')).toBeDefined();
 
-    const store = new FileKnowledgeStore({ baseDir: path.join(root, '.harness', 'knowledge') });
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
     const entry = store.get('constraint-retired-no_completion_without_verification');
     expect(entry).toBeDefined();
     expect(entry!.consumptionMode).toBe('signal');
@@ -104,7 +116,7 @@ describe('retireConstraint 执行逻辑', () => {
     expect(entry!.content).toContain(FIXED_NOW.toISOString());
   });
 
-  it('退役结果打印含回滚语义提示（恢复 = 删 config.yml 段）', () => {
+  it('退役结果打印含回滚语义提示（恢复 = constraints reactivate 命令）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
     const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
@@ -112,7 +124,38 @@ describe('retireConstraint 执行逻辑', () => {
     printRetireResult(result, io);
     const output = io.outText();
     expect(output).toContain('恢复方法');
-    expect(output).toContain('constraints.capability_sync');
+    expect(output).toContain('harness constraints reactivate capability_sync');
+  });
+
+  it('退役结果打印：git 仓内附 commit 提示，非 git 目录不提示（票 02 断点 4）', () => {
+    const gitRoot = createProjectFixture({ name: 'harness-retire-test', files: { '.git/HEAD': 'ref: refs/heads/master\n' } });
+    const inGit = retireConstraint(gitRoot, 'capability_sync', { now: FIXED_NOW });
+    printRetireResult(inGit, io, gitRoot);
+    expect(io.outText()).toContain('git add .harness/config.yml');
+
+    const plainRoot = createProjectFixture({ name: 'harness-retire-test' });
+    const plainIo = captureIO();
+    const notInGit = retireConstraint(plainRoot, 'capability_sync', { now: FIXED_NOW });
+    printRetireResult(notInGit, plainIo, plainRoot);
+    expect(plainIo.outText()).not.toContain('git add');
+  });
+
+  it('裸 disable 不吞退休：enabled:false 无墓碑时 retire 照常落墓碑 + 沉淀（ADR-0032 决策 6.6，票 02 断点 6）', () => {
+    const root = createProjectFixture({
+      name: 'harness-retire-test',
+      config: 'constraints:\n  capability_sync:\n    enabled: false\n',
+    });
+
+    const result = retireConstraint(root, 'capability_sync', { reason: '升级裸 disable 为退休', now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    const config = readConfig(root);
+    expect(config.constraints.capability_sync.enabled).toBe(false);
+    expect(config.constraints.capability_sync.retired.at).toBe(FIXED_NOW.toISOString());
+    expect(config.constraints.capability_sync.retired.reason).toBe('升级裸 disable 为退休');
+    // 沉淀照写，不被裸 disable 吞掉
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    expect(store.get('constraint-retired-capability_sync')).toBeDefined();
   });
 
   it('重复 retire：already_retired，不覆盖原 retired 元数据', () => {
@@ -229,14 +272,14 @@ describe('constraintsRetire 非交互直达', () => {
 
   it('--yes 直达 warning 级退役：不打印 error 级警示并落盘', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true }, io);
+    await constraintsRetire('capability_sync', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
     expect(output).not.toContain('是一条 error 级约束');
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
-    expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
+    expect(config.constraints.capability_sync.enabled).toBe(false);
   });
 
   it('--yes 直达未知 id：明确提示', async () => {
@@ -305,7 +348,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
       ]);
     writeProjectTraces(root, healthy);
 
-    const streams = makeIo(['no_hardcoded_credentials', '误报太多', 'y']);
+    const streams = makeIo(['capability_sync', '误报太多', 'y']);
     const printed = captureLog();
     await runRetireInteractive(root, streams);
     streams.done();
@@ -316,8 +359,8 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
-    expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
-    expect(config.constraints.no_hardcoded_credentials.retired.reason).toBe('误报太多');
+    expect(config.constraints.capability_sync.enabled).toBe(false);
+    expect(config.constraints.capability_sync.retired.reason).toBe('误报太多');
   });
 
   it('坏行 fixture：候选列表前告知损坏行数（决策依据不完整不静默，harness#100）', async () => {
@@ -400,6 +443,88 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     const output = printed.text() + streams.text();
     expect(output).toContain('ghost_id');
     expect(output).toContain('约束不存在');
+    expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
+  });
+});
+
+describe('应用层约束退休（ADR-0033 块 3 子项 3）', () => {
+  const APP_YML = [
+    'constraints:',
+    '  - id: app_no_internal_url',
+    '    rule: Web code must not contain internal URLs',
+    '    checker: regex-scan',
+    '    params:',
+    "      pattern: 'https?://10\\.'",
+    '    severity: warning',
+    '    message: 检测到内网地址',
+    '',
+  ].join('\n');
+
+  function appFixture(configYml?: string): string {
+    return createProjectFixture({
+      name: 'harness-retire-test',
+      config: configYml,
+      files: { [path.join('.harness', 'constraints.yml')]: APP_YML },
+    });
+  }
+
+  it('墓碑写 config.yml 与内置同形（enabled:false + retired），constraints.yml 条文保留不删', () => {
+    const root = appFixture();
+    const ymlBefore = fs.readFileSync(path.join(root, '.harness', 'constraints.yml'), 'utf-8');
+
+    const result = retireConstraint(root, 'app_no_internal_url', { reason: '网关统一拦截', now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    expect(result.isError).toBe(false); // 应用层 severity=warning
+    const config = readConfig(root);
+    const entry = config.constraints.app_no_internal_url;
+    expect(entry.enabled).toBe(false);
+    expect(entry.retired.at).toBe(FIXED_NOW.toISOString());
+    expect(entry.retired.reason).toBe('网关统一拦截');
+    // 退休=停用不是删除：定义正本逐字节不动
+    expect(fs.readFileSync(path.join(root, '.harness', 'constraints.yml'), 'utf-8')).toBe(ymlBefore);
+    // 生效集排除
+    expect(getEffectiveConstraints(root).some(c => c.id === 'app_no_internal_url')).toBe(false);
+  });
+
+  it('沉淀条目复用 saveRetireKnowledge，tags 加 source:app', () => {
+    const root = appFixture();
+    const result = retireConstraint(root, 'app_no_internal_url', { now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    expect(result.knowledgeEntryId).toBe('constraint-retired-app_no_internal_url');
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    const entry = store.get('constraint-retired-app_no_internal_url');
+    expect(entry).toBeDefined();
+    expect(entry!.tags).toContain('constraint-retired');
+    expect(entry!.tags).toContain('constraint:app_no_internal_url');
+    expect(entry!.tags).toContain('source:app');
+    expect(entry!.content).toContain('Web code must not contain internal URLs');
+  });
+
+  it('内置退休沉淀不带 source:app（tags 形状不漂移）', () => {
+    const root = createProjectFixture({ name: 'harness-retire-test' });
+    retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    expect(store.get('constraint-retired-capability_sync')!.tags).not.toContain('source:app');
+  });
+
+  it('重复退休应用层：already_retired 幂等，不覆盖原墓碑', () => {
+    const root = appFixture();
+    retireConstraint(root, 'app_no_internal_url', { reason: '第一次', now: FIXED_NOW });
+
+    const second = retireConstraint(root, 'app_no_internal_url', {
+      reason: '第二次',
+      now: new Date('2026-08-09T00:00:00.000Z'),
+    });
+    expect(second.status).toBe('already_retired');
+    expect(readConfig(root).constraints.app_no_internal_url.retired.reason).toBe('第一次');
+  });
+
+  it('constraints.yml 里的 id 与内置都找不到 → unknown_id', () => {
+    const root = appFixture();
+    const result = retireConstraint(root, 'app_ghost', { now: FIXED_NOW });
+    expect(result.status).toBe('unknown_id');
     expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
   });
 });

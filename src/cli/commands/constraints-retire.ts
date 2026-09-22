@@ -12,11 +12,21 @@
  *         retired: { at, reason, stats: { total, fail, failRate } }
  *
  * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'）。
+baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
+缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
  *
- * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役，
- * retire 只处理内置 check 约束。
+ * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役。
+ * ADR-0032 观察名单（块 3 子项 4）：零拦截命中先进观察名单（`.harness/.state.json`
+ * `constraintWatchlist` 段，StateIO 读-改-写），挂一个季度且样本足才转退役候选——
+ * 交互模式的候选清单因此不含观察期内的零拦截约束。
+ * ADR-0033：retire 处理内置 + 应用层（`.harness/constraints.yml`）check 约束；
+ * 应用层退休墓碑同样写 config.yml，constraints.yml 条文保留不删（退休=停用不是删除），
+ * 沉淀条目 tags 加 `source:app`。
  *
- * retire 不是删除——恢复方法：删 config.yml 中 constraints.<id> 段。
+ * retire 不是删除——恢复走 `harness constraints reactivate <id>`（ADR-0032 决策 6.5：
+ * 复活不改历史，写 constraint-reactivated-<id> 新条目；手动删段无沉淀，不提倡）。
+ * already_retired 幂等只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）：
+ * 裸 enabled:false 是"禁用"不是"退休"，会被退休流程接管补上墓碑与沉淀。
  *
  * 交互与执行分离：retireConstraint 为纯执行逻辑（同步、可测），
  * runRetireInteractive 只做 readline 交互，IO 流可注入。
@@ -30,15 +40,19 @@ import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
-import { FileKnowledgeStore } from '../../knowledge/store';
+import { loadAppConstraints } from '../../core/app-constraints-loader';
+import type { RunTarget } from '../../core/constraints/run-env';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
+import { openKnowledgeStore } from './knowledge-view';
+import { fileStateIO } from '../state-io';
 import {
   buildConstraintsUsageReport,
   CANDIDATE_KIND_LABEL,
   collectUsageByConstraint,
   readProjectTraces,
   readProjectTracesReport,
+  WATCHLIST_PERIOD_DAYS,
 } from '../../core/constraints/usage-report';
 
 export interface RetireExecuteOptions {
@@ -46,6 +60,8 @@ export interface RetireExecuteOptions {
   reason?: string;
   /** 注入当前时间（测试用） */
   now?: Date;
+  /** 知识库路径解析的 io（legacy 兜底告警走 stderr 需要；缺省 processIO） */
+  io?: CommandIO;
 }
 
 export type RetireStatus = 'retired' | 'already_retired' | 'unknown_id';
@@ -58,6 +74,8 @@ export interface RetireResult {
   stats: { total: number; fail: number; failRate: number };
   /** KnowledgeStore 条目 id（status='retired' 时存在） */
   knowledgeEntryId?: string;
+  /** 退役记录实际落盘的知识库根（status='retired' 时存在，harness#177） */
+  knowledgeBaseDir?: string;
 }
 
 export interface ConstraintsRetireOptions {
@@ -67,28 +85,48 @@ export interface ConstraintsRetireOptions {
   yes?: boolean;
 }
 
-interface RetireTargetInfo {
+export interface RetireTargetInfo {
   severity: Constraint['severity'];
   description?: string;
   rule?: string;
   message?: string;
+  /** 约束来源（ADR-0033）：app 层退休沉淀条目 tags 加 source:app */
+  source?: Constraint['source'];
 }
 
 /**
- * 查找约束定义（内置 definitions）
+ * 查找约束定义（内置 definitions + 应用层 constraints.yml，ADR-0033）
  *
  * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
- * 不再自造 ProjectConfigLoader。
+ * 不再自造 ProjectConfigLoader。应用层查找经 target 参数（项目根路径或观察面），
+ * 不传 = 只查内置（历史行为）。
+ *
+ * 导出给 constraints-reactivate 复用（复活同样认内置 + 应用层 check 约束）。
  */
-function findRetireTarget(id: string): RetireTargetInfo | undefined {
+export function findRetireTarget(id: string, target?: RunTarget): RetireTargetInfo | undefined {
   const builtIn = getConstraint(id);
-  if (!builtIn) return undefined;
-  return {
-    severity: builtIn.severity,
-    description: builtIn.description,
-    rule: builtIn.rule,
-    message: builtIn.message,
-  };
+  if (builtIn) {
+    return {
+      severity: builtIn.severity,
+      description: builtIn.description,
+      rule: builtIn.rule,
+      message: builtIn.message,
+      source: 'builtin',
+    };
+  }
+  if (target !== undefined) {
+    const app = loadAppConstraints(target).find(c => c.id === id);
+    if (app) {
+      return {
+        severity: app.severity,
+        description: app.description,
+        rule: app.rule,
+        message: app.message,
+        source: 'app',
+      };
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -127,16 +165,44 @@ function setYamlEntry(
 }
 
 /**
+ * YAML 条目的删除单点（constraints reactivate 用，与 setYamlEntry 同一读-改-写口径）
+ *
+ * 删除 config.yml `section.id` 整个 key；段/条目不存在时零写盘。返回是否实际删除。
+ */
+export function removeYamlEntry(filePath: string, section: string, id: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  const raw = (yaml.load(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>) ?? {};
+  const entries = (raw[section] ?? {}) as Record<string, unknown>;
+  if (!(id in entries)) return false;
+  delete entries[id];
+  raw[section] = entries;
+  fs.writeFileSync(filePath, yaml.dump(raw, { lineWidth: 120 }), 'utf-8');
+  return true;
+}
+
+/**
+ * 落盘后 commit 提示（票 02 断点 4）：仅 git 仓内提示，不替用户动 git。
+ * studio 审卡通道由 applier 自动 commit，本提示面向 CLI 直达/裸项目场景。
+ */
+export function logCommitHint(projectRoot: string, io: CommandIO): void {
+  if (!fs.existsSync(path.join(projectRoot, '.git'))) return;
+  log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（studio 审卡通道会自动 commit）'));
+}
+
+/**
  * 写 KnowledgeStore 退役记录（consumptionMode: 'signal'）
+ *
+ * baseDir 走 openKnowledgeStore 同一解析点（harness#177）：缺省与 knowledge 读口同根，
+ * 不再硬编码 projectRoot 拼接（那会写进没有任何默认读口的 <repo>/.harness/knowledge）。
  */
 function saveRetireKnowledge(
-  projectRoot: string,
   id: string,
   target: RetireTargetInfo,
   reason: string,
   stats: { total: number; fail: number; failRate: number },
-  iso: string
-): string {
+  iso: string,
+  io: CommandIO
+): { entryId: string; baseDir: string } {
   const entryId = `constraint-retired-${id}`;
   const contentLines = [
     `# 约束退役：${id}`,
@@ -171,7 +237,13 @@ function saveRetireKnowledge(
     lastReferenced: iso,
     contributors: [],
     projects: [],
-    tags: ['constraint-retired', `constraint:${id}`, `severity:${target.severity}`],
+    // ADR-0033：应用层退休沉淀带 source:app 标签（内置条目不加，历史形状不动）
+    tags: [
+      'constraint-retired',
+      `constraint:${id}`,
+      `severity:${target.severity}`,
+      ...(target.source === 'app' ? ['source:app'] : []),
+    ],
     applicablePhases: [],
     sourceReferences: [{ timestamp: iso }],
     referencedBy: [],
@@ -180,9 +252,9 @@ function saveRetireKnowledge(
     origin: 'human',
   };
 
-  const store = new FileKnowledgeStore({ baseDir: path.join(projectRoot, '.harness', 'knowledge') });
+  const store = openKnowledgeStore({}, io);
   store.save(entry);
-  return entryId;
+  return { entryId, baseDir: store.getBaseDir() };
 }
 
 /**
@@ -203,15 +275,18 @@ export function retireConstraint(
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
 
-  const target = findRetireTarget(id);
+  const target = findRetireTarget(id, projectRoot);
   const emptyStats = { total: 0, fail: 0, failRate: 0 };
   if (!target) {
     return { id, status: 'unknown_id', isError: false, stats: emptyStats };
   }
   const isError = target.severity === 'error';
 
-  // 已退役保护：退役落点只有 config.yml constraints.<id>.enabled:false 一处
-  if (loader.getConfig().constraints?.[id]?.enabled === false) {
+  // 已退役保护：只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）——
+  // 裸 enabled:false 是"禁用"不是"退休"，落到下面正常退休流程：覆写墓碑 + 补写沉淀，
+  // 不让一次裸 disable 吞掉 retire 的知识沉淀。
+  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
+  if (existing?.enabled === false && existing.retired) {
     return { id, status: 'already_retired', isError, stats: emptyStats };
   }
 
@@ -238,7 +313,14 @@ export function retireConstraint(
   );
 
   // 2. KnowledgeStore
-  const knowledgeEntryId = saveRetireKnowledge(projectRoot, id, target, reason, stats, iso);
+  const { entryId: knowledgeEntryId, baseDir: knowledgeBaseDir } = saveRetireKnowledge(
+    id,
+    target,
+    reason,
+    stats,
+    iso,
+    options.io ?? processIO
+  );
 
   return {
     id,
@@ -246,25 +328,27 @@ export function retireConstraint(
     isError,
     stats,
     knowledgeEntryId,
+    knowledgeBaseDir,
   };
 }
 
 /**
  * 打印单条退役结果（含回滚语义提示）
  */
-export function printRetireResult(result: RetireResult, io: CommandIO = processIO): CommandResult {
+export function printRetireResult(result: RetireResult, io: CommandIO = processIO, projectRoot?: string): CommandResult {
   switch (result.status) {
     case 'unknown_id':
-      log(io, chalk.red(`❌ ${result.id}: 约束不存在（非内置约束），未做任何变更`));
+      log(io, chalk.red(`❌ ${result.id}: 约束不存在（内置与应用层约束中都未找到），未做任何变更`));
       return { kind: 'skip', reason: `${result.id}: 约束不存在，未做任何变更` };
     case 'already_retired':
-      log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 中 enabled: false），跳过`));
+      log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 有 retired 墓碑），跳过`));
       return { kind: 'skip', reason: `${result.id}: 已处于退役状态，跳过` };
     case 'retired': {
       log(io, chalk.green(`✅ ${result.id}: 已退役`));
       log(io, `   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
-      log(io, `   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
-      log(io, chalk.gray(`   retire 不是删除——恢复方法：删除 config.yml 中 constraints.${result.id} 段`));
+      log(io, `   知识沉淀: ${result.knowledgeEntryId}（${result.knowledgeBaseDir}）`);
+      log(io, chalk.gray(`   retire 不是删除——恢复方法：harness constraints reactivate ${result.id}（会写复活沉淀；手动删 config.yml 段则无沉淀）`));
+      if (projectRoot) logCommitHint(projectRoot, io);
       break;
     }
   }
@@ -297,7 +381,13 @@ export async function runRetireInteractive(
   projectRoot: string,
   io: RetireIO = { input: process.stdin, output: process.stdout }
 ): Promise<CommandResult> {
-  const report = buildConstraintsUsageReport(projectRoot);
+  // 观察名单中间态（ADR-0032，块 3 子项 4）：名单内约束不进候选；新列入经 StateIO 写回
+  const stateIO = fileStateIO(projectRoot);
+  const state = stateIO.read();
+  const report = buildConstraintsUsageReport(projectRoot, {}, { watchlist: state.constraintWatchlist });
+  if (Object.keys(report.nextWatchlist).length > Object.keys(state.constraintWatchlist ?? {}).length) {
+    stateIO.write({ ...state, constraintWatchlist: report.nextWatchlist });
+  }
   // 候选诊断是退役决策的依据：数据不完整必须先说（harness#100，与 report 同一降级维度）；
   // 告知行走 stderr，与 status / failure list / 直达分支同一去向（交互正文仍走 console.log）
   if (report.skippedLines > 0) {
@@ -323,6 +413,9 @@ export async function runRetireInteractive(
       report.candidates.forEach((c, i) => {
         console.log(`  ${i + 1}. [${CANDIDATE_KIND_LABEL[c.kind]}] ${c.id} — ${c.reason}`);
       });
+      if (report.watchlist.length > 0) {
+        console.log(chalk.gray(`  （另有 ${report.watchlist.length} 条零拦截约束在观察名单中，满 ${WATCHLIST_PERIOD_DAYS} 天且样本足才转候选——见 harness constraints report）`));
+      }
       console.log();
       const answer = await ask('输入编号（逗号分隔多选）或约束 id，留空取消: ');
       if (!answer) {
@@ -344,7 +437,7 @@ export async function runRetireInteractive(
     // 逐条收集 reason + error 级二次确认
     const plan: { id: string; reason: string }[] = [];
     for (const id of selectedIds) {
-      const target = findRetireTarget(id);
+      const target = findRetireTarget(id, projectRoot);
       if (!target) {
         console.log(chalk.red(`❌ ${id}: 约束不存在，跳过`));
         continue;
@@ -380,8 +473,8 @@ export async function runRetireInteractive(
 
     console.log();
     for (const p of plan) {
-      const result = retireConstraint(projectRoot, p.id, { reason: p.reason });
-      printRetireResult(result, out);
+      const result = retireConstraint(projectRoot, p.id, { reason: p.reason, io: out });
+      printRetireResult(result, out, projectRoot);
     }
   } finally {
     close();
@@ -421,11 +514,11 @@ export async function constraintsRetire(
       logError(io, chalk.yellow(`⚠️  trace 文件有 ${skippedLines} 行损坏已跳过，落盘的退役统计只基于其余合法记录`));
     }
 
-    const result = retireConstraint(projectRoot, id, { reason: options.reason });
+    const result = retireConstraint(projectRoot, id, { reason: options.reason, io });
     if (result.status === 'retired' && result.isError) {
       log(io, chalk.yellow(`⚠️  ${id} 是一条 error 级约束，已通过 --yes 直达退役（交互模式会要求二次确认）`));
     }
-    return printRetireResult(result, io);
+    return printRetireResult(result, io, projectRoot);
   }
 
   return runRetireInteractive(projectRoot);

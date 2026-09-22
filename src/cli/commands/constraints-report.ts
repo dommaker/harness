@@ -1,9 +1,12 @@
 /**
  * harness constraints report —— 约束使用报告（ADR-0001 决策 3/4，ADR-0029 收窄）
  *
- * 只读。面向"人审约束"场景：
+ * 面向"人审约束"场景：
  * - check 约束统计表（total/pass/fail/skip、fail 率、首次/最近触发）
  * - 退役候选诊断（零触发/零拦截/不可评估/高噪），retire 交互模式的数据源
+ * - 零拦截观察名单（ADR-0032，块 3 子项 4）：零拦截命中先进观察名单挂一个季度，
+ *   进 report 但不进退役候选，期满且样本足才转候选；名单状态经 StateIO 读-改-写
+ *   `.harness/.state.json`（本命令因此不再是纯只读——唯一写点是观察名单列入）
  * - 配置健康（unknownIds 残留提示）
  * - --export [file]：脱敏 markdown 摘要（不含项目路径）
  */
@@ -15,10 +18,12 @@ import {
   buildConstraintsUsageReport,
   CANDIDATE_KIND_LABEL,
   DEFAULT_DIAGNOSE_THRESHOLDS,
+  WATCHLIST_PERIOD_DAYS,
   type ConstraintsUsageReport,
   type ConstraintUsageStats,
   type DiagnoseThresholds,
 } from '../../core/constraints/usage-report';
+import { fileStateIO, type StateIO } from '../state-io';
 import { getConstraintsMeta } from './constraints';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -33,6 +38,13 @@ export interface ConstraintsReportOptions {
   noiseFailRate?: number;
   /** 高噪候选最小评估样本数 */
   noiseMinTotal?: number;
+  /**
+   * 观察名单状态接缝（缺省 = fileStateIO(projectPath)）。
+   * 注入则 `.harness/.state.json` 的读写全程走注入面（ADR-0026 同口径）。
+   */
+  stateIO?: StateIO;
+  /** 观察期判定时钟（Unix ms），测试注入用——别在测试里等 90 天 */
+  now?: number;
 }
 
 function formatTime(ts: number | undefined): string {
@@ -94,6 +106,18 @@ export function renderExportMarkdown(
   }
   lines.push('');
 
+  // 观察名单（块 3 子项 4）：进报告不进候选，列入时间与剩余观察期随条目带出
+  lines.push('## 观察名单');
+  lines.push('');
+  if (report.watchlist.length === 0) {
+    lines.push('（空）');
+  } else {
+    for (const w of report.watchlist) {
+      lines.push(`- \`${w.id}\` — ${w.reason}（列入 ${w.listedAt.slice(0, 10)}，剩余观察 ${w.remainingDays} 天；满 ${WATCHLIST_PERIOD_DAYS} 天且样本足转退役候选）`);
+    }
+  }
+  lines.push('');
+
   if (report.lint.unknownIds.length > 0) {
     lines.push('## 配置健康');
     lines.push('');
@@ -116,7 +140,16 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
   if (options.noiseFailRate !== undefined) thresholds.highNoiseFailRate = options.noiseFailRate;
   if (options.noiseMinTotal !== undefined) thresholds.highNoiseMinEvaluated = options.noiseMinTotal;
 
-  const report = buildConstraintsUsageReport(projectRoot, thresholds);
+  const stateIO = options.stateIO ?? fileStateIO(projectRoot);
+  const state = stateIO.read();
+  const report = buildConstraintsUsageReport(projectRoot, thresholds, {
+    watchlist: state.constraintWatchlist,
+    now: options.now,
+  });
+  // 观察名单只增不删：键数变多 = 本次有新列入，经 StateIO 写回（读-改-写，不动其他字段）
+  if (Object.keys(report.nextWatchlist).length > Object.keys(state.constraintWatchlist ?? {}).length) {
+    stateIO.write({ ...state, constraintWatchlist: report.nextWatchlist });
+  }
 
   if (options.json) {
     log(io, JSON.stringify(report, null, 2));
@@ -150,6 +183,15 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
     log(io, chalk.gray('  可运行 `harness constraints retire` 交互式处理候选'));
   }
   log(io);
+
+  // 观察名单分组（零拦截中间态，块 3 子项 4）：无条目零噪声
+  if (report.watchlist.length > 0) {
+    log(io, chalk.bold(`观察名单（${report.watchlist.length} 条，零拦截观察期 ${WATCHLIST_PERIOD_DAYS} 天，期满且样本足才转退役候选）:`));
+    for (const w of report.watchlist) {
+      log(io, `  [观察中] ${w.id} — ${w.reason}（列入 ${w.listedAt.slice(0, 10)}，剩余观察 ${w.remainingDays} 天）`);
+    }
+    log(io);
+  }
 
   // 配置健康
   if (report.lint.unknownIds.length > 0) {

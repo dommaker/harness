@@ -156,7 +156,7 @@ export class ConstraintChecker {
     evidence?: GitEvidence,
     runEnv?: RunEnv
   ): Promise<CheckOutcome> {
-    const impl = getConstraintCheck(constraint.id);
+    const impl = getConstraintCheck(constraint);
     if (!impl) {
       throw new Error(
         `[harness] 约束 "${constraint.id}" (kind='check') 未注册 checker，拒绝静默通过。` +

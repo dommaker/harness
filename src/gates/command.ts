@@ -192,6 +192,57 @@ export const DEFAULT_COMMAND_BLACKLIST: CommandBlacklistRule[] = [
     message: '卸载 Python 包需要确认',
     category: 'package',
   },
+
+  // ========== git 破坏类（ADR-0031，wayfinder 票08 P1-6：只补不可逆损失面） ==========
+  {
+    id: 'git-push-force',
+    pattern: /\bgit\s+push\b[^|;&]*(--force\b|-f\b)/i,
+    level: 'block',
+    message: '禁止强推远程（覆盖共享历史不可逆）',
+    category: 'git',
+  },
+  {
+    id: 'git-clean-force',
+    pattern: /\bgit\s+clean\b[^|;&]*-[a-z]*f/i,
+    level: 'block',
+    message: '禁止 git clean -f（未跟踪文件删除不可恢复）',
+    category: 'git',
+  },
+  {
+    id: 'git-reset-hard',
+    pattern: /\bgit\s+reset\s+--hard\b/i,
+    level: 'warn',
+    message: 'git reset --hard 丢弃未提交改动，需要确认',
+    category: 'git',
+  },
+  {
+    id: 'git-checkout-discard',
+    pattern: /\bgit\s+checkout\s+--\s/i,
+    level: 'warn',
+    message: 'git checkout -- 丢弃工作区改动，需要确认',
+    category: 'git',
+  },
+  {
+    id: 'git-branch-force-delete',
+    pattern: /\bgit\s+branch\s+-D\b/,
+    level: 'warn',
+    message: 'git branch -D 强制删分支（未合并提交可能丢失），需要确认',
+    category: 'git',
+  },
+  {
+    id: 'git-history-rewrite',
+    pattern: /\bgit\s+(filter-branch|filter-repo)\b/i,
+    level: 'warn',
+    message: '历史重写操作不可逆，需要确认',
+    category: 'git',
+  },
+  {
+    id: 'git-reflog-expire',
+    pattern: /\bgit\s+reflog\s+expire\b/i,
+    level: 'warn',
+    message: 'reflog expire 拆除恢复网，需要确认',
+    category: 'git',
+  },
 ];
 
 /**

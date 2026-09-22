@@ -110,3 +110,66 @@ describe('坏行计数透传到 report 数据层（harness#100）', () => {
     expect(report.traceFileExists).toBe(false);
   });
 });
+
+describe('应用层约束进候选诊断（ADR-0033 块 3 子项 3）', () => {
+  const APP_YML = [
+    'constraints:',
+    '  - id: app_no_internal_url',
+    '    rule: Web code must not contain internal URLs',
+    '    checker: regex-scan',
+    '    params:',
+    "      pattern: 'https?://10\\.'",
+    '    severity: warning',
+    '',
+  ].join('\n');
+
+  it('生效集带上应用层后：stats 含应用层条目，零触发自然进候选', () => {
+    const root = createProjectFixture({
+      name: 'usage-report-app',
+      files: { [path.join('.harness', 'constraints.yml')]: APP_YML },
+    });
+
+    const report = buildConstraintsUsageReport(root);
+
+    const stat = report.stats.find(s => s.id === 'app_no_internal_url');
+    expect(stat).toBeDefined();
+    expect(stat!.severity).toBe('warning');
+    expect(stat!.total).toBe(0);
+    expect(
+      report.candidates.some(c => c.id === 'app_no_internal_url' && c.kind === 'zero_trigger')
+    ).toBe(true);
+  });
+
+  it('应用层约束的 trace 统计与内置同口径聚合', () => {
+    const root = createProjectFixture({
+      name: 'usage-report-app',
+      files: { [path.join('.harness', 'constraints.yml')]: APP_YML },
+      traces: [
+        { constraintId: 'app_no_internal_url', result: 'pass' },
+        { constraintId: 'app_no_internal_url', result: 'fail', timestamp: 1700000001000 },
+      ],
+    });
+
+    const report = buildConstraintsUsageReport(root);
+
+    const stat = report.stats.find(s => s.id === 'app_no_internal_url')!;
+    expect(stat.total).toBe(2);
+    expect(stat.fail).toBe(1);
+    expect(stat.failRate).toBeCloseTo(0.5);
+    // 1/2 fail，低于一切候选阈值 → 不进候选
+    expect(report.candidates.some(c => c.id === 'app_no_internal_url')).toBe(false);
+  });
+
+  it('config.yml 禁用应用层约束 → 不进 stats 与候选（生效集口径一致）', () => {
+    const root = createProjectFixture({
+      name: 'usage-report-app',
+      config: 'constraints:\n  app_no_internal_url:\n    enabled: false\n',
+      files: { [path.join('.harness', 'constraints.yml')]: APP_YML },
+    });
+
+    const report = buildConstraintsUsageReport(root);
+
+    expect(report.stats.some(s => s.id === 'app_no_internal_url')).toBe(false);
+    expect(report.candidates.some(c => c.id === 'app_no_internal_url')).toBe(false);
+  });
+});

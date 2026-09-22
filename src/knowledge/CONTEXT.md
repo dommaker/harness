@@ -59,5 +59,7 @@
 - 约束"退役不删除"——retire 落盘 config.yml `enabled: false` + retired 元数据，保留规则原文 + 退役原因 + 历史统计（可回滚）
 - `MaturityLevel` / `StorageLayer` 的值域不抄清单——运行时正本是 `types.ts` 的 `MATURITY_LEVELS` / `STORAGE_LAYERS` 常量（写入闸与 lint 枚举校验共用）
 - `excludeArchived` 同时排除 archived 和 deprecated
+- `list()` 的过滤层是 `index.json`（tags/types 匹配都打在 IndexEntry 上），返回体才回读 .md 全文——手工清洗/直改 .md 数据区时须同步 index（`rebuildIndex()` 或同改 index.json），否则过滤口径与文件内容漂移（#614 存量 tags 清洗同步了两边）
+- tag 写入纪律（#614 审计）：凡 append tag 处先判存在或走 Set 去重——`audit.ts`/`ingest.ts` 的 low_quality 有 includes 闸、ingest 合并走 `new Set`、`lifecycle.checkSkillCandidate` 由前置谓词挡住重复；studio 侧 rule-scanner/pattern-miner 曾因缺闸造成实盘 tags 千次重复腐蚀
 - 仍有两处按**原始** `referencedBy.length` 判定，不属飞轮指标、ADR-0013 明确列为范围外：`lifecycle.ts` 的 signal 饱和 / reference 激活（退役阈值调整另票）、`knowledge health` 的 D1「verified 零引用」线索提示（逐条 issue 线索，非聚合分子）
 - #134 收口后仍在的逐条写点（同型问题，本票裁决点名的循环之外，需要时另票）：`lint.ts` 的三处 autoFix `store.update()`、`lifecycle.recordReference()`（逐事件调用，返回更新后条目并触发回调，批量化会改它的契约）、`ingest.mergeEntries()`；`store.list()` 每条一次 `findFile()` 线性扫索引的 O(N²) 按 #134 裁决**未动**，待把知识树实际规模重新量一次再判是否单开票

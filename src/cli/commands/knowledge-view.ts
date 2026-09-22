@@ -9,18 +9,18 @@
  *   要么声明是人读面独有的派生量（derived，须在测试的豁免表逐条登记理由）。
  * - **角色→样式单表 + 键→中文 label 映射**：维度 label、成熟度颜色、规则 label 的唯一权威。
  * - **json / 人读的唯一分派与退出码**：`--json` 打 `data` 的序列化，否则渲染 display model。
- * - **路径解析与 store 构造**：`-p` / `KNOWLEDGE_BASE_DIR` / 旧目录兜底只在这一处。
+ * - **路径解析与 store 构造**：`-p` / `KNOWLEDGE_BASE_DIR` / 缺省目录解析只在这一处
+ *   （ADR-0034：旧 ~/.studio/knowledge 兼容沿用已退役，studio 正本由编排侧显式注入）。
  */
 
 import chalk from 'chalk';
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { FileKnowledgeStore } from '../../knowledge/store';
 import { AUDIT_RULE_LABELS } from '../../knowledge/audit-scoring';
 import type { AuditIssue, AuditReport, AuditRuleName } from '../../knowledge/audit-scoring';
 import type { MaturityLevel } from '../../knowledge/types';
-import { log, logError, type CommandIO, type CommandResult } from '../command-contract';
+import { log, type CommandIO, type CommandResult } from '../command-contract';
 
 // ── display model ─────────────────────────────────────────
 
@@ -176,20 +176,8 @@ export function emitKnowledgeView<T>(io: CommandIO, options: { json?: boolean },
 
 // ── 路径解析与 store 构造 ─────────────────────────────────
 
-/** 缺省知识库数据根（相对用户 home） */
+/** 缺省知识库数据根（相对用户 home）。裸 CLI 项目缺省目录；studio 场景唯一正本 ~/.studio/knowledge 由编排侧经 KNOWLEDGE_BASE_DIR 显式注入（ADR-0034） */
 const KNOWLEDGE_DATA_DIR = path.join('.harness', 'knowledge');
-/** 旧缺省数据根（曾寄居 studio home），仍有数据时兼容沿用，免迁移 */
-const LEGACY_KNOWLEDGE_DATA_DIR = path.join('.studio', 'knowledge');
-
-let legacyKnowledgeDirNotified = false;
-
-function hasKnowledgeData(dir: string): boolean {
-  try {
-    return fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
-  } catch {
-    return false;
-  }
-}
 
 export interface KnowledgePathOptions {
   /** 覆盖知识库目录（audit/snapshot/migrate/index/health 收） */
@@ -200,22 +188,15 @@ export interface KnowledgePathOptions {
 
 /**
  * 知识库数据根的唯一解析点。`-p` 优先，其次 KNOWLEDGE_BASE_DIR，
- * 最后落到用户 home（旧目录仍有数据时沿用并只提示一次，提示走 stderr 不污染 --json）。
+ * 最后落到用户 home 缺省目录（ADR-0034 目录收编：旧 ~/.studio/knowledge
+ * 兼容沿用逻辑已退役——双目录分叉是历史包袱，studio 正本由编排侧显式注入；
+ * io 参数随兼容提示一并失去用途，签名保留免动全部调用方）。
  */
-export function resolveKnowledgeBaseDir(options: KnowledgePathOptions, io: CommandIO): string {
+export function resolveKnowledgeBaseDir(options: KnowledgePathOptions, _io: CommandIO): string {
   if (options.dir) return options.dir;
   if (options.projectPath) return `${options.projectPath}/.harness/knowledge`;
   if (process.env.KNOWLEDGE_BASE_DIR) return process.env.KNOWLEDGE_BASE_DIR;
-  const defaultDir = path.join(os.homedir(), KNOWLEDGE_DATA_DIR);
-  const legacyDir = path.join(os.homedir(), LEGACY_KNOWLEDGE_DATA_DIR);
-  if (hasKnowledgeData(legacyDir)) {
-    if (!legacyKnowledgeDirNotified) {
-      legacyKnowledgeDirNotified = true;
-      logError(io, toneText(`⚠ 缺省知识库根已改为 ${defaultDir}；旧目录 ${legacyDir} 仍有数据，本次沿用（免迁移，可用 KNOWLEDGE_BASE_DIR 覆盖）`, 'warn'));
-    }
-    return legacyDir;
-  }
-  return defaultDir;
+  return path.join(os.homedir(), KNOWLEDGE_DATA_DIR);
 }
 
 /** 知识库句柄的唯一构造点（路径解析全权交给 resolveKnowledgeBaseDir） */

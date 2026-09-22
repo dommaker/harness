@@ -85,7 +85,8 @@ beforeEach(() => {
 });
 
 // 解析函数本体自 #133 起住 knowledge-view.ts（resolveKnowledgeBaseDir），行为面不变：
-// 这里经 knowledgeStats 观测 `-p` / KNOWLEDGE_BASE_DIR / 旧目录兜底三条路径的解析结果
+// 这里经 knowledgeStats 观测 `-p` / KNOWLEDGE_BASE_DIR / 缺省目录三条路径的解析结果
+// （ADR-0034：旧 ~/.studio/knowledge 兼容沿用已退役，不再属观测面）
 describe('getKnowledgeDir', () => {
   const fs = require('fs');
   const os = require('os');
@@ -119,34 +120,23 @@ describe('getKnowledgeDir', () => {
     }));
   });
 
-  it('should default to ~/.harness/knowledge when no env var and no legacy data', async () => {
+  it('should default to ~/.harness/knowledge when no env var', async () => {
     await knowledgeStats({ json: true }, io);
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: path.join(tmpHome, '.harness', 'knowledge'),
     }));
   });
 
-  it('should keep legacy ~/.studio/knowledge when it still has data, with deprecation notice shown once', async () => {
+  it('should NOT fall back to legacy ~/.studio/knowledge even when it has data (ADR-0034 目录收编：兼容沿用已退役)', async () => {
     const legacyDir = path.join(tmpHome, '.studio', 'knowledge');
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, 'guideline-x.md'), 'data');
     await knowledgeStats({ json: true }, io);
-    expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
-      baseDir: legacyDir,
-    }));
-    expect(io.errText()).toContain('旧目录');
-    // 闩锁：同进程重复解析只提示一次
-    await knowledgeStats({ json: true }, io);
-    const notices = io.errLines().filter(line => line.includes('旧目录'));
-    expect(notices).toHaveLength(1);
-  });
-
-  it('should ignore legacy dir when it exists but is empty', async () => {
-    fs.mkdirSync(path.join(tmpHome, '.studio', 'knowledge'), { recursive: true });
-    await knowledgeStats({ json: true }, io);
+    // 旧目录有数据也不再沿用：落缺省 ~/.harness/knowledge，无兼容提示
     expect(storeCtorSpy).toHaveBeenCalledWith(expect.objectContaining({
       baseDir: path.join(tmpHome, '.harness', 'knowledge'),
     }));
+    expect(io.errText()).not.toContain('旧目录');
   });
 
   it('should use projectPath when provided', async () => {

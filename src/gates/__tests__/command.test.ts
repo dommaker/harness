@@ -196,4 +196,58 @@ describe('CommandGate', () => {
       expect(r.passed).toBe(true);
     });
   });
+
+  describe('git destructive rules（ADR-0031，票08 P1-6）', () => {
+    let gate: CommandGate;
+    beforeEach(() => { gate = new CommandGate(); });
+
+    it('should block git push --force', async () => {
+      const r = await gate.check('git push --force origin master');
+      expect(r.passed).toBe(false);
+      expect(r.details?.blocked.some((b: any) => b.id === 'git-push-force')).toBe(true);
+    });
+
+    it('should block git push -f and --force-with-lease', async () => {
+      expect((await gate.check('git push -f origin master')).passed).toBe(false);
+      expect((await gate.check('git push --force-with-lease')).passed).toBe(false);
+    });
+
+    it('should block git clean -f / -fd / -fdx', async () => {
+      for (const cmd of ['git clean -f', 'git clean -fd', 'git clean -fdx']) {
+        const r = await gate.check(cmd);
+        expect(r.passed).toBe(false);
+        expect(r.details?.blocked.some((b: any) => b.id === 'git-clean-force')).toBe(true);
+      }
+    });
+
+    it('should warn on git reset --hard / checkout -- / branch -D / filter-branch / reflog expire', async () => {
+      const cases: Array<[string, string]> = [
+        ['git reset --hard HEAD~3', 'git-reset-hard'],
+        ['git checkout -- src/foo.ts', 'git-checkout-discard'],
+        ['git branch -D feature-x', 'git-branch-force-delete'],
+        ['git filter-branch --tree-filter x', 'git-history-rewrite'],
+        ['git reflog expire --expire=now --all', 'git-reflog-expire'],
+      ];
+      for (const [cmd, id] of cases) {
+        const r = await gate.check(cmd);
+        expect(r.details?.warnings.some((w: any) => w.id === id)).toBe(true);
+      }
+    });
+
+    it('should allow safe git commands', async () => {
+      for (const cmd of [
+        'git status',
+        'git push origin master',
+        'git reset --soft HEAD~1',
+        'git clean -n',
+        'git checkout -b feature',
+        'git branch -d feature-x',
+        'git commit -m "msg"',
+      ]) {
+        const r = await gate.check(cmd);
+        expect(r.passed).toBe(true);
+        expect(r.details?.warnings ?? []).toEqual([]);
+      }
+    });
+  });
 });

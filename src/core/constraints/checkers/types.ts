@@ -149,6 +149,21 @@ export interface ConstraintCheck {
 }
 
 /**
+ * 填空式 checker 模板工厂（ADR-0033 两层约束模型）
+ *
+ * 每个模板 = validateParams + create：参数坏在加载期早报（validateParams），
+ * create 只在参数已校验后调用。注册点 = checkers/index.ts 的 TEMPLATES。
+ * 类型住在 types.ts（而非 index.ts）是为了模板实现文件只依赖本模块，
+ * 不与注册表形成值级循环导入。
+ */
+export interface TemplatedCheckerFactory {
+  /** 参数校验：返回错误清单，空数组 = 通过（加载期跑，参数坏早报） */
+  validateParams(params: Record<string, unknown>): string[];
+  /** 按约束 id + 已校验参数实例化 checker */
+  create(id: string, params: Record<string, unknown>): ConstraintCheck;
+}
+
+/**
  * 构造纯上下文标志检查（无 I/O 的轻量约束）
  */
 export function contextFlag(

@@ -1,9 +1,10 @@
 /**
  * 项目配置加载器
  *
- * 解读 `.harness/config.yml` 与自定义约束文件、合并内置与项目自定义约束。
- * 本模块不碰文件系统：两份配置的读取口径 = 运行级观察面（`constraints/run-env.ts`，
- * ADR-0023 决策 2），一次运行内各至多读一次。
+ * 解读 `.harness/config.yml`、合并内置与应用层（`.harness/constraints.yml`，ADR-0033）约束。
+ * 本模块不碰文件系统：config.yml 的读取口径 = 运行级观察面（`constraints/run-env.ts`，
+ * ADR-0023 决策 2），一次运行内至多读一次；constraints.yml 的读取收在
+ * `app-constraints-loader.ts`（memo 口径与 rawConfig 同形）。
  */
 
 import type { Constraint } from '../types/constraint';
@@ -16,6 +17,7 @@ import type {
 import { CONSTRAINTS } from './constraints/definitions';
 import { PRESETS_BY_NAME, STANDARD_PRESET } from '../presets';
 import { filterEnabledEntries } from './effective-set';
+import { loadAppConstraints } from './app-constraints-loader';
 import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-env';
 
 /**
@@ -131,12 +133,14 @@ export class ProjectConfigLoader {
   }
 
   /**
-   * 合并内置约束（生效集完整链路，ADR-0029）
+   * 合并内置约束（生效集完整链路，ADR-0029 + ADR-0033）
    *
-   * 合并顺序：内置 → preset 裁剪 → config.yml `constraints.<id>.enabled:false` 删除。
+   * 合并顺序：内置 → preset 裁剪 → 并入应用层（`.harness/constraints.yml`）→
+   * config.yml `constraints.<id>.enabled:false` 删除（对内置与应用层同口径生效，
+   * retired 墓碑随 enabled:false 天然生效）。
    *
    * config.yml 中未知约束 id（如已移除约束的禁用残留）静默忽略，
-   * 记录在结果 unknownIds 中供诊断。
+   * 记录在结果 unknownIds 中供诊断；应用层 id 是已知 id，不进 unknownIds。
    *
    * @param options.preset 覆盖 config.yml 的 preset（CLI --preset 用）；
    *   未知预设名回落 standard + stderr 警告
@@ -184,9 +188,16 @@ export class ProjectConfigLoader {
       unknownIds,
     };
 
-    // 1. 处理启用/禁用配置（未知 id 静默忽略，记录供诊断）
+    // 1. 并入应用层约束（.harness/constraints.yml，ADR-0033）：先进桶再走 config.yml
+    //    筛选，enabled:false/retired 墓碑对应用层 id 才能同口径生效
+    const appConstraints = loadAppConstraints(this.env);
+    for (const c of appConstraints) {
+      result.constraints[c.id] = c;
+    }
+
+    // 2. 处理启用/禁用配置（未知 id 静默忽略，记录供诊断；应用层 id 属已知 id）
     if (this.config.constraints) {
-      const knownIds = new Set(Object.keys(CONSTRAINTS));
+      const knownIds = new Set([...Object.keys(CONSTRAINTS), ...appConstraints.map(c => c.id)]);
       const filtered = filterEnabledEntries(knownIds, this.config.constraints);
       unknownIds.push(...filtered.unknownIds);
       for (const constraintId of filtered.disabledIds) {

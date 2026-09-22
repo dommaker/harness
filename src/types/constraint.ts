@@ -33,6 +33,15 @@ export type ConstraintSeverity = 'error' | 'warning' | 'info';
 export type ConstraintTrigger = string;
 
 /**
+ * 约束来源（ADR-0033 两层约束模型）
+ *
+ * - builtin：内置约束（definitions/ 字面量定义，checker 按约束 id 注册查找）
+ * - app：应用层约束（应用仓 `.harness/constraints.yml` 定义，checker 按模板 id +
+ *   params 实例化）；缺省 builtin
+ */
+export type ConstraintSource = 'builtin' | 'app';
+
+/**
  * 约束定义
  */
 export interface Constraint {
@@ -65,6 +74,25 @@ export interface Constraint {
 
   /** 是否启用 */
   enabled?: boolean;
+
+  /**
+   * 约束来源（ADR-0033）：缺省 builtin
+   *
+   * app = 应用层约束（应用仓 `.harness/constraints.yml` 定义）；
+   * report/退休/提案据此区分来源
+   */
+  source?: ConstraintSource;
+
+  /**
+   * 填空式 checker 模板 id（仅 source='app' 使用）
+   *
+   * 内置约束省略 = checker 按约束 id 在内置注册表查找；应用层约束按模板 id
+   * 在模板注册表（checkers/index.ts TEMPLATES）查找并带 params 实例化
+   */
+  checker?: string;
+
+  /** 模板参数（仅 source='app' 使用，形状由各模板的 validateParams 校验） */
+  params?: Record<string, unknown>;
 }
 
 /**

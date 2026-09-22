@@ -116,7 +116,7 @@ export function reactivateConstraint(
   const now = options.now ?? new Date();
   const iso = now.toISOString();
 
-  const target = findRetireTarget(id);
+  const target = findRetireTarget(id, projectRoot);
   if (!target) {
     return { id, status: 'unknown_id' };
   }
@@ -150,7 +150,7 @@ export function reactivateConstraint(
 export function printReactivateResult(result: ReactivateResult, io: CommandIO = processIO, projectRoot?: string): CommandResult {
   switch (result.status) {
     case 'unknown_id':
-      log(io, chalk.red(`❌ ${result.id}: 约束不存在（非内置约束），未做任何变更`));
+      log(io, chalk.red(`❌ ${result.id}: 约束不存在（内置与应用层约束中都未找到），未做任何变更`));
       return { kind: 'skip', reason: `${result.id}: 约束不存在，未做任何变更` };
     case 'not_retired':
       log(io, chalk.yellow(`⚠️  ${result.id}: 无 retired 墓碑（未退休或仅裸 disable），未做任何变更`));

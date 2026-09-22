@@ -446,3 +446,85 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
   });
 });
+
+describe('应用层约束退休（ADR-0033 块 3 子项 3）', () => {
+  const APP_YML = [
+    'constraints:',
+    '  - id: app_no_internal_url',
+    '    rule: Web code must not contain internal URLs',
+    '    checker: regex-scan',
+    '    params:',
+    "      pattern: 'https?://10\\.'",
+    '    severity: warning',
+    '    message: 检测到内网地址',
+    '',
+  ].join('\n');
+
+  function appFixture(configYml?: string): string {
+    return createProjectFixture({
+      name: 'harness-retire-test',
+      config: configYml,
+      files: { [path.join('.harness', 'constraints.yml')]: APP_YML },
+    });
+  }
+
+  it('墓碑写 config.yml 与内置同形（enabled:false + retired），constraints.yml 条文保留不删', () => {
+    const root = appFixture();
+    const ymlBefore = fs.readFileSync(path.join(root, '.harness', 'constraints.yml'), 'utf-8');
+
+    const result = retireConstraint(root, 'app_no_internal_url', { reason: '网关统一拦截', now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    expect(result.isError).toBe(false); // 应用层 severity=warning
+    const config = readConfig(root);
+    const entry = config.constraints.app_no_internal_url;
+    expect(entry.enabled).toBe(false);
+    expect(entry.retired.at).toBe(FIXED_NOW.toISOString());
+    expect(entry.retired.reason).toBe('网关统一拦截');
+    // 退休=停用不是删除：定义正本逐字节不动
+    expect(fs.readFileSync(path.join(root, '.harness', 'constraints.yml'), 'utf-8')).toBe(ymlBefore);
+    // 生效集排除
+    expect(getEffectiveConstraints(root).some(c => c.id === 'app_no_internal_url')).toBe(false);
+  });
+
+  it('沉淀条目复用 saveRetireKnowledge，tags 加 source:app', () => {
+    const root = appFixture();
+    const result = retireConstraint(root, 'app_no_internal_url', { now: FIXED_NOW });
+
+    expect(result.status).toBe('retired');
+    expect(result.knowledgeEntryId).toBe('constraint-retired-app_no_internal_url');
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    const entry = store.get('constraint-retired-app_no_internal_url');
+    expect(entry).toBeDefined();
+    expect(entry!.tags).toContain('constraint-retired');
+    expect(entry!.tags).toContain('constraint:app_no_internal_url');
+    expect(entry!.tags).toContain('source:app');
+    expect(entry!.content).toContain('Web code must not contain internal URLs');
+  });
+
+  it('内置退休沉淀不带 source:app（tags 形状不漂移）', () => {
+    const root = createProjectFixture({ name: 'harness-retire-test' });
+    retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    expect(store.get('constraint-retired-capability_sync')!.tags).not.toContain('source:app');
+  });
+
+  it('重复退休应用层：already_retired 幂等，不覆盖原墓碑', () => {
+    const root = appFixture();
+    retireConstraint(root, 'app_no_internal_url', { reason: '第一次', now: FIXED_NOW });
+
+    const second = retireConstraint(root, 'app_no_internal_url', {
+      reason: '第二次',
+      now: new Date('2026-08-09T00:00:00.000Z'),
+    });
+    expect(second.status).toBe('already_retired');
+    expect(readConfig(root).constraints.app_no_internal_url.retired.reason).toBe('第一次');
+  });
+
+  it('constraints.yml 里的 id 与内置都找不到 → unknown_id', () => {
+    const root = appFixture();
+    const result = retireConstraint(root, 'app_ghost', { now: FIXED_NOW });
+    expect(result.status).toBe('unknown_id');
+    expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
+  });
+});

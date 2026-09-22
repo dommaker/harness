@@ -167,3 +167,44 @@ describe('constraintsReactivate 非交互直达', () => {
     expect(io.errText()).toContain('用法');
   });
 });
+
+describe('应用层约束复活（ADR-0033 块 3 子项 3）', () => {
+  const APP_YML = [
+    'constraints:',
+    '  - id: app_no_internal_url',
+    '    rule: Web code must not contain internal URLs',
+    '    checker: regex-scan',
+    '    params:',
+    "      pattern: 'https?://10\\.'",
+    '    severity: warning',
+    '',
+  ].join('\n');
+
+  function appFixture(): string {
+    return createProjectFixture({
+      name: 'harness-reactivate-test',
+      files: { [path.join('.harness', 'constraints.yml')]: APP_YML },
+    });
+  }
+
+  it('退休后可复活：删 config.yml 墓碑，约束回生效集（constraints.yml 条文一直在）', () => {
+    const root = appFixture();
+    retireConstraint(root, 'app_no_internal_url', { reason: '先退', now: FIXED_NOW });
+    expect(getEffectiveConstraints(root).some(c => c.id === 'app_no_internal_url')).toBe(false);
+
+    const result = reactivateConstraint(root, 'app_no_internal_url', { reason: '误退', now: REACTIVATE_NOW });
+
+    expect(result.status).toBe('reactivated');
+    expect(readConfig(root).constraints?.app_no_internal_url).toBeUndefined();
+    expect(getEffectiveConstraints(root).some(c => c.id === 'app_no_internal_url')).toBe(true);
+    // 复活沉淀照写
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
+    expect(store.get('constraint-reactivated-app_no_internal_url')).toBeDefined();
+  });
+
+  it('应用层未退休（无墓碑）→ not_retired', () => {
+    const root = appFixture();
+    const result = reactivateConstraint(root, 'app_no_internal_url', { now: REACTIVATE_NOW });
+    expect(result.status).toBe('not_retired');
+  });
+});

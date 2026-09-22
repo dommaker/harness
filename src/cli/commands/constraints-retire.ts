@@ -15,8 +15,10 @@
 baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
 缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
  *
- * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役，
- * retire 只处理内置 check 约束。
+ * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役。
+ * ADR-0033：retire 处理内置 + 应用层（`.harness/constraints.yml`）check 约束；
+ * 应用层退休墓碑同样写 config.yml，constraints.yml 条文保留不删（退休=停用不是删除），
+ * 沉淀条目 tags 加 `source:app`。
  *
  * retire 不是删除——恢复走 `harness constraints reactivate <id>`（ADR-0032 决策 6.5：
  * 复活不改历史，写 constraint-reactivated-<id> 新条目；手动删段无沉淀，不提倡）。
@@ -35,6 +37,8 @@ import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
+import { loadAppConstraints } from '../../core/app-constraints-loader';
+import type { RunTarget } from '../../core/constraints/run-env';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
 import { openKnowledgeStore } from './knowledge-view';
@@ -81,25 +85,43 @@ export interface RetireTargetInfo {
   description?: string;
   rule?: string;
   message?: string;
+  /** 约束来源（ADR-0033）：app 层退休沉淀条目 tags 加 source:app */
+  source?: Constraint['source'];
 }
 
 /**
- * 查找约束定义（内置 definitions）
+ * 查找约束定义（内置 definitions + 应用层 constraints.yml，ADR-0033）
  *
  * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
- * 不再自造 ProjectConfigLoader。
+ * 不再自造 ProjectConfigLoader。应用层查找经 target 参数（项目根路径或观察面），
+ * 不传 = 只查内置（历史行为）。
  *
- * 导出给 constraints-reactivate 复用（复活同样只认内置 check 约束）。
+ * 导出给 constraints-reactivate 复用（复活同样认内置 + 应用层 check 约束）。
  */
-export function findRetireTarget(id: string): RetireTargetInfo | undefined {
+export function findRetireTarget(id: string, target?: RunTarget): RetireTargetInfo | undefined {
   const builtIn = getConstraint(id);
-  if (!builtIn) return undefined;
-  return {
-    severity: builtIn.severity,
-    description: builtIn.description,
-    rule: builtIn.rule,
-    message: builtIn.message,
-  };
+  if (builtIn) {
+    return {
+      severity: builtIn.severity,
+      description: builtIn.description,
+      rule: builtIn.rule,
+      message: builtIn.message,
+      source: 'builtin',
+    };
+  }
+  if (target !== undefined) {
+    const app = loadAppConstraints(target).find(c => c.id === id);
+    if (app) {
+      return {
+        severity: app.severity,
+        description: app.description,
+        rule: app.rule,
+        message: app.message,
+        source: 'app',
+      };
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -210,7 +232,13 @@ function saveRetireKnowledge(
     lastReferenced: iso,
     contributors: [],
     projects: [],
-    tags: ['constraint-retired', `constraint:${id}`, `severity:${target.severity}`],
+    // ADR-0033：应用层退休沉淀带 source:app 标签（内置条目不加，历史形状不动）
+    tags: [
+      'constraint-retired',
+      `constraint:${id}`,
+      `severity:${target.severity}`,
+      ...(target.source === 'app' ? ['source:app'] : []),
+    ],
     applicablePhases: [],
     sourceReferences: [{ timestamp: iso }],
     referencedBy: [],
@@ -242,7 +270,7 @@ export function retireConstraint(
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
 
-  const target = findRetireTarget(id);
+  const target = findRetireTarget(id, projectRoot);
   const emptyStats = { total: 0, fail: 0, failRate: 0 };
   if (!target) {
     return { id, status: 'unknown_id', isError: false, stats: emptyStats };
@@ -305,7 +333,7 @@ export function retireConstraint(
 export function printRetireResult(result: RetireResult, io: CommandIO = processIO, projectRoot?: string): CommandResult {
   switch (result.status) {
     case 'unknown_id':
-      log(io, chalk.red(`❌ ${result.id}: 约束不存在（非内置约束），未做任何变更`));
+      log(io, chalk.red(`❌ ${result.id}: 约束不存在（内置与应用层约束中都未找到），未做任何变更`));
       return { kind: 'skip', reason: `${result.id}: 约束不存在，未做任何变更` };
     case 'already_retired':
       log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 有 retired 墓碑），跳过`));
@@ -395,7 +423,7 @@ export async function runRetireInteractive(
     // 逐条收集 reason + error 级二次确认
     const plan: { id: string; reason: string }[] = [];
     for (const id of selectedIds) {
-      const target = findRetireTarget(id);
+      const target = findRetireTarget(id, projectRoot);
       if (!target) {
         console.log(chalk.red(`❌ ${id}: 约束不存在，跳过`));
         continue;

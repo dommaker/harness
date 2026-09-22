@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import { ConstraintChecker } from '../../core/constraints/checker';
-import { CONSTRAINTS } from '../../core/constraints/definitions';
+import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { TraceCollector } from '../../monitoring/traces';
 import type { ConstraintContext } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
@@ -50,7 +50,11 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
   // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
   const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
 
-  const totalConstraints = Object.keys(CONSTRAINTS).length;
+  // 生效集口径与 check.ts 同一入口（ADR-0033：应用层约束进 report 面的前提）——
+  // 此前跑的是内置全集（CONSTRAINTS），config.yml 禁用与应用层条目都不进报告
+  const merged = getMergedConstraintsConfig(projectPath);
+  const effectiveConstraints = Object.values(merged.constraints);
+  const totalConstraints = effectiveConstraints.length;
 
   const context: ConstraintContext = {
     operation: 'file_modification',
@@ -58,7 +62,7 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
   };
 
   // 收集模式（架构评审候选1）：不抛、全量收集，error 级违规如实进报告
-  const result = await checker.collectConstraints(context);
+  const result = await checker.collectConstraints(context, merged);
 
   const failedErrors = result.errors.filter(r => !r.satisfied);
   const failedWarnings = result.warnings.filter(r => !r.satisfied);
@@ -74,8 +78,8 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
     projectPath,
     constraints: {
       total: totalConstraints,
-      errors: Object.values(CONSTRAINTS).filter(c => c.severity === 'error').length,
-      warnings: Object.values(CONSTRAINTS).filter(c => c.severity === 'warning').length,
+      errors: effectiveConstraints.filter(c => c.severity === 'error').length,
+      warnings: effectiveConstraints.filter(c => c.severity === 'warning').length,
       passed: result.passed ? totalConstraints : totalConstraints - violations.length,
       failed: failedErrors.length,
       warningViolations: failedWarnings.length,

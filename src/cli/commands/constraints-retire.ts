@@ -16,6 +16,9 @@ baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点
 缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
  *
  * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役。
+ * ADR-0032 观察名单（块 3 子项 4）：零拦截命中先进观察名单（`.harness/.state.json`
+ * `constraintWatchlist` 段，StateIO 读-改-写），挂一个季度且样本足才转退役候选——
+ * 交互模式的候选清单因此不含观察期内的零拦截约束。
  * ADR-0033：retire 处理内置 + 应用层（`.harness/constraints.yml`）check 约束；
  * 应用层退休墓碑同样写 config.yml，constraints.yml 条文保留不删（退休=停用不是删除），
  * 沉淀条目 tags 加 `source:app`。
@@ -42,12 +45,14 @@ import type { RunTarget } from '../../core/constraints/run-env';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
 import { openKnowledgeStore } from './knowledge-view';
+import { fileStateIO } from '../state-io';
 import {
   buildConstraintsUsageReport,
   CANDIDATE_KIND_LABEL,
   collectUsageByConstraint,
   readProjectTraces,
   readProjectTracesReport,
+  WATCHLIST_PERIOD_DAYS,
 } from '../../core/constraints/usage-report';
 
 export interface RetireExecuteOptions {
@@ -376,7 +381,13 @@ export async function runRetireInteractive(
   projectRoot: string,
   io: RetireIO = { input: process.stdin, output: process.stdout }
 ): Promise<CommandResult> {
-  const report = buildConstraintsUsageReport(projectRoot);
+  // 观察名单中间态（ADR-0032，块 3 子项 4）：名单内约束不进候选；新列入经 StateIO 写回
+  const stateIO = fileStateIO(projectRoot);
+  const state = stateIO.read();
+  const report = buildConstraintsUsageReport(projectRoot, {}, { watchlist: state.constraintWatchlist });
+  if (Object.keys(report.nextWatchlist).length > Object.keys(state.constraintWatchlist ?? {}).length) {
+    stateIO.write({ ...state, constraintWatchlist: report.nextWatchlist });
+  }
   // 候选诊断是退役决策的依据：数据不完整必须先说（harness#100，与 report 同一降级维度）；
   // 告知行走 stderr，与 status / failure list / 直达分支同一去向（交互正文仍走 console.log）
   if (report.skippedLines > 0) {
@@ -402,6 +413,9 @@ export async function runRetireInteractive(
       report.candidates.forEach((c, i) => {
         console.log(`  ${i + 1}. [${CANDIDATE_KIND_LABEL[c.kind]}] ${c.id} — ${c.reason}`);
       });
+      if (report.watchlist.length > 0) {
+        console.log(chalk.gray(`  （另有 ${report.watchlist.length} 条零拦截约束在观察名单中，满 ${WATCHLIST_PERIOD_DAYS} 天且样本足才转候选——见 harness constraints report）`));
+      }
       console.log();
       const answer = await ask('输入编号（逗号分隔多选）或约束 id，留空取消: ');
       if (!answer) {

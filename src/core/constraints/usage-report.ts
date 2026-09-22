@@ -3,9 +3,11 @@
  *
  * `harness constraints report` 与 `harness constraints retire`（交互模式）共用的
  * 数据层：读取项目 traces.log，与生效集（getEffectiveConstraints）对齐，
- * 产出 check 约束统计表与四类退役候选诊断。
+ * 产出 check 约束统计表、四类退役候选诊断与零拦截观察名单（ADR-0032/0033 块 3 子项 4：
+ * 零拦截先进观察名单挂一个季度，期满且样本足才转正式退役候选）。
  *
- * 只读：不创建目录、不写任何文件。
+ * 只读：不创建目录、不写任何文件。观察名单状态以快照入参进来、以 `nextWatchlist`
+ * 产物出去，持久化（`.harness/.state.json` 经 StateIO 接缝）是 cli 层调用方的职责。
  */
 
 import * as fs from 'fs';
@@ -93,6 +95,52 @@ export const DEFAULT_DIAGNOSE_THRESHOLDS: DiagnoseThresholds = {
 };
 
 /**
+ * 观察名单状态条目（ADR-0032 口径，块 3 子项 4）
+ *
+ * 持久化在 `.harness/.state.json` 的 `constraintWatchlist` 段（StateIO 接缝，
+ * cli 层读-改-写）；本层只认快照，不碰 fs。
+ */
+export interface WatchlistStateEntry {
+  /** 列入观察名单时刻（ISO 串，与 HarnessState 其余时间字段同形） */
+  listedAt: string;
+}
+
+/** 观察名单状态（constraintId → 条目） */
+export type ConstraintWatchlistState = Record<string, WatchlistStateEntry>;
+
+/** 观察期时长（天）：满一个季度且样本仍达标，零拦截才转正式退役候选 */
+export const WATCHLIST_PERIOD_DAYS = 90;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * report 里单独分组展示的观察名单条目
+ *
+ * 列入即进 report（告知面），但不进退役候选；观察期内再次出现 fail / 样本
+ * 跌破阈值时条目自然消失（状态段里的列入记录保留，时钟不回拨）。
+ */
+export interface WatchlistEntry {
+  id: string;
+  stats: ConstraintUsageStats;
+  /** 列入时刻（ISO 串） */
+  listedAt: string;
+  /** 剩余观察天数（观察期未满恒 > 0） */
+  remainingDays: number;
+  /** 人类可读的诊断说明（带证据数字） */
+  reason: string;
+}
+
+/**
+ * 候选诊断的观察名单上下文（不传 = 空名单 + 真实时钟）
+ */
+export interface DiagnoseWatchOptions {
+  /** 观察名单状态快照（来自 `.harness/.state.json`，缺省空） */
+  watchlist?: ConstraintWatchlistState;
+  /** 当前时刻（Unix ms），测试注入用——别在测试里等 90 天 */
+  now?: number;
+}
+
+/**
  * report 数据模型
  */
 export interface ConstraintsUsageReport {
@@ -100,6 +148,13 @@ export interface ConstraintsUsageReport {
   stats: ConstraintUsageStats[];
   /** 退役候选诊断（按 zero_trigger → unevaluable → high_noise → zero_intercept 排序） */
   candidates: RetireCandidate[];
+  /** 零拦截观察名单（进 report 但不进退役候选；期满且样本足才转候选） */
+  watchlist: WatchlistEntry[];
+  /**
+   * 观察名单读-改-写产物：入参快照 + 本次新列入（只增不删）。
+   * 与入参快照键数不同（有新增）时，调用方应经 StateIO 写回 `.harness/.state.json`。
+   */
+  nextWatchlist: ConstraintWatchlistState;
   /** 配置健康诊断（unknownIds 等） */
   lint: EffectiveConfigLint;
   /** trace 文件是否存在 */
@@ -176,18 +231,33 @@ function toStats(id: string, severity: Constraint['severity'], agg: { total: num
   };
 }
 
+/** 诊断完整产物（candidates + watchlist + 待写回的状态） */
+interface DiagnoseOutcome {
+  candidates: RetireCandidate[];
+  watchlist: WatchlistEntry[];
+  nextWatchlist: ConstraintWatchlistState;
+}
+
 /**
  * 退役候选诊断（纯函数）
  *
  * 每条约束最多归入一个类别，优先级：
  * zero_trigger → unevaluable → high_noise → zero_intercept
+ *
+ * zero_intercept 走观察名单中间态（ADR-0032）：命中且样本够 → 不在名单则列入
+ * （listedAt = now），进 watchlist 不进 candidates；已在名单且满 WATCHLIST_PERIOD_DAYS
+ * 且当前样本仍达标 → 转正式 zero_intercept 退役候选。其他三类不进观察名单。
  */
-export function diagnoseRetireCandidates(
+function diagnose(
   stats: ConstraintUsageStats[],
-  thresholds: Partial<DiagnoseThresholds> = {}
-): RetireCandidate[] {
-  const t = { ...DEFAULT_DIAGNOSE_THRESHOLDS, ...thresholds };
+  t: DiagnoseThresholds,
+  watch: DiagnoseWatchOptions
+): DiagnoseOutcome {
+  const now = watch.now ?? Date.now();
+  const watchlistState = watch.watchlist ?? {};
+  const nextWatchlist: ConstraintWatchlistState = { ...watchlistState };
   const candidates: RetireCandidate[] = [];
+  const watchlistEntries: WatchlistEntry[] = [];
 
   for (const s of stats) {
     if (s.total === 0) {
@@ -224,24 +294,66 @@ export function diagnoseRetireCandidates(
     }
 
     if (s.fail === 0 && s.evaluated >= t.zeroInterceptMinEvaluated) {
-      candidates.push({
+      const listed = watchlistState[s.id];
+      const listedAtMs = listed ? Date.parse(listed.listedAt) : NaN;
+      // 列入时间损坏按未列入处理：重新列入、时钟重启（状态文件是人可手改的，不静默信脏值）
+      const isListed = listed !== undefined && Number.isFinite(listedAtMs);
+
+      if (isListed && now - listedAtMs >= WATCHLIST_PERIOD_DAYS * DAY_MS) {
+        candidates.push({
+          id: s.id,
+          kind: 'zero_intercept',
+          stats: s,
+          reason: `零拦截：观察期满（${listed.listedAt.slice(0, 10)} 列入，已满 ${WATCHLIST_PERIOD_DAYS} 天），${s.evaluated} 次评估从未 fail`,
+        });
+        continue;
+      }
+
+      const listedAt = isListed ? listed.listedAt : new Date(now).toISOString();
+      if (!isListed) {
+        nextWatchlist[s.id] = { listedAt };
+      }
+      watchlistEntries.push({
         id: s.id,
-        kind: 'zero_intercept',
         stats: s,
+        listedAt,
+        remainingDays: isListed
+          ? Math.max(0, Math.ceil((listedAtMs + WATCHLIST_PERIOD_DAYS * DAY_MS - now) / DAY_MS))
+          : WATCHLIST_PERIOD_DAYS,
         reason: `零拦截：${s.evaluated} 次评估从未 fail`,
       });
     }
   }
 
-  return candidates;
+  return { candidates, watchlist: watchlistEntries, nextWatchlist };
 }
 
 /**
- * 构建 report 数据模型（只读）
+ * 退役候选诊断（纯函数）——观察名单兼容包装
+ *
+ * 每条约束最多归入一个类别，优先级：
+ * zero_trigger → unevaluable → high_noise → zero_intercept
+ *
+ * 只返回退役候选；观察名单分组与待写回状态走 `buildConstraintsUsageReport`
+ * 的 `watchlist` / `nextWatchlist` 字段。zero_intercept 仅在观察期满且样本足时
+ * 才出现在本返回值里（ADR-0032），未期满的命中不再直接列候选。
+ */
+export function diagnoseRetireCandidates(
+  stats: ConstraintUsageStats[],
+  thresholds: Partial<DiagnoseThresholds> = {},
+  watch: DiagnoseWatchOptions = {}
+): RetireCandidate[] {
+  const t = { ...DEFAULT_DIAGNOSE_THRESHOLDS, ...thresholds };
+  return diagnose(stats, t, watch).candidates;
+}
+
+/**
+ * 构建 report 数据模型（只读；观察名单状态以快照入、以 nextWatchlist 出，不写盘）
  */
 export function buildConstraintsUsageReport(
   projectRoot: string = process.cwd(),
-  thresholds: Partial<DiagnoseThresholds> = {}
+  thresholds: Partial<DiagnoseThresholds> = {},
+  watch: DiagnoseWatchOptions = {}
 ): ConstraintsUsageReport {
   const effective = getEffectiveConstraints(projectRoot);
 
@@ -250,12 +362,15 @@ export function buildConstraintsUsageReport(
   const usage = collectUsageByConstraint(traces);
 
   const stats = effective.map(c => toStats(c.id, c.severity, usage.get(c.id)));
-  const candidates = diagnoseRetireCandidates(stats, thresholds);
+  const t = { ...DEFAULT_DIAGNOSE_THRESHOLDS, ...thresholds };
+  const outcome = diagnose(stats, t, watch);
   const lint = lintEffectiveConfig(projectRoot);
 
   return {
     stats,
-    candidates,
+    candidates: outcome.candidates,
+    watchlist: outcome.watchlist,
+    nextWatchlist: outcome.nextWatchlist,
     lint,
     traceFileExists: fs.existsSync(tracePath),
     skippedLines,

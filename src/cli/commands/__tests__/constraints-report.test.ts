@@ -15,7 +15,9 @@ import {
   buildConstraintsUsageReport,
   diagnoseRetireCandidates,
   readProjectTraces,
+  WATCHLIST_PERIOD_DAYS,
 } from '../../../core/constraints/usage-report';
+import type { HarnessState, StateIO } from '../../state-io';
 import { constraintsReport, renderExportMarkdown } from '../constraints-report';
 import { createProjectFixture, writeProjectTraces } from '../../../test-setup/project-fixture';
 
@@ -126,13 +128,13 @@ describe('buildConstraintsUsageReport', () => {
     expect(noiseC?.kind).toBe('high_noise');
     expect(noiseC?.reason).toContain('83%');
 
-    // 零拦截
-    const zeroC = byId.get('no_hardcoded_credentials');
-    expect(zeroC?.kind).toBe('zero_intercept');
-    expect(zeroC?.reason).toContain('50 次评估');
+    // 零拦截：先进观察名单（ADR-0032 中间态），不直接进退役候选
+    expect(byId.get('no_hardcoded_credentials')).toBeUndefined();
+    const watched = report.watchlist.find(w => w.id === 'no_hardcoded_credentials');
+    expect(watched?.reason).toContain('50 次评估');
   });
 
-  it('阈值可配：放宽零拦截样本阈值后 10 次全 pass 也成为候选', () => {
+  it('阈值可配：放宽零拦截样本阈值后 10 次全 pass 进观察名单（不直接进候选）', () => {
     const root = createProjectFixture({
       name: 'harness-report-test',
       traces: tracesOf('no_hardcoded_credentials', 'pass', 10),
@@ -140,9 +142,11 @@ describe('buildConstraintsUsageReport', () => {
 
     const strict = buildConstraintsUsageReport(root);
     expect(strict.candidates.find(c => c.id === 'no_hardcoded_credentials')).toBeUndefined();
+    expect(strict.watchlist.find(w => w.id === 'no_hardcoded_credentials')).toBeUndefined();
 
     const relaxed = buildConstraintsUsageReport(root, { zeroInterceptMinEvaluated: 10 });
-    expect(relaxed.candidates.find(c => c.id === 'no_hardcoded_credentials')?.kind).toBe('zero_intercept');
+    expect(relaxed.candidates.find(c => c.id === 'no_hardcoded_credentials')).toBeUndefined();
+    expect(relaxed.watchlist.find(w => w.id === 'no_hardcoded_credentials')).toBeDefined();
   });
 
   it('diagnoseRetireCandidates 优先级：全 skip 不重复计入零拦截', () => {
@@ -284,5 +288,170 @@ describe('constraintsReport 坏行数透传（harness#100）', () => {
     writeRawTraces(clean, [healthyTrace('no_hardcoded_credentials')]);
     await constraintsReport({ projectPath: clean, export: 'report.md' }, captureIO());
     expect(fs.readFileSync(path.join(clean, 'report.md'), 'utf-8')).not.toContain('损坏');
+  });
+});
+
+describe('零拦截观察名单（ADR-0032，块 3 子项 4）', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // 固定时钟：观察期判定全靠注入 now，不在测试里等 90 天
+  const NOW = 1700100000000;
+  const NOW_ISO = new Date(NOW).toISOString();
+
+  /** 内存 StateIO 假件（与 status/check 测试同形） */
+  function memoryStateIO(initial: HarnessState = {}): StateIO & { snapshot(): HarnessState } {
+    let state = initial;
+    return {
+      read: () => state,
+      write: (s: HarnessState) => { state = s; },
+      snapshot: () => state,
+    };
+  }
+
+  /** 50 次全 pass 的零拦截 fixture 项目 */
+  function zeroInterceptProject(id = 'no_hardcoded_credentials', n = 50): string {
+    return createProjectFixture({
+      name: 'harness-watchlist-test',
+      traces: tracesOf(id, 'pass', n, NOW - 10 * DAY_MS),
+    });
+  }
+
+  it('命中且不在名单：列入观察名单（记列入时间），进 watchlist 分组不进退役候选', () => {
+    const root = zeroInterceptProject();
+    const report = buildConstraintsUsageReport(root, {}, { now: NOW });
+
+    expect(report.candidates.some(c => c.id === 'no_hardcoded_credentials')).toBe(false);
+    const w = report.watchlist.find(x => x.id === 'no_hardcoded_credentials');
+    expect(w).toBeDefined();
+    expect(w!.listedAt).toBe(NOW_ISO);
+    expect(w!.remainingDays).toBe(WATCHLIST_PERIOD_DAYS);
+    expect(w!.reason).toContain('50 次评估');
+    // 待写回状态只增不删
+    expect(report.nextWatchlist['no_hardcoded_credentials']).toEqual({ listedAt: NOW_ISO });
+  });
+
+  it('观察期未满：仍留名单不转候选，剩余观察期按天折算', () => {
+    const root = zeroInterceptProject();
+    const listedAt = new Date(NOW - 30 * DAY_MS).toISOString();
+    const report = buildConstraintsUsageReport(root, {}, {
+      watchlist: { no_hardcoded_credentials: { listedAt } },
+      now: NOW,
+    });
+
+    expect(report.candidates.some(c => c.id === 'no_hardcoded_credentials')).toBe(false);
+    const w = report.watchlist.find(x => x.id === 'no_hardcoded_credentials');
+    expect(w!.listedAt).toBe(listedAt);
+    expect(w!.remainingDays).toBe(WATCHLIST_PERIOD_DAYS - 30);
+    // 已列入不重复写
+    expect(report.nextWatchlist).toEqual({ no_hardcoded_credentials: { listedAt } });
+  });
+
+  it('期满且样本够：转正式 zero_intercept 退役候选', () => {
+    const root = zeroInterceptProject();
+    const listedAt = new Date(NOW - WATCHLIST_PERIOD_DAYS * DAY_MS).toISOString();
+    const report = buildConstraintsUsageReport(root, {}, {
+      watchlist: { no_hardcoded_credentials: { listedAt } },
+      now: NOW,
+    });
+
+    const c = report.candidates.find(x => x.id === 'no_hardcoded_credentials');
+    expect(c?.kind).toBe('zero_intercept');
+    expect(c?.reason).toContain('观察期满');
+    expect(report.watchlist.some(w => w.id === 'no_hardcoded_credentials')).toBe(false);
+  });
+
+  it('期满但样本不够（评估数跌破阈值）：不转候选', () => {
+    const root = zeroInterceptProject('no_hardcoded_credentials', 30);
+    const listedAt = new Date(NOW - 120 * DAY_MS).toISOString();
+    const report = buildConstraintsUsageReport(root, {}, {
+      watchlist: { no_hardcoded_credentials: { listedAt } },
+      now: NOW,
+    });
+
+    expect(report.candidates.some(c => c.id === 'no_hardcoded_credentials')).toBe(false);
+  });
+
+  it('其他三类候选不进观察名单（zero_trigger/unevaluable/high_noise 维持现状）', () => {
+    const root = createProjectFixture({ name: 'harness-watchlist-test' });
+    writeProjectTraces(root, [
+      ...tracesOf('capability_sync', 'skip', 5),                    // 不可评估
+      ...tracesOf('no_test_simplification', 'fail', 20),            // 高噪
+      ...tracesOf('no_test_simplification', 'pass', 4, 1700001000000),
+      // docs_freshness 等零触发
+    ]);
+    const report = buildConstraintsUsageReport(root, {}, { now: NOW });
+
+    expect(report.candidates.length).toBeGreaterThan(0);
+    expect(report.watchlist).toEqual([]);
+    expect(report.nextWatchlist).toEqual({});
+  });
+
+  it('diagnoseRetireCandidates 兼容签名：只回候选，观察期内的零拦截不出现', () => {
+    const stats = [{
+      id: 'x', severity: 'warning' as const,
+      total: 50, pass: 50, fail: 0, skip: 0,
+      evaluated: 50, failRate: 0,
+    }];
+    expect(diagnoseRetireCandidates(stats)).toEqual([]);
+    const listedAt = new Date(NOW - 100 * DAY_MS).toISOString();
+    const converted = diagnoseRetireCandidates(stats, {}, {
+      watchlist: { x: { listedAt } },
+      now: NOW,
+    });
+    expect(converted.map(c => c.kind)).toEqual(['zero_intercept']);
+  });
+
+  it('列入时间损坏按未列入处理：重新列入、时钟重启', () => {
+    const root = zeroInterceptProject();
+    const report = buildConstraintsUsageReport(root, {}, {
+      watchlist: { no_hardcoded_credentials: { listedAt: 'not-a-date' } },
+      now: NOW,
+    });
+
+    expect(report.candidates.some(c => c.id === 'no_hardcoded_credentials')).toBe(false);
+    expect(report.nextWatchlist['no_hardcoded_credentials']).toEqual({ listedAt: NOW_ISO });
+  });
+
+  it('CLI 级：report 经 StateIO 持久化列入，第二次运行读回仍在名单', async () => {
+    const root = zeroInterceptProject();
+    const stateIO = memoryStateIO();
+
+    await constraintsReport({ projectPath: root, stateIO, now: NOW }, io);
+    expect(stateIO.snapshot().constraintWatchlist?.['no_hardcoded_credentials']).toEqual({ listedAt: NOW_ISO });
+    expect(io.outText()).toContain('观察名单');
+    expect(io.outText()).toContain('no_hardcoded_credentials');
+
+    // 第二次：名单状态经注入面读回，不重复写、不进候选
+    const io2 = captureIO();
+    await constraintsReport({ projectPath: root, stateIO, now: NOW + 10 * DAY_MS }, io2);
+    expect(io2.outText()).toContain('剩余观察 80 天');
+    expect(io2.outText()).not.toContain('[零拦截] no_hardcoded_credentials');
+
+    // 期满：同一条转退役候选
+    const io3 = captureIO();
+    await constraintsReport({ projectPath: root, stateIO, now: NOW + WATCHLIST_PERIOD_DAYS * DAY_MS }, io3);
+    expect(io3.outText()).toContain('[零拦截] no_hardcoded_credentials');
+  });
+
+  it('StateIO 写回不动其他状态字段（读-改-写）', async () => {
+    const root = zeroInterceptProject();
+    const stateIO = memoryStateIO({ shownHints: ['trace_50'], lastStatusRun: '2026-09-01T00:00:00.000Z' });
+
+    await constraintsReport({ projectPath: root, stateIO, now: NOW }, captureIO());
+
+    const s = stateIO.snapshot();
+    expect(s.shownHints).toEqual(['trace_50']);
+    expect(s.lastStatusRun).toBe('2026-09-01T00:00:00.000Z');
+    expect(Object.keys(s.constraintWatchlist ?? {})).toEqual(['no_hardcoded_credentials']);
+  });
+
+  it('--export 脱敏摘要带观察名单分组（列入时间 + 剩余观察期）', async () => {
+    const root = zeroInterceptProject();
+    await constraintsReport({ projectPath: root, export: 'report.md', now: NOW }, captureIO());
+
+    const md = fs.readFileSync(path.join(root, 'report.md'), 'utf-8');
+    expect(md).toContain('## 观察名单');
+    expect(md).toContain('no_hardcoded_credentials');
+    expect(md).toContain(`剩余观察 ${WATCHLIST_PERIOD_DAYS} 天`);
+    expect(md).not.toContain(root);
   });
 });

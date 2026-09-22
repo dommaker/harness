@@ -58,7 +58,9 @@ describe('collectConstraints（收集模式，不抛）', () => {
   });
 
   it('guidelines 照常执行，warningCount 与不满意条目同口径', async () => {
-    const result = await checker.collectConstraints(VIOLATING);
+    // 触发域用 module_modification：32c07ed 把 no_hardcoded_credentials 升 error 级后，
+    // code_implementation 域内已无 warning 级约束，原断言恒假
+    const result = await checker.collectConstraints({ ...VIOLATING, operation: 'module_modification' });
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.warningCount).toBe(result.warnings.filter((g: ConstraintResult) => !g.satisfied).length);
   });

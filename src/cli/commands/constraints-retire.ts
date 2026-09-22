@@ -12,6 +12,8 @@
  *         retired: { at, reason, stats: { total, fail, failRate } }
  *
  * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'）。
+baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
+缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
  *
  * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役，
  * retire 只处理内置 check 约束。
@@ -30,9 +32,9 @@ import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
-import { FileKnowledgeStore } from '../../knowledge/store';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import type { Constraint } from '../../types/constraint';
+import { openKnowledgeStore } from './knowledge-view';
 import {
   buildConstraintsUsageReport,
   CANDIDATE_KIND_LABEL,
@@ -46,6 +48,8 @@ export interface RetireExecuteOptions {
   reason?: string;
   /** 注入当前时间（测试用） */
   now?: Date;
+  /** 知识库路径解析的 io（legacy 兜底告警走 stderr 需要；缺省 processIO） */
+  io?: CommandIO;
 }
 
 export type RetireStatus = 'retired' | 'already_retired' | 'unknown_id';
@@ -58,6 +62,8 @@ export interface RetireResult {
   stats: { total: number; fail: number; failRate: number };
   /** KnowledgeStore 条目 id（status='retired' 时存在） */
   knowledgeEntryId?: string;
+  /** 退役记录实际落盘的知识库根（status='retired' 时存在，harness#177） */
+  knowledgeBaseDir?: string;
 }
 
 export interface ConstraintsRetireOptions {
@@ -128,15 +134,18 @@ function setYamlEntry(
 
 /**
  * 写 KnowledgeStore 退役记录（consumptionMode: 'signal'）
+ *
+ * baseDir 走 openKnowledgeStore 同一解析点（harness#177）：缺省与 knowledge 读口同根，
+ * 不再硬编码 projectRoot 拼接（那会写进没有任何默认读口的 <repo>/.harness/knowledge）。
  */
 function saveRetireKnowledge(
-  projectRoot: string,
   id: string,
   target: RetireTargetInfo,
   reason: string,
   stats: { total: number; fail: number; failRate: number },
-  iso: string
-): string {
+  iso: string,
+  io: CommandIO
+): { entryId: string; baseDir: string } {
   const entryId = `constraint-retired-${id}`;
   const contentLines = [
     `# 约束退役：${id}`,
@@ -180,9 +189,9 @@ function saveRetireKnowledge(
     origin: 'human',
   };
 
-  const store = new FileKnowledgeStore({ baseDir: path.join(projectRoot, '.harness', 'knowledge') });
+  const store = openKnowledgeStore({}, io);
   store.save(entry);
-  return entryId;
+  return { entryId, baseDir: store.getBaseDir() };
 }
 
 /**
@@ -238,7 +247,14 @@ export function retireConstraint(
   );
 
   // 2. KnowledgeStore
-  const knowledgeEntryId = saveRetireKnowledge(projectRoot, id, target, reason, stats, iso);
+  const { entryId: knowledgeEntryId, baseDir: knowledgeBaseDir } = saveRetireKnowledge(
+    id,
+    target,
+    reason,
+    stats,
+    iso,
+    options.io ?? processIO
+  );
 
   return {
     id,
@@ -246,6 +262,7 @@ export function retireConstraint(
     isError,
     stats,
     knowledgeEntryId,
+    knowledgeBaseDir,
   };
 }
 
@@ -263,7 +280,7 @@ export function printRetireResult(result: RetireResult, io: CommandIO = processI
     case 'retired': {
       log(io, chalk.green(`✅ ${result.id}: 已退役`));
       log(io, `   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
-      log(io, `   知识沉淀: ${result.knowledgeEntryId}（.harness/knowledge）`);
+      log(io, `   知识沉淀: ${result.knowledgeEntryId}（${result.knowledgeBaseDir}）`);
       log(io, chalk.gray(`   retire 不是删除——恢复方法：删除 config.yml 中 constraints.${result.id} 段`));
       break;
     }
@@ -380,7 +397,7 @@ export async function runRetireInteractive(
 
     console.log();
     for (const p of plan) {
-      const result = retireConstraint(projectRoot, p.id, { reason: p.reason });
+      const result = retireConstraint(projectRoot, p.id, { reason: p.reason, io: out });
       printRetireResult(result, out);
     }
   } finally {
@@ -421,7 +438,7 @@ export async function constraintsRetire(
       logError(io, chalk.yellow(`⚠️  trace 文件有 ${skippedLines} 行损坏已跳过，落盘的退役统计只基于其余合法记录`));
     }
 
-    const result = retireConstraint(projectRoot, id, { reason: options.reason });
+    const result = retireConstraint(projectRoot, id, { reason: options.reason, io });
     if (result.status === 'retired' && result.isError) {
       log(io, chalk.yellow(`⚠️  ${id} 是一条 error 级约束，已通过 --yes 直达退役（交互模式会要求二次确认）`));
     }

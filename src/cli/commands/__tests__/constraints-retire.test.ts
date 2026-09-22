@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import { captureIO, type CapturingIO } from '../../command-contract';
+import * as os from 'os';
 import * as path from 'path';
 import { PassThrough, Writable } from 'stream';
 import * as yaml from 'js-yaml';
@@ -21,6 +22,7 @@ import { getConstraint } from '../../../core/constraints/definitions';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import { retireConstraint, constraintsRetire, runRetireInteractive, printRetireResult } from '../constraints-retire';
+import { openKnowledgeStore } from '../knowledge-view';
 import { createProjectFixture, writeProjectTraces } from '../../../test-setup/project-fixture';
 
 const FIXED_NOW = new Date('2026-08-08T12:00:00.000Z');
@@ -32,6 +34,12 @@ function readConfig(root: string): any {
 let io: CapturingIO;
 beforeEach(() => {
   io = captureIO();
+  // retire 的 KnowledgeStore 写口走统一解析点（harness#177）：不隔离会写进真实用户主目录
+  process.env.KNOWLEDGE_BASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-retire-kb-'));
+});
+afterEach(() => {
+  fs.rmSync(process.env.KNOWLEDGE_BASE_DIR!, { recursive: true, force: true });
+  delete process.env.KNOWLEDGE_BASE_DIR;
 });
 
 describe('retireConstraint 执行逻辑', () => {
@@ -77,7 +85,7 @@ describe('retireConstraint 执行逻辑', () => {
     expect(config.constraints.capability_sync.retired.reason).toBe('');
   });
 
-  it('KnowledgeStore 写入退役记录：规则原文 + 原因 + 统计 + signal 模式', () => {
+  it('KnowledgeStore 写入退役记录：规则原文 + 原因 + 统计 + signal 模式，落点为 knowledge 读口同一解析根（harness#177）', () => {
     const root = createProjectFixture({
       name: 'harness-retire-test',
       traces: [{ constraintId: 'no_completion_without_verification', result: 'fail' }],
@@ -86,8 +94,12 @@ describe('retireConstraint 执行逻辑', () => {
     const result = retireConstraint(root, 'no_completion_without_verification', { reason: '流程已内置门禁', now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.knowledgeEntryId).toBe('constraint-retired-no_completion_without_verification');
+    // 写口与读口同一解析点：KNOWLEDGE_BASE_DIR 覆盖对写口同步生效
+    expect(result.knowledgeBaseDir).toBe(process.env.KNOWLEDGE_BASE_DIR);
+    // 缺省解析（无 -p/--dir）构造的 store 直接可读——修复前写口硬编码 projectRoot，此处读不到
+    expect(openKnowledgeStore({}, io).get('constraint-retired-no_completion_without_verification')).toBeDefined();
 
-    const store = new FileKnowledgeStore({ baseDir: path.join(root, '.harness', 'knowledge') });
+    const store = new FileKnowledgeStore({ baseDir: process.env.KNOWLEDGE_BASE_DIR! });
     const entry = store.get('constraint-retired-no_completion_without_verification');
     expect(entry).toBeDefined();
     expect(entry!.consumptionMode).toBe('signal');

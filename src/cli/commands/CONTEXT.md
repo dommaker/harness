@@ -18,7 +18,7 @@ H5（#44）起：
 - 6 门禁命令实现在 `acceptance` / `command` / `contract` / `performance` / `review` / `security`（其 CLI 元数据在 `src/gates/definitions.ts`，形状同为 `CommandDefinition`，ADR-0007）；**判定一律穿过统一接口 `evaluate()`**，成败与措辞由共享面映射。`command` 只复用映射、保留自己的单行 ✓/✗ 输出（已对外的机器友好形状）；`security audit` / `acceptance list` / `contract validate-schema` / `review status` / `command --list/--level` 是只展示不判断的子命令，直读报告面（`scan()` 等），不套骨架
 - CLI 子命令 `command` 的两个分支共用同一台 gate 实例（#135/ADR-0024）：默认分支经 `evaluate()` 取裁决、`--level` 经同一实例的 `getRiskLevel()` 取等级，命令侧不再引用模块级单例出口——「配置传进去却到不了判定」的那条路已封。`--strict` 旗帜随 `CommandGateConfig.strict`（零消费者、从不生效）一并删除
 
-`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏；JSON 输出走 `--json-output`——原名 `--json` 与父命令同名会被 commander 消费在父侧、JSON 分支不可达，E1 复盘修正 M3.1 换名，闸见 `__tests__/constraints-report-json-flag.test.ts`）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；落 config.yml retired 元数据 + KnowledgeStore 沉淀。ADR-0029：注入漂移小节、prompt 注入清单、custom 落点与治理注入段同步已随文本注入层关停移除）。
+`constraints` 下挂治理子命令：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏；JSON 输出走 `--json-output`——原名 `--json` 与父命令同名会被 commander 消费在父侧、JSON 分支不可达，E1 复盘修正 M3.1 换名，闸见 `__tests__/constraints-report-json-flag.test.ts`）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；落 config.yml retired 元数据 + KnowledgeStore 沉淀——沉淀写口的 baseDir 走 knowledge-view `openKnowledgeStore` 同一解析点，与 knowledge 读口同根，不再硬编码 projectRoot 拼接（harness#177）。ADR-0029：注入漂移小节、prompt 注入清单、custom 落点与治理注入段同步已随文本注入层关停移除）。
 
 ## 依赖关系
 - 依赖 `src/core/constraints/` 约束引擎

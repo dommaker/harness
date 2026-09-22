@@ -21,11 +21,11 @@ describe('Constraint System', () => {
       expect(all.every(c => c.kind === 'check')).toBe(true);
     });
 
-    it('severity 分桶 = 3 error + 4 warning', () => {
+    it('severity 分桶 = 4 error + 3 warning（ADR-0032：凭证扫描升 error）', () => {
       const errors = Object.values(CONSTRAINTS).filter(c => c.severity === 'error');
       const warnings = Object.values(CONSTRAINTS).filter(c => c.severity === 'warning');
-      expect(errors).toHaveLength(3);
-      expect(warnings).toHaveLength(4);
+      expect(errors).toHaveLength(4);
+      expect(warnings).toHaveLength(3);
       Object.values(CONSTRAINTS).forEach(c => {
         expect(c.kind).toBe('check');
       });
@@ -222,13 +222,13 @@ describe('Constraint Checker', () => {
 
 describe('Constraint Severity', () => {
   it('error 级约束 severity 均为 error', () => {
-    ['no_completion_without_verification', 'no_test_simplification', 'docs_freshness'].forEach(id => {
+    ['no_completion_without_verification', 'no_test_simplification', 'docs_freshness', 'no_hardcoded_credentials'].forEach(id => {
       expect(CONSTRAINTS[id].severity).toBe('error');
     });
   });
 
   it('warning 级约束 severity 均为 warning', () => {
-    ['no_hardcoded_credentials', 'capability_sync', 'context_doc_sync', 'governance_presence'].forEach(id => {
+    ['capability_sync', 'context_doc_sync', 'governance_presence'].forEach(id => {
       expect(CONSTRAINTS[id].severity).toBe('warning');
     });
   });

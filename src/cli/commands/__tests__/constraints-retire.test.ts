@@ -57,7 +57,7 @@ describe('retireConstraint 执行逻辑', () => {
     });
 
     expect(result.status).toBe('retired');
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.stats).toEqual({ total: 3, fail: 1, failRate: 1 / 3 });
 
     const config = readConfig(root);
@@ -241,14 +241,14 @@ describe('constraintsRetire 非交互直达', () => {
 
   it('--yes 直达 warning 级退役：不打印 error 级警示并落盘', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    await constraintsRetire('no_hardcoded_credentials', { projectPath: root, reason: '直接退役', yes: true }, io);
+    await constraintsRetire('capability_sync', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
     expect(output).not.toContain('是一条 error 级约束');
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
-    expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
+    expect(config.constraints.capability_sync.enabled).toBe(false);
   });
 
   it('--yes 直达未知 id：明确提示', async () => {
@@ -317,7 +317,7 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
       ]);
     writeProjectTraces(root, healthy);
 
-    const streams = makeIo(['no_hardcoded_credentials', '误报太多', 'y']);
+    const streams = makeIo(['capability_sync', '误报太多', 'y']);
     const printed = captureLog();
     await runRetireInteractive(root, streams);
     streams.done();
@@ -328,8 +328,8 @@ describe('runRetireInteractive 交互流程（注入 IO 流）', () => {
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
-    expect(config.constraints.no_hardcoded_credentials.enabled).toBe(false);
-    expect(config.constraints.no_hardcoded_credentials.retired.reason).toBe('误报太多');
+    expect(config.constraints.capability_sync.enabled).toBe(false);
+    expect(config.constraints.capability_sync.retired.reason).toBe('误报太多');
   });
 
   it('坏行 fixture：候选列表前告知损坏行数（决策依据不完整不静默，harness#100）', async () => {

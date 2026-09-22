@@ -32,16 +32,17 @@ describe('预设数据', () => {
   describe('RELAXED_PRESET', () => {
     it('应该只启用核心约束', () => {
       expect(RELAXED_PRESET.name).toBe('relaxed');
-      expect(RELAXED_PRESET.errors).toHaveLength(1);
-      expect(RELAXED_PRESET.warnings).toHaveLength(1);
+      expect(RELAXED_PRESET.errors).toHaveLength(2);
+      expect(RELAXED_PRESET.warnings).toHaveLength(0);
     });
 
     it('应该包含 no_completion_without_verification', () => {
       expect(RELAXED_PRESET.errors).toContain('no_completion_without_verification');
     });
 
-    it('应该包含 no_hardcoded_credentials', () => {
-      expect(RELAXED_PRESET.warnings).toContain('no_hardcoded_credentials');
+    it('应该包含 no_hardcoded_credentials（ADR-0032 起为 error 级，同桶）', () => {
+      expect(RELAXED_PRESET.errors).toContain('no_hardcoded_credentials');
+      expect(RELAXED_PRESET.warnings).toEqual([]);
     });
   });
 

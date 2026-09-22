@@ -165,8 +165,8 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      expect(io.outText()).toContain('✅ error 级约束: 全部通过 (1 条)');
-      expect(io.outText()).toContain('✅ warning 级约束: 1/1 通过');
+      // ADR-0032 起凭证扫描为 error 级：code_implementation 下 error 评 2 条，warning 无命中不输出
+      expect(io.outText()).toContain('✅ error 级约束: 全部通过 (2 条)');
       expect(io.outText()).toContain('✅ 约束检查通过');
       expect(result).toEqual({ kind: 'ok' });
     });
@@ -204,7 +204,7 @@ describe('check command（真 git fixture）', () => {
       expect(result.kind).toBe('fail');
     });
 
-    it('staged 硬编码凭证 → warning 级警告但不阻断', async () => {
+    it('staged 硬编码凭证 → error 级违规即阻断（ADR-0032 升级）', async () => {
       const dir = gitRepo();
       stageChange(
         dir,
@@ -220,8 +220,26 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
+      // error 级违规走 throw 契约（#119）：异常外溢为 fail，消息即约束 message
+      expect(io.outText()).toContain('❌ 约束检查异常: 禁止在代码/文档/配置文件中硬编码密码');
+      expect(result.kind).toBe('fail');
+    });
+
+    it('warning 级违规（治理契约缺失）→ 警告但不阻断', async () => {
+      const dir = gitRepo();
+      // 采用 harness 治理（config.yml 在场）但无 PRESERVE:governance 段 → governance_presence 判 warning
+      write(dir, '.harness/config.yml', 'preset: standard\n');
+      stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
+      passTraces(dir);
+
+      // 不显式传 trigger：governance_presence 的触发词是 file_modification，由 diff 推断
+      const result = await check(
+        { preset: 'standard', staged: true, projectPath: dir },
+        io
+      );
+
       expect(io.outText()).toContain('⚠️  warning 级约束警告: 1 条');
-      expect(io.outText()).toContain('- no_hardcoded_credentials');
+      expect(io.outText()).toContain('- governance_presence');
       expect(io.outText()).toContain('✅ 约束检查通过');
       expect(result).toEqual({ kind: 'ok' });
     });

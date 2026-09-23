@@ -184,6 +184,90 @@ describe('pretool-use-hook', () => {
     });
   });
 
+  describe('非 Bash 工具事件（P1-5：只留痕不拦截，拦截归 codex 沙箱）', () => {
+    it('Edit 事件放行（exit 0）并写 tool-event trace（evidence 记工具名 + file_path，不记内容正文）', () => {
+      const stdin = JSON.stringify({
+        tool_name: 'Edit',
+        tool_input: { file_path: 'src/a.ts', old_string: 'SECRET=abc123', new_string: 'SECRET=def456' },
+      });
+      expect(runPreToolUseHook(stdin)).toBe(0);
+
+      const traces = readTraces();
+      expect(traces).toHaveLength(1);
+      expect(traces[0]).toMatchObject({
+        constraintId: 'tool-event:Edit',
+        severity: 'info',
+        result: 'pass',
+        operation: 'pretool-use-hook',
+      });
+      expect(traces[0].evidence).toEqual(['tool:Edit', 'path:src/a.ts']);
+      // 内容正文（可能含敏感值）不进 trace
+      expect(JSON.stringify(traces[0])).not.toContain('abc123');
+    });
+
+    it('Write 事件放行并留痕', () => {
+      const stdin = JSON.stringify({
+        tool_name: 'Write',
+        tool_input: { file_path: 'docs/note.md', content: 'body' },
+      });
+      expect(runPreToolUseHook(stdin)).toBe(0);
+
+      const traces = readTraces();
+      expect(traces).toHaveLength(1);
+      expect(traces[0].constraintId).toBe('tool-event:Write');
+      expect(traces[0].evidence).toEqual(['tool:Write', 'path:docs/note.md']);
+    });
+
+    it('apply_patch 事件（无 file_path）放行并留痕，evidence 只记工具名', () => {
+      const stdin = JSON.stringify({
+        tool_name: 'apply_patch',
+        tool_input: { patch: '*** Begin Patch' },
+      });
+      expect(runPreToolUseHook(stdin)).toBe(0);
+
+      const traces = readTraces();
+      expect(traces).toHaveLength(1);
+      expect(traces[0].constraintId).toBe('tool-event:apply_patch');
+      expect(traces[0].evidence).toEqual(['tool:apply_patch']);
+    });
+
+    it('MCP 工具事件放行并留痕', () => {
+      const stdin = JSON.stringify({
+        tool_name: 'mcp__local-rag__query_documents',
+        tool_input: { query: 'x' },
+      });
+      expect(runPreToolUseHook(stdin)).toBe(0);
+
+      const traces = readTraces();
+      expect(traces).toHaveLength(1);
+      expect(traces[0].constraintId).toBe('tool-event:mcp__local-rag__query_documents');
+    });
+
+    it('非 Bash 事件即使 tool_input 带危险 command 字段也不拦（判定面只认 Bash）', () => {
+      const stdin = JSON.stringify({
+        tool_name: 'Edit',
+        tool_input: { file_path: 'a.ts', command: 'rm -rf /' },
+      });
+      const r = decidePreToolUse(stdin);
+      expect(r.allowed).toBe(true);
+      expect(r.toolName).toBe('Edit');
+      expect(runPreToolUseHook(stdin)).toBe(0);
+    });
+
+    it('Bash 事件判定维持不变（回归：block 仍 exit 2）', () => {
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      expect(runPreToolUseHook(stdinOf('rm -rf /'))).toBe(2);
+      const traces = readTraces();
+      expect(traces).toHaveLength(1);
+      expect(traces[0].constraintId).toBe('command-gate');
+    });
+
+    it('缺 tool_name 的旧事件形状按 Bash 兼容（command 照常判定）', () => {
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      expect(runPreToolUseHook(JSON.stringify({ tool_input: { command: 'rm -rf /' } }))).toBe(2);
+    });
+  });
+
   describe('CommandGate.match 公共只读面（P1-7）', () => {
     it('返回命中规则明细（id/level/message），与 isAllowed 同一谓词', () => {
       const gate = new CommandGate();

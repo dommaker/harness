@@ -8,7 +8,7 @@
 - `core/index.ts`: 核心约束引擎
 - `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理
-- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径（studio#153）；P1-7（ADR-0031，wayfinder 票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）
+- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径（studio#153）；P1-7（ADR-0031，wayfinder 票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
 
 ## 目录
 | 目录 | 职责 |

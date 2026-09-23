@@ -18,6 +18,11 @@
  * P1-7（ADR-0031，wayfinder 票08）：判定后对命中写审计 trace（只记账不加新拦截
  * 能力）——此前拦下/放行的危险命令只写 stderr 不落盘，traces.log 里只有约束检查
  * 在写。留痕失败经 try/catch 吞掉，fail-open 口径与 shim 主路径一致。
+ *
+ * P1-5 harness 半边（ADR-0031，wayfinder 票08）：识别 tool_name 非 Bash 的事件
+ * （Edit/Write/apply_patch/MCP 工具，studio 侧补全 codex hooks matcher 后会到达），
+ * 只留痕不拦截——这些事件的 tool_input 没有 command 字段，旧形状会因缺字段
+ * fail-open 空转；拦截归 codex 沙箱，本 shim 对它们只记账。
  */
 import { CommandGate } from './gates/command';
 import type { CommandBlacklistRule } from './gates/types';
@@ -27,7 +32,8 @@ import { TraceCollector } from './monitoring/traces';
 export const HOOK_MARKER = 'harness-command-gate';
 
 interface PreToolUseInput {
-  tool_input?: { command?: string };
+  tool_name?: string;
+  tool_input?: { command?: string; file_path?: string };
 }
 
 /** 一次 PreToolUse 的判定结果：放行结论 + 命中明细（hits 供审计留痕） */
@@ -35,11 +41,16 @@ export interface PreToolUseDecision {
   allowed: boolean;
   command: string;
   hits: CommandBlacklistRule[];
+  /** provider 工具名（缺省按 Bash 兼容旧事件形状） */
+  toolName: string;
+  /** 非 Bash 事件的目标路径类字段（file_path；不记内容正文） */
+  targetPath?: string;
 }
 
 /**
  * 判定一次 PreToolUse 是否放行。
  * block 级命中 → allowed=false；warn/audit/干净命令/坏输入一律 allowed=true。
+ * 非 Bash 工具事件（Edit/Write/apply_patch/MCP）恒放行（P1-5：拦截归 codex 沙箱）。
  */
 export function decidePreToolUse(rawStdin: string): PreToolUseDecision {
   let input: PreToolUseInput = {};
@@ -48,15 +59,20 @@ export function decidePreToolUse(rawStdin: string): PreToolUseDecision {
   } catch {
     // 非 JSON stdin：放行
   }
-  const command = (input.tool_input && input.tool_input.command) || '';
+  const toolName = input.tool_name || 'Bash';
+  const toolInput = input.tool_input || {};
+  if (toolName !== 'Bash') {
+    return { allowed: true, command: '', hits: [], toolName, targetPath: toolInput.file_path };
+  }
+  const command = toolInput.command || '';
   try {
     const gate = new CommandGate();
     // 与 isAllowed 同一谓词（match）：allowed = 无 block 级命中
     const hits = gate.match(command);
-    return { allowed: !hits.some((r) => r.level === 'block'), command, hits };
+    return { allowed: !hits.some((r) => r.level === 'block'), command, hits, toolName };
   } catch {
     // CommandGate 加载/判定异常：fail-open
-    return { allowed: true, command, hits: [] };
+    return { allowed: true, command, hits: [], toolName };
   }
 }
 
@@ -68,7 +84,8 @@ const SEVERITY_BY_LEVEL = {
 } as const;
 
 /**
- * 命中留痕（P1-7）：每条带命中的判定写一条汇总 trace。
+ * 判定留痕：非 Bash 工具事件一条 `tool-event:<tool>`（P1-5），Bash 命中一条
+ * 汇总 trace（P1-7）。
  *
  * 口径选择记理由：
  * - constraintId 用汇总的 'command-gate' 而非每规则 'command-gate:<ruleId>'——
@@ -80,8 +97,25 @@ const SEVERITY_BY_LEVEL = {
  *   项目根（provider 在项目根起会话），可接受；写错地方也不拦主路径。
  */
 function recordHookTrace(decision: PreToolUseDecision): void {
-  if (decision.hits.length === 0) return;
   try {
+    // P1-5：非 Bash 工具事件只留痕不拦截（拦截归 codex 沙箱）——constraintId
+    // 按工具名分（tool-event:<tool>），工具集合有界、不会碎片化聚合；evidence
+    // 记工具名 + 目标路径类字段（file_path），不记内容正文。
+    if (decision.toolName !== 'Bash') {
+      new TraceCollector().record({
+        constraintId: `tool-event:${decision.toolName}`,
+        severity: 'info',
+        timestamp: Date.now(),
+        result: 'pass',
+        operation: 'pretool-use-hook',
+        evidence: [
+          `tool:${decision.toolName}`,
+          ...(decision.targetPath ? [`path:${decision.targetPath}`] : []),
+        ],
+      });
+      return;
+    }
+    if (decision.hits.length === 0) return;
     const maxLevel = decision.hits.some((r) => r.level === 'block')
       ? 'block'
       : decision.hits.some((r) => r.level === 'warn')

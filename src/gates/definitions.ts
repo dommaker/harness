@@ -171,7 +171,12 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
         { flags: '--ignore-dev-deps', description: '忽略开发依赖', defaultValue: false },
         { flags: '--scan-command <cmd>', description: '自定义扫描命令' },
       ],
-      subcommands: { audit: { impl: { module: 'security', export: 'auditDetails' } } },
+      subcommands: {
+        audit: { impl: { module: 'security', export: 'auditDetails' } },
+        // P1-8（ADR-0031，wayfinder 票08）：gitleaks 全历史机密扫描；
+        // 二进制缺失 skip 不 fail，CI 安装后才是真门
+        secrets: { impl: { module: 'security', export: 'secretsScan' } },
+      },
       subcommandStrict: false,
       bareRunsAction: true,
       action: { module: 'security', export: 'security' },

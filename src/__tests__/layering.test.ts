@@ -84,7 +84,9 @@ const DOWNSTREAM: Record<string, string[]> = {
   // ── 顶层组合面 / 测试面：可下行到任何单元 ──
   cli: [ANY], // CLI 是唯一的上层，per-command 懒加载各命令实现
   'index.ts': [ANY], // 包根 barrel（ADR-0003 显式清单）
-  'pretool-use-hook.ts': ['gates', 'types', 'utils'], // 钩子入口：PreToolUse 决策取 CommandGate
+  // 钩子入口：PreToolUse 决策取 CommandGate；P1-7（ADR-0031）命中留痕经
+  // TraceCollector 写 traces——与 hooks 组合根 → monitoring 同方向，是下行不是债
+  'pretool-use-hook.ts': ['gates', 'monitoring', 'types', 'utils'],
   __tests__: [ANY], // 根测试面：跨目录取生产码是本职
 };
 

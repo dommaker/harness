@@ -308,8 +308,12 @@ export class CommandGate implements Gate {
   /**
    * 唯一匹配谓词（#135）：类别忽略与规则模式测试只在此处发生。
    * 三个入口一律经 judge() 取它的投影，不再各写一遍匹配循环。
+   *
+   * P1-7（ADR-0031，wayfinder 票08）起由私有提为公共同步只读面：
+   * pretool-use-hook 需要命中明细（rule id/level）写审计 trace，
+   * isAllowed 的布尔投影丢掉了 hits。谓词语义不变，调用方不得改返回数组。
    */
-  private matchCommand(command: string): CommandBlacklistRule[] {
+  match(command: string): CommandBlacklistRule[] {
     const hits: CommandBlacklistRule[] = [];
 
     for (const rule of this.blacklist) {
@@ -331,7 +335,7 @@ export class CommandGate implements Gate {
    * 三投影因此对同一输入不可能互相矛盾。
    */
   private judge(command: string): CommandVerdict {
-    const hits = this.matchCommand(command);
+    const hits = this.match(command);
     const blocked = hits.filter(rule => rule.level === 'block');
     const warnings = hits.filter(rule => rule.level === 'warn');
     const audits = hits.filter(rule => rule.level === 'audit');

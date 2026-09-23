@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-23
+
+### Changes
+- fix(layering): 登记 pretool-use-hook → monitoring 下行边（票08 P1-7 漏登记）
+- feat(security): 新增 security secrets 子命令——gitleaks 全历史机密扫描（ADR-0031，wayfinder 票08 P1-8）
+- feat(hook): shim 识别非 Bash 工具事件，只留痕不拦截（ADR-0031，wayfinder 票08 P1-5 harness 半边）
+- feat(hook): pretool-use-hook 命中留痕走 traces 通道（ADR-0031，wayfinder 票08 P1-7）
+
 ## [1.12.0] - 2026-09-23
 
 ### Changes

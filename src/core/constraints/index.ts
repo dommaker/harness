@@ -24,10 +24,32 @@ export type { CheckConstraintsOptions, TraceRecorder } from './checker';
 export { CheckCache } from './check-cache';
 export type { CheckCacheConfig, CheckSamplingConfig } from './check-cache';
 
+// 检查器原语 SDK（harness#181，ADR-0035 决策 3 第二半：只导出存量——现有 checker 真实在用的件）
+export {
+  buildCheckEnv,
+  normalizeCheckOutcome,
+  formatEvidence,
+  contextFlag,
+  contextEvidenceFlag,
+} from './checkers';
+export type {
+  ConstraintCheck,
+  CheckEnv,
+  CheckOutcome,
+  CheckDetail,
+  CheckSkip,
+  NormalizedOutcome,
+  EvidenceProviders,
+  CheckInputNeeds,
+  CheckEvidenceInput,
+  ContextEvidenceFlag,
+} from './checkers';
+
 // 类型导出
 export type {
   ConstraintId,
   ConstraintKind,
+  ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
   Constraint,

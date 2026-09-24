@@ -41,6 +41,16 @@ export interface GitEvidence {
   changedFileNames(staged: boolean): string;
   /** HEAD 中存在的目录集合；命令失败 → null */
   headDirs(): Set<string> | null;
+  /**
+   * staged 全量 diff 是否取证成功（harness#182）
+   *
+   * 命令失败（非 git 仓库 / 超 maxBuffer）时 stagedDiff() 归空串——「无变更」与
+   * 「取证失败」在返回值上不可区分，检查器输入契约据此分辨（memo 复用同一份结果，
+   * 不重复执行命令）。
+   */
+  stagedDiffAvailable(): boolean;
+  /** 变更文件名列表是否取证成功（语义同 stagedDiffAvailable） */
+  changedFileNamesAvailable(staged: boolean): boolean;
 }
 
 /** 大 diff 不 ENOBUFS 的缓冲上限（1MB） */
@@ -114,6 +124,9 @@ export function createGitEvidence(
       const result = once(HEAD_TREE);
       return result.ok ? parseHeadDirs(result.stdout) : null;
     },
+    stagedDiffAvailable: () => once(STAGED_DIFF).ok,
+    changedFileNamesAvailable: (staged: boolean) =>
+      once(staged ? STAGED_DIFF_NAMES : UNSTAGED_DIFF_NAMES).ok,
   };
 }
 

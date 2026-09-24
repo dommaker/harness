@@ -3,6 +3,7 @@
  *
  * 只保留带真实 checker 的约束。每条必须：
  * - kind: 'check'
+ * - channel: 'gate'（ADR-0035：硬门禁通道，显式标注）
  * - severity: 'warning'（违规告警不阻断）
  * - 在 checkers/ 注册表中有对应实现（注册表闭环，缺失即加载期抛错）
  */
@@ -17,6 +18,7 @@ export const WARNING_CONSTRAINTS: Record<string, Constraint> = {
   capability_sync: {
     id: 'capability_sync',
     kind: 'check',
+    channel: 'gate',
     rule: 'CODE CHANGES MUST UPDATE CAPABILITIES.MD',
     message: '核心模块变更必须同步功能清单（支持模块级目录条目登记）',
     severity: 'warning',
@@ -45,6 +47,7 @@ export const WARNING_CONSTRAINTS: Record<string, Constraint> = {
   context_doc_sync: {
     id: 'context_doc_sync',
     kind: 'check',
+    channel: 'gate',
     rule: 'KEY DIRECTORIES SHOULD HAVE CONTEXT.MD',
     message: '关键目录缺少 CONTEXT.md，运行 harness sync-docs 创建模板后填写实际内容',
     severity: 'warning',
@@ -74,6 +77,7 @@ export const WARNING_CONSTRAINTS: Record<string, Constraint> = {
   governance_presence: {
     id: 'governance_presence',
     kind: 'check',
+    channel: 'gate',
     rule: 'GOVERNANCE CONTRACT MUST BE PRESENT (AGENTS.MD PRESERVE:GOVERNANCE BLOCK OR CLAUDE.MD GOVERNANCE RULES)',
     message: '治理契约缺失：AGENTS.md 缺少非空 PRESERVE:governance 段，且 CLAUDE.md 无 Governance Rules 块',
     severity: 'warning',

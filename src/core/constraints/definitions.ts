@@ -46,3 +46,13 @@ export function findConstraintsByTrigger(trigger: ConstraintTrigger): Constraint
 export function getConstraint(id: string): Constraint | undefined {
   return CONSTRAINTS[id];
 }
+
+/**
+ * gate 通道判定（ADR-0035）：缺省 'gate'
+ *
+ * 检查分发与注册表闭环的唯一口径——channel 非 gate 的条目不进入 checker
+ * 分发、不要求注册 checker（discipline 登记记录 / workflow 流程承载）
+ */
+export function isGateConstraint(constraint: Constraint): boolean {
+  return (constraint.channel ?? 'gate') === 'gate';
+}

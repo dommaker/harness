@@ -54,10 +54,13 @@ const evidenceText = (outcome: CheckOutcome): string =>
   normalizeCheckOutcome(outcome).evidence.join('\n');
 
 describe('capability_sync — skip 与文档格式门槛', () => {
-  it('无 CAPABILITIES.md → skip（ADR-0001 存在性探测，有无变更都一样）', async () => {
+  it('无 CAPABILITIES.md → 带原因的 skip（ADR-0001 存在性探测，有无变更都一样；harness#182）', async () => {
     const dir = createProjectFixture({ name: 'cap-sync-none' });
-    expect(await capabilitySync.evaluate(makeEnv(dir, []))).toBe('skip');
-    expect(await capabilitySync.evaluate(makeEnv(dir, ['src/foo.ts']))).toBe('skip');
+    for (const staged of [[], ['src/foo.ts']]) {
+      const outcome = normalizeCheckOutcome(await capabilitySync.evaluate(makeEnv(dir, staged)));
+      expect(outcome.skipped).toBe(true);
+      expect(outcome.skipReason).toContain('未采用 CAPABILITIES.md 约定');
+    }
   });
 
   it('散文文档（无表格）+ 有变更 → 放行（历史语义）', async () => {
@@ -87,6 +90,21 @@ describe('capability_sync — skip 与文档格式门槛', () => {
   it('有表格但零条目 + 源码无文件 → 放行（门限定「确有可登记对象」，不扩大 fail 面）', async () => {
     const dir = setupDir('empty-table-nosrc', `# Capabilities\n\n${TABLE_HEAD}`);
     expect(passed(await capabilitySync.evaluate(makeEnv(dir, [])))).toBe(true);
+  });
+
+  it('staged 清单不可得（git 取证失败）→ 放行但带降级提示，不假「已核对」（harness#182）', async () => {
+    const dir = setupDir('diff-unavailable', `# C\n\n${TABLE_HEAD}| foo | src/foo.ts | foo |\n`, ['src/foo.ts']);
+    const context: ConstraintContext = { operation: 'commit', projectPath: dir };
+    const env = buildCheckEnv(context, {
+      stagedDiff: async () => '',
+      stagedDiffNames: async () => '',
+      srcScan: (root: string) => collectSourceFiles(dir, [root]),
+      available: () => false,
+    });
+    const outcome = normalizeCheckOutcome(await capabilitySync.evaluate(env));
+    expect(outcome.satisfied).toBe(true); // fail-open 保留
+    expect(outcome.skipped).toBe(false); // 全量扫描不依赖 git，不整体 skip
+    expect(outcome.evidence.join('\n')).toContain('增量检查降级');
   });
 });
 

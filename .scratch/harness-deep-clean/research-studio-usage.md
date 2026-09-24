@@ -1,6 +1,6 @@
 # Studio 对 @dommaker/harness 的完整使用面快照（重构护栏）
 
-> 调研日期：2026-08。扫描范围：`/root/projects/studio`（排除 node_modules、dist）。
+> 调研日期：2026-08。扫描范围：`~/projects/studio`（排除 node_modules、dist）。
 > studio 锁定版本：`"@dommaker/harness": "^0.16.6"`（根 package.json + packages/studio-shared 均声明）。
 > 用途：harness 大刀阔斧重构时，本文列出 studio 的每一个使用点与影响级别，并在末尾给出不可破坏的护栏清单。
 >

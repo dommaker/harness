@@ -38,8 +38,8 @@
 
 | # | 现象 | 证据 | 说明 |
 |---|------|------|------|
-| R1 | studio 仓 `.claude/settings.json` 仍是**旧式 dist 深路径**，且指向 harness **仓 checkout** 而非 node_modules | `studio/.claude/settings.json:32` `require('/root/projects/harness/dist/gates/command')`；`:64` `require('/root/projects/harness/dist/core/constraints/checker')` | #147/#154 已确立「出厂 shim + require.resolve 根导出」模式，provider 生成面（`.codex`/`.kimi-code`）已迁移，唯独手写/留存的 `.claude/settings.json` 未迁移。harness 内部文件移动即断；且依赖 `/root/projects/harness` 本地 checkout 存在，部署形态脆弱 |
-| R2 | `.codex/hooks.json` / `.kimi-code/config.toml` 的 shim 路径**钉死 studio-prod pnpm 版本深路径** | `studio/.codex/hooks.json:10` 与 `studio/.kimi-code/config.toml:80`：`node /root/projects/studio-prod/node_modules/.pnpm/@dommaker+harness@1.1.1/node_modules/@dommaker/harness/dist/pretool-use-hook.js` | 路径本身是新 shim（#154 模式正确），但钉在 `@1.1.1`——studio `package.json:65` 已要求 `^1.2.3`，机器配置与依赖声明脱节两个 minor；pnpm 版本化路径在 harness 升级后指向旧包甚至失效路径。另注：该绝对路径含 `studio-prod` 部署布局，写在公开仓配置里（脱敏问题超出本票范围，仅记录） |
+| R1 | studio 仓 `.claude/settings.json` 仍是**旧式 dist 深路径**，且指向 harness **仓 checkout** 而非 node_modules | `studio/.claude/settings.json:32` `require('~/projects/harness/dist/gates/command')`；`:64` `require('~/projects/harness/dist/core/constraints/checker')` | #147/#154 已确立「出厂 shim + require.resolve 根导出」模式，provider 生成面（`.codex`/`.kimi-code`）已迁移，唯独手写/留存的 `.claude/settings.json` 未迁移。harness 内部文件移动即断；且依赖 `~/projects/harness` 本地 checkout 存在，部署形态脆弱 |
+| R2 | `.codex/hooks.json` / `.kimi-code/config.toml` 的 shim 路径**钉死生产部署 checkout 的 pnpm 版本深路径** | `studio/.codex/hooks.json:10` 与 `studio/.kimi-code/config.toml:80`：`node <生产部署 checkout>/node_modules/.pnpm/@dommaker+harness@1.1.1/node_modules/@dommaker/harness/dist/pretool-use-hook.js` | 路径本身是新 shim（#154 模式正确），但钉在 `@1.1.1`——studio `package.json:65` 已要求 `^1.2.3`，机器配置与依赖声明脱节两个 minor；pnpm 版本化路径在 harness 升级后指向旧包甚至失效路径。另注：该绝对路径含生产部署布局，本仓为公开仓、此类路径一律写占位形式（脱敏要求，2026-09-24 收口本行） |
 
 ---
 

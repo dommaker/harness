@@ -18,6 +18,11 @@ export {
   constraintChecker,
   CheckCache,
   ConstraintViolationError,
+  buildCheckEnv,
+  normalizeCheckOutcome,
+  formatEvidence,
+  contextFlag,
+  contextEvidenceFlag,
 } from './constraints';
 export type {
   CheckConstraintsOptions,
@@ -25,6 +30,7 @@ export type {
   CheckSamplingConfig,
   ConstraintId,
   ConstraintKind,
+  ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
   Constraint,
@@ -32,6 +38,16 @@ export type {
   ConstraintContext,
   ConstraintCheckResult,
   IronLawContext,
+  ConstraintCheck,
+  CheckEnv,
+  CheckOutcome,
+  CheckDetail,
+  CheckSkip,
+  NormalizedOutcome,
+  EvidenceProviders,
+  CheckInputNeeds,
+  CheckEvidenceInput,
+  ContextEvidenceFlag,
 } from './constraints';
 
 // 验证器（检查点 / PassesGate / CSO）

@@ -238,6 +238,60 @@ describe('ConstraintChecker - 补充覆盖', () => {
       await expect(checkConstraints(context)).rejects.toThrow();
     });
   });
+
+  describe('channel 通道分发过滤（ADR-0035）', () => {
+    const disciplineEntry = {
+      id: 'app_discipline_rule',
+      kind: 'check' as const,
+      channel: 'discipline' as const,
+      severity: 'error' as const,
+      rule: 'DISCIPLINE RECORD',
+      message: '纪律登记记录',
+      trigger: 'code_implementation',
+      enforcement: '',
+      source: 'app' as const,
+    };
+    const customConfig = {
+      constraints: { app_discipline_rule: disciplineEntry },
+      disabled: [] as string[],
+    };
+    const context: ConstraintContext = { operation: 'code_implementation' };
+
+    it('非 gate 条目不进入 checker 分发、不触发注册表闭环抛错', async () => {
+      const result = await checker.checkConstraints(context, customConfig);
+      expect(result.passed).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('findApplicableConstraints 同样过滤非 gate 条目', () => {
+      const applicable = checker.findApplicableConstraints(context, customConfig);
+      expect(applicable.errors).toHaveLength(0);
+      expect(applicable.warnings).toHaveLength(0);
+    });
+
+    it('beforeExecution 跳过非 gate 条目', async () => {
+      await expect(checkBeforeExecution(context, customConfig)).resolves.not.toThrow();
+    });
+
+    it('非 gate 条目漏到 check() 单条入口 → 抛错（编排层过滤缺失不静默）', async () => {
+      await expect(checker.check(disciplineEntry, context)).rejects.toThrow(/不进入检查分发/);
+    });
+
+    it('channel: gate 且无 checker 的条目依旧当场抛错（闭环不松绑）', async () => {
+      const gateNoChecker = {
+        id: 'no_such_builtin_constraint',
+        kind: 'check' as const,
+        channel: 'gate' as const,
+        severity: 'error' as const,
+        rule: 'GATE WITHOUT CHECKER',
+        message: 'gate 无 checker',
+        trigger: 'code_implementation',
+        enforcement: '',
+      };
+      await expect(checker.check(gateNoChecker, context)).rejects.toThrow(/未注册 checker/);
+    });
+  });
 });
 
 describe('buildCheckEnv - 证据接线契约', () => {
@@ -263,10 +317,32 @@ describe('buildCheckEnv - 证据接线契约', () => {
     expect(env.srcScan('src')).toEqual(['src/x.ts']);
   });
 
-  it("'none' env 下 evidence flag 未接线的 checker 返回 'skip'", async () => {
-    // 「没接证据 → skip」由注释固化为可执行契约
-    const check = contextEvidenceFlag('test-flag', (ctx) => ctx.hasVerificationEvidence);
+  it("'none' env 下 evidence flag 未接线的 checker 返回带原因的 skip（harness#182）", async () => {
+    // 「没接证据 → skip」由注释固化为可执行契约；原因进结果面
+    const check = contextEvidenceFlag('test-flag', 'hasVerificationEvidence');
     const env = buildCheckEnv(context, 'none');
-    expect(await check.evaluate(env)).toBe('skip');
+    expect(await check.evaluate(env)).toEqual({
+      skip: true,
+      reason: '证据标志 hasVerificationEvidence 未接线',
+    });
+  });
+
+  it("'none' 变体：证据输入一律报不可得（输入契约的降级依据）", () => {
+    const env = buildCheckEnv(context, 'none');
+    expect(env.evidenceAvailable!('stagedDiff')).toBe(false);
+    expect(env.evidenceAvailable!('stagedDiffNames')).toBe(false);
+  });
+
+  it('providers 变体：缺省报全部可得；自定义 available 原样生效', () => {
+    const providers = {
+      stagedDiff: async () => '',
+      stagedDiffNames: async () => '',
+      srcScan: () => [] as string[],
+    };
+    const env = buildCheckEnv(context, providers);
+    expect(env.evidenceAvailable!('stagedDiff')).toBe(true);
+
+    const degraded = buildCheckEnv(context, { ...providers, available: () => false });
+    expect(degraded.evidenceAvailable!('stagedDiffNames')).toBe(false);
   });
 });

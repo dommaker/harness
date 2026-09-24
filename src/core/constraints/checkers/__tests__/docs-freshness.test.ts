@@ -42,9 +42,11 @@ function writeCap(dir: string, body: string): void {
 }
 
 describe('docs_freshness — 存在性探测（ADR-0001）', () => {
-  it('无 CAPABILITIES.md/CHANGELOG/配置 → skip，不计 pass/fail', async () => {
+  it('无 CAPABILITIES.md/CHANGELOG/配置 → 带原因的 skip，不计 pass/fail（harness#182）', async () => {
     const dir = setupProject('none', ['src/module.ts']);
-    expect(await docsFreshness.evaluate(makeEnv(dir))).toBe('skip');
+    const outcome = normalizeCheckOutcome(await docsFreshness.evaluate(makeEnv(dir)));
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.skipReason).toContain('未采用文档新鲜度约定');
   });
 });
 

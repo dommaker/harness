@@ -4,7 +4,8 @@
  * severity 显式模型（ADR-0029）：
  * - severity='error'：检查失败立即抛出异常（block 模式）
  * - severity='warning'：检查失败记录警告
- * 全部约束 kind='check'，必须带真实 checker（注册表闭环）。
+ * 全部约束 kind='check'；channel='gate' 的约束必须带真实 checker（注册表闭环，
+ * ADR-0035），非 gate 条目（workflow/discipline）不进入检查分发。
  */
 
 import {
@@ -15,13 +16,13 @@ import {
   ConstraintViolationError,
 } from '../../types/constraint';
 import type { ExecutionTrace } from '../../types/trace';
-import { CONSTRAINTS } from './definitions';
+import { CONSTRAINTS, isGateConstraint } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { matchesTrigger } from './triggers';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
-import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, type CheckOutcome } from './checkers';
+import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, degradeForMissingInputs, type CheckOutcome } from './checkers';
 import { createGitEvidence, type GitEvidence } from './git-evidence';
 import { createRunEnv, type RunEnv } from './run-env';
 
@@ -100,8 +101,9 @@ export class ConstraintChecker {
         severity: constraint.severity,
         satisfied: true,
         skipped: true,
+        skipReason: outcome.skipReason,
         constraint,
-        message: `约束 ${constraint.id} 跳过评估（约定未采用或证据未接线）`,
+        message: `约束 ${constraint.id} 跳过评估（${outcome.skipReason ?? '约定未采用或证据未接线'}）`,
         checkedAt: new Date(),
       };
     }
@@ -137,14 +139,16 @@ export class ConstraintChecker {
       projectPath: context.projectPath,
       sessionId: context.sessionId,
       evidence: checkResult.evidence,
+      skipReason: checkResult.skipped ? checkResult.skipReason : undefined,
     });
   }
 
   /**
    * 检查约束前置条件（工单 21：分发至 checkers/ 注册表）
    *
-   * 注册表闭环（ADR-0001）：kind='check' 未注册 checker 直接抛错，
-   * 不再有"未注册默认通过"路径。
+   * 注册表闭环（ADR-0001，口径经 ADR-0035 收窄）：channel='gate' 未注册 checker
+   * 直接抛错，不再有"未注册默认通过"路径；非 gate 条目在编排层分发前已过滤，
+   * 漏到这里说明编排层有洞，同样抛错而非静默通过。
    *
    * git 证据（stagedDiff/stagedDiffNames）单一来源 = GitEvidence adapter（#87）：
    * 一次 run 内调用方传同一实例即至多取证一次，run 外调用独占一份。
@@ -156,11 +160,18 @@ export class ConstraintChecker {
     evidence?: GitEvidence,
     runEnv?: RunEnv
   ): Promise<CheckOutcome> {
+    if (!isGateConstraint(constraint)) {
+      throw new Error(
+        `[harness] 约束 "${constraint.id}" (channel='${constraint.channel}') 不进入检查分发，` +
+        `编排层过滤缺失，拒绝静默通过。`
+      );
+    }
     const impl = getConstraintCheck(constraint);
     if (!impl) {
       throw new Error(
-        `[harness] 约束 "${constraint.id}" (kind='check') 未注册 checker，拒绝静默通过。` +
-        `请在 checkers/ 注册实现（纯文本提示层已随 ADR-0029 关停，文本规则写入项目治理文档）。`
+        `[harness] 约束 "${constraint.id}" (channel='gate') 未注册 checker，拒绝静默通过。` +
+        `请在 checkers/ 注册实现；拦不住的纪律规则标 channel: discipline 登记（harness 不执行），` +
+        `流程承载的规则标 channel: workflow（ADR-0035）。`
       );
     }
 
@@ -175,7 +186,18 @@ export class ConstraintChecker {
             relative(projectPath, f)
           )
         ),
+      available: (input) => {
+        switch (input) {
+          case 'stagedDiff': return git.stagedDiffAvailable();
+          case 'stagedDiffNames': return git.changedFileNamesAvailable(true);
+        }
+      },
     }, runEnv);
+
+    // 输入契约（harness#182）：checker 声明的输入环境给不了 → 带原因的 skipped，
+    // 不进入 evaluate（「检查器失效 ≠ 对象合规」，不再对空证据假 pass / 无声 skip）
+    const degraded = degradeForMissingInputs(impl, env);
+    if (degraded) return degraded;
 
     return await impl.evaluate(env);
   }
@@ -197,7 +219,7 @@ export class ConstraintChecker {
     const constraints = this.getConstraints(customConfig);
 
     const applicable = Object.values(constraints).filter(constraint =>
-      matchesTrigger(constraint, operations)
+      isGateConstraint(constraint) && matchesTrigger(constraint, operations)
     );
 
     return {
@@ -276,7 +298,8 @@ export class ConstraintChecker {
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
     // 1. error 级: block 模式首个违规即抛；collect 模式全量收集
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error')) {
+    //    （ADR-0035：channel 非 gate 的条目不进入检查分发，两级循环同口径过滤）
+    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error' && isGateConstraint(c))) {
       if (!matchesTrigger(constraint, operations)) continue;
 
       const checkResult = await this.check(constraint, context, run, env);
@@ -292,7 +315,7 @@ export class ConstraintChecker {
     }
 
     // 2. warning 级: 记录警告
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'warning')) {
+    for (const constraint of Object.values(constraints).filter(c => c.severity === 'warning' && isGateConstraint(c))) {
       if (!matchesTrigger(constraint, operations)) continue;
 
       const checkResult = await this.check(constraint, context, run, env);
@@ -327,7 +350,7 @@ export class ConstraintChecker {
     const constraints = this.getConstraints(customConfig);
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error')) {
+    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error' && isGateConstraint(c))) {
       if (!matchesTrigger(constraint, operations)) continue;
 
       const result = await this.check(constraint, context, run, env);

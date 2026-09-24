@@ -4,7 +4,7 @@ Status: resolved
 
 ## Question
 
-扫描 /root/projects/studio 全部代码与脚本,列出其对 harness 的每一个使用点:
+扫描 ~/projects/studio 全部代码与脚本,列出其对 harness 的每一个使用点:
 1. 调用了哪些 harness CLI 命令(含参数形态)
 2. import/require 了 harness 的哪些模块或 API
 3. postinstall/prepare 等脚本(scripts/harness-sync.js、harness-coverage.ts 等)依赖 harness 的哪些文件/行为

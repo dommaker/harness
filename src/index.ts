@@ -31,6 +31,7 @@ export type {
   Constraint,
   ConstraintId,
   ConstraintKind,
+  ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
   ConstraintContext,
@@ -83,6 +84,31 @@ export {
   checkBeforeExecution,
 } from './core/constraints/checker';
 export type { CheckConstraintsOptions } from './core/constraints/checker';
+
+// ========================================
+// 检查器原语 SDK（harness#181，ADR-0035 决策 3 第二半）
+// 业务检查器脚本 import 原语组装，瘦身成「事实 ↔ 期望」的绑定。
+// 导出纪律 = 只导出存量（现有 checker 真实在用的件），不为想象中的需求新增抽象。
+// ========================================
+export {
+  buildCheckEnv,
+  normalizeCheckOutcome,
+  formatEvidence,
+  contextFlag,
+  contextEvidenceFlag,
+} from './core/constraints/checkers';
+export type {
+  ConstraintCheck,
+  CheckEnv,
+  CheckOutcome,
+  CheckDetail,
+  CheckSkip,
+  NormalizedOutcome,
+  EvidenceProviders,
+  CheckInputNeeds,
+  CheckEvidenceInput,
+  ContextEvidenceFlag,
+} from './core/constraints/checkers';
 
 // ========================================
 // 约束缓存

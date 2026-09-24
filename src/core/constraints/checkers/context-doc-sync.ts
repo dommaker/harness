@@ -18,7 +18,14 @@ export const contextDocSync: ConstraintCheck = {
     const projectPath = env.projectPath;
     const resolution = resolveContextFiles(env);
     if (resolution.state !== 'enabled') {
-      return 'skip'; // 未配置或约定已立但无目标，跳过评估
+      // 未配置或约定已立但无目标，跳过评估（harness#182：原因进结果面）
+      return {
+        skip: true,
+        reason:
+          resolution.state === 'enabled-empty'
+            ? 'context_files 约定已启用但 required_dirs 为空'
+            : '项目未配置 governance.context_files 约定',
+      };
     }
 
     // 证据随判定一并返回（ADR-0016 补迁）：此前只回裸 false，

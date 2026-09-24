@@ -59,8 +59,29 @@ describe('governance_presence checker', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('未采用 harness 治理（无 .harness/config.yml）→ skip', async () => {
-    expect(await governancePresence.evaluate(makeEnv(tempDir))).toBe('skip');
+  it('未采用 harness 治理（无 .harness/config.yml）→ 带原因的 skip（harness#182）', async () => {
+    const outcome = normalizeCheckOutcome(await governancePresence.evaluate(makeEnv(tempDir)));
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.skipReason).toContain('未采用 harness 治理');
+  });
+
+  it('config.yml YAML 损坏 → 仍按「已采用」评估（harness#182：不再恰在配置出问题时闭嘴）', async () => {
+    fs.mkdirSync(path.join(tempDir, '.harness'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, '.harness', 'config.yml'), 'preset: [broken\n  - {unclosed');
+    // 两处都没有治理契约 → fail（旧行为：解析抛错被吞 → 误判未采用 → skip）
+    const outcome = normalizeCheckOutcome(await governancePresence.evaluate(makeEnv(tempDir)));
+    expect(outcome.skipped).toBe(false);
+    expect(outcome.satisfied).toBe(false);
+    expect(outcome.evidence.join('\n')).toContain('治理契约');
+  });
+
+  it('config.yml YAML 损坏 + AGENTS.md 有 PRESERVE:governance → pass（损坏配置不影响在场判定）', async () => {
+    fs.mkdirSync(path.join(tempDir, '.harness'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, '.harness', 'config.yml'), 'preset: [broken\n  - {unclosed');
+    fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), `# AGENTS.md\n\n${GOVERNANCE_BLOCK}\n`);
+    const outcome = normalizeCheckOutcome(await governancePresence.evaluate(makeEnv(tempDir)));
+    expect(outcome.skipped).toBe(false);
+    expect(outcome.satisfied).toBe(true);
   });
 
   it('新模型：AGENTS.md 有非空 PRESERVE:governance 段 → pass', async () => {

@@ -2,7 +2,7 @@
 
 - 日期：2026-09-22
 - 状态：已接受
-- 关联：wayfinder 地图 `/root/projects/docs/wayfinder/harness-repositioning/`（锁定前提，票 03/04/06/08/09 定案）；ADR-0001（约束体系起点，本 ADR 给它补上定位层面的"为什么"）；ADR-0029（harness 收编为机制与知识工具的方向裁决，本 ADR 将其上升为第一性分工）；ADR-0032/0033/0034（本 ADR 的展开）
+- 关联：wayfinder 地图 `harness-repositioning/`（锁定前提，票 03/04/06/08/09 定案）；ADR-0001（约束体系起点，本 ADR 给它补上定位层面的"为什么"）；ADR-0029（harness 收编为机制与知识工具的方向裁决，本 ADR 将其上升为第一性分工）；ADR-0032/0033/0034（本 ADR 的展开）
 
 ## 背景
 

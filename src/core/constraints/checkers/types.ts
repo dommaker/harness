@@ -26,6 +26,14 @@ export interface CheckEnv extends RunEnv {
   stagedDiffNames(): Promise<string>;
   /** 源码根相对路径文件列表（run 内 cached） */
   srcScan(root: string): string[];
+  /**
+   * 证据输入是否可得（harness#182 输入契约）
+   *
+   * 编排层按 ConstraintCheck.needs 比对，不可得即显式降级 skip，不再让 checker
+   * 对空证据做出「假合规」判定。buildCheckEnv 恒填充；手写 env 省略 = 全部可得
+   * （旧形状兼容，编排层按 available 处理）。
+   */
+  evidenceAvailable?(input: CheckEvidenceInput): boolean;
 }
 
 /**
@@ -41,7 +49,12 @@ export interface EvidenceProviders {
   stagedDiffNames(): Promise<string>;
   /** 源码根相对路径文件列表 */
   srcScan(root: string): string[];
+  /** 证据输入是否可得（harness#182）；省略 = 全部可得 */
+  available?(input: CheckEvidenceInput): boolean;
 }
+
+/** git 证据输入种类（harness#182 输入契约的比对单元） */
+export type CheckEvidenceInput = 'stagedDiff' | 'stagedDiffNames';
 
 /**
  * 构造 CheckEnv：生产侧唯一构造点
@@ -69,19 +82,35 @@ export function buildCheckEnv(
       stagedDiff: async () => '',
       stagedDiffNames: async () => '',
       srcScan: () => [],
+      evidenceAvailable: () => false,
     };
   }
-  return { ...run, context, ...evidence };
+  const { available, ...providers } = evidence;
+  return { ...run, context, ...providers, evidenceAvailable: available ?? (() => true) };
+}
+
+/**
+ * 带原因的跳过（harness#182）
+ *
+ * 「检查器失效 / 输入不可得 / 约定未采用」≠「对象合规」：未评估必须显式、有声、
+ * 可统计。reason 自描述（可直接给人看），经 NormalizedOutcome.skipReason 落到
+ * ConstraintResult、CLI 跳过清单与 trace；编排层只透传，不参与解释内容。
+ */
+export interface CheckSkip {
+  skip: true;
+  /** 未评估原因（如「staged diff 不可得（git 取证失败）」） */
+  reason: string;
 }
 
 /**
  * 检查结果三态（ADR-0001 存在性探测 / flag 未接线）：
  * - true = 满足（pass）
  * - false = 违反（fail）
- * - 'skip' = 未评估（项目未采用对应约定，或证据 flag 未接线），不计 pass/fail
+ * - 'skip' = 未评估（等价 CheckSkip 的无原因旧形状），不计 pass/fail
+ * - CheckSkip = 未评估 + 原因（harness#182，进结果面与 trace）
  * - CheckDetail = 判定 + 证据行（harness#119）
  */
-export type CheckOutcome = boolean | 'skip' | CheckDetail;
+export type CheckOutcome = boolean | 'skip' | CheckSkip | CheckDetail;
 
 /**
  * 带证据的检查结果（harness#119）
@@ -105,6 +134,8 @@ export interface NormalizedOutcome {
   satisfied: boolean;
   skipped: boolean;
   evidence: string[];
+  /** 未评估原因（harness#182；仅 skipped=true 时可能携带，进 CLI 跳过清单与 trace） */
+  skipReason?: string;
 }
 
 /** 证据条数上限：trace 是 JSONL，缺口上百项时不能整仓落盘 */
@@ -131,6 +162,9 @@ export function formatEvidence(summary: string, items: string[]): string[] {
 export function normalizeCheckOutcome(outcome: CheckOutcome): NormalizedOutcome {
   if (outcome === 'skip') return { satisfied: true, skipped: true, evidence: [] };
   if (typeof outcome === 'boolean') return { satisfied: outcome, skipped: false, evidence: [] };
+  if ('skip' in outcome) {
+    return { satisfied: true, skipped: true, evidence: [], skipReason: outcome.reason };
+  }
   return {
     satisfied: outcome.pass,
     skipped: false,
@@ -139,12 +173,73 @@ export function normalizeCheckOutcome(outcome: CheckOutcome): NormalizedOutcome 
 }
 
 /**
+ * 检查器声明式输入契约（harness#182）
+ *
+ * checker 声明自己吃什么输入；编排层在 evaluate 前比对环境实际供给，
+ * 缺输入即统一显式降级（带原因的 skipped），代替各 checker 自行静默退化
+ * （如对空 diff 假 pass、对 undefined flag 无声 skip）。
+ */
+export interface CheckInputNeeds {
+  /** git 证据输入：env.evidenceAvailable 报不可得 → 降级 skip */
+  evidence?: CheckEvidenceInput[];
+  /** 上下文证据标志：值为 undefined（未接线）→ 降级 skip */
+  contextFlags?: ContextEvidenceFlag[];
+}
+
+/** ConstraintContext 中取值为 boolean | undefined 的证据标志名 */
+export type ContextEvidenceFlag = {
+  [K in keyof ConstraintContext]-?: ConstraintContext[K] extends boolean | undefined ? K : never;
+}[keyof ConstraintContext];
+
+/** 证据标志未接线的 skip 原因文案（findMissingInputs 与 contextEvidenceFlag 兜底共用） */
+function flagNotWiredReason(flag: string): string {
+  return `证据标志 ${flag} 未接线`;
+}
+
+/**
+ * 输入契约比对：返回缺项描述（空数组 = 输入齐备，可进入评估）
+ *
+ * 每条缺项自描述（直接进 skip reason）；手写 env 未提供 evidenceAvailable
+ * 时按「全部可得」处理（旧形状兼容）。
+ */
+export function findMissingInputs(check: ConstraintCheck, env: CheckEnv): string[] {
+  const missing: string[] = [];
+  for (const input of check.needs?.evidence ?? []) {
+    const available = env.evidenceAvailable?.(input) ?? true;
+    if (!available) {
+      missing.push(
+        input === 'stagedDiff'
+          ? 'staged diff 不可得（git 取证失败或未接线）'
+          : 'staged 变更文件清单不可得（git 取证失败或未接线）'
+      );
+    }
+  }
+  for (const flag of check.needs?.contextFlags ?? []) {
+    if (env.context[flag] === undefined) missing.push(flagNotWiredReason(flag));
+  }
+  return missing;
+}
+
+/**
+ * 输入契约降级（harness#182）：缺输入 → 带原因的 CheckSkip；齐备 → null
+ *
+ * 编排层（checker.ts）与 checker-as-guard 接线点（gates/checker-gate.ts）的
+ * 唯一降级口，两处不得各写一遍比对 + 组装。
+ */
+export function degradeForMissingInputs(check: ConstraintCheck, env: CheckEnv): CheckSkip | null {
+  const missing = findMissingInputs(check, env);
+  return missing.length > 0 ? { skip: true, reason: missing.join('；') } : null;
+}
+
+/**
  * 单条约束检查实现
  */
 export interface ConstraintCheck {
   /** 约束 ID（与 definitions 一致） */
   id: string;
-  /** 检查主体：true = 满足；false = 违反；'skip' = 未评估；CheckDetail = 判定 + 证据行 */
+  /** 输入契约（harness#182）：声明即由编排层保证，缺输入不进入 evaluate */
+  needs?: CheckInputNeeds;
+  /** 检查主体：true = 满足；false = 违反；'skip'/CheckSkip = 未评估；CheckDetail = 判定 + 证据行 */
   evaluate(env: CheckEnv): Promise<CheckOutcome> | CheckOutcome;
 }
 
@@ -174,21 +269,23 @@ export function contextFlag(
 }
 
 /**
- * 构造证据标志检查（ADR-0001：flag 未接线 = skip 而非 fail）
+ * 构造证据标志检查（ADR-0001：flag 未接线 = skip 而非 fail；harness#182 起 skip 带原因）
  *
- * - flag === undefined：调用方未接线该证据 → 'skip'（不评估，不误报违规）
+ * - flag === undefined：调用方未接线该证据 → 编排层按 needs 契约降级 skip；
+ *   直接 evaluate（绕过编排层）时此处兜底，同样报带原因的 skip
  * - flag === false：显式无证据 → fail
  * - flag === true：有证据 → pass
  */
 export function contextEvidenceFlag(
   id: string,
-  pick: (context: ConstraintContext) => boolean | undefined
+  flag: ContextEvidenceFlag
 ): ConstraintCheck {
   return {
     id,
+    needs: { contextFlags: [flag] },
     evaluate: (env) => {
-      const value = pick(env.context);
-      if (value === undefined) return 'skip';
+      const value = env.context[flag];
+      if (value === undefined) return { skip: true, reason: flagNotWiredReason(flag) };
       return value;
     },
   };

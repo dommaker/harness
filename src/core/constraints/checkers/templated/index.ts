@@ -10,3 +10,4 @@
 
 export { regexScan } from './regex-scan';
 export { fileExists } from './file-exists';
+export { execScript } from './exec';

@@ -4,9 +4,9 @@
  * checker.ts 编排层通过 getConstraintCheck() 查找实现。
  *
  * 两层注册表：
- * - 内置 checker（registry，按约束 id）：模块加载时校验全部 kind='check' 的内置约束
- *   都有已注册 checker，且注册表中没有无对应 check 定义的孤儿实现；
- *   任一不满足即抛错（加载期失败，不许静默 pass，ADR-0001）。
+ * - 内置 checker（registry，按约束 id）：模块加载时校验全部 channel='gate' 的内置约束
+ *   都有已注册 checker（ADR-0035 闭环收窄：非 gate 条目不要求 checker），且注册表中
+ *   没有无对应 gate 定义的孤儿实现；任一不满足即抛错（加载期失败，不许静默 pass，ADR-0001）。
  * - 模板 checker（TEMPLATES，按模板 id）：填空式参数化模板，供应用层约束
  *   （source='app'，`.harness/constraints.yml`）按 checker + params 实例化。
  *   闭环语义扩展而非开口：应用层约束在加载期（app-constraints-loader）校验
@@ -15,7 +15,7 @@
 
 import type { Constraint } from '../../../types/constraint';
 import type { ConstraintCheck } from './types';
-import { getAllConstraints } from '../definitions';
+import { getAllConstraints, isGateConstraint } from '../definitions';
 
 import {
   noCompletionWithoutVerification,
@@ -54,13 +54,13 @@ export { TEMPLATES } from './templates-registry';
 // 注册表闭环校验（加载期）
 // ========================================
 
-const checkConstraints = getAllConstraints().filter(c => c.kind === 'check');
+const checkConstraints = getAllConstraints().filter(c => c.kind === 'check' && isGateConstraint(c));
 
 for (const c of checkConstraints) {
   if (!registry.has(c.id)) {
     throw new Error(
-      `[harness] 约束注册表闭环校验失败：kind='check' 的约束 "${c.id}" 未注册 checker。` +
-      `请在 checkers/ 中实现并注册（纯文本提示层已随 ADR-0029 关停）。`
+      `[harness] 约束注册表闭环校验失败：channel='gate' 的约束 "${c.id}" 未注册 checker。` +
+      `请在 checkers/ 中实现并注册；无 checker 的纪律/流程规则须标非 gate 通道（ADR-0035）。`
     );
   }
 }
@@ -68,7 +68,7 @@ for (const c of checkConstraints) {
 for (const id of registry.keys()) {
   if (!checkConstraints.some(c => c.id === id)) {
     throw new Error(
-      `[harness] 约束注册表闭环校验失败：checker "${id}" 没有对应的 kind='check' 约束定义。` +
+      `[harness] 约束注册表闭环校验失败：checker "${id}" 没有对应的 channel='gate' 约束定义。` +
       `请在 definitions/ 中补齐定义，或从注册表移除。`
     );
   }
@@ -78,7 +78,7 @@ for (const id of registry.keys()) {
  * 查找检查实现
  *
  * - 传字符串 id 或内置约束：按 id 查内置注册表，未注册返回 undefined
- *   （编排层对 kind='check' 未注册的情况抛错）
+ *   （编排层对 channel='gate' 未注册的情况抛错）
  * - 传 source='app' 的约束：按 checker 模板 id + params 实例化；
  *   模板 id 未注册 → 抛错（闭环保留，不许静默 pass）
  */
@@ -107,13 +107,25 @@ export function registeredCheckCount(): number {
   return registry.size;
 }
 
-export { buildCheckEnv, normalizeCheckOutcome } from './types';
+export {
+  buildCheckEnv,
+  normalizeCheckOutcome,
+  findMissingInputs,
+  degradeForMissingInputs,
+  formatEvidence,
+  contextFlag,
+  contextEvidenceFlag,
+} from './types';
 export type {
   ConstraintCheck,
   TemplatedCheckerFactory,
   CheckEnv,
   CheckOutcome,
   CheckDetail,
+  CheckSkip,
+  CheckInputNeeds,
+  CheckEvidenceInput,
+  ContextEvidenceFlag,
   NormalizedOutcome,
   EvidenceProviders,
 } from './types';

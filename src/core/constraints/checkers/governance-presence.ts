@@ -7,12 +7,15 @@
  * 段被删除/掏空后 sync-docs 重新生成会静默丢失，此处补「在场」校验。
  *
  * ADR-0001 存在性探测：项目未采用 harness 治理（无 .harness/config.yml）→ skip。
+ * 探测按**文件存在**而非解析成功（harness#182）：此前按 loadRawProjectConfig 解析
+ * 判定，config.yml YAML 损坏 → 解析抛错 → 误判「未采用」→ skip——恰在配置出问题
+ * 时闭嘴。文件在 = 已采用，解析坏不坏都照查治理契约在场性。
  * 向后兼容：旧模型仓（CLAUDE.md 有治理块、AGENTS.md 无 PRESERVE:governance）→ pass，
  * 不强制迁移；两处都没有才报违规。
  */
 
+import { existsSync } from 'fs';
 import { join } from 'path';
-import { loadRawProjectConfig } from '../../project-config-loader';
 import { hasGovernanceContract, hasPreserveBlock, readIfExists } from '../injection-writer';
 import type { ConstraintCheck } from './types';
 
@@ -36,14 +39,10 @@ export const governancePresence: ConstraintCheck = {
   async evaluate(env) {
     const projectPath = env.projectPath;
 
-    // 存在性探测：无 harness 配置 = 未采用治理约定 → skip（不计 pass/fail）
-    let adopted = false;
-    try {
-      adopted = loadRawProjectConfig(env) !== undefined;
-    } catch {
-      adopted = false;
+    // 存在性探测：无 harness 配置 = 未采用治理约定 → skip（不计 pass/fail，原因进结果面）
+    if (!existsSync(join(projectPath, '.harness', 'config.yml'))) {
+      return { skip: true, reason: '项目未采用 harness 治理（无 .harness/config.yml）' };
     }
-    if (!adopted) return 'skip';
 
     if (hasGovernancePreserveBlock(join(projectPath, 'AGENTS.md'))) return true;
     if (hasClaudeGovernance(join(projectPath, 'CLAUDE.md'))) return true;

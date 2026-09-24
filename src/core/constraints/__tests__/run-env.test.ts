@@ -194,6 +194,8 @@ describe('context-builder 经注入的观察面取证据', () => {
     stagedDiff: () => '',
     changedFileNames: () => changed.join('\n'),
     headDirs: () => new Set<string>(),
+    stagedDiffAvailable: () => true,
+    changedFileNamesAvailable: () => true,
   });
 
   /** 只记次数的假观察面：records 固定，用于断言两个证据探测都从 env 取数 */

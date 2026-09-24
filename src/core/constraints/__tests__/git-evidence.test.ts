@@ -76,6 +76,8 @@ function recordingEvidence(
       calls.push(`${phase()}:headDirs`);
       return source.headDirs();
     },
+    stagedDiffAvailable: () => source.stagedDiffAvailable(),
+    changedFileNamesAvailable: (staged: boolean) => source.changedFileNamesAvailable(staged),
   };
 }
 
@@ -118,6 +120,24 @@ describe('git 证据适配器（#87）', () => {
       expect(evidence.headDirs()).toBeNull();
       expect(evidence.changedFileNames(true)).toBe('');
       expect(commands.length).toBe(3);
+    });
+
+    it('取证成败透出（harness#182）：失败 → available=false；成功 → true；与同一份 memo 共用不重跑', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-git-evidence-'));
+      const { runner, commands } = countingRunner();
+      const evidence = createGitEvidence(dir, runner);
+
+      expect(evidence.stagedDiffAvailable()).toBe(false);
+      expect(evidence.changedFileNamesAvailable(true)).toBe(false);
+      // availability 与取值共用同一条 memo 记录：available + 取值只 spawn 一次
+      expect(evidence.stagedDiff()).toBe('');
+      expect(evidence.stagedDiffAvailable()).toBe(false);
+      expect(commands.filter(c => c === 'git diff --cached').length).toBe(1);
+
+      const repo = makeRepo();
+      const ok = createGitEvidence(repo);
+      expect(ok.stagedDiffAvailable()).toBe(true);
+      expect(ok.changedFileNamesAvailable(true)).toBe(true);
     });
   });
 

@@ -128,7 +128,9 @@ describe('docs_freshness 评估段 skip 行为变更（工单 84：约定已立�
       configYml:
         'governance:\n  doc_freshness:\n    checks:\n      - type: changelog_version\n  context_files:\n    enabled: true\n',
     });
-    expect(await evalDocsFreshness(dir)).toBe('skip');
+    const outcome = normalizeCheckOutcome(await evalDocsFreshness(dir));
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.skipReason).toContain('required_dirs 为空');
   });
 
   it('enabled 但空 + CAPABILITIES.md 健康 → skip（原为 true）', async () => {
@@ -137,7 +139,9 @@ describe('docs_freshness 评估段 skip 行为变更（工单 84：约定已立�
       files: ['src/module.ts'],
       capabilitiesBody: `${TABLE_HEAD}| module | src/module.ts | module |`,
     });
-    expect(await evalDocsFreshness(dir)).toBe('skip');
+    const outcome = normalizeCheckOutcome(await evalDocsFreshness(dir));
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.skipReason).toContain('required_dirs 为空');
   });
 
   it('enabled 但空 + CAPABILITIES.md 幽灵条目 → 仍 fail（Step 1 文件表判定不因 context_files 受影响）', async () => {

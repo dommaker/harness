@@ -21,10 +21,23 @@ const evaluate = (
 
 describe('iron flags — 三态与字段映射', () => {
   it('no_completion_without_verification → 读 hasVerificationEvidence', async () => {
-    expect(await evaluate(noCompletionWithoutVerification, {})).toBe('skip');
+    // 未接线 → 带原因的 skip（harness#182：undefined flag 不再静默 skip）
+    expect(await evaluate(noCompletionWithoutVerification, {})).toEqual({
+      skip: true,
+      reason: '证据标志 hasVerificationEvidence 未接线',
+    });
     expect(await evaluate(noCompletionWithoutVerification, { hasVerificationEvidence: false })).toBe(false);
     expect(await evaluate(noCompletionWithoutVerification, { hasVerificationEvidence: true })).toBe(true);
     // 相邻字段不串台：hasTest 不能顶替
-    expect(await evaluate(noCompletionWithoutVerification, { hasTest: true })).toBe('skip');
+    expect(await evaluate(noCompletionWithoutVerification, { hasTest: true })).toEqual({
+      skip: true,
+      reason: '证据标志 hasVerificationEvidence 未接线',
+    });
+  });
+
+  it('声明 contextFlags 输入契约（harness#182）：编排层据此在 evaluate 前降级', () => {
+    expect(noCompletionWithoutVerification.needs).toEqual({
+      contextFlags: ['hasVerificationEvidence'],
+    });
   });
 });

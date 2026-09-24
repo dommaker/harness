@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-24
+
+### Changes
+- docs: CAPABILITIES.md 补 no_hardcoded_credentials / no_test_simplification 行为口径（harness#184）（harness#185）
+- fix(constraints): no_test_simplification 启发式按意图重写（harness#185）
+- fix(constraints): no_hardcoded_credentials 收窄正则版——补漏报形态 + fail 证据行 + diff 路径按文件过滤（harness#184）
+- feat(constraints): 业务检查器两半——exec 执行协议口子 + 检查器原语 SDK 导出（harness#181）
+- feat(constraints): 检查器失效显式化——输入契约 + fail-open 发声 + skip 原因进结果面（harness#182）
+- feat(constraints): 约束 schema 引入 channel 字段（gate/workflow/discipline）（harness#180）
+- docs: 泛化受跟踪文档中的开发机现场路径（存量脱敏收口）
+
 ## [1.13.0] - 2026-09-23
 
 ### Changes

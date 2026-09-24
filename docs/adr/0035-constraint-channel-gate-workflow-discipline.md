@@ -2,7 +2,7 @@
 
 - 日期：2026-09-24
 - 状态：已接受
-- 关联：harness#180（实施票）；studio#640（Phase 2 违规代理计数，消费方）；harness#174（预设落地时点："schema 变更待 evolution 晋升机制落地时一并做"）；ADR-0029（注册表闭环措辞由本 ADR 收窄）；ADR-0033（两层约束模型，discipline 条目走应用层 `.harness/constraints.yml` 登记）；ADR-0001（闭环语义本体）
+- 关联：harness#180（实施票）；harness#181（决策 3 exec 档 + 检查器原语 SDK 落地票）；studio#640（Phase 2 违规代理计数，消费方）；harness#174（预设落地时点："schema 变更待 evolution 晋升机制落地时一并做"）；ADR-0029（注册表闭环措辞由本 ADR 收窄）；ADR-0033（两层约束模型，discipline 条目走应用层 `.harness/constraints.yml` 登记）；ADR-0001（闭环语义本体）
 
 ## 背景
 
@@ -32,3 +32,7 @@
 - 应用层 `.harness/constraints.yml`：`checker` 仅 gate 通道必填；非 gate 条目允许无 checker，填写了仍按模板校验；非法 channel 值加载期抛错。
 - ADR-0029 的闭环措辞以本 ADR 为准收窄（该 ADR 正文留修订记录，不改写历史）。
 - 范围外：exec 自定义检查器口子（另立票）；studio 侧采集/计数/提案/生效实现（studio#640 本体）；workflow 通道条目的流程承载机制。
+
+## 修订记录
+
+- 2026-09-24（harness#181）：决策 3 的 exec 档与检查器原语 SDK 落地（存档触发口径「等首张模板填不了的晋升提案」已于 2026-09-24 会话修正为可排期，见 #181）。exec 口子 = `exec` 模板进 TEMPLATES：名册写 `checker: exec` + `params.command`，按退出码判定（0 过 / 非 0 违规），stdout/stderr 进证据，带超时杀进程组与输出截断保护；SDK = `CheckOutcome`/`buildCheckEnv`/`normalizeCheckOutcome`/`formatEvidence`/`contextFlag`/`contextEvidenceFlag` 及接缝类型进包根/core/constraints 三处显式清单（只导出存量，增量原语随真实需求开普通小票，不设触发条件）。

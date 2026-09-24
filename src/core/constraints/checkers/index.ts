@@ -107,7 +107,15 @@ export function registeredCheckCount(): number {
   return registry.size;
 }
 
-export { buildCheckEnv, normalizeCheckOutcome, findMissingInputs, degradeForMissingInputs } from './types';
+export {
+  buildCheckEnv,
+  normalizeCheckOutcome,
+  findMissingInputs,
+  degradeForMissingInputs,
+  formatEvidence,
+  contextFlag,
+  contextEvidenceFlag,
+} from './types';
 export type {
   ConstraintCheck,
   TemplatedCheckerFactory,

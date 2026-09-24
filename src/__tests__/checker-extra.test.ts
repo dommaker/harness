@@ -238,6 +238,60 @@ describe('ConstraintChecker - 补充覆盖', () => {
       await expect(checkConstraints(context)).rejects.toThrow();
     });
   });
+
+  describe('channel 通道分发过滤（ADR-0035）', () => {
+    const disciplineEntry = {
+      id: 'app_discipline_rule',
+      kind: 'check' as const,
+      channel: 'discipline' as const,
+      severity: 'error' as const,
+      rule: 'DISCIPLINE RECORD',
+      message: '纪律登记记录',
+      trigger: 'code_implementation',
+      enforcement: '',
+      source: 'app' as const,
+    };
+    const customConfig = {
+      constraints: { app_discipline_rule: disciplineEntry },
+      disabled: [] as string[],
+    };
+    const context: ConstraintContext = { operation: 'code_implementation' };
+
+    it('非 gate 条目不进入 checker 分发、不触发注册表闭环抛错', async () => {
+      const result = await checker.checkConstraints(context, customConfig);
+      expect(result.passed).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('findApplicableConstraints 同样过滤非 gate 条目', () => {
+      const applicable = checker.findApplicableConstraints(context, customConfig);
+      expect(applicable.errors).toHaveLength(0);
+      expect(applicable.warnings).toHaveLength(0);
+    });
+
+    it('beforeExecution 跳过非 gate 条目', async () => {
+      await expect(checkBeforeExecution(context, customConfig)).resolves.not.toThrow();
+    });
+
+    it('非 gate 条目漏到 check() 单条入口 → 抛错（编排层过滤缺失不静默）', async () => {
+      await expect(checker.check(disciplineEntry, context)).rejects.toThrow(/不进入检查分发/);
+    });
+
+    it('channel: gate 且无 checker 的条目依旧当场抛错（闭环不松绑）', async () => {
+      const gateNoChecker = {
+        id: 'no_such_builtin_constraint',
+        kind: 'check' as const,
+        channel: 'gate' as const,
+        severity: 'error' as const,
+        rule: 'GATE WITHOUT CHECKER',
+        message: 'gate 无 checker',
+        trigger: 'code_implementation',
+        enforcement: '',
+      };
+      await expect(checker.check(gateNoChecker, context)).rejects.toThrow(/未注册 checker/);
+    });
+  });
 });
 
 describe('buildCheckEnv - 证据接线契约', () => {

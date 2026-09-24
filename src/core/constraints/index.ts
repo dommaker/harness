@@ -28,6 +28,7 @@ export type { CheckCacheConfig, CheckSamplingConfig } from './check-cache';
 export type {
   ConstraintId,
   ConstraintKind,
+  ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
   Constraint,

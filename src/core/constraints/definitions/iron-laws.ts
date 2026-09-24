@@ -3,6 +3,7 @@
  *
  * 只保留带真实 checker 的约束。每条必须：
  * - kind: 'check'
+ * - channel: 'gate'（ADR-0035：硬门禁通道，显式标注）
  * - severity: 'error'（违规即阻断）
  * - 在 checkers/ 注册表中有对应实现（注册表闭环，缺失即加载期抛错）
  */
@@ -17,6 +18,7 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
   no_completion_without_verification: {
     id: 'no_completion_without_verification',
     kind: 'check',
+    channel: 'gate',
     rule: 'NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE',
     message: '禁止无验证声明完成，必须运行验证命令',
     severity: 'error',
@@ -33,6 +35,7 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
   no_hardcoded_credentials: {
     id: 'no_hardcoded_credentials',
     kind: 'check',
+    channel: 'gate',
     rule: 'NO HARDCODED PASSWORDS, TOKENS, SECRETS, OR CREDENTIALS IN ANY SOURCE FILE',
     message: '禁止在代码/文档/配置文件中硬编码密码、token、密钥、API key',
     severity: 'error',
@@ -49,6 +52,7 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
   no_test_simplification: {
     id: 'no_test_simplification',
     kind: 'check',
+    channel: 'gate',
     rule: 'NO SIMPLIFYING TESTS TO AVOID DIFFICULTY',
     message: '禁止简化测试绕过困难',
     severity: 'error',
@@ -74,6 +78,7 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
   docs_freshness: {
     id: 'docs_freshness',
     kind: 'check',
+    channel: 'gate',
     rule: 'CAPABILITIES.MD MUST BE IN SYNC WITH CODE',
     message: 'CAPABILITIES.md 与源码不同步，运行 harness sync-docs 更新后重新提交',
     severity: 'error',

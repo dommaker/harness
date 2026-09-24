@@ -28,3 +28,7 @@ harness 约束体系原是「Iron Laws / Guidelines / Prompts」三层命名 + k
 - breaking 面：`Constraint`/`ConstraintResult`/`ConstraintCheckResult`/`MergedConstraintsConfig`/`PresetConfig`/trace 类型/`CustomConstraintDefinition` 形状变更；`IRON_LAWS`/`GUIDELINES`/`PROMPTS` 导出合并为 `CONSTRAINTS`；`renderConstraintsSection`/`renderConstraintsByTrigger`/`CONSTRAINTS_START_MARKER`/`CONSTRAINTS_END_MARKER` 导出删除；init 不再生成 custom-constraints.yml 示例。
 - 迁移路径：项目 config.yml 的 `custom_constraints*`/`scenes` 键成为死配置（静默忽略）；`constraints.<id>` 引用已删 id 时 lintEffectiveConfig 报 unknownIds，按提示清理。CLAUDE.md/AGENTS.md 中已注入的 HARNESS_CONSTRAINTS 段不再被 harness 维护，由项目自行处置。
 - studio 侧适配（消费 CONSTRAINTS/severity 新面）是另一张票，不在本仓。
+
+## 修订记录
+
+- 2026-09-24（ADR-0035 / harness#180）：注册表闭环措辞收窄为「**gate 通道的规则必须带 checker**」。决策 2 中「kind='check' 未注册 checker 直接抛错」与决策 4 中「kind='check' 注册表闭环不允许无 checker 的约束存在」两处，自 ADR-0035 起以 channel 口径为准：`channel` 非 gate（workflow/discipline）的条目允许无 checker——不进入检查分发、不触发闭环抛错、harness 不渲染不注入（文本注入层关停的裁决不变，discipline 条目只是名册里的数据记录）。正文不改写，以此记录为准。

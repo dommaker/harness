@@ -25,6 +25,7 @@ export type {
   CheckSamplingConfig,
   ConstraintId,
   ConstraintKind,
+  ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
   Constraint,

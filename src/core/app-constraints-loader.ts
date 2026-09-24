@@ -9,9 +9,11 @@
  *   （配置坏不能静默放行，延续注册表闭环语义）
  * - id 强制 `app_` 前缀；与内置 id 冲突或无前缀 → 加载期抛错
  * - checker 必须是模板注册表（checkers/index.ts TEMPLATES）里的 id，且 validateParams 通过，
- *   否则加载期抛错
- * - 必填字段：id / rule / checker / severity；可选：params / trigger / message / description /
- *   enforcement。trigger 缺省 = 每次 check 都评估（全操作集）
+ *   否则加载期抛错；checker 仅 channel='gate'（缺省）必填，非 gate 条目允许无 checker
+ * - 必填字段：id / rule / severity；可选：channel / checker / params / trigger / message /
+ *   description / enforcement。channel 缺省 = 'gate'；trigger 缺省 = 每次 check 都评估（全操作集）
+ * - channel 三值（ADR-0035）：gate = 硬门禁（带 checker 进检查分发）；workflow = 流程承载；
+ *   discipline = 登记记录（harness 不渲染、不注入、不执行，供消费方计数晋升）
  *
  * memo 口径与 `RunEnv.rawConfig()` 同形：传 RunEnv 即一枚观察面至多读一次
  * （WeakMap 挂在实例上）；传项目根路径 = 自造一枚一次性观察面，每次调用读当下内容。
@@ -20,7 +22,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import type { Constraint, ConstraintSeverity, ConstraintTrigger } from '../types/constraint';
+import type { Constraint, ConstraintChannel, ConstraintSeverity, ConstraintTrigger } from '../types/constraint';
 import { CONSTRAINTS } from './constraints/definitions';
 // 模板注册表直引 templates-registry 而非 checkers 桶：checkers/index.ts 经内置
 // checker 回头依赖 project-config-loader，从本模块引桶会成值级循环
@@ -34,6 +36,8 @@ const APP_CONSTRAINTS_FILE_REL = path.join('.harness', 'constraints.yml');
 const APP_ID_PREFIX = 'app_';
 
 const SEVERITIES: readonly ConstraintSeverity[] = ['error', 'warning', 'info'];
+
+const CHANNELS: readonly ConstraintChannel[] = ['gate', 'workflow', 'discipline'];
 
 /**
  * trigger 缺省值 = 全操作集：应用层约束未声明 trigger 时每次 check 都评估
@@ -86,10 +90,17 @@ function toConstraint(raw: unknown, index: number, rel: string): Constraint {
   const rule = asString(entry.rule);
   if (!rule) fail(rel, `${at} (${id}) 缺必填字段 rule`);
 
+  const channel = entry.channel ?? 'gate';
+  if (!CHANNELS.includes(channel as ConstraintChannel)) {
+    fail(rel, `${at} (${id}) channel 取值非法（须为 ${CHANNELS.join('/')}，缺省 gate）`);
+  }
+
+  // checker 仅 gate 通道必填（ADR-0035 闭环收窄）；非 gate 条目允许无 checker，
+  // 填写了仍按模板校验（提前暴露写错的模板 id，不留到死配置）
   const checker = asString(entry.checker);
-  if (!checker) fail(rel, `${at} (${id}) 缺必填字段 checker`);
-  const factory = TEMPLATES.get(checker);
-  if (!factory) {
+  if (!checker && channel === 'gate') fail(rel, `${at} (${id}) 缺必填字段 checker`);
+  const factory = checker ? TEMPLATES.get(checker) : undefined;
+  if (checker && !factory) {
     fail(rel, `${at} (${id}) 引用的 checker 模板 "${checker}" 未注册（可用模板见 checkers/templated/）`);
   }
 
@@ -102,7 +113,10 @@ function toConstraint(raw: unknown, index: number, rel: string): Constraint {
   if (params !== undefined && (params === null || typeof params !== 'object' || Array.isArray(params))) {
     fail(rel, `${at} (${id}) params 必须是对象`);
   }
-  const paramErrors = factory.validateParams((params ?? {}) as Record<string, unknown>);
+  if (!checker && params !== undefined) {
+    fail(rel, `${at} (${id}) 无 checker 的条目不允许携带 params（死配置）`);
+  }
+  const paramErrors = factory ? factory.validateParams((params ?? {}) as Record<string, unknown>) : [];
   if (paramErrors.length > 0) {
     fail(rel, `${at} (${id}) 模板 "${checker}" 参数校验失败：${paramErrors.join('；')}`);
   }
@@ -116,6 +130,7 @@ function toConstraint(raw: unknown, index: number, rel: string): Constraint {
   return {
     id,
     kind: 'check',
+    channel: channel as ConstraintChannel,
     rule,
     message: asString(entry.message) ?? rule,
     severity: severity as ConstraintSeverity,

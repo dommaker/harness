@@ -2,11 +2,16 @@
  * 约束类型定义
  *
  * severity 显式模型（ADR-0029，取代 ADR-0001 的三层命名与 kind 二元模型）：
- * - 全部约束 kind='check'：必须带真实 checker，参与运行时检查与 trace 统计
  * - severity 直接写死在定义上：error = 违规即阻断；warning = 违规告警不阻断；
  *   info = 仅记录
  * - 纯文本提示层（kind='prompt' / promptInjection / 注入段渲染）已整体关停，
  *   文本规则由消费方手写治理段承接
+ *
+ * channel 通道模型（ADR-0035，两轴：channel=后果轴、checker 来源=判定轴）：
+ * - gate（缺省）：硬门禁，必须带真实 checker，参与运行时检查与 trace 统计
+ * - workflow：流程机制承载，无 checker，不进检查分发
+ * - discipline：拦不住但数得出的登记记录，无 checker，harness 不渲染、不注入、
+ *   不执行，供消费方做信号计数；晋升毕业后原地翻 channel 回 gate
  */
 
 /**
@@ -23,6 +28,17 @@ export type ConstraintKind = 'check';
  * 约束严重性（显式字段，取代三层 level 命名）
  */
 export type ConstraintSeverity = 'error' | 'warning' | 'info';
+
+/**
+ * 约束通道（ADR-0035，后果轴；与探测器来源的判定轴正交）
+ *
+ * - gate：硬门禁——带 checker、违规按 severity 阻断/告警（缺省通道，现有行为）
+ * - workflow：流程机制承载——无 checker，由 CI/拆票等流程结构兜住，不进检查分发
+ * - discipline：拦不住但数得出——无 checker 的登记记录，harness 永不渲染、
+ *   永不注入、永不执行，仅供消费方（如 studio）做代理信号计数；
+ *   超阈值晋升毕业后原地翻回 gate（补上 checker）
+ */
+export type ConstraintChannel = 'gate' | 'workflow' | 'discipline';
 
 /**
  * 约束触发条件（开放扩展）
@@ -49,10 +65,18 @@ export interface Constraint {
   id: ConstraintId;
 
   /**
-   * 约束类别（ADR-0029）：恒为 'check'——必须带真实 checker，参与运行时检查；
+   * 约束类别（ADR-0029）：恒为 'check'；
    * 纯文本提示（kind='prompt'）已随文本注入层一并关停
    */
   kind: ConstraintKind;
+
+  /**
+   * 约束通道（ADR-0035）：缺省 'gate'
+   *
+   * gate 通道必须带 checker（注册表闭环收窄后的口径）；workflow/discipline
+   * 通道允许无 checker——不进入检查分发、不触发闭环抛错、harness 不渲染不注入
+   */
+  channel?: ConstraintChannel;
 
   /** 约束规则（英文） */
   rule: string;
@@ -84,7 +108,7 @@ export interface Constraint {
   source?: ConstraintSource;
 
   /**
-   * 填空式 checker 模板 id（仅 source='app' 使用）
+   * 填空式 checker 模板 id（仅 source='app' 使用；仅 channel='gate' 必填）
    *
    * 内置约束省略 = checker 按约束 id 在内置注册表查找；应用层约束按模板 id
    * 在模板注册表（checkers/index.ts TEMPLATES）查找并带 params 实例化

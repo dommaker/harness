@@ -3,8 +3,10 @@
  *
  * 覆盖面：
  * - loadAppConstraints 校验分支（文件不存在 / 坏 YAML / 缺必填字段 / id 无前缀 /
- *   id 与内置冲突 / 未知模板 / validateParams 失败 / trigger 形状）
- * - 实例化缺省（source='app'、kind='check'、trigger 缺省全操作集、message 回落 rule）
+ *   id 与内置冲突 / 未知模板 / validateParams 失败 / trigger 形状 / channel 枚举）
+ * - channel 通道（ADR-0035）：缺省 gate；非 gate（discipline/workflow）允许无 checker，
+ *   填写了仍按模板校验；gate 无 checker 依旧抛错（闭环不松绑）
+ * - 实例化缺省（source='app'、kind='check'、channel='gate'、trigger 缺省全操作集、message 回落 rule）
  * - memo 口径与 RunEnv.rawConfig 同形（同一观察面至多读一次；路径入参每次读当下内容）
  * - 合并链（mergeConstraints / getEffectiveConstraints）：应用层并入 +
  *   config.yml enabled:false / retired 墓碑对应用层 id 同口径生效 + 不进 unknownIds
@@ -66,7 +68,7 @@ describe('loadAppConstraints 校验分支', () => {
     expect(loadAppConstraints(fixture())).toEqual([]);
   });
 
-  it('合法条目 → Constraint（source=app，kind=check，缺省 trigger=全操作集，message 回落 rule）', () => {
+  it('合法条目 → Constraint（source=app，kind=check，channel 缺省 gate，缺省 trigger=全操作集，message 回落 rule）', () => {
     registerFake();
     const constraints = loadAppConstraints(fixture(VALID));
 
@@ -75,6 +77,7 @@ describe('loadAppConstraints 校验分支', () => {
     expect(c).toMatchObject({
       id: 'app_no_internal_url',
       kind: 'check',
+      channel: 'gate',
       rule: 'Web code must not contain internal URLs',
       severity: 'warning',
       message: '检测到内网地址',
@@ -152,6 +155,73 @@ constraints:
     expect(() => loadAppConstraints(root)).toThrow(/severity/);
   });
 
+  it('channel 取值非法 → 抛错', () => {
+    registerFake();
+    const root = fixture(`
+constraints:
+  - id: app_x
+    rule: r
+    checker: fake-template
+    severity: warning
+    channel: audit
+`);
+    expect(() => loadAppConstraints(root)).toThrow(/channel/);
+  });
+
+  it.each(['discipline', 'workflow'] as const)('channel: %s 无 checker → 校验通过（ADR-0035 闭环收窄）', (channel) => {
+    const root = fixture(`
+constraints:
+  - id: app_no_checker_rule
+    rule: Agents must not claim done without evidence
+    severity: info
+    channel: ${channel}
+`);
+    const constraints = loadAppConstraints(root);
+    expect(constraints).toHaveLength(1);
+    expect(constraints[0]).toMatchObject({
+      id: 'app_no_checker_rule',
+      channel,
+      source: 'app',
+    });
+    expect(constraints[0].checker).toBeUndefined();
+  });
+
+  it('channel: gate（含缺省）无 checker → 抛错（闭环不松绑）', () => {
+    const root = fixture(`
+constraints:
+  - id: app_gate_no_checker
+    rule: r
+    severity: warning
+    channel: gate
+`);
+    expect(() => loadAppConstraints(root)).toThrow(/缺必填字段 checker/);
+  });
+
+  it('非 gate 条目填写了 checker 仍按模板校验（写错的模板 id 加载期暴露）', () => {
+    const root = fixture(`
+constraints:
+  - id: app_discipline_bad_template
+    rule: r
+    severity: info
+    channel: discipline
+    checker: not-a-template
+`);
+    expect(() => loadAppConstraints(root)).toThrow(/未注册/);
+  });
+
+  it('无 checker 的条目携带 params → 抛错（死配置不静默放行）', () => {
+    const root = fixture(`
+constraints:
+  - id: app_discipline_dead_params
+    rule: r
+    severity: info
+    channel: discipline
+    params:
+      pattern: foo
+`);
+    expect(() => loadAppConstraints(root)).toThrow(/死配置/);
+  });
+
   it('validateParams 不通过 → 抛错（参数坏早报）', () => {
     registerFake();
     const root = fixture(`
@@ -216,5 +286,18 @@ describe('合并链并入（ADR-0033）', () => {
     registerFake();
     const root = fixture(VALID, 'constraints:\n  app_no_internal_url:\n    enabled: false\n');
     expect(lintEffectiveConfig(root).unknownIds).toEqual([]);
+  });
+
+  it('discipline 条目并入生效集（登记记录在名册可读，供消费方计数）', () => {
+    const root = fixture(`
+constraints:
+  - id: app_discipline_rule
+    rule: Agents must not claim done without evidence
+    severity: info
+    channel: discipline
+`);
+    const constraints = getEffectiveConstraints(root);
+    const entry = constraints.find(c => c.id === 'app_discipline_rule');
+    expect(entry).toMatchObject({ channel: 'discipline', source: 'app' });
   });
 });

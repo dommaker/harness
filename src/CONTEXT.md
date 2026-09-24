@@ -51,6 +51,6 @@
 
 ## 注意事项
 - 公共包，禁止硬编码业务路径
-- 约束定义在 `core/constraints/definitions/{iron-laws,guidelines,prompts}.ts`，不应在运行时代码中定义
+- 约束定义在 `core/constraints/definitions/{iron-laws,guidelines}.ts`（按 severity 分组），不应在运行时代码中定义
 - `bin/` 只有 CLI 入口发布到 npm
 - `__tests__` 的文件系统夹具根一律经 `fs.mkdtempSync` 取每轮唯一目录（缺省父目录 = tmpdir；被测语义本身是 cwd 相对解析的，才显式 opt-out 留在 cwd），固定名会在并发/被 kill 的运行之间互删或被复用成脏夹具；闸 = `__tests__/test-fixture-hygiene.test.ts`（harness#145）

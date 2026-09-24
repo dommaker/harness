@@ -31,6 +31,7 @@ export type {
   Constraint,
   ConstraintId,
   ConstraintKind,
+  ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
   ConstraintContext,

@@ -109,6 +109,23 @@ describe('containsHardcodedCredential', () => {
       containsHardcodedCredential('export function add(a: number, b: number) { return a + b; }')
     ).toBe(false);
   });
+
+  it('豁免右值为代码表达式的赋值（#184 收窄正则版假灯回归）', () => {
+    // 现场复现：交付链 2026-09-24 一次采纳 1.14.0 时，业务仓的 React useCallback
+    // 赋值被无引号分支判成「口令类赋值」——右值是代码而非字面量。
+    expect(
+      containsHardcodedCredential('const insertPmoTok' + 'en = useCallback((candidate: string) => {')
+    ).toBe(false);
+    expect(
+      containsHardcodedCredential('const refreshTok' + 'en = getTokenFromStor' + 'age();')
+    ).toBe(false);
+    expect(
+      containsHardcodedCredential('const refreshTok' + 'en = req.cookies.refre' + 'sh;')
+    ).toBe(false);
+    expect(
+      containsHardcodedCredential('api' + '_key: make' + 'Key("abc123456789"),')
+    ).toBe(false);
+  });
 });
 
 describe('noHardcodedCredentials checker', () => {

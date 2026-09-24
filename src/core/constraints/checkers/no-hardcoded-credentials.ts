@@ -12,6 +12,9 @@
  * 模板文件（.example/.sample/.template/.dist）与占位符值（your_xxx、process.env
  * 引用、变量插值等）豁免；占位符判定作用于「值」而非整行，行内出现 test/example
  * 等词不再豁免真实值。
+ *
+ * 无引号右值若是代码表达式（含括号/花括号/分号或 `=>`）一并豁免——那是调用与取值，
+ * 不是口令字面量；带引号的值不受此豁免影响（CODE_EXPRESSION 记明残余漏报与取舍）。
  */
 
 import { readFileSync } from 'fs';
@@ -54,6 +57,19 @@ const URL_CREDENTIAL_PATTERN = /\b[a-z][a-z0-9+.-]{1,20}:\/\/[^/\s:@'"]+:[^/\s@'
 const PLACEHOLDER_VALUE =
   /^(?:process\.env\b|your[_-]|<|\$\{|xxx+$|placeholder|changeme|dummy|fake|redacted|string\b|number\b|boolean\b|unknown\b|any\b)/i;
 
+/**
+ * 代码表达式特征（只作用于**无引号**右值）：带 `(`/`)`/`{`/`}`/`;` 或 `=>` 的裸值是代码，
+ * 不是字面量口令。无引号分支会把 `useCallback` 调用的整段左括号到首个空格吃成「值」，
+ * 于是 React/Vue 的 hook 赋值、成员链取值、函数调用一律误判「口令类赋值」
+ * （2026-09-24 交付链采纳 1.14.0 时于业务仓现场命中，回归测试钉在旁测文件）。
+ * 带引号的值不走此豁免——引号内就是字面量，括号属于口令本身。
+ *
+ * 残余已知漏报：右值是纯标识符引用（对象字面量里指向另一个变量）时不豁免，
+ * 它与 .env/YAML 的无引号真值同形、单行内无法区分。增量面刻意宁可放过代码形状，
+ * 也不给无引号真值开洞；这类泄露由全历史 gitleaks 兜底（见文件头分工）。
+ */
+const CODE_EXPRESSION = /[(){};]|=>/;
+
 /** URL 匹配串内的占位符（变量插值、尖括号、your_xxx） */
 const URL_PLACEHOLDER = /\$\{|<|your[_-]|xxx+/i;
 
@@ -83,8 +99,10 @@ function classifyLine(line: string): HitRule | null {
   }
   const assign = line.match(ASSIGNMENT_PATTERN);
   if (assign) {
-    const value = assign[1] ?? assign[2];
-    if (!PLACEHOLDER_VALUE.test(value)) return '口令类赋值';
+    const quoted = assign[1];
+    const value = quoted ?? assign[2];
+    const codeRhs = quoted === undefined && CODE_EXPRESSION.test(value);
+    if (!codeRhs && !PLACEHOLDER_VALUE.test(value)) return '口令类赋值';
   }
   const url = line.match(URL_CREDENTIAL_PATTERN);
   if (url && !URL_PLACEHOLDER.test(url[0])) return 'URL 内嵌凭证';

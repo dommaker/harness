@@ -25,7 +25,7 @@
 
 ## 三、已知问题（迁移前就存在）
 
-1. **registry/index.json 硬编码绝对路径** — `path` 字段指向 `/root/projects/agent-platform/...`，npm 安装后不可用
+1. **registry/index.json 硬编码绝对路径** — `path` 字段指向开发机上前代项目的 checkout 绝对路径，npm 安装后不可用
 2. **git 版本历史功能** — `tools-std/routes.ts` 的 getGitLog/getGitDiff/getGitFileContent 假设文件在 git repo，但 npm 包不是 git repo
 3. **GET /workflows 端点** — 读取已废弃的 workflow YAML
 

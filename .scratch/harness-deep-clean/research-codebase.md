@@ -1,6 +1,6 @@
 # harness 源码全景调研报告（工单 02）
 
-> 调研对象：`/root/projects/harness`（@dommaker/harness v0.16.6，分支 `refactor/deep-clean`）
+> 调研对象：`~/projects/harness`（@dommaker/harness v0.16.6，分支 `refactor/deep-clean`）
 > 排除：node_modules、dist/、coverage/（`src/tools/core/node_modules` 是运行时产物，按约定不算源码）
 > 方法：全量 grep/AST 交叉验证，非凭感觉；jest 基线今日实测复核。
 

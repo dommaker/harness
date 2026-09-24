@@ -2,7 +2,7 @@
 
 - 日期：2026-09-22
 - 状态：已接受
-- 关联：wayfinder 地图 `/root/projects/docs/wayfinder/harness-repositioning/`（锁定前提"知识分工"，票 06 环节归属定案、票 02 断点 1）；ADR-0029（退休落点只剩 config.yml + retired 元数据 + KnowledgeStore，知识写口路径由本 ADR 收敛）；ADR-0031（分工总尺）、ADR-0032（退休沉淀必须写进正本库）
+- 关联：wayfinder 地图 `harness-repositioning/`（锁定前提"知识分工"，票 06 环节归属定案、票 02 断点 1）；ADR-0029（退休落点只剩 config.yml + retired 元数据 + KnowledgeStore，知识写口路径由本 ADR 收敛）；ADR-0031（分工总尺）、ADR-0032（退休沉淀必须写进正本库）
 
 ## 背景
 

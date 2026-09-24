@@ -2,7 +2,7 @@
 
 - 日期：2026-09-22
 - 状态：已接受
-- 关联：wayfinder 地图 `/root/projects/docs/wayfinder/harness-repositioning/`（锁定前提"约束分两层"，票 04 细化定案）；ADR-0001（注册表闭环语义是"不许自带 checker"的机制基础）；ADR-0029（severity 分级与退休机制对应用层一视同仁的前提）；ADR-0031（分工：应用特有内容归应用）、ADR-0032（四分法与退休口径）
+- 关联：wayfinder 地图 `harness-repositioning/`（锁定前提"约束分两层"，票 04 细化定案）；ADR-0001（注册表闭环语义是"不许自带 checker"的机制基础）；ADR-0029（severity 分级与退休机制对应用层一视同仁的前提）；ADR-0031（分工：应用特有内容归应用）、ADR-0032（四分法与退休口径）
 
 ## 背景
 

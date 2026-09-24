@@ -1,6 +1,6 @@
 # harness 定位原则（一页纸）
 
-> 2026-09-22 定稿。出处：wayfinder 地图 `/root/projects/docs/wayfinder/harness-repositioning/`（票 01–09 全部关闭）。
+> 2026-09-22 定稿。出处：wayfinder 地图 `harness-repositioning/`（票 01–09 全部关闭）。
 > 配套存档：ADR-0031（定位与分工）、ADR-0032（约束分类与退化）、ADR-0033（两层约束）、ADR-0034（知识归属）。
 > 本文给任何人看，不讲内部字段名；术语见地图目录的 GLOSSARY.md。
 

@@ -2,7 +2,7 @@
 
 - 日期：2026-09-22
 - 状态：已接受
-- 关联：wayfinder 地图 `/root/projects/docs/wayfinder/harness-repositioning/`（票 03 分类法定案、票 05 退休流程设计、票 02 断点清单）；ADR-0001（"退役需人确认"语义保留并强化）；ADR-0029（severity 显式化是本次级别错配修正的机制基础）
+- 关联：wayfinder 地图 `harness-repositioning/`（票 03 分类法定案、票 05 退休流程设计、票 02 断点清单）；ADR-0001（"退役需人确认"语义保留并强化）；ADR-0029（severity 显式化是本次级别错配修正的机制基础）
 
 ## 背景
 

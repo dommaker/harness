@@ -13,7 +13,7 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 - **本 effort 覆盖 wayfinder 默认规划模式:决议完成后直接进入执行,工单逐个串行执行,每完成一处细小优化一次独立 git 提交,全程不间断**
 - 用户答复固化(一次性 grilling 结论):
   - 废弃功能由 agent 自主裁决删除,但删除前必须核对 studio 使用面快照,studio 真实需要但尚未引入的功能不可删
-  - 对外接口(npm exports / bin / CLI 语法)可大改;**绝不修改 /root/projects/studio**,以 studio 使用面快照为删除护栏
+  - 对外接口(npm exports / bin / CLI 语法)可大改;**绝不修改 ~/projects/studio**,以 studio 使用面快照为删除护栏
   - 过时测试可删改,但最终全套 jest 必须绿
   - 双锁文件:保留 pnpm-lock.yaml(经核实后删 package-lock.json)
   - 性能验收:agent 合理判断 + 报告说明
@@ -60,6 +60,6 @@ harness 仓库完成全套代码优化重构并可验收:臃肿逻辑重构完�
 
 ## Out of scope
 
-- 修改 /root/projects/studio 仓库任何文件(其并行重构中,冲突不可控;以迁移说明文档单向交付)
+- 修改 ~/projects/studio 仓库任何文件(其并行重构中,冲突不可控;以迁移说明文档单向交付)
 - npm publish / 版本 bump / CHANGELOG 发布流程(用户验收后统一 ship)
 - git push 到 origin(用户环境 push 会卡住;留本地待验收)

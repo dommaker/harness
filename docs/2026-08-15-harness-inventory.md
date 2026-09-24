@@ -10,7 +10,7 @@
 
 判定口径：**高消费** = studio 程序化 import + harness 内部有运行时消费；**低消费** = 仅单一入口（CLI / studio 单点 / 仅类型）；**疑似孤儿** = 无 studio 消费、无内部运行时消费、无 CLI 命令暴露。
 
-studio 侧 import 面（生产代码，非测试）来源：`grep -rn "@dommaker/harness" /root/projects/studio/packages /root/projects/studio/apps --include="*.ts"`（排除 `__tests__`/`node_modules`/`dist`），共 116 行、约 50 个文件。
+studio 侧 import 面（生产代码，非测试）来源：`grep -rn "@dommaker/harness" ~/projects/studio/packages ~/projects/studio/apps --include="*.ts"`（排除 `__tests__`/`node_modules`/`dist`），共 116 行、约 50 个文件。
 
 | 子系统 | 源码行数 | studio 消费 | harness 内部消费 | CLI 命令 | 分层 |
 |---|---|---|---|---|---|

@@ -21,10 +21,10 @@
 
 ## 一手来源与核对口径
 
-> **独立参考文档（本报告的长期查阅入口）**：`/root/projects/docs/deepseek-harness/reference.md`——dsh 单独的技术调研文档（包清单索引 + 机制行级引用 + 查阅速查表），配合本地完整 clone `/root/projects/deepseek-harness`（HEAD `47f9438`）。后续查阅 dsh 细节优先读它，本报告只承载与 @dommaker/harness 的对照结论。
+> **独立参考文档（本报告的长期查阅入口）**：`reference.md`（dsh 调研档案，随本机 clone 存放、未入本仓）——dsh 单独的技术调研文档（包清单索引 + 机制行级引用 + 查阅速查表），配合本地完整 clone `~/projects/deepseek-harness`（HEAD `47f9438`）。后续查阅 dsh 细节优先读它，本报告只承载与 @dommaker/harness 的对照结论。
 
 - **DeepSeek Harness 官方仓库**（master）：https://github.com/deepseek-ai/deepseek-harness ，本次核对锁定 commit `47f943859bef60e4160492346772ded9b24f765a`（2026-08-13，"release: dsh@0.1.0-rc.5 & publish the dsh family publicly"）。
-- **本机实际运行实现**：npx 安装的 `@deepseek-ai/dsh@0.1.0-rc.6`，源码在 `/root/.npm/_npx/1e7f6d9597241db0/node_modules/@deepseek-ai/`（含 `@deepseek-ai/cordis@4.0.1` 的 `src/*.ts` 与各包 `README.zh.md` 架构文档）。**注意：本机 rc.6 略新于 master 锁定的 rc.5**，冲突处以 master 为准，本报告以 master 文档为准、以本机源码为行级证据。
+- **本机实际运行实现**：npx 安装的 `@deepseek-ai/dsh@0.1.0-rc.6`，源码在 `~/.npm/_npx/<hash>/node_modules/@deepseek-ai/`（含 `@deepseek-ai/cordis@4.0.1` 的 `src/*.ts` 与各包 `README.zh.md` 架构文档）。**注意：本机 rc.6 略新于 master 锁定的 rc.5**，冲突处以 master 为准，本报告以 master 文档为准、以本机源码为行级证据。
 - **Cordis**：https://github.com/cordiverse/cordis （任务给定的 `cordisjs/cordis` 经 GitHub 重定向到 `cordiverse/cordis`，同一仓库），默认分支 `main`，核对锁定 commit `8cc9e33fab69e2d0476d126baaf2acb24e6a6ab4`（2026-08-13），stars 3307。
 - **Cordis 设计论文**：*A Programming Paradigm for Spatiotemporal Composability*，官方出处 https://github.com/cordiverse/paper （README 摘要 + `paper.pdf`，preprint draft 2026-08-13，锁定 commit `948a07b369c62adb3b12e102458be5c18dfb69b9`）。
 - **网络限制说明**：本环境 `github.com:443`（git clone / raw.githubusercontent / codeload）不可达，但 `api.github.com`（经 `gh api`）可达。master 文件经 GitHub Contents API 逐文件拉取并 base64 解码，内容可靠；**未能完整 clone 仓库树**，`.agents/notes/**` 等 Agent Note 文件未逐篇读取（本报告仅把其路径当作「被 README 引用」的事实标注，不引用其内容）。

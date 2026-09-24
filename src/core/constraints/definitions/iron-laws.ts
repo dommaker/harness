@@ -41,7 +41,7 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
     severity: 'error',
     trigger: ['code_implementation', 'doc_update', 'config_change', 'commit'],
     enforcement: 'credential-scan',
-    description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、Markdown 文档、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。建议配合 pre-commit hook 做自动扫描。`,
+    description: `凭证（密码/token/密钥/API key）必须从环境变量或加密配置读取，严禁以明文形式出现在任何源代码文件中。包括但不限于：源码、YAML/JSON 配置、脚本文件。模板文件（.example/.sample/.template）允许占位符但不得包含真实值。checker 做 commit 时增量扫描（staged diff/变更文件），文档类文件（.md 等）豁免——文档样例是误报大户，文档与全历史的真实泄露由 security secrets（gitleaks，ADR-0031）兜底。建议配合 pre-commit hook 做自动扫描。`,
   },
 
   /**

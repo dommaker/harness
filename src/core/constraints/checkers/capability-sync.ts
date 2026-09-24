@@ -45,9 +45,9 @@ export const capabilitySync: ConstraintCheck = {
   id: 'capability_sync',
   async evaluate(env) {
     const projectPath = env.projectPath;
-    // ADR-0001 存在性探测：项目未采用 CAPABILITIES.md 约定 → skip（不计 pass/fail）
+    // ADR-0001 存在性探测：项目未采用 CAPABILITIES.md 约定 → skip（不计 pass/fail，原因进结果面）
     if (!existsSync(join(projectPath, CAPABILITIES_FILE_REL))) {
-      return 'skip';
+      return { skip: true, reason: '项目未采用 CAPABILITIES.md 约定（无 CAPABILITIES.md）' };
     }
     try {
       const capabilitiesMode = getCapabilitiesMode(env);
@@ -55,7 +55,7 @@ export const capabilitySync: ConstraintCheck = {
       const caps = env.capabilities(
         collectPopulationFiles(projectPath, env.sourceRoots(), (root) => env.srcScan(root))
       );
-      if (!caps) return 'skip'; // 探测与取数之间文档消失：与上方同一语义
+      if (!caps) return { skip: true, reason: '评估期间 CAPABILITIES.md 消失（探测与取数之间被删除）' };
       const verdict = caps.verdict;
 
       // 清单格式（计数行）没有文件表可核对，计数由 sync-docs 维护，直接放行
@@ -63,14 +63,25 @@ export const capabilitySync: ConstraintCheck = {
         return true;
       }
 
-      const diffNames = (await env.stagedDiffNames()).split('\n').filter(Boolean);
+      // 增量维度的输入可得性（harness#182）：git 取证失败时 stagedDiffNames 归空串不抛错，
+      // uncoveredChanges 恒空 = Step 1 静默失效——放行路径必须带降级提示，不假「已核对」。
+      // 不声明 needs 改走编排层 skip：全量扫描（Step 2）不依赖 git，非 git 项目照出漂移提示
+      const diffNamesAvailable = env.evidenceAvailable?.('stagedDiffNames') ?? true;
+      const degradedNote = diffNamesAvailable
+        ? []
+        : ['增量检查降级：staged 变更清单不可得（git 取证失败），本次未核对变更文件的文档登记'];
+      const diffNames = diffNamesAvailable
+        ? (await env.stagedDiffNames()).split('\n').filter(Boolean)
+        : [];
       // 增量覆盖判定留在本文件：变更清单属 git 证据（#87），不在上行数据面
       const uncoveredChanges = significantCodeChanges(diffNames).filter(
         (f) => !isCoveredByEntries(verdict.coverageEntries, f)
       );
 
       // 无表格的散文文档：历史放行语义
-      if (!verdict.hasTable) return true;
+      if (!verdict.hasTable) {
+        return degradedNote.length > 0 ? { pass: true, evidence: degradedNote } : true;
+      }
 
       // 文档退化门：有表格却什么都没登记（限定「源码根下确有文件」——空仓 + 空表没有可登记
       // 对象，历史行为是放行，本票不顺手扩大 fail 面）
@@ -98,14 +109,17 @@ export const capabilitySync: ConstraintCheck = {
         const kind = capabilitiesMode === 'module' ? '未登记模块目录' : '未登记源文件';
         return {
           pass: true,
-          evidence: formatEvidence(
-            `CAPABILITIES.md ${kind} ${gaps.length} 项（仓库级漂移，与本次变更无关；修复: harness sync-docs）`,
-            gaps
-          ),
+          evidence: [
+            ...formatEvidence(
+              `CAPABILITIES.md ${kind} ${gaps.length} 项（仓库级漂移，与本次变更无关；修复: harness sync-docs）`,
+              gaps
+            ),
+            ...degradedNote,
+          ],
         };
       }
 
-      return true;
+      return degradedNote.length > 0 ? { pass: true, evidence: degradedNote } : true;
     } catch (err) {
       // fail-open 语义保留，但异常放行也要落地可见：warn 只进本地 stderr，
       // 进不了 trace——静默吞错会让解析 bug 变成「永远通过」（harness#119 同族问题）

@@ -36,19 +36,18 @@ function getBuiltInDocFreshnessConfig(): DocFreshnessCheck[] {
  * 判定逻辑与取数都在 run 级：文档原文、源码根、代码实况清单、对照判定一次算好，
  * 与 capability_sync 共用同一份（ADR-0023 决策 4；此前两边各读一遍、各解析一遍）。
  * 无表格（能力清单格式）时自然零幽灵。
+ *
+ * 不吞异常（harness#182）：取数/解析失败由调用方统一走 fail-open 发声路径，
+ * 静默返回 [] 会把「检查器失效」读成「零幽灵 = 合规」。
  */
 function findDeadCapabilityEntries(env: CheckEnv): string[] {
-  try {
-    // 先探存在性再取数：只有 CHANGELOG 而无 CAPABILITIES.md 的项目不该为此扫一遍源码树
-    if (!existsSync(join(env.projectPath, CAPABILITIES_FILE_REL))) return [];
-    const population = collectPopulationFiles(env.projectPath, env.sourceRoots(), (root) =>
-      env.srcScan(root)
-    );
-    const caps = env.capabilities(population);
-    return caps ? caps.verdict.deadEntries : [];
-  } catch {
-    return [];
-  }
+  // 先探存在性再取数：只有 CHANGELOG 而无 CAPABILITIES.md 的项目不该为此扫一遍源码树
+  if (!existsSync(join(env.projectPath, CAPABILITIES_FILE_REL))) return [];
+  const population = collectPopulationFiles(env.projectPath, env.sourceRoots(), (root) =>
+    env.srcScan(root)
+  );
+  const caps = env.capabilities(population);
+  return caps ? caps.verdict.deadEntries : [];
 }
 
 /**
@@ -82,19 +81,35 @@ export const docsFreshness: ConstraintCheck = {
   async evaluate(env) {
     const projectPath = env.projectPath;
 
-    // ADR-0001 存在性探测：项目无任何 freshness 配置/目标 → skip（不计 pass/fail）
-    if (!hasFreshnessTargets(env)) return 'skip';
+    // ADR-0001 存在性探测：项目无任何 freshness 配置/目标 → skip（不计 pass/fail，原因进结果面）
+    if (!hasFreshnessTargets(env)) {
+      return {
+        skip: true,
+        reason: '项目未采用文档新鲜度约定（无 CAPABILITIES.md / CHANGELOG / freshness 配置）',
+      };
+    }
+
+    // Step 1（文件表幽灵）与 Step 2（FreshnessRunner）各自 fail-open 发声（harness#182，
+    // 对齐 capability_sync 姿势）：任一步异常 → console.warn + 降级提示累积进 evidence，
+    // 不吞错、也不让一步的异常吞掉另一步的 fail 面
+    const degraded: string[] = [];
+    const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
     // Step 1: 文件表格式 — 登记的条目（文件+目录）是否仍存在（ADR-0009）
-    const deadEntries = findDeadCapabilityEntries(env);
-    if (deadEntries.length > 0) {
-      // 证据通道点名条目（harness#119）：此前是 console.error 侧信道（2026-08-08 studio
-      // CI 4 连红时的临时办法），CLI 结构化输出与 trace 两头都拿不到，
-      // error 级拦截时用户只看到一句通用提示，basename 碰撞下无从定位
-      return {
-        pass: false,
-        evidence: formatEvidence('CAPABILITIES.md 登记的条目不存在', deadEntries),
-      };
+    try {
+      const deadEntries = findDeadCapabilityEntries(env);
+      if (deadEntries.length > 0) {
+        // 证据通道点名条目（harness#119）：此前是 console.error 侧信道（2026-08-08 studio
+        // CI 4 连红时的临时办法），CLI 结构化输出与 trace 两头都拿不到，
+        // error 级拦截时用户只看到一句通用提示，basename 碰撞下无从定位
+        return {
+          pass: false,
+          evidence: formatEvidence('CAPABILITIES.md 登记的条目不存在', deadEntries),
+        };
+      }
+    } catch (err) {
+      console.warn('[docs_freshness] 文件表新鲜度检查异常：', err);
+      degraded.push(`文件表幽灵检查异常，本次未核对: ${reasonOf(err)}（不代表登记条目均在场）`);
     }
 
     // Step 2: 能力清单格式 + CLAUDE.md + CHANGELOG — 通过 FreshnessRunner
@@ -104,7 +119,9 @@ export const docsFreshness: ConstraintCheck = {
       // context_files 三态统一口径（工单 84）：约定已立但无目标（enabled 但
       // required_dirs 缺失/空）→ skip，与 context_doc_sync 同构；不再静默放行
       const contextFiles = resolveContextFiles(env);
-      if (contextFiles.state === 'enabled-empty') return 'skip';
+      if (contextFiles.state === 'enabled-empty') {
+        return { skip: true, reason: 'context_files 约定已启用但 required_dirs 为空' };
+      }
       const requiredDirs = contextFiles.state === 'enabled' ? contextFiles.dirs : undefined;
 
       const runner = new FreshnessRunner();
@@ -129,10 +146,11 @@ export const docsFreshness: ConstraintCheck = {
           ),
         };
       }
-    } catch {
-      // FreshnessRunner 失败不影响整体
+    } catch (err) {
+      console.warn('[docs_freshness] FreshnessRunner 检查异常，默认放行：', err);
+      degraded.push(`FreshnessRunner 检查异常，按 fail-open 放行: ${reasonOf(err)}（本次结果不代表文档新鲜度已验证）`);
     }
 
-    return true;
+    return degraded.length > 0 ? { pass: true, evidence: degraded } : true;
   },
 };

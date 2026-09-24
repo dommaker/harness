@@ -189,11 +189,11 @@ export async function check(
       hints.forEach(r => logEvidence(io, r, 'gray', r.id));
     }
 
-    // Skipped：约定未采用 / 证据未接线，未评估（不计通过/失败）
+    // Skipped：约定未采用 / 证据未接线 / 输入不可得，未评估（不计通过/失败；harness#182 起原因随行列出）
     if (skippedResults.length > 0) {
-      log(io, chalk.gray(`⏭️  跳过评估: ${skippedResults.length} 条（约定未采用或证据未接线，不计通过/失败）`));
+      log(io, chalk.gray(`⏭️  跳过评估: ${skippedResults.length} 条（未评估，不计通过/失败）`));
       skippedResults.forEach(r => {
-        log(io, chalk.gray(`   - ${r.id}`));
+        log(io, chalk.gray(`   - ${r.id}${r.skipReason ? `：${r.skipReason}` : ''}`));
       });
     }
 

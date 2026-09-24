@@ -13,5 +13,5 @@ import { contextEvidenceFlag } from './types';
 
 export const noCompletionWithoutVerification = contextEvidenceFlag(
   'no_completion_without_verification',
-  ctx => ctx.hasVerificationEvidence
+  'hasVerificationEvidence'
 );

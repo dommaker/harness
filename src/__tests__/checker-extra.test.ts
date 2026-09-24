@@ -317,10 +317,32 @@ describe('buildCheckEnv - 证据接线契约', () => {
     expect(env.srcScan('src')).toEqual(['src/x.ts']);
   });
 
-  it("'none' env 下 evidence flag 未接线的 checker 返回 'skip'", async () => {
-    // 「没接证据 → skip」由注释固化为可执行契约
-    const check = contextEvidenceFlag('test-flag', (ctx) => ctx.hasVerificationEvidence);
+  it("'none' env 下 evidence flag 未接线的 checker 返回带原因的 skip（harness#182）", async () => {
+    // 「没接证据 → skip」由注释固化为可执行契约；原因进结果面
+    const check = contextEvidenceFlag('test-flag', 'hasVerificationEvidence');
     const env = buildCheckEnv(context, 'none');
-    expect(await check.evaluate(env)).toBe('skip');
+    expect(await check.evaluate(env)).toEqual({
+      skip: true,
+      reason: '证据标志 hasVerificationEvidence 未接线',
+    });
+  });
+
+  it("'none' 变体：证据输入一律报不可得（输入契约的降级依据）", () => {
+    const env = buildCheckEnv(context, 'none');
+    expect(env.evidenceAvailable!('stagedDiff')).toBe(false);
+    expect(env.evidenceAvailable!('stagedDiffNames')).toBe(false);
+  });
+
+  it('providers 变体：缺省报全部可得；自定义 available 原样生效', () => {
+    const providers = {
+      stagedDiff: async () => '',
+      stagedDiffNames: async () => '',
+      srcScan: () => [] as string[],
+    };
+    const env = buildCheckEnv(context, providers);
+    expect(env.evidenceAvailable!('stagedDiff')).toBe(true);
+
+    const degraded = buildCheckEnv(context, { ...providers, available: () => false });
+    expect(degraded.evidenceAvailable!('stagedDiffNames')).toBe(false);
   });
 });

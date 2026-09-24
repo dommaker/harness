@@ -37,26 +37,32 @@ const CTX_FILES = (enabled: boolean, dirs?: string[]) =>
   (dirs ? `    required_dirs: [${dirs.map(d => `'${d}'`).join(', ')}]\n` : '');
 
 describe('context_doc_sync — skip 门槛（ADR-0001 存在性探测）', () => {
+  /** skip 形状统一断言（harness#182：skip 恒带原因） */
+  const expectSkip = async (dir: string, reason: string) => {
+    const outcome = normalizeCheckOutcome(await evaluate(dir));
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.skipReason).toContain(reason);
+  };
+
   it('无 .harness/config.yml → skip', async () => {
-    expect(await evaluate(setupDir('no-config', null))).toBe('skip');
+    await expectSkip(setupDir('no-config', null), '未配置 governance.context_files');
   });
 
   it('配置无 governance.context_files → skip', async () => {
-    expect(await evaluate(setupDir('no-section', 'preset: standard\n'))).toBe('skip');
+    await expectSkip(setupDir('no-section', 'preset: standard\n'), '未配置 governance.context_files');
   });
 
   it('enabled: false → skip（facade 旧断言 satisfied:true 的真实语义）', async () => {
-    expect(await evaluate(setupDir('disabled', CTX_FILES(false, ['src'])))).toBe('skip');
+    await expectSkip(setupDir('disabled', CTX_FILES(false, ['src'])), '未配置 governance.context_files');
   });
 
-  it('enabled 但 required_dirs 缺失/非数组/空 → skip', async () => {
-    expect(await evaluate(setupDir('no-dirs', CTX_FILES(true)))).toBe('skip');
-    expect(await evaluate(setupDir('empty-dirs', CTX_FILES(true, [])))).toBe('skip');
-    expect(
-      await evaluate(
-        setupDir('bad-dirs', 'governance:\n  context_files:\n    enabled: true\n    required_dirs: src\n')
-      )
-    ).toBe('skip');
+  it('enabled 但 required_dirs 缺失/非数组/空 → skip（约定已立但无目标）', async () => {
+    await expectSkip(setupDir('no-dirs', CTX_FILES(true)), 'required_dirs 为空');
+    await expectSkip(setupDir('empty-dirs', CTX_FILES(true, [])), 'required_dirs 为空');
+    await expectSkip(
+      setupDir('bad-dirs', 'governance:\n  context_files:\n    enabled: true\n    required_dirs: src\n'),
+      'required_dirs 为空'
+    );
   });
 });
 
@@ -77,6 +83,8 @@ describe('context_doc_sync — 判定', () => {
 
   it('配置解析失败 → skip（不炸不报）', async () => {
     const dir = setupDir('bad-yaml', 'governance: [\n  broken: {{\n');
-    expect(await evaluate(dir)).toBe('skip');
+    const outcome = normalizeCheckOutcome(await evaluate(dir));
+    expect(outcome.skipped).toBe(true);
+    expect(outcome.skipReason).toContain('未配置 governance.context_files');
   });
 });

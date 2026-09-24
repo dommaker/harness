@@ -28,13 +28,30 @@ describe('createCheckerGate', () => {
     expect(decision.result.message).toContain('判定违规');
   });
 
-  it('证据未接线（skip）→ abstain（不阻断）', async () => {
+  it('证据未接线（skip）→ abstain（不阻断），理由带出 skip 原因（harness#182）', async () => {
     const gate = createCheckerGate(
-      contextEvidenceFlag('flag-skip', () => undefined)
+      contextEvidenceFlag('flag-skip', 'hasVerificationEvidence')
     );
     const decision = await gate.evaluate(ctx);
     expect(decision.status).toBe('abstain');
     expect(decision.result.message).toContain('跳过');
+    expect(decision.result.message).toContain('hasVerificationEvidence 未接线');
+  });
+
+  it('git 证据需求在 gate 环境必缺（env 不接证据）→ abstain，不假评估（harness#182 输入契约）', async () => {
+    let evaluated = false;
+    const gate = createCheckerGate({
+      id: 'needs-git',
+      needs: { evidence: ['stagedDiff'] },
+      evaluate: () => {
+        evaluated = true;
+        return true;
+      },
+    });
+    const decision = await gate.evaluate(ctx);
+    expect(evaluated).toBe(false);
+    expect(decision.status).toBe('abstain');
+    expect(decision.result.message).toContain('staged diff 不可得');
   });
 
   // harness#119：CheckDetail 形状接入后，映射必须经 normalizeCheckOutcome——

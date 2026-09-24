@@ -48,11 +48,14 @@ describe('no_test_simplification', () => {
     expect(await evaluate('')).toBe(true);
   });
 
-  it('git diff 失败 → 默认通过（fail-open，自 facade 测迁入）', async () => {
-    expect(
-      await evaluate(async () => {
-        throw new Error('not a git repository');
-      })
-    ).toBe(true);
+  it('声明 stagedDiff 输入契约（harness#182）：git 取证失败由编排层降级，不假 pass', () => {
+    expect(noTestSimplification.needs).toEqual({ evidence: ['stagedDiff'] });
+  });
+
+  it('git diff 失败 → 带原因的 skip（fail-open 但不假 pass，harness#182）', async () => {
+    const outcome = await evaluate(async () => {
+      throw new Error('not a git repository');
+    });
+    expect(outcome).toEqual({ skip: true, reason: 'staged diff 取证失败：not a git repository' });
   });
 });

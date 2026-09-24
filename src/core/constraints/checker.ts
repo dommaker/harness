@@ -22,7 +22,7 @@ import { matchesTrigger } from './triggers';
 import { join, relative } from 'path';
 import { CheckCache } from './check-cache';
 import { findTsSourceFiles } from '../../utils/file-walk';
-import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, type CheckOutcome } from './checkers';
+import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, degradeForMissingInputs, type CheckOutcome } from './checkers';
 import { createGitEvidence, type GitEvidence } from './git-evidence';
 import { createRunEnv, type RunEnv } from './run-env';
 
@@ -101,8 +101,9 @@ export class ConstraintChecker {
         severity: constraint.severity,
         satisfied: true,
         skipped: true,
+        skipReason: outcome.skipReason,
         constraint,
-        message: `约束 ${constraint.id} 跳过评估（约定未采用或证据未接线）`,
+        message: `约束 ${constraint.id} 跳过评估（${outcome.skipReason ?? '约定未采用或证据未接线'}）`,
         checkedAt: new Date(),
       };
     }
@@ -138,6 +139,7 @@ export class ConstraintChecker {
       projectPath: context.projectPath,
       sessionId: context.sessionId,
       evidence: checkResult.evidence,
+      skipReason: checkResult.skipped ? checkResult.skipReason : undefined,
     });
   }
 
@@ -184,7 +186,18 @@ export class ConstraintChecker {
             relative(projectPath, f)
           )
         ),
+      available: (input) => {
+        switch (input) {
+          case 'stagedDiff': return git.stagedDiffAvailable();
+          case 'stagedDiffNames': return git.changedFileNamesAvailable(true);
+        }
+      },
     }, runEnv);
+
+    // 输入契约（harness#182）：checker 声明的输入环境给不了 → 带原因的 skipped，
+    // 不进入 evaluate（「检查器失效 ≠ 对象合规」，不再对空证据假 pass / 无声 skip）
+    const degraded = degradeForMissingInputs(impl, env);
+    if (degraded) return degraded;
 
     return await impl.evaluate(env);
   }

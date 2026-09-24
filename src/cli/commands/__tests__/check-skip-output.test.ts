@@ -83,12 +83,12 @@ describe('check 命令 skip 输出', () => {
     jest.clearAllMocks();
   });
 
-  it('skipped 单独列示，不计入 error 级通过条数', async () => {
+  it('skipped 单独列示，不计入 error 级通过条数；skipReason 随行列出（harness#182）', async () => {
     mockChecker.checkConstraints.mockResolvedValue({
       passed: true,
       errors: [
         { id: 'law_pass', severity: 'error', satisfied: true, checkedAt: new Date(), constraint: fakeConstraint('law_pass', 'error') },
-        { id: 'law_skip', severity: 'error', satisfied: true, skipped: true, checkedAt: new Date(), constraint: fakeConstraint('law_skip', 'error') },
+        { id: 'law_skip', severity: 'error', satisfied: true, skipped: true, skipReason: 'staged diff 不可得（git 取证失败或未接线）', checkedAt: new Date(), constraint: fakeConstraint('law_skip', 'error') },
       ],
       warnings: [],
       warningCount: 0,
@@ -98,9 +98,9 @@ describe('check 命令 skip 输出', () => {
 
     // 通过条数只计实际评估的 1 条
     expect(io.outText()).toContain('error 级约束: 全部通过 (1 条)');
-    // skipped 单独列示
+    // skipped 单独列示，原因随行（降级跳过与约定未采用在结果面可区分）
     expect(io.outText()).toContain('跳过评估: 1 条');
-    expect(io.outText()).toContain('- law_skip');
+    expect(io.outText()).toContain('- law_skip：staged diff 不可得');
     // skip 不影响整体通过
     expect(io.outText()).toContain('约束检查通过');
   });

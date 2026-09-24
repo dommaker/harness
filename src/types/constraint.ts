@@ -140,6 +140,14 @@ export interface ConstraintResult {
    * 但不计入 pass/fail 统计；trace 记录为 result: 'skip'。
    */
   skipped?: boolean;
+
+  /**
+   * 跳过原因（harness#182：「检查器失效 ≠ 对象合规」必须显式、可统计）
+   *
+   * 仅 skipped=true 时可能携带（旧路径的裸 'skip' 无原因）；
+   * 进 CLI 跳过清单与 ExecutionTrace.skipReason。
+   */
+  skipReason?: string;
   
   /** 约束定义 */
   constraint?: Constraint;

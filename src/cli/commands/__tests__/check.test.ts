@@ -132,6 +132,8 @@ function recordingEvidence(projectPath: string): {
       requests.push('headDirs');
       return shared.headDirs();
     },
+    stagedDiffAvailable: () => shared.stagedDiffAvailable(),
+    changedFileNamesAvailable: (staged: boolean) => shared.changedFileNamesAvailable(staged),
   };
   return { evidence, requests, commands };
 }

@@ -31,9 +31,6 @@ TraceCollector, TraceAnalyzer, ContextTracker
 ## Knowledge Infrastructure
 KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), SDDIndexGenerator (scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md), migrateKnowledgeEntries (AS-021 migration), extractCodeStructure (TS Compiler API code analysis)
 
-## Hook Scripts (bin/)
-harness-knowledge-track.sh, harness-sensitive-check.sh
-
 ## Agent Infrastructure
 AgentLifecycle (init→running→paused→completed→failed)
 

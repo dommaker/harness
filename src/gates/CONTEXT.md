@@ -31,6 +31,7 @@
 - **本入口的值面（24 项运行时导出）逐字冻结在 `src/__tests__/public-value-surface.test.ts`**（ADR-0022 追记第 5 条收口）：删掉或新增任一值导出——含上面 6 个 `create*Gate` 工厂（其中 5 个是本入口内联声明）——即红且指名 `./gates` 与符号，「这个函数不在公开面上、删它非 breaking」不再靠人 grep。本入口的值导出恰好全数是包根 `.` 的子集，删除会连带撞 `public-exports.test.ts`，但那个套件报的是 `.`、分不清入口归属；类型面另归 `public-type-surface.test.ts`。增删属公共面 breaking，须走发布级别裁决（ADR-0003/0022）
 
 ## 注意事项
+- 「门禁」仅指本层注册的 6 种；检查点（`core/validators/checkpoint.ts` + `harness validate` + checkpoints.yml）是独立机制，两者分工与术语裁决见 ADR-0036
 - 门禁系统不包含业务逻辑，只提供检查能力
 - `acceptance.ts` 的 13 处 return 是 `AcceptanceGateResult`（无 gate/duration 字段，`evaluate()` 归一化为 GateResult 报告——设计如此，见该方法注释），不是 GateResult 字面量，故不套 `pass`/`fail` 构造器；改成 GateResult 会动公共类型形状
 - 统一的是决策协议（id/order/三态），执行细节（gh pr view/正则黑名单/OpenAPI diff/json-summary 覆盖率）私有——不要把执行细节塞进 Gate 接口

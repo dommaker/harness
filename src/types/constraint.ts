@@ -35,7 +35,7 @@ export type ConstraintSeverity = 'error' | 'warning' | 'info';
  * - gate：硬门禁——带 checker、违规按 severity 阻断/告警（缺省通道，现有行为）
  * - workflow：流程机制承载——无 checker，由 CI/拆票等流程结构兜住，不进检查分发
  * - discipline：拦不住但数得出——无 checker 的登记记录，harness 永不渲染、
- *   永不注入、永不执行，仅供消费方（如 studio）做代理信号计数；
+ *   永不注入、永不执行，仅供消费方做代理信号计数；
  *   超阈值晋升毕业后原地翻回 gate（补上 checker）
  */
 export type ConstraintChannel = 'gate' | 'workflow' | 'discipline';
@@ -277,7 +277,3 @@ export interface ConstraintCheckResult {
   warningCount: number;
 }
 
-/**
- * studio 兼容别名(P0 护栏):等价于 ConstraintContext
- */
-export type IronLawContext = ConstraintContext;

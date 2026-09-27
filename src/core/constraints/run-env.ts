@@ -52,7 +52,7 @@ export interface RunEnv {
    * `CAPABILITIES.md` 的读取 + 解析 + 与代码实况的对照判定（ADR-0023 决策 4）
    *
    * 此前 capability_sync 与 docs_freshness 各读一遍文档、各跑一遍 `reconcileCapabilities`
-   * （studio 量得单次 7.6–15.9ms，两边解析输入逐字节相同）。此处一次供给两消费方。
+   * （下游消费方量得单次 7.6–15.9ms，两边解析输入逐字节相同）。此处一次供给两消费方。
    * 文档缺失 → `undefined`（消费方据此 skip / 无幽灵）。
    *
    * **memo 只记第一次传入的 `populationFiles`**：同一 run 内两消费方必须给同一份代码实况清单。

@@ -6,7 +6,7 @@
 ## 核心导出
 - `TraceCollector` — 执行追踪收集（append-only JSONL，`.harness/logs/traces.log`）。读入口三个：`readReport(filter?)` 报告入口（返回 `{ traces, skippedLines }`，harness#100）、`read()/readRecent()/readByConstraint()` 兼容包装（#82 裁决 4 冻结的签名，丢计数）、`getStats()` 文件级统计（`{ fileExists, fileSize, totalLines, oldestTrace?, newestTrace? }`，harness#114 起经 `readJsonlEnds` 只 parse 两端；坏行并进 `totalLines` 的原始行数口径，要单列坏行数用 `readReport()`）
 - 模块级出口：`getTraceCollector()` / `configureTraceCollector(config)`——进程级单例面，**cwd 锚定**（构造不带 projectPath），本仓生产代码零消费、保留仅为跨仓兼容（锚根约定见「约定」第一条）；`createAnalyzer(config?)` 同理，等价 `new TraceAnalyzer(new TraceCollector(), config)`
-- `TraceAnalyzer` — 追踪统计分析 + 异常检测（共用 analyzer-base 纯函数）。`analyzeRecentReport(hours)` 带坏行数，`analyzeRecent()/analyzeConstraint()` 仍返回 `TraceSummary[]`。**ADR-0020**：`summarize`/`detectAnomalies` 的判定本体是 trace-analyzer.ts 的模块级纯函数 `summarizeTraces(traces)` / `detectTraceAnomalies(summaries, config?)`（阈值经参数传入，不再是实例状态），类壳只转发——类壳是 studio 的运行时消费面（`new TraceAnalyzer(c)` + `analyzeRecentReport`/`detectAnomalies`，签名逐字不动），已持有数据的消费端直调纯函数。两函数**不进包根导出**（ADR-0003 零扩张），仓内经相对 import
+- `TraceAnalyzer` — 追踪统计分析 + 异常检测（共用 analyzer-base 纯函数）。`analyzeRecentReport(hours)` 带坏行数，`analyzeRecent()/analyzeConstraint()` 仍返回 `TraceSummary[]`。**ADR-0020**：`summarize`/`detectAnomalies` 的判定本体是 trace-analyzer.ts 的模块级纯函数 `summarizeTraces(traces)` / `detectTraceAnomalies(summaries, config?)`（阈值经参数传入，不再是实例状态），类壳只转发——类壳是跨仓消费方的运行时消费面（`new TraceAnalyzer(c)` + `analyzeRecentReport`/`detectAnomalies`，签名逐字不动），已持有数据的消费端直调纯函数。两函数**不进包根导出**（ADR-0003 零扩张），仓内经相对 import
 - `ContextTracker` — LLM 调用上下文使用快照记录
 
 ## 依赖关系
@@ -22,7 +22,7 @@
 - 零 Token 成本：不调用 LLM
 - **凡以 `skip` 策略读 JSONL，坏行计数必须到达该消费面的用户可见输出，或在该调用点显式记名豁免并写明理由（harness#100）**——静默吞掉「数据不全」不是一种可选项。承载方式纯增量：新报告入口带计数，旧入口退化为丢计数的薄包装（#82 裁决 4 的兼容约束继续成立），不另立第二份计数概念、不把 `JsonlReadResult` 提升进包根（ADR-0003）
   - 机器可检：`src/utils/__tests__/jsonl-skip-disposition.test.ts` 三道闸——每个 `readJsonl` 调用点必须判得出策略（判不出即形状逃逸，失败）、skip 读点集合冻结（新增未声明即失败，站点消失却不删条目也失败）、每个读点上方 6 行内有 `计数去向：` 声明且邻居声明不得顶替
-  - 三类去向（逐条对得上代码）：**报告体内部的降级位**随报告体走 stdout——`constraints report` 的坏行提示紧挨既有的 `traceFileExists` 说明；**不挤动既有输出的诊断告知**走 stderr——`status`（`logError`，stdout 的 `记录数` 口径与字节不变）、`failure list`（#96 定稿的 `console.error`）、`constraints retire`（交互与 `--yes` 直达两条路径各自告知）；**结构化面用字段**——`constraints report --json-output` 的 `skippedLines`、`--export` markdown 的警示行、studio 端点响应体（配套票 studio#451）
+  - 三类去向（逐条对得上代码）：**报告体内部的降级位**随报告体走 stdout——`constraints report` 的坏行提示紧挨既有的 `traceFileExists` 说明；**不挤动既有输出的诊断告知**走 stderr——`status`（`logError`，stdout 的 `记录数` 口径与字节不变）、`failure list`（#96 定稿的 `console.error`）、`constraints retire`（交互与 `--yes` 直达两条路径各自告知）；**结构化面用字段**——`constraints report --json-output` 的 `skippedLines`、`--export` markdown 的警示行、跨仓消费端点的响应体）
 
 ## 注意事项
 - 追踪数据供 `harness constraints report` 统计与退役候选诊断消费（观测用途，不做自动降级）

@@ -1,7 +1,7 @@
 /**
  * CheckCache 测试（H6/G5：TTL 缓存既有行为 + 计数采样扩展）
  *
- * 计数采样语义（与 studio runtime/cache.ts 收编对齐）：
+ * 计数采样语义（与下游消费方 runtime/cache.ts 收编对齐）：
  * - 每个 (namespace, key) 独立计数
  * - 第 1 次调用必执行（采样轮），此后每 N 次执行 1 次
  * - 非采样轮：缓存命中（未过期）返回缓存值；未命中/已过期返回 defaultValueOnMiss，不执行 fn

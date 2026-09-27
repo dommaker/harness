@@ -37,7 +37,6 @@ export type {
   ConstraintResult,
   ConstraintContext,
   ConstraintCheckResult,
-  IronLawContext,
   ConstraintCheck,
   CheckEnv,
   CheckOutcome,

@@ -1,13 +1,13 @@
 /**
  * 发布物完整性自检（harness#77，#75 N4 收编）
  *
- * harness 自己最知道自己发了什么：关键发布物清单不再由外部（studio publishPackage）
+ * harness 自己最知道自己发了什么：关键发布物清单不再由外部（下游消费方发布流）
  * 或本仓 release 命令各自硬编码 dist 内部文件，而是从包声明面（package.json
  * main/exports/bin）运行时推导 + 少量运行时 extras 随源码维护——目录重构动到
  * 声明面时清单自动跟随，extras 与其描述的文件同仓同评审。
  *
  * 公开面（barrel）：getCriticalArtifacts / verifyReleaseArtifacts。
- * studio publishPackage 的 dist 校验改调本能力，替换硬编码清单（studio#425 配套切换）。
+ * 下游消费方发布流的 dist 校验改调本能力，替换硬编码清单。
  */
 
 import * as fs from 'fs';
@@ -104,7 +104,7 @@ function resolveRoot(pkgRoot?: string): string {
 
 /**
  * 关键发布物清单（相对包根路径，排序去重）。
- * pkgRoot 缺省时自动解析本包根——外部消费者（studio）零参数即自检已安装的 harness。
+ * pkgRoot 缺省时自动解析本包根——外部消费者零参数即自检已安装的 harness。
  */
 export function getCriticalArtifacts(pkgRoot?: string): string[] {
   const root = resolveRoot(pkgRoot);
@@ -131,7 +131,7 @@ export interface ArtifactIntegrityResult {
  * 它们非公开契约，存在性由 tsc 构建成功保证，历史上外部硬编码它们正是
  * 重构误判（6cf3c329）的根因。
  *
- * 挂载点：harness release 命令第 4 步；studio publishPackage dist 校验（配套切换 studio#425）。
+ * 挂载点：harness release 命令第 4 步；下游消费方发布流 dist 校验。
  */
 export function verifyReleaseArtifacts(pkgRoot?: string): ArtifactIntegrityResult {
   const root = resolveRoot(pkgRoot);

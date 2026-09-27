@@ -199,7 +199,7 @@ describe('TraceCollector', () => {
       expect(stats.newestTrace).toBe(200);
     });
 
-    it('四个读方法签名与返回类型编译期固定（studio analyzeRecent 消费面零改动证据）', () => {
+    it('四个读方法签名与返回类型编译期固定（跨仓消费方 analyzeRecent 消费面零改动证据）', () => {
       const read: (filter?: TraceFilter) => ExecutionTrace[] = collector.read.bind(collector);
       const readRecent: (hours: number) => ExecutionTrace[] = collector.readRecent.bind(collector);
       const readByConstraint: (constraintId: string) => ExecutionTrace[] =

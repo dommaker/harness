@@ -3,7 +3,7 @@
  *
  * `getEffectiveConstraints(projectRoot)` 是全仓唯一的生效集来源：
  * 内置 → preset → config.yml 禁用。
- * `harness check`、外部消费者（studio 等）全部消费它，
+ * `harness check`、外部消费者全部消费它，
  * 不再直接读 CONSTRAINTS 全集。
  */
 

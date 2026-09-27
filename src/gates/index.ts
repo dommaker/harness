@@ -48,7 +48,7 @@ export { getGate, listRegisteredGates, registeredGateCount, assertGateRegistryCl
 export { runGates, type GateRunResult } from './runner';
 
 /**
- * checker-as-guard 接线点：ConstraintCheck → Gate（studio #129 随动）
+ * checker-as-guard 接线点：ConstraintCheck → Gate（下游消费方随动）
  */
 export { createCheckerGate } from './checker-gate';
 

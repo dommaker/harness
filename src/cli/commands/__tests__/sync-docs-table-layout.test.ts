@@ -72,7 +72,7 @@ describe('sync-docs CAPABILITIES.md 表格排版（#171）', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('撤目录条目行（studio 撤登记形状）：同样整行删除', async () => {
+  it('撤目录条目行（撤登记形状）：同样整行删除', async () => {
     const dir = makeProject(
       'dir-entry',
       ['cli/cli.ts', 'harness/h.ts'],

@@ -1,8 +1,8 @@
 /**
- * checker-as-guard 接线点（G1 / studio #129 随动）
+ * checker-as-guard 接线点（G1 / 下游消费方随动）
  *
- * 把已注册的 ConstraintCheck 适配为统一 Gate，供守卫链（如 studio
- * runCompletionGuards）复用 runGates 的 deny 单调 / ask fail-closed 语义。
+ * 把已注册的 ConstraintCheck 适配为统一 Gate，供守卫链（如下游消费方的
+ * completion guards）复用 runGates 的 deny 单调 / ask fail-closed 语义。
  *
  * env 经 buildCheckEnv(..., 'none') 构造（显式不接证据），语义见工厂 doc；
  * `ctx.runEnv` 传入即与本 run 其余消费方共用同一份上行数据读取（ADR-0023）。

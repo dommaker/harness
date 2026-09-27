@@ -359,7 +359,7 @@ const perEntryRules: AuditRule[] = [
     scope: 'active',
     detect: (entry) => {
       const tags = (entry.tags ?? []).map(t => t.toLowerCase());
-      // Tag-level: "pipeline" tag is deprecated (Studio Pipeline superseded by Agent Network)
+      // Tag-level: "pipeline" tag is deprecated (superseded by Agent Network)
       if (tags.includes('pipeline')) {
         return `标签 "pipeline" 属于已废弃领域（已被 Agent Network 取代）`;
       }

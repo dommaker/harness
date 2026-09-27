@@ -4,7 +4,7 @@
  * 事故：5 个测试文件 fs.mkdtempSync 后零清理（constraints-retire / check-drift /
  * constraints-report / agent-prompt-renderer / injection-drift），日常 jest 运行累积。
  *
- * 机制（studio apps/api/tests/mkdtemp-cleanup.ts 同款，jest 版）：
+ * 机制（与下游消费方测试基建同款，jest 版）：
  * 1) patch fs.mkdtempSync--本进程创建的临时目录全部进注册表，afterAll 统一 rmSync。
  *    jest worker 被 kill 时 process 'exit' 不触发，必须用 afterAll（setupFilesAfterEnv
  *    里注册 = 文件级钩子）。

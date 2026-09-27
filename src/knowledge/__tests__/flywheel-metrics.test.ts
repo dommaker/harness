@@ -81,7 +81,7 @@ describe('evaluateFlywheel — 引用侧指标', () => {
         makeEntry('K-001', ['agent-a:2026-09-01', 'search:2026-09-01']),
         makeEntry('K-002', ['prompt-inject:2026-08-30', 'test-agent:2026-08-31']),
         makeEntry('K-003', []),
-        makeEntry('K-004', ['decision-1:2026-07-01', 'studio-web:2026-07-02']),
+        makeEntry('K-004', ['decision-1:2026-07-01', 'web-app:2026-07-02']),
       ],
     });
 

@@ -101,8 +101,8 @@ export class PassesGate {
    *
    * @example
    * ```typescript
-   * // Studio 调用方式
-   * const testResult = await runTestCommand(workDir);  // Studio 自己运行
+   * // 下游消费方调用方式
+   * const testResult = await runTestCommand(workDir);  // 消费方自己运行
    * const passesResult = passesGate.check(testResult); // harness 只验证
    *
    * if (!passesResult.allowed) {

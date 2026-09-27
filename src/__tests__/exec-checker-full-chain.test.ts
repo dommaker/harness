@@ -1,7 +1,7 @@
 /**
  * exec 执行协议全链验收（harness#181 第一半）
  *
- * 示例业务检查器 fixtures/public-repo-sanitization.mjs（场景原型 = studio 侧安全底线
+ * 示例业务检查器 fixtures/public-repo-sanitization.mjs（场景原型 = 下游消费方安全底线
  * public_repo_sanitization，ADR-0032 ①；占位符豁免谓词是模板填参表达不了的业务判定）
  * 走完整链：编写（fixtures 脚本）→ 名册登记（.harness/constraints.yml 写
  * checker: exec + params.command）→ 执行（loadAppConstraints → ConstraintChecker 分发）
@@ -22,12 +22,12 @@ const SCRIPT = path.join(
 );
 
 const DIRTY_DOC = [
-  '部署参考 /Users/alice/projects/studio 的配置。',
+  '部署参考 /Users/alice/projects/demo 的配置。',
   '占位符写法 /Users/<you>/projects 不算残留。',
   '另一个现场 /home/bob/work/app 也要拦。',
 ].join('\n');
 
-const CLEAN_DOC = '部署参考 /Users/<you>/projects/studio 的配置。\n';
+const CLEAN_DOC = '部署参考 /Users/<you>/projects/demo 的配置。\n';
 
 function constraintsYml(severity: 'error' | 'warning'): string {
   return [

@@ -236,17 +236,15 @@ async function hasKnowledgeDir(projectPath: string): Promise<boolean> {
   }
 }
 
-/** 模块上下文正本候选路径（相对项目根）：新正本优先，旧正本兼容沿用（免迁移） */
+/** 模块上下文正本候选路径（相对项目根） */
 const CONTEXT_DOC_PATHS: string[][] = [
   ['.harness', 'CONTEXT.md'],
-  ['.studio', 'CONTEXT.md'],
 ];
 
 /**
  * 定位模块上下文正本（正本模型）：
  * 模块上下文沉淀归并到业务仓单一正本（模块锚点组织）时，知识入口行改指正本，
- * 不再输出散置 CONTEXT.md 指引。正本路径缺省 `.harness/CONTEXT.md`；
- * 旧正本 `.studio/CONTEXT.md` 在场时兼容沿用，两者同时在场上以 `.harness/` 为准。
+ * 不再输出散置 CONTEXT.md 指引。正本路径缺省 `.harness/CONTEXT.md`。
  * 返回相对 projectPath 的正本路径（posix 分隔符），无正本返回 null。只判存在性，不解析内容。
  */
 async function findCanonicalContextDoc(projectPath: string): Promise<string | null> {

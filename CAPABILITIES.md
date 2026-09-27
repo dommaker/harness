@@ -10,7 +10,7 @@ check, validate, passes-gate, init, report, status, spec, acceptance, performanc
 ## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
 
-统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。6 个门禁 CLI 命令的判定一律穿过 `evaluate()`，`GateDecision → CommandResult` 的映射与失败措辞收在 `src/cli/gate-command.ts` 一处（架构评审候选1）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny；链级暂无调用方，`order` 与本执行器按 #115 的复开条件保留（config.yml 声明式顺序/开关面已收缩，见 ADR-0002「后续变更」）。checker-as-guard 接线点 `createCheckerGate(check)`（studio #129 随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
+统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。6 个门禁 CLI 命令的判定一律穿过 `evaluate()`，`GateDecision → CommandResult` 的映射与失败措辞收在 `src/cli/gate-command.ts` 一处（架构评审候选1）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny；链级暂无调用方，`order` 与本执行器按 #115 的复开条件保留（config.yml 声明式顺序/开关面已收缩，见 ADR-0002「后续变更」）。checker-as-guard 接线点 `createCheckerGate(check)`（下游消费方随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
 
 ## Constraint Model (severity 显式, ADR-0029)
 - check (7)：全部约束 kind='check'，必须带真实 checker，注册表闭环；severity 写死在定义上——errors (4) 违规阻断；warnings (3) 违规告警。（ADR-0029：三层命名与 kind 二元模型废止，纯文本提示层（prompt 类 9 条 + promptInjection/injectPrompt/appliesTo 字段 + 注入段渲染/漂移校验）整体关停，文本规则由消费方手写治理段承接）
@@ -41,7 +41,7 @@ GovernanceExecutor (doc-code-config drift detection, detect-only)
 FreshnessRunner (config-driven doc freshness checking: changelog_version, context_docs, doc_dir_check, doc_regex_count), FreshnessAutoFix (regex count auto-fix)
 
 ## Release Integrity
-verifyReleaseArtifacts / getCriticalArtifacts（#75 N4 收编）：关键发布物清单 = package.json 声明面（main/exports/bin）运行时推导 + 运行时 extras（bin 引导定义表、dist/tools/definitions）随源码维护；pkgRoot 缺省自动解析本包根，外部消费者零参数即自检已安装的 harness。挂载点：release 命令第 4 步、studio publishPackage dist 校验（studio#425 配套切换）
+verifyReleaseArtifacts / getCriticalArtifacts（#75 N4 收编）：关键发布物清单 = package.json 声明面（main/exports/bin）运行时推导 + 运行时 extras（bin 引导定义表、dist/tools/definitions）随源码维护；pkgRoot 缺省自动解析本包根，外部消费者零参数即自检已安装的 harness。挂载点：release 命令第 4 步、下游消费方发布流 dist 校验配套
 
 ## Runtime Bootstrap
 `bootstrapHarness` / `bootstrapHarnessSync` / `HarnessBootstrap`（type）：运行环境组合根，一次调用装配 `ConstraintChecker` + `TraceCollector`（锚 projectPath，harness#88/#139）+ `SessionManager`，并加载 `.harness/config.yml` 产出 `mergedConstraints`。原 `## Hooks` 段的通用管线面（`HookRegistry` / `HookPipeline` / `assertHookRegistryClosed` / `toErrorStrategy` 四值符号 + 八类型）双仓零生产消费者，已随 ADR-0027 整体删除（#170）。

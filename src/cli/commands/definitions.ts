@@ -297,7 +297,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
   },
   {
     command: 'release',
-    description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。不依赖 Studio API。',
+    description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。纯 CLI 实现，不依赖外部 API。',
     options: [
       { flags: '--bump <type>', description: '版本递增类型', defaultValue: 'patch' },
       { flags: '--dry-run <bool>', description: '仅模拟执行', defaultValue: 'false' },

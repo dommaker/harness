@@ -2,8 +2,8 @@
  * harness release 命令
  *
  * 完整 npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。
- * 与 studio MCP tool `publishPackage` 共享同一逻辑，但此 CLI 命令不依赖 Studio API 运行。
- * 当 studio API 因 harness 包损坏而无法启动时，此 CLI 命令仍可用。
+ * 纯 CLI 实现，不依赖任何外部 API——下游编排服务因 harness 包损坏而无法启动时，
+ * 此 CLI 命令仍可作为发布兜底通道使用。
  *
  * 流程：
  *   1. Verify package

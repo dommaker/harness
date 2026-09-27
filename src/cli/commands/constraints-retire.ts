@@ -182,11 +182,11 @@ export function removeYamlEntry(filePath: string, section: string, id: string): 
 
 /**
  * 落盘后 commit 提示（票 02 断点 4）：仅 git 仓内提示，不替用户动 git。
- * studio 审卡通道由 applier 自动 commit，本提示面向 CLI 直达/裸项目场景。
+ * 下游审卡通道由 applier 自动 commit，本提示面向 CLI 直达/裸项目场景。
  */
 export function logCommitHint(projectRoot: string, io: CommandIO): void {
   if (!fs.existsSync(path.join(projectRoot, '.git'))) return;
-  log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（studio 审卡通道会自动 commit）'));
+  log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（下游审卡通道会自动 commit）'));
 }
 
 /**

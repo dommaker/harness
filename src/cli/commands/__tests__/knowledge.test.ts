@@ -86,7 +86,7 @@ beforeEach(() => {
 
 // 解析函数本体自 #133 起住 knowledge-view.ts（resolveKnowledgeBaseDir），行为面不变：
 // 这里经 knowledgeStats 观测 `-p` / KNOWLEDGE_BASE_DIR / 缺省目录三条路径的解析结果
-// （ADR-0034：旧 ~/.studio/knowledge 兼容沿用已退役，不再属观测面）
+// （ADR-0034：旧消费方数据区兼容沿用已退役，不再属观测面）
 describe('getKnowledgeDir', () => {
   const fs = require('fs');
   const os = require('os');
@@ -127,8 +127,8 @@ describe('getKnowledgeDir', () => {
     }));
   });
 
-  it('should NOT fall back to legacy ~/.studio/knowledge even when it has data (ADR-0034 目录收编：兼容沿用已退役)', async () => {
-    const legacyDir = path.join(tmpHome, '.studio', 'knowledge');
+  it('should NOT fall back to legacy consumer data dir even when it has data (ADR-0034 目录收编：兼容沿用已退役)', async () => {
+    const legacyDir = path.join(tmpHome, '.legacy', 'knowledge');
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, 'guideline-x.md'), 'data');
     await knowledgeStats({ json: true }, io);

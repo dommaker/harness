@@ -66,7 +66,7 @@ export type CheckEvidenceInput = 'stagedDiff' | 'stagedDiffNames';
  * - runEnv = 本 run 的运行级观察面（ADR-0023）：传入即与 context-builder 及
  *   其余 checker 共用同一份上行数据读取；不传则自造一枚，只服务本次调用
  *
- * studio 侧若需 git 证据（#129），传真实 providers 即可。
+ * 下游消费方若需 git 证据，传真实 providers 即可。
  */
 export function buildCheckEnv(
   context: ConstraintContext,

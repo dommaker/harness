@@ -1,5 +1,5 @@
 /**
- * checker-as-guard 接线点测试（G1 / studio #129 随动）
+ * checker-as-guard 接线点测试（G1 / 下游消费方随动）
  */
 
 import { createCheckerGate } from '../checker-gate';

@@ -233,7 +233,7 @@ describe('D2: event-noise', () => {
 
   it('rejects [Session Feature] titles', () => {
     const { audit } = memoryAudit([]);
-    const entry = makeEntry({ title: '[Session Feature] feat: studio release' });
+    const entry = makeEntry({ title: '[Session Feature] feat: product release' });
     const issues = audit.validate(entry);
     expect(issues.some(i => i.rule === 'event-noise' && i.action === 'archive')).toBe(true);
   });

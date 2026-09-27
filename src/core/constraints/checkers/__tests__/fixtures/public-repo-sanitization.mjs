@@ -2,7 +2,7 @@
 /**
  * 示例业务检查器（harness#181 验收示例）：public-repo-sanitization
  *
- * 场景原型 = studio 侧安全底线 public_repo_sanitization（ADR-0032 ①）：公开发布仓的
+ * 场景原型 = 下游消费方安全底线 public_repo_sanitization（ADR-0032 ①）：公开发布仓的
  * 受跟踪文本不得残留开发机现场绝对路径（/Users/<name>/、/home/<name>/），文档示例的
  * 占位符形态（/Users/<you>/ 等尖括号段）豁免。
  *

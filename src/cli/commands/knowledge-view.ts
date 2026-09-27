@@ -10,7 +10,7 @@
  * - **角色→样式单表 + 键→中文 label 映射**：维度 label、成熟度颜色、规则 label 的唯一权威。
  * - **json / 人读的唯一分派与退出码**：`--json` 打 `data` 的序列化，否则渲染 display model。
  * - **路径解析与 store 构造**：`-p` / `KNOWLEDGE_BASE_DIR` / 缺省目录解析只在这一处
- *   （ADR-0034：旧 ~/.studio/knowledge 兼容沿用已退役，studio 正本由编排侧显式注入）。
+ *   （ADR-0034：消费方数据区正本由编排侧经 KNOWLEDGE_BASE_DIR 显式注入）。
  */
 
 import chalk from 'chalk';
@@ -176,7 +176,7 @@ export function emitKnowledgeView<T>(io: CommandIO, options: { json?: boolean },
 
 // ── 路径解析与 store 构造 ─────────────────────────────────
 
-/** 缺省知识库数据根（相对用户 home）。裸 CLI 项目缺省目录；studio 场景唯一正本 ~/.studio/knowledge 由编排侧经 KNOWLEDGE_BASE_DIR 显式注入（ADR-0034） */
+/** 缺省知识库数据根（相对用户 home）。裸 CLI 项目缺省目录；消费方数据区正本由编排侧经 KNOWLEDGE_BASE_DIR 显式注入（ADR-0034） */
 const KNOWLEDGE_DATA_DIR = path.join('.harness', 'knowledge');
 
 export interface KnowledgePathOptions {
@@ -188,8 +188,8 @@ export interface KnowledgePathOptions {
 
 /**
  * 知识库数据根的唯一解析点。`-p` 优先，其次 KNOWLEDGE_BASE_DIR，
- * 最后落到用户 home 缺省目录（ADR-0034 目录收编：旧 ~/.studio/knowledge
- * 兼容沿用逻辑已退役——双目录分叉是历史包袱，studio 正本由编排侧显式注入；
+ * 最后落到用户 home 缺省目录（ADR-0034 目录收编：消费方数据区正本由
+ * 编排侧经 KNOWLEDGE_BASE_DIR 显式注入，本命令不做任何旧目录兼容沿用；
  * io 参数随兼容提示一并失去用途，签名保留免动全部调用方）。
  */
 export function resolveKnowledgeBaseDir(options: KnowledgePathOptions, _io: CommandIO): string {

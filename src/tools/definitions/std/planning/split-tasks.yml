@@ -343,7 +343,6 @@ examples:
 # ============================================================================
 
 metadata:
-  author: Agent Studio
   version: 1.0.0
   changelog:
     - version: 1.0.0

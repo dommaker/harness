@@ -52,7 +52,7 @@ export class TraceCollector {
   constructor(config?: Partial<TraceCollectorConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     // 收根则相对落点按项目解析（harness#139：否则 -p 半失效——评估跑在 B、trace 写进 cwd）；
-    // 没收根则保持 cwd 解析，这是跨仓消费者（studio）依赖的兼容面，不是遗漏
+    // 没收根则保持 cwd 解析，这是跨仓消费者依赖的兼容面，不是遗漏
     this.traceFile = this.config.projectPath
       ? path.resolve(this.config.projectPath, this.config.traceFile!)
       : this.config.traceFile!;
@@ -127,12 +127,12 @@ export class TraceCollector {
    * 支持过滤条件（同 `read()`）：时间范围 / 约束 ID / 结果类型 / 项目路径 / 会话 ID。
    *
    * **计数是文件级口径**：过滤只作用于合法记录——坏行没有 timestamp/约束 ID 可归窗，
-   * 丢不得。这正是消费方（studio 端点）无法自己算出坏行数的原因。
+   * 丢不得。这正是消费方（跨仓调用端点）无法自己算出坏行数的原因。
    */
   readReport(filter?: TraceFilter): { traces: ExecutionTrace[]; skippedLines: number } {
     // 坏行策略：skip（harness#82 裁决 4：原裸 parse「抛」改 skip）；
     // 计数去向：透传——skippedLines 随本方法返回，消费面是 TraceAnalyzer.analyzeRecentReport()
-    // （结构化）与包外调用方（studio 端点经配套票 #451 读它，见 studio#451）；
+    // （结构化）与包外调用方（跨仓消费端点经 skippedLines 字段读它）；
     // `harness status` 另按 projectPath 直读 jsonl 正本，不经过本类
     const { records, skippedLines } = readJsonl<ExecutionTrace>(this.traceFile, 'skip');
 
@@ -315,7 +315,7 @@ export class TraceCollector {
  *
  * harness#139 起本仓生产代码不再消费它：CLI check/report 与 bootstrap 四个组合根
  * 各自 `new TraceCollector({ projectPath })` 锚根构造（守卫见 project-path-convention
- * 闸 4）。保留是给跨仓调用方（studio）的既有形状——它依赖「API 进程 cwd 恰好是项目」。
+ * 闸 4）。保留是给跨仓调用方的既有形状——它依赖「调用方进程 cwd 恰好是项目」。
  * 传 `projectPath` 是它的锚根出口；不传则落点按 cwd 解析（行为逐字不变）。
  */
 let globalCollector: TraceCollector | null = null;

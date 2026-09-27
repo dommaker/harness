@@ -1,7 +1,7 @@
 /**
- * pretool-use-hook 测试（studio#153）
+ * pretool-use-hook 测试
  *
- * 验收口径：block/warn/audit 行为与 studio-agent 生成版脚本一致——
+ * 验收口径：block/warn/audit 行为与下游消费方生成版脚本一致——
  * block 级 exit 2 阻断，warn/audit 放行，坏输入 fail-open。
  *
  * P1-7（ADR-0031，wayfinder 票08）：命中留痕走 traces 通道——整个套件 chdir 到

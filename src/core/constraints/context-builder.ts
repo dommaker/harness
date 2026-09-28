@@ -124,23 +124,6 @@ export function detectRootCauseInvestigation(projectPath: string): boolean {
   return false;
 }
 
-/** 验证证据的尾部窗口（工单 23 原口径：只看最近 10 条） */
-const VERIFICATION_EVIDENCE_TAIL = 10;
-
-/**
- * 检测是否有验证证据（取运行级观察面的最近 10 条）
- */
-async function detectVerificationEvidence(env: RunEnv): Promise<boolean> {
-  try {
-    // tail 在 parse 之前截断 → 坏行会占用尾部槽位（#82 裁决范围外的既有口径，本票不改）
-    return env
-      .traceTail(VERIFICATION_EVIDENCE_TAIL)
-      .records.some(trace => trace.result === 'pass');
-  } catch {
-    return false;
-  }
-}
-
 /**
  * 检测是否有需求来源
  * 检查 CLAUDE.md、README.md、specs/、docs/specs/ 等
@@ -221,7 +204,6 @@ export async function buildConstraintContext(options: {
     hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),
     hasFailingTest: await detectFailingTest(runEnv),
     hasRootCauseInvestigation: detectRootCauseInvestigation(projectPath),
-    hasVerificationEvidence: await detectVerificationEvidence(runEnv),
     hasReuseCheck: detectReuseCheck(projectPath),
     hasRequirement: detectRequirement(projectPath),
   };

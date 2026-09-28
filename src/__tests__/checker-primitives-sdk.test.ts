@@ -62,9 +62,9 @@ describe('检查器原语 SDK（harness#181）', () => {
     const flagCheck = contextFlag('app_flag', (ctx) => ctx.operation === 'commit');
     expect(normalizeCheckOutcome(await flagCheck.evaluate(env)).satisfied).toBe(true);
 
-    const evidenceCheck = contextEvidenceFlag('app_evidence', 'hasVerificationEvidence');
+    const evidenceCheck = contextEvidenceFlag('app_evidence', 'hasFailingTest');
     const skipped = normalizeCheckOutcome(await evidenceCheck.evaluate(env));
     expect(skipped.skipped).toBe(true);
-    expect(skipped.skipReason).toContain('hasVerificationEvidence');
+    expect(skipped.skipReason).toContain('hasFailingTest');
   });
 });

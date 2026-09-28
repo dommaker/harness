@@ -7,7 +7,7 @@
 
 import { ConstraintChecker, checkConstraint } from '../core/constraints/checker';
 import type { ConstraintContext } from '../types/constraint';
-import { rmSync, mkdtempSync } from 'fs';
+import { rmSync, mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -31,14 +31,22 @@ describe('ConstraintChecker', () => {
 
   describe('error 级约束', () => {
     it('should check no_completion_without_verification', async () => {
+      // harness#183：验证证据 = .harness/evidence 落盘（独立链路），不再是 context flag
+      const withEvidence = join(tempDir, 'with-evidence');
+      mkdirSync(join(withEvidence, '.harness', 'evidence'), { recursive: true });
+      writeFileSync(join(withEvidence, '.harness', 'evidence', 'test.log'), 'ok');
+      const withoutEvidence = join(tempDir, 'without-evidence');
+      mkdirSync(withoutEvidence, { recursive: true });
+
       const contextWithEvidence: ConstraintContext = {
         operation: 'code_implementation',
-        hasVerificationEvidence: true,
+        projectPath: withEvidence,
+        changedFiles: [],
       };
 
       const contextWithoutEvidence: ConstraintContext = {
         operation: 'code_implementation',
-        hasVerificationEvidence: false,
+        projectPath: withoutEvidence,
       };
 
       const resultWithEvidence = await checker.check(
@@ -86,22 +94,16 @@ describe('ConstraintChecker', () => {
 
   describe('Helper functions', () => {
     it('should check single constraint via checkConstraint', async () => {
+      const withEvidence = join(tempDir, 'helper-with-evidence');
+      mkdirSync(join(withEvidence, '.harness', 'evidence'), { recursive: true });
+      writeFileSync(join(withEvidence, '.harness', 'evidence', 'test.log'), 'ok');
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasVerificationEvidence: true,
+        projectPath: withEvidence,
+        changedFiles: [],
       };
 
       const result = await checkConstraint('no_completion_without_verification', context);
-      expect(result.satisfied).toBe(true);
-    });
-
-    it('prompt 约束经 checkConstraint 短路通过', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-      };
-
-      const result = await checkConstraint('no_completion_without_verification', context);
-      expect(result.id).toBe('no_completion_without_verification');
       expect(result.satisfied).toBe(true);
     });
 

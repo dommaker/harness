@@ -92,6 +92,9 @@ function fixtureRepo(): string {
   // 改一个已登记的源文件并 stage → 触发条件 module_modification
   write(dir, 'src/existing.ts', 'export const a = 2;\n');
   git(dir, 'add', '--', 'src/existing.ts');
+  // harness#183：真验证证据（.harness/evidence 落盘，须在变更之后写 → mtime 更新）；
+  // readdir/stat 不经本套件的读取计数器，冻结表不变
+  write(dir, '.harness/evidence/test-fixture.log', '1 passed\n');
   return dir;
 }
 

@@ -55,14 +55,14 @@ describe('findMissingInputs — needs 与环境供给比对', () => {
   it('contextFlags 为 undefined → 缺项点名标志', () => {
     const check: ConstraintCheck = {
       id: 'flag-check',
-      needs: { contextFlags: ['hasVerificationEvidence'] },
+      needs: { contextFlags: ['hasFailingTest'] },
       evaluate: () => true,
     };
     expect(findMissingInputs(check, envOf(CONTEXT, {}))).toEqual([
-      '证据标志 hasVerificationEvidence 未接线',
+      '证据标志 hasFailingTest 未接线',
     ]);
     expect(
-      findMissingInputs(check, envOf({ ...CONTEXT, hasVerificationEvidence: false }, {}))
+      findMissingInputs(check, envOf({ ...CONTEXT, hasFailingTest: false }, {}))
     ).toEqual([]);
   });
 

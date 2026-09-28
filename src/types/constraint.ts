@@ -220,9 +220,6 @@ export interface ConstraintContext {
   /** 是否已通过诊断→修复闸门（设计方案已确认） */
   hasPlanApproval?: boolean;
 
-  /** 是否有验证证据 */
-  hasVerificationEvidence?: boolean;
-  
   /** 是否有测试 */
   hasTest?: boolean;
   

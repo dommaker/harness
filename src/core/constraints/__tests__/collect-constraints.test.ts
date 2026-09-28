@@ -6,31 +6,55 @@
  * block 模式的 throw 契约由 checker-extra / iron-laws 既有用例钉住，这里只测 collect 侧。
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ConstraintChecker } from '../checker';
 import type { ConstraintContext, ConstraintResult } from '../../../types/constraint';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // 缺省 no-op trace 记录器：本套件不验 trace 面（trace 面由 trace-injection 套件钉住）
 const checker = new ConstraintChecker();
 
-/** 只违 no_completion_without_verification，其余铁律满足（flag 口径同 checker-extra） */
-const VIOLATING: ConstraintContext = {
-  operation: 'code_implementation',
-  hasTest: false,
-  hasVerificationEvidence: false,
-  hasRequirement: true,
-  hasSingleTask: true,
-  taskDescription: 'single focused change',
-};
+/**
+ * 证据夹具（harness#183：验证证据 = .harness/evidence 落盘，不再是 context flag）：
+ * VIOLATING 项目无证据（只违 no_completion_without_verification，其余铁律满足）；
+ * CLEAN 项目有证据（新鲜度无所依——无 changedFiles——有证据即过）
+ */
+let violatingDir: string;
+let cleanDir: string;
+let VIOLATING: ConstraintContext;
+let CLEAN: ConstraintContext;
 
-const CLEAN: ConstraintContext = {
-  operation: 'code_implementation',
-  hasTest: true,
-  hasVerificationEvidence: true,
-  hasRequirement: true,
-  hasSingleTask: true,
-  taskDescription: 'single focused change',
-};
+beforeAll(() => {
+  violatingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-collect-violating-'));
+  cleanDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-collect-clean-'));
+  fs.mkdirSync(path.join(cleanDir, '.harness', 'evidence'), { recursive: true });
+  fs.writeFileSync(path.join(cleanDir, '.harness', 'evidence', 'test.log'), 'ok');
+
+  VIOLATING = {
+    operation: 'code_implementation',
+    projectPath: violatingDir,
+    hasTest: false,
+    hasRequirement: true,
+    hasSingleTask: true,
+    taskDescription: 'single focused change',
+  };
+  CLEAN = {
+    operation: 'code_implementation',
+    projectPath: cleanDir,
+    changedFiles: [],
+    hasTest: true,
+    hasRequirement: true,
+    hasSingleTask: true,
+    taskDescription: 'single focused change',
+  };
+});
+
+afterAll(() => {
+  fs.rmSync(violatingDir, { recursive: true, force: true });
+  fs.rmSync(cleanDir, { recursive: true, force: true });
+});
 
 describe('collectConstraints（收集模式，不抛）', () => {
   it('铁律违规不抛 —— resolves 而非 rejects', async () => {

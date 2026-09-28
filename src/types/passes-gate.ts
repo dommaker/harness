@@ -3,6 +3,14 @@
  */
 
 /**
+ * 验证证据的约定落点（项目根相对路径）
+ *
+ * 写方 = PassesGate.runTests（真实跑测试命令后落盘）与消费方外部验证事件；
+ * 读方 = no_completion_without_verification checker（harness#183）。路径真相只此一处。
+ */
+export const EVIDENCE_DIR_REL = '.harness/evidence';
+
+/**
  * 测试门控配置
  */
 export interface PassesGateConfig {

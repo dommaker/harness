@@ -30,7 +30,8 @@ export const CAPABILITIES_FILE_REL = 'CAPABILITIES.md';
 /**
  * 尾部窗口上限 = 本 run 内最大的尾部消费方（有无失败记录看 20 条，见 context-builder）
  *
- * 更小的窗口（验证证据看 10 条）从同一份行文本上截，不再二次读文件。
+ * harness#183 起验证证据不再读 trace（语义循环拆除，改读 .harness/evidence），
+ * trace 尾部只剩 hasFailingTest 一个消费方。
  */
 const TRACE_TAIL_WINDOW = 20;
 
@@ -95,9 +96,9 @@ export function createRunEnv(projectPath: string): RunEnv {
     projectPath,
     traceTail(limit: number) {
       if (!window) {
-        // 计数去向：豁免（harness#100）——本观察面只供给「最近有无 fail / 有无 pass」两个
-        // 布尔证据的消费方，它们不读 skippedLines；坏行占尾部槽位只会让证据变少（方向保守），
-        // 告知需要改判定形状，属行为变更不在本票（口径与改前的两处独立 tail 读逐字一致）
+        // 计数去向：豁免（harness#100）——本观察面只供给「最近有无 fail」一个布尔证据
+        // 消费方，不读 skippedLines；坏行占尾部槽位只会让证据变少（方向保守），
+        // 告知需要改判定形状，属行为变更不在本票
         window = readJsonlWindow<ExecutionTrace>(traceFile, 'skip', TRACE_TAIL_WINDOW);
       }
       return window.take(limit);

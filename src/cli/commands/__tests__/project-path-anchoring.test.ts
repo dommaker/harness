@@ -169,7 +169,7 @@ describe('-p 锚定：执行与 IO 必须落在 projectPath（cwd ≠ projectPat
       execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
     }
 
-    /** check 能真跑完的项目：已提交基线 + staged 改动 + 一条 pass trace（验证证据） */
+    /** check 能真跑完的项目：已提交基线 + staged 改动 + 真验证证据（harness#183：.harness/evidence 落盘） */
     function checkProject(name: string): string {
       const dir = createProjectFixture({
         name,
@@ -183,6 +183,9 @@ describe('-p 锚定：执行与 IO 必须落在 projectPath（cwd ≠ projectPat
       git(dir, 'commit', '-q', '-m', 'baseline');
       fs.writeFileSync(path.join(dir, 'src/existing.ts'), 'export const a = 2;\n', 'utf-8');
       git(dir, 'add', '--', 'src/existing.ts');
+      // 验证证据须在变更之后落盘（mtime 新鲜度口径）
+      fs.mkdirSync(path.join(dir, '.harness', 'evidence'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.harness', 'evidence', 'test-fixture.log'), '1 passed\n', 'utf-8');
       return dir;
     }
 

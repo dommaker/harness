@@ -97,7 +97,7 @@ describe('buildConstraintsUsageReport', () => {
   it('四类候选诊断：零触发/不可评估(flag)/不可评估(探测)/高噪/零拦截', () => {
     const root = createProjectFixture({ name: 'harness-report-test' });
     writeProjectTraces(root, [
-      // 不可评估（flag 未接线）：全部 skip
+      // 不可评估（证据不可用）：全部 skip（harness#183 起不再是 flag 未接线）
       ...tracesOf('no_completion_without_verification', 'skip', 3),
       // 不可评估（存在性探测未命中）：全部 skip
       ...tracesOf('capability_sync', 'skip', 5),
@@ -113,12 +113,12 @@ describe('buildConstraintsUsageReport', () => {
     // 零触发（未出现在 trace 的 check 约束）
     expect(byId.get('docs_freshness')?.kind).toBe('zero_trigger');
 
-    // 不可评估 · flag 未接线
+    // 不可评估 · 全部 skip（证据不可用/约定未采用不再分列，harness#183 起无 flag 型约束）
     const flagC = byId.get('no_completion_without_verification');
     expect(flagC?.kind).toBe('unevaluable');
-    expect(flagC?.reason).toContain('证据 flag 未接线');
+    expect(flagC?.reason).toContain('约定未采用或证据不可用');
 
-    // 不可评估 · 约定未采用
+    // 不可评估 · 同口径
     const probeC = byId.get('capability_sync');
     expect(probeC?.kind).toBe('unevaluable');
     expect(probeC?.reason).toContain('约定未采用');

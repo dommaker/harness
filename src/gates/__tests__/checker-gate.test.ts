@@ -30,12 +30,12 @@ describe('createCheckerGate', () => {
 
   it('证据未接线（skip）→ abstain（不阻断），理由带出 skip 原因（harness#182）', async () => {
     const gate = createCheckerGate(
-      contextEvidenceFlag('flag-skip', 'hasVerificationEvidence')
+      contextEvidenceFlag('flag-skip', 'hasFailingTest')
     );
     const decision = await gate.evaluate(ctx);
     expect(decision.status).toBe('abstain');
     expect(decision.result.message).toContain('跳过');
-    expect(decision.result.message).toContain('hasVerificationEvidence 未接线');
+    expect(decision.result.message).toContain('hasFailingTest 未接线');
   });
 
   it('git 证据需求在 gate 环境必缺（env 不接证据）→ abstain，不假评估（harness#182 输入契约）', async () => {

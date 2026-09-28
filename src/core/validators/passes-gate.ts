@@ -11,6 +11,7 @@ import { execAsync } from '../../utils/exec';
 import { judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { EVIDENCE_DIR_REL } from '../../types/passes-gate';
 import type {
   PassesGateConfig,
   TaskTestResult,
@@ -266,7 +267,7 @@ export class PassesGate {
    * 生成测试证据
    */
   private async generateEvidence(workDir: string, output: string): Promise<string> {
-    const evidenceDir = path.join(workDir, '.harness', 'evidence');
+    const evidenceDir = path.join(workDir, EVIDENCE_DIR_REL);
     await fs.mkdir(evidenceDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

@@ -3,16 +3,18 @@
  *
  * 覆盖：
  * - 三条存在性探测（capability_sync / context_doc_sync / docs_freshness）有/无约定两路
- * - flag 型 error 级约束 undefined → skip（显式 false 仍 fail，true 仍 pass）
  * - error 级 skip 不阻断 checkConstraints
  * - detectTrigger 代码文件 → 附加 code_implementation 推断
  * - trace 记录 result: 'skip'；TraceAnalyzer 的 pass/fail 率分母不计 skip
+ *
+ * harness#183：flag 型 error 约束（hasVerificationEvidence 三态）随证据源重构退役，
+ * no_completion_without_verification 改为 checker 体内读 .harness/evidence；
+ * 「error 级 skip 不阻断」的钉子和 trace skip 形态改用 docs_freshness 的存在性探测承载。
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ConstraintChecker } from '../core/constraints/checker';
 import { detectTrigger, buildConstraintContext } from '../core/constraints/context-builder';
-import { CONSTRAINTS } from '../core/constraints/definitions';
 import { TraceAnalyzer } from '../monitoring/trace-analyzer';
 import type { Constraint, ConstraintContext } from '../types/constraint';
 import type { ExecutionTrace } from '../types/trace';
@@ -162,48 +164,27 @@ describe('skip 三态语义（ADR-0001）', () => {
     });
   });
 
-  describe('flag 型 error 级约束：undefined → skip', () => {
-    it('hasVerificationEvidence undefined → skip；false → fail；true → pass', async () => {
-      const law = CONSTRAINTS['no_completion_without_verification'];
-
-      const skipped = await checker.check(law, { operation: 'code_implementation' });
-      expect(skipped.skipped).toBe(true);
-      expect(skipped.satisfied).toBe(true);
-
-      const failed = await checker.check(law, {
-        operation: 'code_implementation',
-        hasVerificationEvidence: false,
-      });
-      expect(failed.skipped).toBeUndefined();
-      expect(failed.satisfied).toBe(false);
-
-      const passed = await checker.check(law, {
-        operation: 'code_implementation',
-        hasVerificationEvidence: true,
-      });
-      expect(passed.skipped).toBeUndefined();
-      expect(passed.satisfied).toBe(true);
-    });
-
-    it('Iron Law skip 不阻断 checkConstraints', async () => {
-      // flag 未接线（CLI pre-commit 路径的典型形态）
+  describe('error 级约束的 skip / fail 语义', () => {
+    it('error 级 skip 不阻断 checkConstraints（docs_freshness 存在性探测承载）', async () => {
+      // 无任何 freshness 约定/目标的空目录：docs_freshness skip（harness#183 前由
+      // no_completion_without_verification 的 flag 未接线承载该语义）
       const result = await checker.checkConstraints({
-        operation: 'code_implementation',
+        operation: 'file_modification',
         projectPath: path.join(tempDir, 'empty'),
       });
 
       expect(result.passed).toBe(true);
       const skippedIds = result.errors.filter(r => r.skipped).map(r => r.id);
       expect(skippedIds).toEqual(
-        expect.arrayContaining(['no_completion_without_verification'])
+        expect.arrayContaining(['docs_freshness'])
       );
     });
 
-    it('显式 false 仍按 fail 阻断（skip 语义不改变 fail-closed）', async () => {
+    it('无验证证据仍按 fail 阻断（skip 语义不改变 fail-closed）', async () => {
       await expect(
         checker.checkConstraints({
           operation: 'code_implementation',
-          hasVerificationEvidence: false,
+          projectPath: path.join(tempDir, 'empty'),
           hasSingleTask: true,
           hasRequirement: true,
         })
@@ -273,14 +254,16 @@ describe('skip 三态语义（ADR-0001）', () => {
       const records: ExecutionTrace[] = [];
       const recording = new ConstraintChecker({ record: (t) => records.push(t) });
 
+      // skip 形态由 docs_freshness 存在性探测承载（harness#183 前是 flag 未接线的
+      // no_completion_without_verification）
       await recording.checkConstraints({
-        operation: 'code_implementation',
+        operation: 'file_modification',
         projectPath: path.join(tempDir, 'empty'),
       });
 
       const skipTraces = records.filter(t => t.result === 'skip');
       expect(skipTraces.map(t => t.constraintId)).toEqual(
-        expect.arrayContaining(['no_completion_without_verification'])
+        expect.arrayContaining(['docs_freshness'])
       );
     });
 

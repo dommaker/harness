@@ -12,4 +12,4 @@
 export { TraceCollector, getTraceCollector, configureTraceCollector } from './traces';
 export { TraceAnalyzer, createAnalyzer } from './trace-analyzer';
 export { ContextTracker } from './context-tracker';
-export type { ContextAverages } from './context-tracker';
+export type { ContextAverages, ContextUsageSnapshot } from './context-tracker';

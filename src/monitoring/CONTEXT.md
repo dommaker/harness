@@ -7,10 +7,10 @@
 - `TraceCollector` — 执行追踪收集（append-only JSONL，`.harness/logs/traces.log`）。读入口三个：`readReport(filter?)` 报告入口（返回 `{ traces, skippedLines }`，harness#100）、`read()/readRecent()/readByConstraint()` 兼容包装（#82 裁决 4 冻结的签名，丢计数）、`getStats()` 文件级统计（`{ fileExists, fileSize, totalLines, oldestTrace?, newestTrace? }`，harness#114 起经 `readJsonlEnds` 只 parse 两端；坏行并进 `totalLines` 的原始行数口径，要单列坏行数用 `readReport()`）
 - 模块级出口：`getTraceCollector()` / `configureTraceCollector(config)`——进程级单例面，**cwd 锚定**（构造不带 projectPath），本仓生产代码零消费、保留仅为跨仓兼容（锚根约定见「约定」第一条）；`createAnalyzer(config?)` 同理，等价 `new TraceAnalyzer(new TraceCollector(), config)`
 - `TraceAnalyzer` — 追踪统计分析 + 异常检测（共用 analyzer-base 纯函数）。`analyzeRecentReport(hours)` 带坏行数，`analyzeRecent()/analyzeConstraint()` 仍返回 `TraceSummary[]`。**ADR-0020**：`summarize`/`detectAnomalies` 的判定本体是 trace-analyzer.ts 的模块级纯函数 `summarizeTraces(traces)` / `detectTraceAnomalies(summaries, config?)`（阈值经参数传入，不再是实例状态），类壳只转发——类壳是跨仓消费方的运行时消费面（`new TraceAnalyzer(c)` + `analyzeRecentReport`/`detectAnomalies`，签名逐字不动），已持有数据的消费端直调纯函数。两函数**不进包根导出**（ADR-0003 零扩张），仓内经相对 import
-- `ContextTracker` — LLM 调用上下文使用快照记录
+- `ContextTracker` — LLM 调用上下文使用快照记录；`ContextUsageSnapshot` 类型正本同住 `context-tracker.ts`（自 `context/types.ts` 迁入，断 context↔monitoring 目录级环；`compactionLevel` 值域内联字面量，与 `context/types.ts` 的 `CompactionLevel` 同步维护）
 
 ## 依赖关系
-- 依赖 `src/types/trace` ExecutionTrace 类型
+- 依赖 `src/types/trace` ExecutionTrace 类型、`src/utils/`（jsonl 等）；对 `src/context/` 零依赖（ContextUsageSnapshot 已迁入本模块）
 - 消费者：`src/cli/commands/{check,report}` 与 `src/hooks/bootstrap`——组合根**锚根构造**收集器 `new TraceCollector({ projectPath })` 并注入 `ConstraintChecker` 构造参数（harness#88 接线，#139 收根：cwd 锚定的 `getTraceCollector()` 单例在本仓生产代码已零消费，保留仅为跨仓兼容面）；`status` 按 projectPath 直读读链正本后**直调模块级纯函数**，不构造 collector/类壳（ADR-0020：collector 构造函数的 mkdir 副作用就此退出该路径）
 - `ContextTracker` 的仓内持有者是 `src/context/session-manager`：构造时收 `basePath` 并经 `getTracker()` 交出。仓内**无** `record()` 调用点，`getRecent()/getAverages()/detectIssues()` 也无 CLI 接线（`getTracker()` 零仓内调用方），快照的写入方与读方都是库消费者（经包根 `ContextTracker` 出口，ADR-0003）——harness#142 核对补上这条消费边，此前只列了 trace 侧消费者
 - core 不再依赖本模块（方向由 eslint no-restricted-imports 锁死，`src/__tests__/layering.test.ts` 守卫）

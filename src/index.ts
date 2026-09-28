@@ -239,7 +239,7 @@ export {
   createAnalyzer,
   ContextTracker,
 } from './monitoring';
-export type { ContextAverages } from './monitoring';
+export type { ContextAverages, ContextUsageSnapshot } from './monitoring';
 
 // ========================================
 // 失败处理（错误分类 + 记录 + 违规处理策略）
@@ -279,7 +279,6 @@ export type {
   CompactionLevel,
   ContextSource,
   ContextSourceType,
-  ContextUsageSnapshot,
   InjectionConfig,
   InjectionResult,
   SessionCheckpoint,

@@ -8,7 +8,30 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, appendJsonl } from '../utils/jsonl';
-import type { ContextUsageSnapshot } from '../context/types';
+
+/**
+ * 上下文使用快照（自 `context/types.ts` 迁入——生产者/唯一消费者是本模块的
+ * ContextTracker，迁入后断 context↔monitoring 目录级环）
+ *
+ * `compactionLevel` 值域与 `context/types.ts` 的 `CompactionLevel` 同一
+ * （'eviction'|'summary'|'checkpoint'）；此处内联字面量而非跨目录 import，
+ * 以保持 monitoring 对 context 零依赖——改值域时两处同步。
+ */
+export interface ContextUsageSnapshot {
+  timestamp: string;
+  totalTokens: number;
+  breakdown: {
+    systemPrompt: number;
+    messages: number;
+    toolOutputs: number;
+    knowledge: number;
+    other: number;
+  };
+  truncatedItems: Array<{ type: string; id: string; originalTokens: number; keptTokens: number }>;
+  offloadedItems: Array<{ type: string; id: string; target: 'disk' | 'summary' | 'dropped' }>;
+  compactionTriggered: boolean;
+  compactionLevel?: 'eviction' | 'summary' | 'checkpoint';
+}
 
 export interface ContextAverages {
   avgTokens: number;

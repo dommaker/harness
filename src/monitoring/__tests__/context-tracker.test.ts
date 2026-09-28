@@ -4,7 +4,7 @@
 
 import { ContextTracker } from '../context-tracker';
 import * as fs from 'fs';
-import type { ContextUsageSnapshot } from '../../context/types';
+import type { ContextUsageSnapshot } from '../context-tracker';
 
 jest.mock('fs', () => {
   // 两条读入口必须同源：utils/jsonl 的 tail 走倒读分块（openSync/fstatSync/readSync，

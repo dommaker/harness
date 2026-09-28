@@ -16,7 +16,7 @@
 
 ## 约定
 - Token 预算策略由配置文件控制
-- 压缩只剩词汇不留引擎：`types.ts` 保留 `CompactionLevel`（被 `ContextUsageSnapshot.compactionLevel` 引用）与 `CompactionConfig`，但 `SessionCompaction` 引擎、`CompactionResult`、`DEFAULT_COMPACTION_CONFIG` 与 `AdaptiveTokenBudget` 已随 ADR-0022（零生产消费者）删除，本目录不再提供压缩策略组合点
+- 压缩只剩词汇不留引擎：`types.ts` 保留 `CompactionLevel`（被 `CompactionConfig` 引用；`ContextUsageSnapshot.compactionLevel` 已随快照类型迁 `monitoring/context-tracker.ts`，值域内联同一字面量）与 `CompactionConfig`，但 `SessionCompaction` 引擎、`CompactionResult`、`DEFAULT_COMPACTION_CONFIG` 与 `AdaptiveTokenBudget` 已随 ADR-0022（零生产消费者）删除，本目录不再提供压缩策略组合点
 
 ## 注意事项
 - 零 Token 成本：纯计算，不调用 LLM

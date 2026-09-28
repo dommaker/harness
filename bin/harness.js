@@ -17,6 +17,12 @@
  * 命令实现与定义表内不得出现 process.exit / process.exitCode。
  */
 
+// V8 编译缓存（Node >=22.1 提供 module.enableCompileCache；engines 声明 >=18，typeof 探测兜底）
+const nodeModule = require('node:module');
+if (typeof nodeModule.enableCompileCache === 'function') {
+  nodeModule.enableCompileCache();
+}
+
 const { Command } = require('commander');
 const { version } = require('../package.json');
 

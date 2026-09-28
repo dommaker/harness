@@ -26,10 +26,10 @@ export type CommandKind = 'ok' | 'skip' | 'fail' | 'usage-error';
  * （多闸门命令须含闸门标识）；`skip` 可选附原因。
  */
 export type CommandResult =
-  | { kind: 'ok' }
-  | { kind: 'skip'; reason?: string }
-  | { kind: 'fail'; reason: string }
-  | { kind: 'usage-error'; reason: string };
+  | { kind: Extract<CommandKind, 'ok'> }
+  | { kind: Extract<CommandKind, 'skip'>; reason?: string }
+  | { kind: Extract<CommandKind, 'fail'>; reason: string }
+  | { kind: Extract<CommandKind, 'usage-error'>; reason: string };
 
 /**
  * 命令输出流注入面（最小可写接口，`process.stdout` / `process.stderr` 结构化满足）

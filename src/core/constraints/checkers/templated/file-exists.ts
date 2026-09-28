@@ -47,7 +47,7 @@ export const fileExists: TemplatedCheckerFactory = {
       evaluate(env) {
         const pathHit = rel !== undefined && existsSync(join(env.projectPath, rel));
         const globHits = globPattern !== undefined
-          ? glob.sync(globPattern, { cwd: env.projectPath, dot: true, onlyFiles: false })
+          ? glob.sync(globPattern, { cwd: env.projectPath, dot: true, onlyFiles: false, ignore: ['node_modules/**'] })
           : [];
 
         if (mustExist) {

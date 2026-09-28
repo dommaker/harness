@@ -240,12 +240,20 @@ export interface AcceptanceCriteria {
 }
 
 /**
+ * 黑名单级别：
+ * - block: 禁止执行，直接拒绝
+ * - warn: 允许执行，但记录警告
+ * - audit: 允许执行，但记录审计日志
+ */
+export type BlacklistLevel = 'block' | 'warn' | 'audit';
+
+/**
  * 命令黑名单规则
  */
 export interface CommandBlacklistRule {
   id: string;
   pattern: RegExp;
-  level: 'block' | 'warn' | 'audit';
+  level: BlacklistLevel;
   message: string;
   category: string;
 }

@@ -10,17 +10,12 @@ import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, GateCon
 import { decisionFromResult } from './decision';
 
 /**
- * 黑名单级别
+ * 黑名单级别（正本在 types.ts，与 CommandBlacklistRule.level 同一定义）
  */
-export type BlacklistLevel = 'block' | 'warn' | 'audit';
+export type { BlacklistLevel } from './types';
 
 /**
  * 默认黑名单规则
- *
- * 级别说明：
- * - block: 禁止执行，直接拒绝
- * - warn: 允许执行，但记录警告
- * - audit: 允许执行，但记录审计日志
  */
 export const DEFAULT_COMMAND_BLACKLIST: CommandBlacklistRule[] = [
   // ========== 系统级破坏命令 ==========

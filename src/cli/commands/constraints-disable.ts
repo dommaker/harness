@@ -8,8 +8,8 @@
  * - retire：永久退役，写 retired 墓碑 + `constraint-retired-<id>` 沉淀；
  *   对裸 disabled 条目会接管补墓碑+沉淀（constraints-retire.ts 头部注释）
  *
- * 语义与 studio evolution applier 的 applyDisable 对齐（源出 dommaker/studio#646 裁定
- * config.yml 归 harness，本命令是 studio 侧切换的落点）：
+ * 语义与下游消费方 applier 的 applyDisable 对齐（经下游裁定
+ * config.yml 归 harness，本命令是下游切换的落点）：
  * 只认内置 + 应用层（.harness/constraints.yml）check 约束（findRetireTarget 同路径，
  * ADR-0033）；写后验证生效集已缩小，失败回滚备份。
  *
@@ -73,7 +73,7 @@ export function disableConstraint(projectRoot: string, id: string): DisableResul
   const backup = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : null;
   setYamlEntry(configPath, 'config.yml', 'constraints', id, { enabled: false });
 
-  // 2. 写后验证：生效集必须已缩小（与 studio applier 同一纪律），失败回滚备份
+  // 2. 写后验证：生效集必须已缩小（与下游 applier 同一纪律），失败回滚备份
   try {
     if (getEffectiveConstraints(projectRoot).some(c => c.id === id)) {
       throw new Error('constraint still present in effective set after disable');

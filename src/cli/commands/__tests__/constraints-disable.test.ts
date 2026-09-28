@@ -3,7 +3,7 @@
  *
  * 裸禁用 = config.yml `constraints.<id>.enabled:false`，无 retired 墓碑、无知识沉淀
  * （墓碑与沉淀是 retire 专有语义）。幂等 already_disabled；retired 墓碑不接管不动；
- * 写后验证生效集已缩小，失败回滚（与 studio evolution applier 同一纪律）。
+ * 写后验证生效集已缩小，失败回滚（与下游消费方 applier 同一纪律）。
  * CLI 直达（constraintsDisable）：--yes 人确认闸门，与 retire/reactivate 同形。
  *
  * 使用真实临时目录。

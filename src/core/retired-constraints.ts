@@ -3,7 +3,7 @@
  *
  * `listRetiredConstraints(target)` 是 retired 墓碑的唯一公共读口：
  * config.yml `constraints.<id>` 中 `enabled: false` + `retired` 墓碑段
- * 在 mergeConstraints 时被滤出生效集，下游（如 studio 路由）列退役约束
+ * 在 mergeConstraints 时被滤出生效集，下游消费方（如路由层）列退役约束
  * 不再直读 `.harness/config.yml`。
  *
  * 墓碑口径与 retire/reactivate 的幂等判定同一处真相：

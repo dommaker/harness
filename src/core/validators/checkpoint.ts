@@ -3,7 +3,7 @@
  * 与 ADR-0031「harness 不做生产编排」冲突，已废止）
  *
  * 执行项目自声明的检查点（13 种通用 check type，见 .harness/checkpoints.yml）；
- * 消费方：harness validate CLI、CI、下游运行时（如 studio）。
+ * 消费方：harness validate CLI、CI、下游运行时。
  * 各检查族实现位于 check-handlers/{file,command,output,http}.ts。
  */
 

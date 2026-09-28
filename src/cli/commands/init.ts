@@ -32,6 +32,9 @@ import {
   renderGitLabCiJobs,
   PRE_COMMIT_SNIPPET,
   PRE_PUSH_SNIPPET,
+  OUTPUT_STYLE_START,
+  OUTPUT_STYLE_END,
+  renderOutputStyleSection,
 } from './scaffold-templates';
 
 export interface InitOptions {
@@ -411,29 +414,12 @@ async function findCiWorkflows(workflowsDir: string): Promise<string[]> {
 }
 
 /**
- * Output Style 段标记（ADR-0001：init 只写标记区间内，标记外只读）
+ * Output Style 段标记与正文正本在 `scaffold-templates.ts`
+ *（ADR-0001：init 只写标记区间内，标记外只读）
  */
-const OUTPUT_STYLE_START = '<!-- HARNESS_OUTPUT_STYLE_START -->';
-const OUTPUT_STYLE_END = '<!-- HARNESS_OUTPUT_STYLE_END -->';
 
 /** 旧版 harness 无标记 Output Style 段的特征串（用于区分 harness 写入 vs 用户自写） */
 const LEGACY_OUTPUT_STYLE_FINGERPRINT = 'Terse like caveman';
-
-const OUTPUT_STYLE_BODY = [
-  'Terse like caveman. Technical substance exact. Only fluff die.',
-  'Drop: articles, filler (just/really/basically), pleasantries (sure/certainly/happy to), hedging.',
-  'Fragments OK. Short synonyms. Code blocks unchanged. Error messages quoted exact.',
-  'Pattern: [thing] [action] [reason]. [next step].',
-  'No sycophantic openers/closing fluff. No emojis or em-dashes.',
-  'Read existing files before writing. Don\'t re-read unless changed.',
-  'Skip files over 100KB unless required.',
-  'Don\'t guess APIs, versions, flags, commit SHAs, or package names. Verify before asserting.',
-].join('\n');
-
-/** 渲染带标记的 Output Style 段（含 `## Output Style` 标题，以换行结尾） */
-function renderOutputStyleSection(): string {
-  return `${OUTPUT_STYLE_START}\n## Output Style\n\n${OUTPUT_STYLE_BODY}\n${OUTPUT_STYLE_END}\n`;
-}
 
 /**
  * 在 CLAUDE.md 顶部写入 Output Style 段（标记化、幂等）

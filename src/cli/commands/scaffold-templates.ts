@@ -352,3 +352,26 @@ const DEFAULT_RESOLUTIONS = {
 export function renderResolutions(): string {
   return JSON.stringify(DEFAULT_RESOLUTIONS, null, 2);
 }
+
+// ── CLAUDE.md Output Style 段（ADR-0001：init 只写标记区间内，标记外只读）─────
+
+/** Output Style 段标记（区间外只读；replaceStandaloneRange 的 begin/end） */
+export const OUTPUT_STYLE_START = '<!-- HARNESS_OUTPUT_STYLE_START -->';
+export const OUTPUT_STYLE_END = '<!-- HARNESS_OUTPUT_STYLE_END -->';
+
+/** Output Style 段正文（逐字节冻结面：init 落盘与幂等替换的唯一正本） */
+export const OUTPUT_STYLE_BODY = [
+  'Terse like caveman. Technical substance exact. Only fluff die.',
+  'Drop: articles, filler (just/really/basically), pleasantries (sure/certainly/happy to), hedging.',
+  'Fragments OK. Short synonyms. Code blocks unchanged. Error messages quoted exact.',
+  'Pattern: [thing] [action] [reason]. [next step].',
+  'No sycophantic openers/closing fluff. No emojis or em-dashes.',
+  'Read existing files before writing. Don\'t re-read unless changed.',
+  'Skip files over 100KB unless required.',
+  'Don\'t guess APIs, versions, flags, commit SHAs, or package names. Verify before asserting.',
+].join('\n');
+
+/** 渲染带标记的 Output Style 段（含 `## Output Style` 标题，以换行结尾） */
+export function renderOutputStyleSection(): string {
+  return `${OUTPUT_STYLE_START}\n## Output Style\n\n${OUTPUT_STYLE_BODY}\n${OUTPUT_STYLE_END}\n`;
+}

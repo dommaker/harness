@@ -12,8 +12,8 @@
  *         retired: { at, reason, stats: { total, fail, failRate } }
  *
  * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'）。
-baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
-缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
+ * baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
+ * 缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
  *
  * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役。
  * ADR-0032 观察名单（块 3 子项 4）：零拦截命中先进观察名单（`.harness/.state.json`
@@ -61,7 +61,7 @@ export interface RetireExecuteOptions {
   reason?: string;
   /** 注入当前时间（测试用） */
   now?: Date;
-  /** 知识库路径解析的 io（legacy 兜底告警走 stderr 需要；缺省 processIO） */
+  /** 知识库路径解析的 io（注入给 openKnowledgeStore；当前 resolveKnowledgeBaseDir 已不消费，保留注入点与读口签名对齐。缺省 processIO） */
   io?: CommandIO;
 }
 

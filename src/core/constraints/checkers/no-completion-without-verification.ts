@@ -7,8 +7,11 @@
  * （PassesGate.runTests 真实跑项目声明的验证命令后落盘；消费方外部验证事件
  * 也写这里），判定与约束检查自身的 trace 彻底脱钩。
  *
- * 新鲜度口径：最新证据文件的 mtime ≥ 全部可读变更文件的最大 mtime
+ * 新鲜度口径：最新证据文件的 mtime 严格晚于全部可读变更文件的 mtime
  * （验证跑在最新变更之后）。不用固定时间窗——与本次变更的因果关系才是口径。
+ * 同刻等值（harness#195）：文件系统时间戳粒度有限，等值在物理上无法区分先后，
+ * 属不可判定态——判 pass 是假绿灯（同毫秒「先证据后变更」会被放行），判 fail 又
+ * 误杀正常时序（改完立刻验证落进同一毫秒），故等值走显式降级 skip，不放行也不违规。
  * 已知边界（保守方向，不修复）：git checkout 等刷新工作区 mtime 会误杀真证据
  * （误判过期 → fail，要求重跑验证）；证据只核存在性与时间，不读内容——防伪
  * 非本票口径（旧机制是自我指认，更弱）。
@@ -19,6 +22,8 @@
  * 判定（显式三态，harness#182 语义）：
  * - 证据目录缺失/为空 → fail（从未验证）
  * - 证据旧于最新变更 → fail（证据过期，点名晚于证据的变更文件）
+ * - 证据与变更文件同刻等值 → 带原因的 CheckSkip（harness#195：等值不可判定，
+ *   不放行也不违规；严格晚于证据的变更并存时 fail 优先，证据确定过期不降级）
  * - 新鲜 → pass
  * - changedFiles 为 undefined（调用方未接线变更清单，如生产侧直调）→ 带原因的
  *   CheckSkip：新鲜度无所依不能放行（空数组 = 真无变更，不在此列，有证据即过）
@@ -96,11 +101,13 @@ export const noCompletionWithoutVerification: ConstraintCheck = {
     // 全部不可读才无法判定 → 显式降级
     let readable = 0;
     const laterThanEvidence: string[] = [];
+    const sameAsEvidence: string[] = [];
     for (const file of changed) {
       try {
         const mtime = fs.statSync(path.join(env.projectPath, file)).mtimeMs;
         readable++;
         if (mtime > evidence.mtime) laterThanEvidence.push(file);
+        else if (mtime === evidence.mtime) sameAsEvidence.push(file);
       } catch {
         // 变更文件不可读（如已删除）：不参与新鲜度判定
       }
@@ -119,6 +126,14 @@ export const noCompletionWithoutVerification: ConstraintCheck = {
           '验证证据过期：最新证据早于本次变更，需重新运行项目声明的验证命令',
           laterThanEvidence.map(f => `晚于证据的变更: ${f}`)
         ),
+      };
+    }
+    // 同刻等值 = 时钟精度内先后不可判（harness#195）：不放行也不违规，显式降级。
+    // 置于 fail 之后：严格晚于证据的变更并存时证据确定过期，不因同刻降级
+    if (sameAsEvidence.length > 0) {
+      return {
+        skip: true,
+        reason: `证据与变更文件同刻（mtime 等值，时钟精度内无法区分先后）：${sameAsEvidence.join(', ')}，无法判定证据新鲜度，本次未评估`,
       };
     }
     return true;

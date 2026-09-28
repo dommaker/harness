@@ -6,7 +6,8 @@
  *
  * - 证据源 = `.harness/evidence/`（独立链路写入：PassesGate.runTests 真实跑测试
  *   命令落盘，或消费方外部验证事件），与 traces.log 彻底脱钩
- * - 新鲜度 = 最新证据 mtime ≥ 全部可读变更文件的最大 mtime（验证跑在最新变更之后）
+ * - 新鲜度 = 最新证据 mtime 严格晚于全部可读变更文件（验证跑在最新变更之后）；
+ *   同刻等值 = 时钟精度内先后不可判（harness#195）→ 显式降级 skip，不放行也不违规
  * - 缺失/空目录 → fail；过期 → fail（点名晚于证据的变更文件）；
  *   证据位不可读 / 新鲜度不可判定 → 带原因的显式降级 skip（不静默）
  *
@@ -74,13 +75,31 @@ describe('no_completion_without_verification（harness#183 证据源重构）', 
     expect(result.satisfied).toBe(true);
   });
 
-  it('证据与最新变更同一时刻（>= 口径）→ pass', async () => {
+  it('证据与最新变更同一时刻（等值不可判，harness#195）→ 显式降级 skip，不放行也不违规', async () => {
     writeChangedFile('src/a.ts', T_OLD);
     writeEvidence('test-same-instant.log', T_OLD);
 
     const result = await checker.check(LAW, contextOf(['src/a.ts']));
 
-    expect(result.satisfied).toBe(true);
+    // 时钟精度内「同刻」物理上无法区分先后：判 pass 是假绿灯，判 fail 又可能误杀
+    // 正常时序（改完立刻验证落进同一毫秒）——不可判定态走显式降级，与「变更清单
+    // 未接线」「mtime 均不可读」同一出口
+    expect(result.skipped).toBe(true);
+    expect(result.satisfied).toBe(true); // skip 不产生违规
+    expect(result.skipReason).toContain('同刻');
+    expect(result.skipReason).toContain('src/a.ts');
+  });
+
+  it('严格晚于证据的变更与同刻变更并存 → fail 优先（证据确定过期，不因同刻降级）', async () => {
+    writeChangedFile('src/a.ts', T_OLD);
+    writeChangedFile('src/b.ts', T_NEW);
+    writeEvidence('test-same-instant.log', T_OLD);
+
+    const result = await checker.check(LAW, contextOf(['src/a.ts', 'src/b.ts']));
+
+    expect(result.skipped).toBeUndefined();
+    expect(result.satisfied).toBe(false);
+    expect(result.evidence?.join('\n')).toContain('src/b.ts');
   });
 
   it('changedFiles 为 undefined（调用方未接线变更清单）→ 显式降级 skip，不放行', async () => {

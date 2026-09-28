@@ -128,8 +128,10 @@ export class KnowledgeQuery {
   estimateTokens(text: string): number {
     let tokens = 0;
     for (const ch of text) {
-      // CJK Unified Ideographs + common CJK ranges
-      if (/[一-鿿㐀-䶿豈-﫿]/.test(ch)) {
+      // CJK Unified Ideographs + common CJK ranges（charCodeAt 区间判断，与原正则等价）：
+      // U+3400–U+4DBF（Ext A）、U+4E00–U+9FFF（Unified）、U+F900–U+FAFF（兼容表意）
+      const code = ch.charCodeAt(0);
+      if ((code >= 0x3400 && code <= 0x4dbf) || (code >= 0x4e00 && code <= 0x9fff) || (code >= 0xf900 && code <= 0xfaff)) {
         tokens += 2;
       } else {
         tokens += 0.25;
@@ -166,14 +168,21 @@ export class KnowledgeQuery {
     requirementText?: string;
     phase?: string;
   }): { rules: KnowledgeEntry[]; references: KnowledgeEntry[]; context: KnowledgeEntry[] } {
-    const rules = this.queryByMode('rule');
+    // 一次全量 list + 内存分组（等价于按 mode 三次 list；条目 mode 单一，分组保序。
+    // signal 条目原三次 queryByMode 均不取，分组后同样不消费）
+    const grouped: Record<ConsumptionMode, KnowledgeEntry[]> = { rule: [], reference: [], context: [], signal: [] };
+    for (const entry of this.store.list({})) {
+      grouped[entry.consumptionMode ?? 'reference'].push(entry);
+    }
 
-    const allRefs = this.queryByMode('reference');
+    const rules = grouped.rule;
+
+    const allRefs = grouped.reference;
     const references = taskContext.requirementText
       ? this.filterByText(allRefs, taskContext.requirementText).slice(0, 3)
       : allRefs.slice(0, 3);
 
-    const allContext = this.queryByMode('context');
+    const allContext = grouped.context;
     const context = taskContext.phase
       ? allContext.filter(e => e.applicablePhases.includes(taskContext.phase!))
       : allContext;

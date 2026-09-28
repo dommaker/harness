@@ -10,9 +10,8 @@
 - `KnowledgeInjector` — 知识注入引擎；`origin === 'external'` 条目注入时带 `[External Source — verify before acting]` 前缀（标记唯一正本是 `knowledge/query.ts` 的 `EXTERNAL_SOURCE_MARKER`，本目录不另存字面量），注入 source 的 metadata 带 `entryId`/`maturity`/`origin`（外部内容三层防御第二层，harness#161）
 
 ## 依赖关系
-- 依赖 `src/types/` 公共类型
-- 依赖 `src/core/` 核心模块
-- 被 Agent 会话管理消费
+- 依赖 `src/knowledge/`（`knowledge/types` 类型 + `knowledge/query` 的 `KnowledgeQuery`/`EXTERNAL_SOURCE_MARKER` 值）、`src/utils/`（jsonl）、`src/monitoring/`（`ContextTracker` 值边：`session-manager` 构造持有并经 `getTracker()` 交出）
+- 仓内消费方只有 `src/index.ts` 的公共导出 re-export（`./context` 子路径面）；`ContextUsageSnapshot` 正本已迁 `monitoring/context-tracker.ts`，`context/index.ts` 留 type-only 转发保子路径公共面
 
 ## 约定
 - Token 预算策略由配置文件控制

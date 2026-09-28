@@ -18,8 +18,16 @@
 | monitoring/ | Execution Trace 收集/分析、上下文追踪 |
 | failure/ | 错误分类、失败记录 |
 | context/ | 会话管理、token 预算、压缩、知识注入 |
-| spec/ | （空目录）@spec 注释检查已删（ADR-0003）；spec 故事见 core/spec/validator + SpecAcceptanceGate |
-| cli/commands/ | 23 个 CLI 子命令 |
+| cli/commands/ | 20 个顶层命令（COMMAND_DEFINITIONS 14 + GATE_DEFINITIONS 6）+ constraints 治理子命令 |
+| agents/ | Agent 生命周期状态机（7 状态） |
+| completion-checkers/ | 提交集收尾软观测三纯判定（tdd-chain / phase-format / contract-presence） |
+| hooks/ | harness 运行时 bootstrap 组合根（bootstrapHarness） |
+| knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Linter、Reference Tracker |
+| presets/ | 预设纯数据（strict/standard/relaxed） |
+| release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
+| sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md） |
+| types/ | 公共类型（checkpoint / constraint / cso / failure / passes-gate / project-config / spec） |
+| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-version / detect-source-roots / glob-match） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
 | tools/ | 工具定义 |
 

@@ -17,7 +17,7 @@
 
 ## 依赖关系
 - 依赖 `src/core/`（checker-gate 适配 checkers 注册表类型并经 `buildCheckEnv` 构造执行环境）
-- 依赖 `src/types/` 公共类型
+- 本地 `types.ts` 自足（零 `src/types/` 边）
 
 ## 约定
 - 新门禁必须：① 在 `definitions.ts` 补 GateDefinition（含 CLI 元数据）② 在 `registry.ts` IMPLEMENTATIONS 注册实现（缺一 → 加载期抛错）③ 实现统一 Gate 接口（evaluate 产三态决策，报告由 `types.ts` 的 `pass`/`fail`/`fromError`/`gateResult` 构造，不手写字面量）④ 配 CLI 命令（命令实现文件 + CLI 元数据的 module+export 引用，bin 由定义表驱动生成，不再手写块）+ 测试文件

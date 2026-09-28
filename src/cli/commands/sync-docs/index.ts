@@ -10,6 +10,7 @@
  * - context-syncer.ts       CONTEXT.md 模板生成/发现/过时判定 + 目录导出面采集（harness#142）
  * - agents-syncer.ts        AGENTS.md 生成
  * - preserve-block.ts       PRESERVE 标记块提取与组合
+ * - head-gate.ts            --gate 的 vs HEAD 漂移判定（harness#189）
  */
 
 import chalk from 'chalk';
@@ -44,6 +45,11 @@ import {
 } from './context-syncer';
 import { buildAgentsMd } from './agents-syncer';
 import { extractPreserveBlocks, composeAgentsMd } from './preserve-block';
+import {
+  assertHeadGateEnv,
+  diffManagedDocsAgainstHead,
+  missingRegistrationNames,
+} from './head-gate';
 import { log, processIO, type CommandIO, type CommandResult } from '../../command-contract';
 
 export interface SyncDocsOptions {
@@ -59,6 +65,12 @@ export interface SyncDocsOptions {
   agents?: boolean;
   /** 一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目 */
   compact?: boolean;
+  /**
+   * 门禁模式（harness#189）：照常自愈写入后，判定被管理文档相对 HEAD 是否有
+   * diff——有 diff 判 fail 且点名缺登记文件，无 diff 判 ok。语义等价原流水线
+   * 内联 `git diff --exit-code` 门；与 --check/--json/--compact 互斥。
+   */
+  gate?: boolean;
 }
 
 /**
@@ -85,6 +97,22 @@ export async function syncDocs(
   const drift = (reason: string): CommandResult => (isCheck ? { kind: 'fail', reason } : { kind: 'ok' });
   const isJson = options.json === true;
   const capsMode = getCapabilitiesMode(projectPath);
+
+  // --gate（harness#189）：自愈写入 + vs HEAD 漂移判定。与只读/迁移形态互斥
+  // （不猜意图）；前置校验先于任何写入（脏用法零落盘）。
+  if (options.gate) {
+    if (isCheck || isJson || options.compact) {
+      return {
+        kind: 'usage-error',
+        reason: '--gate 与 --check/--json/--compact 互斥（gate = 自愈写入 + vs HEAD 漂移判定）',
+      };
+    }
+    try {
+      assertHeadGateEnv(projectPath);
+    } catch (err) {
+      return { kind: 'usage-error', reason: (err as Error).message };
+    }
+  }
 
   // --compact：一次性迁移，将文件表格折叠为目录条目后直接返回
   if (options.compact) {
@@ -474,7 +502,9 @@ export async function syncDocs(
     );
   }
 
-  if (!hasIssues) {
+  // --gate 时无「无需写入即返回」捷径：sync-docs 查不出的未提交手改也是 vs HEAD 漂移，
+  // 必须落到末尾的 gate 判定（票面契约：有 diff 即 fail，不问 diff 来源）。
+  if (!hasIssues && !options.gate) {
     log(io, chalk.green('✅ 所有文档都是最新的'));
     return { kind: 'ok' };
   }
@@ -513,6 +543,37 @@ export async function syncDocs(
   if (hasAgentsIssues && agentsMdExpected !== null) {
     await fs.writeFile(path.join(projectPath, 'AGENTS.md'), agentsMdExpected, 'utf-8');
     log(io, chalk.green(agentsMdExists ? `✅ 已更新 AGENTS.md` : `✅ 已生成 AGENTS.md`));
+  }
+
+  // --gate（harness#189）：写入完成后判定被管理文档相对 HEAD 的漂移。
+  // 自愈顺序不变（写入永远在校验之前）；「需要自愈」本身成为失败，
+  // diff 新增行即缺登记名单（不退回裸 check 式不点名的红）。
+  if (options.gate) {
+    const managedFiles = [
+      'CAPABILITIES.md',
+      ...(options.agents ? ['AGENTS.md'] : []),
+      ...result.contextMissing.map((d) => `${d}/CONTEXT.md`),
+    ];
+    const gateDrift = diffManagedDocsAgainstHead(projectPath, managedFiles);
+    if (gateDrift.files.length === 0) {
+      log(io, chalk.green('\n✅ 被管理文档与 HEAD 一致'));
+      return { kind: 'ok' };
+    }
+    log(io, chalk.red('\n❌ 被管理文档相对 HEAD 已过期（自愈写入已落盘，需提交）:'));
+    gateDrift.files.forEach((f) => log(io, chalk.gray(`  - ${f}`)));
+    if (gateDrift.capAdded.length > 0) {
+      log(io, chalk.yellow('  缺登记/新增（diff 新增行即名单）:'));
+      gateDrift.capAdded.forEach((l) => log(io, chalk.gray(`    + ${l}`)));
+    }
+    if (gateDrift.capRemoved.length > 0) {
+      log(io, chalk.yellow('  撤登记/删除（diff 删除行）:'));
+      gateDrift.capRemoved.forEach((l) => log(io, chalk.gray(`    - ${l}`)));
+    }
+    log(io, chalk.gray('  请本地运行 harness sync-docs 并提交结果。'));
+    const names = missingRegistrationNames(gateDrift.capAdded);
+    const reason = `被管理文档相对 HEAD 已过期：${gateDrift.files.join('、')}`
+      + (names.length > 0 ? `；缺登记：${names.join('、')}` : '');
+    return { kind: 'fail', reason };
   }
 
   return hasIssues ? drift('写入模式已修复漂移（历史面：退出码仍为 0）') : { kind: 'ok' };

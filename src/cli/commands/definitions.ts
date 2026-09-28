@@ -223,6 +223,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--json', description: '输出 JSON 格式（供 LLM 消费）', defaultValue: false },
       { flags: '--agents', description: '同步 AGENTS.md（agent 导读；PRESERVE 标记段重新生成时保留）', defaultValue: false },
       { flags: '--compact', description: '一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目', defaultValue: false },
+      { flags: '--gate', description: '门禁模式：自愈写入后判定被管理文档相对 HEAD 的 diff，有 diff 退 1（CI 用；与 --check/--json/--compact 互斥）', defaultValue: false },
     ],
     // --check 下的漂移由实现返回 fail（候选7：退出码映射只在 bin 一处），故无需 afterRun
     action: { module: 'sync-docs', export: 'syncDocs' },

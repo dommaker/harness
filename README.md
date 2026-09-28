@@ -88,6 +88,7 @@ harness constraints    # 约束元数据（版本/hash/计数/文本大小）
 harness constraints report   # 约束使用报告：统计 + 退役候选诊断 + 配置健康 + 注入漂移（--export 脱敏）
 harness constraints retire   # 约束退役：交互选择 + 人确认 → config.yml + KnowledgeStore + 注入段同步
 harness constraints retire <id> --yes   # 直达退役：显式 --yes 人确认（无 --yes 拒绝执行）
+harness constraints disable <id> --yes   # 裸禁用：config.yml enabled:false 无墓碑无沉淀（区别于 retire）
 harness report         # 生成检查报告
 
 # 门禁

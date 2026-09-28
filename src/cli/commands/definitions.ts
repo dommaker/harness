@@ -371,6 +371,20 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         }],
       },
       {
+        command: 'disable',
+        argument: '<id>',
+        description: '裸禁用约束：config.yml enabled:false 无 retired 墓碑无沉淀（区别于 retire；写后验证生效集已缩小，失败回滚）；直达需显式 --yes，幂等 already disabled',
+        options: [
+          { flags: '-p, --project-path <path>', description: '项目路径' },
+          { flags: '-y, --yes', description: '显式确认直达禁用（与 retire 同一道人确认闸门）', defaultValue: false },
+        ],
+        action: { module: 'constraints-disable', export: 'constraintsDisable' },
+        mapActionArgs: (positionals, options) => [positionals[0], {
+          projectPath: options.projectPath,
+          yes: options.yes,
+        }],
+      },
+      {
         command: 'pack-proposal',
         argument: '<id>',
         description: '打包升级提案材料（ADR-0033 决策 4）：条文 + checker 模板与参数 + traces 使用统计 + 升级理由留白，脱敏 markdown 落 .harness/reports/proposal-<id>-<YYYYMMDD>.md（--stdout 打印不落盘）',

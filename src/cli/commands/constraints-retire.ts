@@ -136,8 +136,10 @@ export function findRetireTarget(id: string, target?: RunTarget): RetireTargetIn
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
  * 文件名）。落盘字节由 `__tests__/constraints-retire.test.ts`
  * 的逐字节冻结用例钉住——合并属内部重构，对外产物不得漂移。
+ *
+ * 导出给 constraints-disable 复用（裸禁用写 `{ enabled: false }` 同一读-改-写口径）。
  */
-function setYamlEntry(
+export function setYamlEntry(
   filePath: string,
   label: string,
   section: string,

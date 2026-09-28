@@ -3,7 +3,7 @@
 ## CLI Commands (20)
 check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, sdd, failure, release, constraints, spec-baseline-check
 
-约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；写 config.yml retired 元数据 + KnowledgeStore 沉淀，可回滚。ADR-0029：custom 纯文本约束与注入段同步已随文本注入层关停一并退役）。
+约束治理子命令挂在 `constraints` 下：`constraints report`（使用统计 + 退役候选诊断 + 配置健康，`--export` 脱敏 markdown）、`constraints retire`（交互选择 + 人确认退役；带 id 直达需显式 `--yes`（#24 人确认闸门），无 `--yes` 报错 + 非零退出码且不落盘；写 config.yml retired 元数据 + KnowledgeStore 沉淀，可回滚。ADR-0029：custom 纯文本约束与注入段同步已随文本注入层关停一并退役）、`constraints disable`（裸禁用：config.yml `enabled:false` 无墓碑无沉淀（harness#190），直达需 `--yes`，幂等，写后验证生效集缩小、失败回滚）。
 
 命令注册表（H5）：`COMMAND_DEFINITIONS`（非门禁命令）+ `GATE_DEFINITIONS.cli`（6 门禁命令）是命令形状单一来源，两者形状同为 `CommandDefinition`（ADR-0007），bin/harness.js 单引擎单循环注册表驱动生成（无手写命令块，R6）；实现引用 module+export per-command 懒加载（O2，任一命令执行只加载该命令模块，--help/--version 零命令实现加载）。
 

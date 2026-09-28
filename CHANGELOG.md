@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- feat(constraints): 新增 `constraints disable` 裸禁用公共面——config.yml `enabled:false` 无墓碑无沉淀、幂等、写后验证生效集缩小失败回滚（harness#190，ADR-0032 决策 6.6 另一侧；studio evolution applier 切换落点）
+
 ## [1.14.0] - 2026-09-24
 
 ### Changes

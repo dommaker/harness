@@ -423,6 +423,25 @@ export async function checkConstraints(
 }
 
 /**
+ * 快捷函数：收集模式执行约束检查（不抛出口，harness#194）
+ *
+ * 与 checkConstraints 共享同一检查体、同一 options 签名，唯一差别是不 throw：
+ * error 级违规照进 result.errors、passed=false，后续 error 与 warning 级照常执行。
+ * 报告类 / HTTP 端点类消费方拿全量视图；阻断语义只属于 checkConstraints。
+ */
+export async function collectConstraints(
+  context: ConstraintContext,
+  options?: CheckConstraintsOptions
+): Promise<ConstraintCheckResult> {
+  const result = await ConstraintChecker.getInstance().collectConstraints(context, options?.customConfig ?? null);
+  if (options?.onTrace) {
+    for (const r of result.errors) options.onTrace(r);
+    for (const r of result.warnings) options.onTrace(r);
+  }
+  return result;
+}
+
+/**
  * 快捷函数：执行前检查
  *
  * @param context 约束上下文

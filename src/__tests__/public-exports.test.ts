@@ -76,6 +76,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'checkConstraints',
   'classifyCommitFiles',
   'classifyError',
+  'collectConstraints',
   'collectUsageByConstraint',
   'configureTraceCollector',
   'contextEvidenceFlag',

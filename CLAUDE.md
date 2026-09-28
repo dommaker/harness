@@ -57,7 +57,7 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 
 ### Entry Points
 
-- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`checkBeforeExecution()`）
+- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`、`checkBeforeExecution()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
 - **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management), `./gates` (gates only)
 

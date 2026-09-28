@@ -87,6 +87,7 @@ export type {
 export {
   checkConstraint,
   checkConstraints,
+  collectConstraints,
   checkBeforeExecution,
 } from './core/constraints/checker';
 export type { CheckConstraintsOptions } from './core/constraints/checker';

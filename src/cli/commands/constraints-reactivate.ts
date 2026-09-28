@@ -19,7 +19,8 @@ import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { isRetiredTombstone } from '../../core/retired-constraints';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import { openKnowledgeStore } from './knowledge-view';
-import { findRetireTarget, logCommitHint, removeYamlEntry, type RetireTargetInfo } from './constraints-retire';
+import { findRetireTarget, logCommitHint, type RetireTargetInfo } from './constraints-retire';
+import { removeYamlEntry } from '../yaml-edit';
 
 export interface ReactivateExecuteOptions {
   /** 复活原因（可空） */

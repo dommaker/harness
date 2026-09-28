@@ -25,7 +25,8 @@ import chalk from 'chalk';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
 import { isRetiredTombstone } from '../../core/retired-constraints';
 import { getEffectiveConstraints } from '../../core/effective-constraints';
-import { findRetireTarget, logCommitHint, setYamlEntry } from './constraints-retire';
+import { findRetireTarget, logCommitHint } from './constraints-retire';
+import { setYamlEntry } from '../yaml-edit';
 
 export type DisableStatus =
   | 'disabled'

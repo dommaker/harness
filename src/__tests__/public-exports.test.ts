@@ -110,6 +110,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'isCommandAllowed',
   'lintEffectiveConfig',
   'listRegisteredGates',
+  'listRetiredConstraints',
   'matchAnyGlob',
   'matchGlob',
   'migrateKnowledgeEntries',

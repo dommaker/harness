@@ -40,6 +40,7 @@ import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
+import { isRetiredTombstone } from '../../core/retired-constraints';
 import { loadAppConstraints } from '../../core/app-constraints-loader';
 import type { RunTarget } from '../../core/constraints/run-env';
 import type { KnowledgeEntry } from '../../knowledge/types';
@@ -284,9 +285,9 @@ export function retireConstraint(
 
   // 已退役保护：只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）——
   // 裸 enabled:false 是"禁用"不是"退休"，落到下面正常退休流程：覆写墓碑 + 补写沉淀，
-  // 不让一次裸 disable 吞掉 retire 的知识沉淀。
+  // 不让一次裸 disable 吞掉 retire 的知识沉淀。判定谓词唯一实现 = isRetiredTombstone。
   const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
-  if (existing?.enabled === false && existing.retired) {
+  if (isRetiredTombstone(existing)) {
     return { id, status: 'already_retired', isError, stats: emptyStats };
   }
 

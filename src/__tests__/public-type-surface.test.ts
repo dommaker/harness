@@ -229,6 +229,8 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'ReferenceRecord',
     'RetireCandidate',
     'RetireCandidateKind',
+    'RetiredConstraintEntry',
+    'RetiredConstraintMeta',
     'ReviewGateConfig',
     'SchemaLoader',
     'SecurityGateConfig',

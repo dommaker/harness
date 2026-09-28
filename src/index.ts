@@ -53,6 +53,13 @@ export {
   lintEffectiveConfig,
 } from './core/effective-constraints';
 export type { EffectiveConfigLint } from './core/effective-constraints';
+export {
+  listRetiredConstraints,
+} from './core/retired-constraints';
+export type {
+  RetiredConstraintEntry,
+  RetiredConstraintMeta,
+} from './core/retired-constraints';
 
 // ========================================
 // 约束使用报告（退役候选诊断数据层，下游消费方进化链路消费）

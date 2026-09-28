@@ -120,11 +120,6 @@ function scanText(text: string, file: string): Hit[] {
   return hits;
 }
 
-/** 判定一段文本是否包含硬编码凭证 */
-export function containsHardcodedCredential(text: string): boolean {
-  return scanText(text, '(text)').length > 0;
-}
-
 interface AddedLine {
   file: string;
   lineNo: number;

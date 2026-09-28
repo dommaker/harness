@@ -12,7 +12,6 @@ import { join } from 'path';
 import { describe, it, expect, afterAll } from '@jest/globals';
 import {
   noHardcodedCredentials,
-  containsHardcodedCredential,
 } from '../no-hardcoded-credentials';
 import type { CheckEnv } from '../types';
 import { createRunEnv } from '../../run-env';
@@ -33,97 +32,113 @@ const PASSWORD_ASSIGN = 'const dbPass' + 'word = "sup3r-s3cret-value";';
 const JWT =
   'eyJ' + 'hbGciOiJIUzI1NiJ9.' + 'eyJ' + 'zdWIiOiIxMjM0NTY3ODkwIn0.' + 'dozjgNryP4J3jVmNHl0w5N_XgL0n';
 
-describe('containsHardcodedCredential', () => {
-  it('命中 PEM 私钥头', () => {
-    expect(containsHardcodedCredential(PEM_HEADER + '\nMIIE...')).toBe(true);
+/** 经生产入口判定一段文本是否命中凭证：写入临时文件，走「变更文件内容扫描」路径 */
+const scanDir = mkdtempSync(join(tmpdir(), 'harness-cred-scan-'));
+afterAll(() => rmSync(scanDir, { recursive: true, force: true }));
+
+async function textHitsCredential(text: string): Promise<boolean> {
+  writeFileSync(join(scanDir, 'probe.ts'), text + '\n');
+  const env: CheckEnv = {
+    ...createRunEnv(scanDir),
+    context: { operation: 'commit', projectPath: scanDir, changedFiles: ['probe.ts'] },
+    stagedDiff: async () => '',
+    stagedDiffNames: async () => '',
+    srcScan: () => [],
+  };
+  return (await noHardcodedCredentials.evaluate(env)) !== true;
+}
+
+describe('文本命中判定（经生产入口 evaluate 的变更文件扫描路径）', () => {
+  it('命中 PEM 私钥头', async () => {
+    expect(await textHitsCredential(PEM_HEADER + '\nMIIE...')).toBe(true);
   });
 
-  it('命中 AWS Access Key', () => {
-    expect(containsHardcodedCredential(`const key = "${AWS_KEY}";`)).toBe(true);
+  it('命中 AWS Access Key', async () => {
+    expect(await textHitsCredential(`const key = "${AWS_KEY}";`)).toBe(true);
   });
 
-  it('命中硬编码 password 赋值', () => {
-    expect(containsHardcodedCredential(PASSWORD_ASSIGN)).toBe(true);
+  it('命中硬编码 password 赋值', async () => {
+    expect(await textHitsCredential(PASSWORD_ASSIGN)).toBe(true);
   });
 
-  it('命中硬编码 api_key 赋值', () => {
-    expect(containsHardcodedCredential('api' + '_key: "abcdef123456789"')).toBe(true);
+  it('命中硬编码 api_key 赋值', async () => {
+    expect(await textHitsCredential('api' + '_key: "abcdef123456789"')).toBe(true);
   });
 
-  it('命中 .env 裸值（无引号赋值）', () => {
-    expect(containsHardcodedCredential('DB_TO' + 'KEN=abc123def456ghi')).toBe(true);
+  it('命中 .env 裸值（无引号赋值）', async () => {
+    expect(await textHitsCredential('DB_TO' + 'KEN=abc123def456ghi')).toBe(true);
   });
 
-  it('命中无引号 YAML 值', () => {
-    expect(containsHardcodedCredential('pass' + 'word: secret123')).toBe(true);
+  it('命中无引号 YAML 值', async () => {
+    expect(await textHitsCredential('pass' + 'word: secret123')).toBe(true);
   });
 
-  it('命中 URL 内嵌凭证', () => {
-    expect(containsHardcodedCredential('const url = "postgres:/' + '/user:pw12345@db.host/app";')).toBe(true);
+  it('命中 URL 内嵌凭证', async () => {
+    expect(await textHitsCredential('const url = "postgres:/' + '/user:pw12345@db.host/app";')).toBe(true);
   });
 
-  it('命中 JSON 带引号键', () => {
-    expect(containsHardcodedCredential('"pass' + 'word": "realvalue123"')).toBe(true);
+  it('命中 JSON 带引号键', async () => {
+    expect(await textHitsCredential('"pass' + 'word": "realvalue123"')).toBe(true);
   });
 
-  it('命中非清单变量名 credential/privateKey/signingKey', () => {
-    expect(containsHardcodedCredential('cred' + 'ential = "realvalue123";')).toBe(true);
-    expect(containsHardcodedCredential('private' + 'Key = "realvalue123";')).toBe(true);
-    expect(containsHardcodedCredential('signing' + '_key: realvalue123')).toBe(true);
+  it('命中非清单变量名 credential/privateKey/signingKey', async () => {
+    expect(await textHitsCredential('cred' + 'ential = "realvalue123";')).toBe(true);
+    expect(await textHitsCredential('private' + 'Key = "realvalue123";')).toBe(true);
+    expect(await textHitsCredential('signing' + '_key: realvalue123')).toBe(true);
   });
 
-  it('命中 JWT', () => {
-    expect(containsHardcodedCredential(`const tok = "${JWT}";`)).toBe(true);
+  it('命中 JWT', async () => {
+    expect(await textHitsCredential(`const tok = "${JWT}";`)).toBe(true);
   });
 
-  it('行内出现 test 不再整行豁免真实值', () => {
+  it('行内出现 test 不再整行豁免真实值', async () => {
     expect(
-      containsHardcodedCredential('const pass' + 'word = "realvalue123"; // test fixture')
+      await textHitsCredential('const pass' + 'word = "realvalue123"; // test fixture')
     ).toBe(true);
   });
 
-  it('豁免环境变量引用', () => {
+  it('豁免环境变量引用', async () => {
     expect(
-      containsHardcodedCredential('const pass' + 'word = process.env.DB_PASSWORD;')
+      await textHitsCredential('const pass' + 'word = process.env.DB_PASSWORD;')
     ).toBe(false);
   });
 
-  it('豁免占位符值', () => {
+  it('豁免占位符值', async () => {
     expect(
-      containsHardcodedCredential('const pass' + 'word = "your-password-here";')
+      await textHitsCredential('const pass' + 'word = "your-password-here";')
     ).toBe(false);
   });
 
-  it('豁免 TS 类型注解（值是类型名而非字面量）', () => {
-    expect(containsHardcodedCredential('api' + 'Key: string|undefined;')).toBe(false);
+  it('豁免 TS 类型注解（值是类型名而非字面量）', async () => {
+    expect(await textHitsCredential('api' + 'Key: string|undefined;')).toBe(false);
   });
 
-  it('豁免 URL 中的变量插值占位', () => {
+  it('豁免 URL 中的变量插值占位', async () => {
     expect(
-      containsHardcodedCredential('postgres://user:' + '${' + 'DB_PASS}@host/db')
+      await textHitsCredential('postgres://user:' + '${' + 'DB_PASS}@host/db')
     ).toBe(false);
   });
 
-  it('普通代码不误报', () => {
+  it('普通代码不误报', async () => {
     expect(
-      containsHardcodedCredential('export function add(a: number, b: number) { return a + b; }')
+      await textHitsCredential('export function add(a: number, b: number) { return a + b; }')
     ).toBe(false);
   });
 
-  it('豁免右值为代码表达式的赋值（#184 收窄正则版假灯回归）', () => {
+  it('豁免右值为代码表达式的赋值（#184 收窄正则版假灯回归）', async () => {
     // 现场复现：交付链 2026-09-24 一次采纳 1.14.0 时，业务仓的 React useCallback
     // 赋值被无引号分支判成「口令类赋值」——右值是代码而非字面量。
     expect(
-      containsHardcodedCredential('const insertPmoTok' + 'en = useCallback((candidate: string) => {')
+      await textHitsCredential('const insertPmoTok' + 'en = useCallback((candidate: string) => {')
     ).toBe(false);
     expect(
-      containsHardcodedCredential('const refreshTok' + 'en = getTokenFromStor' + 'age();')
+      await textHitsCredential('const refreshTok' + 'en = getTokenFromStor' + 'age();')
     ).toBe(false);
     expect(
-      containsHardcodedCredential('const refreshTok' + 'en = req.cookies.refre' + 'sh;')
+      await textHitsCredential('const refreshTok' + 'en = req.cookies.refre' + 'sh;')
     ).toBe(false);
     expect(
-      containsHardcodedCredential('api' + '_key: make' + 'Key("abc123456789"),')
+      await textHitsCredential('api' + '_key: make' + 'Key("abc123456789"),')
     ).toBe(false);
   });
 });

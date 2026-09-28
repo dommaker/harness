@@ -58,10 +58,11 @@ export function isRetiredTombstone(
  * 裸禁用与未配置条目不入选。无 config.yml / 无 constraints 段时返回空数组。
  * 返回顺序 = config.yml 条目顺序（YAML 解析保序）。
  *
- * @param target 项目根路径，或本 run 的运行级观察面（缺省 process.cwd()）
+ * @param target 项目根路径，或本 run 的运行级观察面（无 cwd 默认值，
+ *   与同族访问器 `getGovernanceConfig` 同形——cwd 兜底只在 CLI 入口做一次，harness#95/#192）
  *   传观察面 = config.yml 读取与本 run 其余消费方共用同一份（ADR-0023 决策 2）
  */
-export function listRetiredConstraints(target: RunTarget = process.cwd()): RetiredConstraintEntry[] {
+export function listRetiredConstraints(target: RunTarget): RetiredConstraintEntry[] {
   const loader = new ProjectConfigLoader(target);
   loader.load();
   const constraints = loader.getConfig().constraints ?? {};

@@ -10,7 +10,7 @@
  *
  * 形状（ADR-0020）：`summarize`/`detectAnomalies` 的判定本体是模块级纯函数
  * （`summarizeTraces`/`detectTraceAnomalies`），`TraceAnalyzer` 类壳转发过去——
- * 类壳是 studio 的运行时消费面，纯函数是已持有数据、不需要 collector 的消费端
+ * 类壳是跨仓消费方的运行时消费面，纯函数是已持有数据、不需要 collector 的消费端
  * （`status`）的入口。两个纯函数不进包根导出（ADR-0003 零扩张）。
  */
 
@@ -213,7 +213,7 @@ export class TraceAnalyzer {
    * 纯计算，零 Token 成本
    *
    * ADR-0020：判定本体在模块级 `summarizeTraces()`，此处只是类壳转发
-   * （studio 经类消费的面逐字不动）。
+   * （跨仓消费方经类消费的面逐字不动）。
    */
   summarize(traces: ExecutionTrace[]): TraceSummary[] {
     return summarizeTraces(traces);

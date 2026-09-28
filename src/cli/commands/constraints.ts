@@ -2,7 +2,7 @@
  * harness constraints -- 约束集合元数据导出
  *
  * 纯数据导出，不调用 LLM，不访问文件系统（除 definitions.ts）。
- * 供 Studio 等消费者获取约束的 hash、计数等元数据。
+ * 供下游消费方获取约束的 hash、计数等元数据。
  */
 
 import { createHash } from 'crypto';

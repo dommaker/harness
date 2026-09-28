@@ -67,13 +67,21 @@ function stageChange(dir: string, rel: string, content: string): void {
   git(dir, 'add', '--', rel);
 }
 
-/** 真验证证据：traces.log 里有一条 pass（未跟踪，不进 diff） */
+/** trace 种子行（未跟踪，不进 diff）；仅供 trace 计数/切片类用例预置 */
 function passTraces(dir: string, lines = 1): void {
   write(
     dir,
     '.harness/logs/traces.log',
     Array(lines).fill('{"constraintId":"fixture","result":"pass"}').join('\n') + '\n'
   );
+}
+
+/**
+ * 真验证证据（harness#183）：.harness/evidence 落盘一条测试输出（未跟踪，不进 diff）。
+ * traces.log 不再充当验证证据（其唯一写入方是约束检查自身，语义循环已拆除）。
+ */
+function passEvidence(dir: string): void {
+  write(dir, '.harness/evidence/test-fixture.log', '1 passed\n');
 }
 
 /**
@@ -146,6 +154,7 @@ function stagedTestDeletion(): string {
   git(dir, 'commit', '-q', '-m', 'tests');
   stageChange(dir, 'src/__tests__/existing.test.ts', "test('a', () => {}\n");
   passTraces(dir);
+  passEvidence(dir);
   return dir;
 }
 
@@ -161,6 +170,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       const result = await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
@@ -183,11 +193,12 @@ describe('check command（真 git fixture）', () => {
         io
       );
 
-      expect(io.outText()).toContain('禁止无验证声明完成，必须运行验证命令');
-      expect(result).toEqual({
-        kind: 'fail',
-        reason: 'check error: 禁止无验证声明完成，必须运行验证命令',
-      });
+      expect(io.outText()).toContain('禁止无验证声明完成，必须有晚于最新变更的验证证据');
+      // reason 携带证据行（harness#119 证据通道），前缀比对即可
+      expect(result.kind).toBe('fail');
+      expect(result.kind === 'fail' && result.reason).toContain(
+        'check error: 禁止无验证声明完成，必须有晚于最新变更的验证证据（.harness/evidence）'
+      );
     });
 
     it('staged 删除测试行 → 真 git diff 驱动 no_test_simplification 拦截', async () => {
@@ -216,6 +227,7 @@ describe('check command（真 git fixture）', () => {
         'export const a = 1;\nconst pass' + 'word = "correcthorsebattery";\n'
       );
       passTraces(dir);
+      passEvidence(dir);
 
       const result = await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
@@ -233,6 +245,7 @@ describe('check command（真 git fixture）', () => {
       write(dir, '.harness/config.yml', 'preset: standard\n');
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       // 不显式传 trigger：governance_presence 的触发词是 file_modification，由 diff 推断
       const result = await check(
@@ -251,6 +264,7 @@ describe('check command（真 git fixture）', () => {
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       stageChange(dir, 'src/nested/deep.ts', 'export const d = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'code_implementation' },
@@ -274,6 +288,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       await check({ staged: true, projectPath: dir, trigger: 'code_implementation' }, io);
       await check(
@@ -309,6 +324,7 @@ describe('check command（真 git fixture）', () => {
       const dir = capRepo(['src/existing.ts', 'src/nested/deep.ts']);
       stageChange(dir, 'src/nested/extra.ts', 'export const e = 1;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       const result = await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'module_modification' },
@@ -323,6 +339,7 @@ describe('check command（真 git fixture）', () => {
     it('仓库级漂移（与本次变更无关）→ 提示块露出，不判违规', async () => {
       const dir = capRepo(['src/existing.ts']);
       passTraces(dir);
+      passEvidence(dir);
 
       const result = await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'module_modification' },
@@ -342,6 +359,7 @@ describe('check command（真 git fixture）', () => {
     it('提示与违规都写进 trace 的 evidence 字段（统计侧可诊断）', async () => {
       const dir = capRepo(['src/existing.ts']);
       passTraces(dir);
+      passEvidence(dir);
 
       await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'module_modification' },
@@ -361,6 +379,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/__tests__/added.test.ts', "test('a', () => {}\n");
       passTraces(dir);
+      passEvidence(dir);
       const { evidence, requests, commands } = recordingEvidence(dir);
 
       const result = await check({ preset: 'standard', staged: true, projectPath: dir, evidence }, io);
@@ -376,6 +395,7 @@ describe('check command（真 git fixture）', () => {
       const stagedDir = gitRepo();
       stageChange(stagedDir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(stagedDir);
+      passEvidence(stagedDir);
       const staged = recordingEvidence(stagedDir);
       await check(
         { preset: 'standard', staged: true, projectPath: stagedDir, trigger: 'code_implementation', evidence: staged.evidence },
@@ -388,6 +408,7 @@ describe('check command（真 git fixture）', () => {
       const worktreeDir = gitRepo();
       write(worktreeDir, 'src/existing.ts', 'export const a = 3;\n');
       passTraces(worktreeDir);
+      passEvidence(worktreeDir);
       const worktree = recordingEvidence(worktreeDir);
       await check(
         { preset: 'standard', staged: false, projectPath: worktreeDir, trigger: 'code_implementation', evidence: worktree.evidence },
@@ -404,6 +425,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
       const seeded = projectTraces(dir).length;
 
       await check(
@@ -427,6 +449,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       await check({ preset: 'standard', staged: true, projectPath: dir }, io);
 
@@ -437,6 +460,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/brandnew/mod.ts', 'export const n = 1;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       await check({ preset: 'standard', staged: true, projectPath: dir }, io);
 
@@ -447,6 +471,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/__tests__/existing.test.ts', "test('a', () => {}\n");
       passTraces(dir);
+      passEvidence(dir);
 
       await check({ preset: 'standard', staged: true, projectPath: dir }, io);
 
@@ -467,6 +492,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
 
       await check(
         { preset: 'standard', staged: true, projectPath: dir, trigger: 'design_request' },
@@ -483,6 +509,7 @@ describe('check command（真 git fixture）', () => {
       const dir = gitRepo();
       stageChange(dir, 'src/existing.ts', 'export const a = 2;\n');
       passTraces(dir);
+      passEvidence(dir);
       write(
         dir,
         '.harness/config.yml',

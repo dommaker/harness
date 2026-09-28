@@ -1,5 +1,5 @@
 /**
- * governance_presence：治理契约在场守护（studio #302，ADR 2026-08-21 落点模型）
+ * governance_presence：治理契约在场守护（ADR 2026-08-21 落点模型）
  *
  * 治理契约正本 = AGENTS.md 手写 `PRESERVE:governance` 段（旧模型仓 = CLAUDE.md
  * Governance Rules 块 / 历史 HARNESS_CONSTRAINTS 注入段，ADR-0029 后注入段不再

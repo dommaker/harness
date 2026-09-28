@@ -55,12 +55,13 @@ describe('detectSourceRoots', () => {
     expect(roots).toContain('packages/mylib/lib');
   });
 
-  it('monorepo: apps/*/src/modules/*', () => {
+  it('monorepo: apps/*/src（不再下探 modules 层）', () => {
     touchFile(join(tempDir, 'apps', 'api', 'src', 'modules', 'auth'), 'index.ts');
     touchFile(join(tempDir, 'apps', 'api', 'src', 'modules', 'users'), 'handler.ts');
     const roots = detectSourceRoots(tempDir);
-    expect(roots).toContain('apps/api/src/modules/auth');
-    expect(roots).toContain('apps/api/src/modules/users');
+    expect(roots).toContain('apps/api/src');
+    expect(roots).not.toContain('apps/api/src/modules/auth');
+    expect(roots).not.toContain('apps/api/src/modules/users');
   });
 
   it('排除 .d.ts 文件（只有类型声明不视为源码目录）', () => {
@@ -93,6 +94,6 @@ describe('detectSourceRoots', () => {
     const roots = detectSourceRoots(tempDir);
     expect(roots).toContain('src');
     expect(roots).toContain('packages/core/src');
-    expect(roots).toContain('apps/api/src/modules/auth');
+    expect(roots).toContain('apps/api/src');
   });
 });

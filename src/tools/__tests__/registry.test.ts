@@ -1,14 +1,14 @@
 /**
  * tools 能力目录 registry 完整性测试（架构评审 2026-09-02 候选12 / harness#91）
  *
- * `src/tools/definitions/` 是随包发布的数据（package.json files 含 src），studio 经包根
+ * `src/tools/definitions/` 是随包发布的数据（package.json files 含 src），下游消费方经包根
  * 公开导出消费（`getToolsDir` / `getRegistryPath`）——此前代码半边有 public-exports 钉住导出面，
  * 数据半边零测试：幽灵项 / 漏登项 / path 悬空 / name 漂移都没人守。
  * 这是 ADR-0002「注册型能力一律定义即注册 + 构建期闭环」唯一没覆盖的一类注册表。
  *
  * 裁决（#91 triage）：
  * - **yml 目录是正本**，registry.json 是派生索引 → 对照方向 = 双向集合一致
- * - **不做 yml schema 校验**（那等于替 studio 定能力契约，破坏面外溢到 studio）
+ * - **不做 yml schema 校验**（那等于替下游消费方定能力契约，破坏面外溢到下游）
  * - `rollback` 重名 ×2（std/deploy 与 std/governance）是既有事实，进豁免名单；
  *   重名本身是否合法另票裁决 → 名单外的任何新重名一律红
  *
@@ -214,7 +214,7 @@ describe('tools registry 完整性 — 真实数据（definitions/ 随包发布�
     expect(Number(declared?.[1])).toBe(snapshot.ymlPaths.length);
   });
 
-  it('包根公开导出的两个路径入口指向存在的 definitions/ 与 registry.json（studio 消费面）', () => {
+  it('包根公开导出的两个路径入口指向存在的 definitions/ 与 registry.json（下游消费面）', () => {
     expect(fs.existsSync(getToolsDir())).toBe(true);
     expect(fs.existsSync(getRegistryPath())).toBe(true);
   });

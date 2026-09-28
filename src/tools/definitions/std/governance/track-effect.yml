@@ -192,7 +192,6 @@ outputs:
 
 # 元数据
 metadata:
-  author: Agent Studio
   tags:
     - governance
     - effect-tracking

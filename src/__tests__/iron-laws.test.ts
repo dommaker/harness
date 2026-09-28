@@ -12,6 +12,9 @@ import {
 import { constraintChecker } from '../core/constraints/checker';
 import { getConstraintCheck, registeredCheckCount } from '../core/constraints/checkers';
 import type { ConstraintContext } from '../types/constraint';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 describe('Constraint System', () => {
   describe('清单构成（ADR-0029：16 → 7，全部 kind=check）', () => {
@@ -188,36 +191,26 @@ describe('Constraint Checker', () => {
   });
 
   it('should check all constraints', async () => {
+    // harness#183：验证证据 = .harness/evidence 落盘（独立链路），不再是 context flag
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-iron-laws-'));
+    fs.mkdirSync(path.join(projectPath, '.harness', 'evidence'), { recursive: true });
+    fs.writeFileSync(path.join(projectPath, '.harness', 'evidence', 'test.log'), 'ok');
     const context: ConstraintContext = {
       operation: 'code_implementation',
+      projectPath,
+      changedFiles: [],
       hasRequirement: true,
-      hasVerificationEvidence: true,
       hasSingleTask: true,
     };
 
     const result = await constraintChecker.checkConstraints(context);
     expect(result.errors.length + result.warnings.length).toBeGreaterThan(0);
+    fs.rmSync(projectPath, { recursive: true, force: true });
   });
 
-  it('should skip no_completion_without_verification when hasVerificationEvidence is undefined（未接线不评估）', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-    };
-
-    const result = await constraintChecker.check(CONSTRAINTS['no_completion_without_verification'], context);
-    expect(result.skipped).toBe(true);
-    expect(result.satisfied).toBe(true);
-  });
-
-  it('should pass no_completion_without_verification when hasVerificationEvidence is true', async () => {
-    const context: ConstraintContext = {
-      operation: 'code_implementation',
-      hasVerificationEvidence: true,
-    };
-
-    const result = await constraintChecker.check(CONSTRAINTS['no_completion_without_verification'], context);
-    expect(result.satisfied).toBe(true);
-  });
+  // harness#183：flag 三态（未接线 skip / false fail / true pass）随证据源重构退役，
+  // 判定收进 checker 体内（读 .harness/evidence），语义钉子见
+  // checkers/__tests__/no-completion-without-verification.test.ts
 });
 
 describe('Constraint Severity', () => {

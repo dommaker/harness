@@ -211,7 +211,7 @@ const RELATIVE_PATH_DEFAULT_EXEMPTIONS: Record<string, string> = {
   'src/monitoring/trace-analyzer.ts':
     'summaryFile: ".harness/logs/traces-summary.json" 同型病灶（#139 实测的第二处命中）。不在本票修：' +
     'harness 侧无生产写点（`status` 自 ADR-0020 起直调纯函数，不构造 analyzer），修它等于给无人消费的面' +
-    '新增根参数。与 trace 的 failure/summary 三件套同型病灶一并由 studio 侧迁移票带走（#139 Out of scope）。',
+    '新增根参数。与 trace 的 failure/summary 三件套同型病灶一并由下游消费方迁移票带走（#139 Out of scope）。',
 };
 
 describe('projectPath 传递约定（harness#95）', () => {

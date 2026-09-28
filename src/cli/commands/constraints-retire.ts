@@ -12,8 +12,8 @@
  *         retired: { at, reason, stats: { total, fail, failRate } }
  *
  * 每条同时写一条 KnowledgeStore 记录（consumptionMode: 'signal'）。
-baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
-缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
+ * baseDir 不硬编码 projectRoot 拼接，走 openKnowledgeStore 同一解析点（harness#177）：
+ * 缺省与 `harness knowledge` 读口同根，KNOWLEDGE_BASE_DIR 覆盖对写口同步生效。
  *
  * ADR-0029：custom 纯文本约束与治理注入段同步已随文本注入层关停一并退役。
  * ADR-0032 观察名单（块 3 子项 4）：零拦截命中先进观察名单（`.harness/.state.json`
@@ -40,6 +40,7 @@ import * as yaml from 'js-yaml';
 import chalk from 'chalk';
 import { getConstraint } from '../../core/constraints/definitions';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
+import { isRetiredTombstone } from '../../core/retired-constraints';
 import { loadAppConstraints } from '../../core/app-constraints-loader';
 import type { RunTarget } from '../../core/constraints/run-env';
 import type { KnowledgeEntry } from '../../knowledge/types';
@@ -60,7 +61,7 @@ export interface RetireExecuteOptions {
   reason?: string;
   /** 注入当前时间（测试用） */
   now?: Date;
-  /** 知识库路径解析的 io（legacy 兜底告警走 stderr 需要；缺省 processIO） */
+  /** 知识库路径解析的 io（注入给 openKnowledgeStore；当前 resolveKnowledgeBaseDir 已不消费，保留注入点与读口签名对齐。缺省 processIO） */
   io?: CommandIO;
 }
 
@@ -135,8 +136,10 @@ export function findRetireTarget(id: string, target?: RunTarget): RetireTargetIn
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
  * 文件名）。落盘字节由 `__tests__/constraints-retire.test.ts`
  * 的逐字节冻结用例钉住——合并属内部重构，对外产物不得漂移。
+ *
+ * 导出给 constraints-disable 复用（裸禁用写 `{ enabled: false }` 同一读-改-写口径）。
  */
-function setYamlEntry(
+export function setYamlEntry(
   filePath: string,
   label: string,
   section: string,
@@ -182,11 +185,11 @@ export function removeYamlEntry(filePath: string, section: string, id: string): 
 
 /**
  * 落盘后 commit 提示（票 02 断点 4）：仅 git 仓内提示，不替用户动 git。
- * studio 审卡通道由 applier 自动 commit，本提示面向 CLI 直达/裸项目场景。
+ * 下游审卡通道由 applier 自动 commit，本提示面向 CLI 直达/裸项目场景。
  */
 export function logCommitHint(projectRoot: string, io: CommandIO): void {
   if (!fs.existsSync(path.join(projectRoot, '.git'))) return;
-  log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（studio 审卡通道会自动 commit）'));
+  log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（下游审卡通道会自动 commit）'));
 }
 
 /**
@@ -284,9 +287,9 @@ export function retireConstraint(
 
   // 已退役保护：只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）——
   // 裸 enabled:false 是"禁用"不是"退休"，落到下面正常退休流程：覆写墓碑 + 补写沉淀，
-  // 不让一次裸 disable 吞掉 retire 的知识沉淀。
+  // 不让一次裸 disable 吞掉 retire 的知识沉淀。判定谓词唯一实现 = isRetiredTombstone。
   const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
-  if (existing?.enabled === false && existing.retired) {
+  if (isRetiredTombstone(existing)) {
     return { id, status: 'already_retired', isError, stats: emptyStats };
   }
 

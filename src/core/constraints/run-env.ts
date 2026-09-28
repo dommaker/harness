@@ -30,7 +30,8 @@ export const CAPABILITIES_FILE_REL = 'CAPABILITIES.md';
 /**
  * 尾部窗口上限 = 本 run 内最大的尾部消费方（有无失败记录看 20 条，见 context-builder）
  *
- * 更小的窗口（验证证据看 10 条）从同一份行文本上截，不再二次读文件。
+ * harness#183 起验证证据不再读 trace（语义循环拆除，改读 .harness/evidence），
+ * trace 尾部只剩 hasFailingTest 一个消费方。
  */
 const TRACE_TAIL_WINDOW = 20;
 
@@ -52,7 +53,7 @@ export interface RunEnv {
    * `CAPABILITIES.md` 的读取 + 解析 + 与代码实况的对照判定（ADR-0023 决策 4）
    *
    * 此前 capability_sync 与 docs_freshness 各读一遍文档、各跑一遍 `reconcileCapabilities`
-   * （studio 量得单次 7.6–15.9ms，两边解析输入逐字节相同）。此处一次供给两消费方。
+   * （下游消费方量得单次 7.6–15.9ms，两边解析输入逐字节相同）。此处一次供给两消费方。
    * 文档缺失 → `undefined`（消费方据此 skip / 无幽灵）。
    *
    * **memo 只记第一次传入的 `populationFiles`**：同一 run 内两消费方必须给同一份代码实况清单。
@@ -95,9 +96,9 @@ export function createRunEnv(projectPath: string): RunEnv {
     projectPath,
     traceTail(limit: number) {
       if (!window) {
-        // 计数去向：豁免（harness#100）——本观察面只供给「最近有无 fail / 有无 pass」两个
-        // 布尔证据的消费方，它们不读 skippedLines；坏行占尾部槽位只会让证据变少（方向保守），
-        // 告知需要改判定形状，属行为变更不在本票（口径与改前的两处独立 tail 读逐字一致）
+        // 计数去向：豁免（harness#100）——本观察面只供给「最近有无 fail」一个布尔证据
+        // 消费方，不读 skippedLines；坏行占尾部槽位只会让证据变少（方向保守），
+        // 告知需要改判定形状，属行为变更不在本票
         window = readJsonlWindow<ExecutionTrace>(traceFile, 'skip', TRACE_TAIL_WINDOW);
       }
       return window.take(limit);

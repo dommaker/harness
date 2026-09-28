@@ -3,7 +3,7 @@
  *
  * 统一所有源码目录发现逻辑:
  *   1. monorepo: packages/下各包的 src 或 lib 子目录
- *   2. monorepo: apps/下各应用的 src/modules 子目录
+ *   2. monorepo: apps/下各应用的 src 子目录
  *   3. 单 repo: src/ lib/ 目录
  *
  * 返回相对 projectPath 的路径数组。全都不存在时返回空数组。
@@ -49,28 +49,10 @@ export function detectSourceRoots(projectPath: string): string[] {
         if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('__')) continue;
         const appDir = join(appsDir, entry.name);
 
-        // apps/api/src/modules/* 的子目录
-        const modulesDir = join(appDir, 'src', 'modules');
-        if (existsSync(modulesDir)) {
-          try {
-            const modEntries = readdirSync(modulesDir, { withFileTypes: true });
-            for (const mod of modEntries) {
-              if (!mod.isDirectory() || mod.name.startsWith('.') || mod.name.startsWith('__')) continue;
-              const modPath = join(modulesDir, mod.name);
-              if (hasSourceFiles(modPath)) {
-                roots.push(`apps/${entry.name}/src/modules/${mod.name}`);
-              }
-            }
-          } catch { /* skip */ }
-        }
-
         // apps/xxx/src 本身
         const appSrcDir = join(appDir, 'src');
         if (existsSync(appSrcDir) && hasSourceFiles(appSrcDir)) {
-          // 避免重复（modules 已覆盖子目录）
-          if (!roots.some(r => r.startsWith(`apps/${entry.name}/src/`))) {
-            roots.push(`apps/${entry.name}/src`);
-          }
+          roots.push(`apps/${entry.name}/src`);
         }
       }
     } catch { /* skip */ }

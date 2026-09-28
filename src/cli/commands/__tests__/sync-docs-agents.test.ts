@@ -281,29 +281,6 @@ describe('sync-docs --agents', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
-    it('旧正本 .studio/CONTEXT.md 仍在场时兼容沿用（免迁移），两者同在以 .harness/ 为准', async () => {
-      const legacyDir = path.join(tempDir, 'legacy-context-model');
-      createFixture(legacyDir, { pnpm: true, withCapabilities: true });
-      fs.mkdirSync(path.join(legacyDir, '.studio'), { recursive: true });
-      fs.writeFileSync(path.join(legacyDir, '.studio', 'CONTEXT.md'), '# 模块上下文\n\n## src\n\n职责：夹具\n');
-      await syncDocs({ projectPath: legacyDir, agents: true }, io);
-      expect(fs.readFileSync(path.join(legacyDir, 'AGENTS.md'), 'utf-8'))
-        .toContain('模块上下文正本：`.studio/CONTEXT.md`（模块锚点组织），改动代码时同步更新');
-      fs.rmSync(legacyDir, { recursive: true, force: true });
-
-      const bothDir = path.join(tempDir, 'both-context-model');
-      createFixture(bothDir, { pnpm: true, withCapabilities: true });
-      fs.mkdirSync(path.join(bothDir, '.studio'), { recursive: true });
-      fs.writeFileSync(path.join(bothDir, '.studio', 'CONTEXT.md'), '# 旧\n');
-      fs.mkdirSync(path.join(bothDir, '.harness'), { recursive: true });
-      fs.writeFileSync(path.join(bothDir, '.harness', 'CONTEXT.md'), '# 新\n');
-      await syncDocs({ projectPath: bothDir, agents: true }, io);
-      const content = fs.readFileSync(path.join(bothDir, 'AGENTS.md'), 'utf-8');
-      expect(content).toContain('模块上下文正本：`.harness/CONTEXT.md`');
-      expect(content).not.toContain('.studio/CONTEXT.md');
-      fs.rmSync(bothDir, { recursive: true, force: true });
-    });
-
     it('正本不存在时保持散置模型行，--check 无漂移', async () => {
       const testDir = path.join(tempDir, 'scattered-context-model');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
@@ -630,7 +607,7 @@ describe('sync-docs --agents', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
-    it('PRESERVE:governance 治理契约段开箱即用：重新生成保留、--check 通过（studio #302）', async () => {
+    it('PRESERVE:governance 治理契约段开箱即用：重新生成保留、--check 通过（ADR 2026-08-21 落点模型）', async () => {
       const testDir = path.join(tempDir, 'preserve-governance');
       createFixture(testDir, { pnpm: true, withCapabilities: true });
 

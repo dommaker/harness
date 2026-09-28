@@ -4,7 +4,7 @@
  * 缓存 git diff 和 src/ 递归扫描结果，减少重复 I/O。
  * 同一请求内多次 checkConstraints 调用共享缓存。
  *
- * 计数采样（H6/G5，收编 studio runtime/cache.ts）：
+ * 计数采样（H6/G5，收编下游消费方 runtime/cache.ts）：
  * get/getSync 可传声明式采样配置，对每个 (namespace, key) 独立计数，
  * 第 1 次调用必执行，此后每 N 次执行 1 次完整检查，其余 N-1 次复用缓存；
  * 非采样轮缓存未命中（无缓存或已过期）时返回 defaultValueOnMiss，不执行 fn。

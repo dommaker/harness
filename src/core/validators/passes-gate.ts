@@ -11,6 +11,7 @@ import { execAsync } from '../../utils/exec';
 import { judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { EVIDENCE_DIR_REL } from '../../types/passes-gate';
 import type {
   PassesGateConfig,
   TaskTestResult,
@@ -101,8 +102,8 @@ export class PassesGate {
    *
    * @example
    * ```typescript
-   * // Studio 调用方式
-   * const testResult = await runTestCommand(workDir);  // Studio 自己运行
+   * // 下游消费方调用方式
+   * const testResult = await runTestCommand(workDir);  // 消费方自己运行
    * const passesResult = passesGate.check(testResult); // harness 只验证
    *
    * if (!passesResult.allowed) {
@@ -266,7 +267,7 @@ export class PassesGate {
    * 生成测试证据
    */
   private async generateEvidence(workDir: string, output: string): Promise<string> {
-    const evidenceDir = path.join(workDir, '.harness', 'evidence');
+    const evidenceDir = path.join(workDir, EVIDENCE_DIR_REL);
     await fs.mkdir(evidenceDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

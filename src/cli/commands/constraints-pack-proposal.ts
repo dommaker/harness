@@ -1,7 +1,7 @@
 /**
  * harness constraints pack-proposal <id> —— 升级提案材料打包（ADR-0033 决策 4，块 3 子项 5）
  *
- * 升级通道链路：studio 审卡发起/初审 → approve 后由本命令打包脱敏材料 →
+ * 升级通道链路：下游审卡发起/初审 → approve 后由本命令打包脱敏材料 →
  * 人拿材料去 harness 仓开 issue（github 操作留给人，本命令不触网）。
  *
  * 材料内容：条文 + severity + checker 模板与参数 + traces.log 使用统计（只有计数）

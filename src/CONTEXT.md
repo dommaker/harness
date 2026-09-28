@@ -8,7 +8,7 @@
 - `core/index.ts`: 核心约束引擎
 - `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理
-- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径（studio#153）；P1-7（ADR-0031，wayfinder 票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
+- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径；P1-7（ADR-0031，wayfinder 票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
 
 ## 目录
 | 目录 | 职责 |
@@ -39,7 +39,7 @@
 | GateDecision | 三态决策 `deny \| abstain \| ask`；deny 单调（下游不可改回 allow）、ask 枚举预留 fail-closed = deny |
 | GateResult | 报告结构（gate/passed/message/details/timestamp/duration），保留为报告层，不作决策 |
 | 守卫 guard | 仅 dsh 借鉴语境（工具管线单调守卫），不进入 harness 命名 |
-| 回滚 | 分工：版本化回退（单段——yml 数据文件 git 版本化，删段恢复）+ 提案回滚（多段 inverse，挂 studio#82 D6） |
+| 回滚 | 分工：版本化回退（单段——yml 数据文件 git 版本化，删段恢复）+ 提案回滚（多段 inverse） |
 | 文件驱动 CLI | yml 状态真值 + 一次性进程、无常驻生命周期；故不引 dispose 链（止步档 1） |
 | 对照（reconcile） | CAPABILITIES.md 声明与源码实况的双向一致性判定（代码→文档查漏登，文档→代码查幽灵）；唯一实现 `core/constraints/capabilities-reconcile.ts`，capability_sync / docs_freshness / sync-docs 共消费（ADR-0009）。一次 check run 内只算一次，经 `RunEnv.capabilities()` 供给两 checker（ADR-0023 决策 4） |
 | 判定证据（evidence） | checker 随判定一并返回的路径级依据（`CheckDetail{pass, evidence}`，harness#119/ADR-0016）；文案由 checker 措辞、消费端只打印，出口 = `ConstraintResult` / CLI 输出 / trace / error 级异常文案。不是第四种统计态：**违规** = 与本次变更有因果（进 pass/fail 分母），**提示** = `pass:true` + evidence（仓库级漂移等无因果缺口，只露出不拦） |

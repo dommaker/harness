@@ -52,7 +52,7 @@ const FIXTURE: KnowledgeEntry[] = [
   makeEntry('K-001', 'verified', ['agent-a:2026-09-01', 'search:2026-09-01']),
   makeEntry('K-002', 'verified', ['prompt-inject:2026-08-30', 'test-agent:2026-08-31', 'monitor:2026-09-01']),
   makeEntry('K-003', 'draft', []),
-  makeEntry('K-004', 'proven', ['decision-1:2026-07-01', 'studio-web:2026-07-02']),
+  makeEntry('K-004', 'proven', ['decision-1:2026-07-01', 'web-app:2026-07-02']),
 ];
 
 function setupKnowledgeBase(): string {

@@ -42,10 +42,29 @@ describe('ConstraintChecker - 补充覆盖', () => {
   afterAll(() => {
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
+      for (const dir of evidenceFixtures) fs.rmSync(dir, { recursive: true, force: true });
     } catch {
       // ignore
     }
   });
+
+  /**
+   * 证据夹具（harness#183：验证证据 = .harness/evidence 落盘，不再是 context flag）
+   * projectWithEvidence = 有证据（新鲜度无所依即有证据即过）；projectWithoutEvidence = 无证据
+   */
+  const evidenceFixtures: string[] = [];
+  function projectWithEvidence(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-evidence-'));
+    fs.mkdirSync(path.join(dir, '.harness', 'evidence'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.harness', 'evidence', 'test.log'), 'ok');
+    evidenceFixtures.push(dir);
+    return dir;
+  }
+  function projectWithoutEvidence(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-no-evidence-'));
+    evidenceFixtures.push(dir);
+    return dir;
+  }
   describe('findApplicableConstraints', () => {
     it('应该过滤出匹配 trigger 的约束', () => {
       const context: ConstraintContext = {
@@ -78,8 +97,9 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('通过检查不应该抛出异常', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
+        projectPath: projectWithEvidence(),
+        changedFiles: [],
         hasTest: true,
-        hasVerificationEvidence: true,
         hasRequirement: true,
         taskDescription: 'Test task — single focused change',
         hasSingleTask: true,
@@ -92,8 +112,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('违规应该抛出 ConstraintViolationError', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
+        projectPath: projectWithoutEvidence(),
         hasTest: false,
-        hasVerificationEvidence: false,
       };
 
       await expect(checkBeforeExecution(context)).rejects.toThrow();
@@ -102,8 +122,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('customConfig 应替换内置集（空配置不检查内置 error 级约束）', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
+        projectPath: projectWithoutEvidence(),
         hasTest: false,
-        hasVerificationEvidence: false,
       };
 
       // 内置 error 级约束下违规抛错
@@ -147,7 +167,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('checkConstraint 带 customConfig 应命中配置内约束', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasVerificationEvidence: true,
+        projectPath: projectWithEvidence(),
+        changedFiles: [],
       };
       const customConfig = {
         constraints: {
@@ -180,7 +201,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('check 结果带约束定义的 severity', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasVerificationEvidence: true,
+        projectPath: projectWithEvidence(),
+        changedFiles: [],
       };
 
       const result = await checker.check(
@@ -218,7 +240,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
       const context: ConstraintContext = {
         operation: 'code_implementation',
-        hasVerificationEvidence: true,
+        projectPath: projectWithEvidence(),
+        changedFiles: [],
       };
 
       const result = await checkConstraint('no_completion_without_verification', context);
@@ -231,8 +254,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('error 级违规应该抛出 ConstraintViolationError', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
+        projectPath: projectWithoutEvidence(),
         hasTest: false,
-        hasVerificationEvidence: false,
       };
 
       await expect(checkConstraints(context)).rejects.toThrow();
@@ -319,11 +342,11 @@ describe('buildCheckEnv - 证据接线契约', () => {
 
   it("'none' env 下 evidence flag 未接线的 checker 返回带原因的 skip（harness#182）", async () => {
     // 「没接证据 → skip」由注释固化为可执行契约；原因进结果面
-    const check = contextEvidenceFlag('test-flag', 'hasVerificationEvidence');
+    const check = contextEvidenceFlag('test-flag', 'hasFailingTest');
     const env = buildCheckEnv(context, 'none');
     expect(await check.evaluate(env)).toEqual({
       skip: true,
-      reason: '证据标志 hasVerificationEvidence 未接线',
+      reason: '证据标志 hasFailingTest 未接线',
     });
   });
 

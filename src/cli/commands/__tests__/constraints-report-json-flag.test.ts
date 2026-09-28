@@ -7,7 +7,7 @@
  * `constraints report --json` 输出的仍是文本格式。
  *
  * 修法（计划允许二选一）：子命令换名 --json-output。
- * 理由：父命令 --json 有活跃消费者（studio-agent 取约束 hash），
+ * 理由：父命令 --json 有活跃消费者（下游消费方取约束 hash），
  * 删除会静默降级其取数；子命令 --json 因本 bug 从未可达、零消费者，
  * 换名零破坏。
  *

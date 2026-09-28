@@ -1,5 +1,5 @@
 /**
- * mkdtemp 泄漏防护测试（2026-08-26 /tmp 3.9 万残留事故，与 studio 同款机制）。
+ * mkdtemp 泄漏防护测试（2026-08-26 /tmp 3.9 万残留事故，与下游消费方同款机制）。
  * 正本见 ../mkdtemp-cleanup.ts。
  */
 import fs from 'fs';

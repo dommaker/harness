@@ -1,5 +1,5 @@
 /**
- * governance_presence 检查器旁测（studio #302，ADR 2026-08-21 落点模型）
+ * governance_presence 检查器旁测（ADR 2026-08-21 落点模型）
  *
  * 在场守护：PRESERVE 只保「存在」不保「在场」——治理契约段被删除/掏空后
  * sync-docs 重新生成会静默丢失，本 checker 在 harness check 时校验在场性。

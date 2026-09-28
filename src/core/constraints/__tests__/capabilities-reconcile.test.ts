@@ -89,7 +89,7 @@ describe('reconcileCapabilities — 代码→文档（漏登记）', () => {
 
 describe('reconcileCapabilities — 文档→代码（幽灵）', () => {
   it('文件条目多根相对路径：项目根或任一源码根下存在即算活', () => {
-    const content = '| 模块 | 文件 | 说明 |\n|---|---|---|\n| API | apps/routes.ts | studio 式多根 |';
+    const content = '| 模块 | 文件 | 说明 |\n|---|---|---|\n| API | apps/routes.ts | 多根相对路径 |';
     const v = reconcileCapabilities({
       content,
       populationFiles: [],

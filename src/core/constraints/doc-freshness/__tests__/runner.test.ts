@@ -278,11 +278,11 @@ describe('FreshnessRunner', () => {
         'CLAUDE.md': [
           '## Key Architecture Paths',
           '',
-          '| `packages/studio-shared/src/` | Shared |',
+          '| `packages/pkg-a/src/` | Shared |',
         ].join('\n'),
       });
-      mkdirSync(join(TEST_ROOT, 'dirdir-skip-reverse', 'packages', 'studio-shared', 'src'), { recursive: true });
-      mkdirSync(join(TEST_ROOT, 'dirdir-skip-reverse', 'packages', 'studio-web', 'src'), { recursive: true });
+      mkdirSync(join(TEST_ROOT, 'dirdir-skip-reverse', 'packages', 'pkg-a', 'src'), { recursive: true });
+      mkdirSync(join(TEST_ROOT, 'dirdir-skip-reverse', 'packages', 'pkg-b', 'src'), { recursive: true });
 
       const config: DocFreshnessConfig = {
         checks: [{

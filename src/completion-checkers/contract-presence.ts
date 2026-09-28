@@ -3,7 +3,7 @@
  *
  * - 按 yml contracts 类型清单查表：类型不在清单内 = skip（不算违规）
  * - 类型 → 判定方法的映射是代码不是配置（CONTRACT_JUDGMENTS）；
- *   首个活跃条目 review → context.reviewReport 在场（studio agent-loop 已解析字段，不重复解析）
+ *   首个活跃条目 review → context.reviewReport 在场（下游 agent-loop 已解析字段，不重复解析）
  * - 类型在清单内但无判定方法注册 = violation（暴露配置与代码失配）
  */
 

@@ -1,7 +1,9 @@
 /**
- * 检查点验证引擎（编排层，工单 23）
+ * 检查点验证引擎（查落实工具，ADR-0036；原「编排层」自述为项目初期历史话术，
+ * 与 ADR-0031「harness 不做生产编排」冲突，已废止）
  *
- * 在每个步骤执行后，自动验证检查点是否满足。
+ * 执行项目自声明的检查点（13 种通用 check type，见 .harness/checkpoints.yml）；
+ * 消费方：harness validate CLI、CI、下游运行时。
  * 各检查族实现位于 check-handlers/{file,command,output,http}.ts。
  */
 

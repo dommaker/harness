@@ -20,11 +20,11 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
     kind: 'check',
     channel: 'gate',
     rule: 'NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE',
-    message: '禁止无验证声明完成，必须运行验证命令',
+    message: '禁止无验证声明完成，必须有晚于最新变更的验证证据（.harness/evidence）',
     severity: 'error',
     trigger: 'code_implementation',
     enforcement: 'verify-completion',
-    description: '在声明任何任务完成之前，必须运行新鲜的验证命令（项目声明的测试 + type check），以新鲜输出作为完成证据。验证命令集由项目自行声明，全量验证留给 CI 流程。',
+    description: '在声明任何任务完成之前，必须真实运行项目声明的测试等验证命令，输出落盘 .harness/evidence/（harness passes-gate 运行或外部验证事件写入）作为完成证据；证据须晚于最新变更，缺失或过期即违规。验证命令集由项目自行声明，全量验证留给 CI 流程。',
   },
 
   /**

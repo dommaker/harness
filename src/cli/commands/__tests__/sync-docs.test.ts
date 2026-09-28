@@ -171,7 +171,7 @@ describe('sync-docs command', () => {
     it('描述以 / 结尾的表格行不应被误判为目录条目（check 必须收敛）', async () => {
       // 回归：JSDoc 首行在 "gitRepo /" 处换行时，生成的描述单元格以 / 结尾，
       // 旧目录条目正则将其误判为目录 → --check 永远报「包含已删除的模块」
-      // （2026-08-04 studio PR #44 CI Governance 不收敛事故）
+      // （2026-08-04 CI Governance 不收敛事故）
       const testDir = path.join(tempDir, 'trailing-slash-desc');
       const srcDir = path.join(testDir, 'src');
       fs.mkdirSync(srcDir, { recursive: true });
@@ -409,7 +409,7 @@ describe('sync-docs command', () => {
       const testDir = path.join(tempDir, 'tsx-row');
       const srcDir = path.join(testDir, 'src', 'components');
       fs.mkdirSync(srcDir, { recursive: true });
-      // 复刻 studio 场景：同目录混合 .ts 与 .tsx
+      // 复刻下游消费方场景：同目录混合 .ts 与 .tsx
       fs.writeFileSync(path.join(srcDir, 'statusClasses.ts'), 'export const statuses = {};');
       fs.writeFileSync(
         path.join(srcDir, 'DistillProposalCard.tsx'),
@@ -504,7 +504,7 @@ describe('sync-docs command', () => {
       fs.writeFileSync(path.join(srcA, 'routes.ts'), 'export const routes = 1;');
 
       // CAPABILITIES.md 另有一条指向不存在路径的 routes.ts（basename 碰撞，
-      // 按 basename 对比时永远不可见 —— 2026-08-08 studio CI 4 连红事故）
+      // 按 basename 对比时永远不可见 —— 2026-08-08 CI 4 连红事故）
       fs.writeFileSync(
         path.join(testDir, 'CAPABILITIES.md'),
         [

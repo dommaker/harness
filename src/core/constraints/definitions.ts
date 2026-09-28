@@ -6,7 +6,7 @@
  * 纯文本提示层（prompts.ts）已随文本注入层关停整体删除。
  *
  * 工单 20：字面量定义按 severity 分组放 ./definitions/{iron-laws,guidelines}.ts；
- * 本文件保持原路径做薄聚合（studio rule-scanner 按此路径解析，P0 #8）。
+ * 本文件保持原路径做薄聚合。
  */
 
 import type { Constraint, ConstraintTrigger } from '../../types/constraint';

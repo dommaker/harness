@@ -137,7 +137,6 @@ decision_priority:
 
 # 元数据
 metadata:
-  author: Agent Studio
   tags:
     - governance
     - voting

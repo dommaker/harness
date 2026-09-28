@@ -20,14 +20,6 @@ import { getEffectiveConstraints, lintEffectiveConfig } from '../effective-const
 import type { EffectiveConfigLint } from '../effective-constraints';
 
 /**
- * flag 型 check 约束（证据来自 ConstraintContext flag，见 checkers/iron-flags.ts）。
- * 全部 skip 时标注"证据 flag 未接线"（区别于存在性探测的"约定未采用"）。
- */
-export const FLAG_EVIDENCE_CONSTRAINT_IDS: ReadonlySet<string> = new Set([
-  'no_completion_without_verification',
-]);
-
-/**
  * 单条 check 约束的使用统计
  */
 export interface ConstraintUsageStats {
@@ -271,14 +263,12 @@ function diagnose(
     }
 
     if (s.skip === s.total) {
-      const wiring = FLAG_EVIDENCE_CONSTRAINT_IDS.has(s.id)
-        ? '证据 flag 未接线'
-        : '约定未采用（存在性探测未命中）';
+      // harness#183 起无 flag 型约束：全 skip = 约定未采用（存在性探测未命中）或证据不可用
       candidates.push({
         id: s.id,
         kind: 'unevaluable',
         stats: s,
-        reason: `不可评估：全部 ${s.total} 次均为 skip（${wiring}）`,
+        reason: `不可评估：全部 ${s.total} 次均为 skip（约定未采用或证据不可用）`,
       });
       continue;
     }

@@ -223,6 +223,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--json', description: '输出 JSON 格式（供 LLM 消费）', defaultValue: false },
       { flags: '--agents', description: '同步 AGENTS.md（agent 导读；PRESERVE 标记段重新生成时保留）', defaultValue: false },
       { flags: '--compact', description: '一次性迁移：将 CAPABILITIES.md 文件表格折叠为目录条目', defaultValue: false },
+      { flags: '--gate', description: '门禁模式：自愈写入后判定被管理文档相对 HEAD 的 diff，有 diff 退 1（CI 用；与 --check/--json/--compact 互斥）', defaultValue: false },
     ],
     // --check 下的漂移由实现返回 fail（候选7：退出码映射只在 bin 一处），故无需 afterRun
     action: { module: 'sync-docs', export: 'syncDocs' },
@@ -297,7 +298,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
   },
   {
     command: 'release',
-    description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。不依赖 Studio API。',
+    description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。纯 CLI 实现，不依赖外部 API。',
     options: [
       { flags: '--bump <type>', description: '版本递增类型', defaultValue: 'patch' },
       { flags: '--dry-run <bool>', description: '仅模拟执行', defaultValue: 'false' },
@@ -366,6 +367,20 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         mapActionArgs: (positionals, options) => [positionals[0], {
           projectPath: options.projectPath,
           reason: options.reason,
+          yes: options.yes,
+        }],
+      },
+      {
+        command: 'disable',
+        argument: '<id>',
+        description: '裸禁用约束：config.yml enabled:false 无 retired 墓碑无沉淀（区别于 retire；写后验证生效集已缩小，失败回滚）；直达需显式 --yes，幂等 already disabled',
+        options: [
+          { flags: '-p, --project-path <path>', description: '项目路径' },
+          { flags: '-y, --yes', description: '显式确认直达禁用（与 retire 同一道人确认闸门）', defaultValue: false },
+        ],
+        action: { module: 'constraints-disable', export: 'constraintsDisable' },
+        mapActionArgs: (positionals, options) => [positionals[0], {
+          projectPath: options.projectPath,
           yes: options.yes,
         }],
       },

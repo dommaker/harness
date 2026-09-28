@@ -16,6 +16,7 @@ import * as path from 'path';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import chalk from 'chalk';
 import { ProjectConfigLoader } from '../../core/project-config-loader';
+import { isRetiredTombstone } from '../../core/retired-constraints';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import { openKnowledgeStore } from './knowledge-view';
 import { findRetireTarget, logCommitHint, removeYamlEntry, type RetireTargetInfo } from './constraints-retire';
@@ -121,11 +122,12 @@ export function reactivateConstraint(
     return { id, status: 'unknown_id' };
   }
 
-  // 只认 retired 墓碑：裸 disable 与未配置一律 not_retired（与 retire 的幂等口径对偶）
+  // 只认 retired 墓碑：裸 disable 与未配置一律 not_retired（与 retire 的幂等口径对偶，
+  // 判定谓词唯一实现 = isRetiredTombstone）
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
   const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
-  if (!(existing?.enabled === false && existing.retired)) {
+  if (!isRetiredTombstone(existing)) {
     return { id, status: 'not_retired' };
   }
 

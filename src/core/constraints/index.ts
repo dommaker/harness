@@ -56,7 +56,6 @@ export type {
   ConstraintResult,
   ConstraintContext,
   ConstraintCheckResult,
-  IronLawContext,
 } from '../../types/constraint';
 
 export { ConstraintViolationError } from '../../types/constraint';

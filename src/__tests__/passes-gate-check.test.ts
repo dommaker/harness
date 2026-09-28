@@ -97,7 +97,7 @@ describe('PassesGate.check()', () => {
   /**
    * AC-007（ADR-0022 改写）：零消费者方法已从公共面删除
    *
-   * 原用例断言「保留 setPasses() 向后兼容」——兼容对象经 harness+studio 双仓
+   * 原用例断言「保留 setPasses() 向后兼容」——兼容对象经双仓
    * 核实不存在，ADR-0022 明确推翻该 AC。`@ts-expect-error` 在编译期钉住删除，
    * 运行期断言同时钉住形状（方法不存在于原型）。
    */

@@ -81,13 +81,14 @@ report 观测 → retire（人确认）→ 知识沉淀 → --export 回传 → 
 ```bash
 # 核心
 harness check          # 约束检查（pre-commit hook 用）
-harness validate       # 检查点验证（失败退出码 1，可用于 CI 门控）
+harness validate       # 检查点验证（读 .harness/checkpoints.yml，失败退出码 1，供 CI 检查用）
 harness init           # 初始化 .harness/ 目录（不覆盖已有运行时配置）
 harness status         # 项目健康状态、统计、异常检测
 harness constraints    # 约束元数据（版本/hash/计数/文本大小）
 harness constraints report   # 约束使用报告：统计 + 退役候选诊断 + 配置健康 + 注入漂移（--export 脱敏）
 harness constraints retire   # 约束退役：交互选择 + 人确认 → config.yml + KnowledgeStore + 注入段同步
 harness constraints retire <id> --yes   # 直达退役：显式 --yes 人确认（无 --yes 拒绝执行）
+harness constraints disable <id> --yes   # 裸禁用：config.yml enabled:false 无墓碑无沉淀（区别于 retire）
 harness report         # 生成检查报告
 
 # 门禁
@@ -135,7 +136,8 @@ scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
 |------|------|
 | 约束引擎 | check/prompt 二元约束 + 生效集合并（`getEffectiveConstraints`）+ 注入渲染/漂移校验 |
 | 知识引擎 | 约束退役 → KnowledgeStore 沉淀（规则原文 + 原因 + 历史统计），可检索、可追溯 |
-| 门禁系统 | 8 种门禁：测试/验收/性能/安全/契约/审查/命令/检查点 |
+| 门禁系统 | 6 种门禁：验收/性能/安全/契约/审查/命令（另有测试门控命令 passes-gate） |
+| 检查点验证 | 项目在 checkpoints.yml 自声明的通用检查项（13 种 check type），由 `harness validate` 执行；与门禁的分工见 ADR-0036 |
 | 运行环境引导 | `bootstrapHarness` / `bootstrapHarnessSync`：一次调用装配约束检查器 + trace 记录器 + 会话管理器（原「Hook 管线」面双仓零消费者，已随 ADR-0027 整体删除） |
 | 上下文/监控 | Token 预算 + 会话压缩 + Trace 收集/分析 |
 

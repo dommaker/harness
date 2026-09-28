@@ -17,9 +17,7 @@ import type { Constraint } from '../../../types/constraint';
 import type { ConstraintCheck } from './types';
 import { getAllConstraints, isGateConstraint } from '../definitions';
 
-import {
-  noCompletionWithoutVerification,
-} from './iron-flags';
+import { noCompletionWithoutVerification } from './no-completion-without-verification';
 import { noTestSimplification } from './no-test-simplification';
 import { capabilitySync } from './capability-sync';
 import { contextDocSync } from './context-doc-sync';

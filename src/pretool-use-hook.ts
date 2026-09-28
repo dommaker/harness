@@ -1,11 +1,11 @@
 /**
- * PreToolUse 执法脚本 — command-gate hook 固化版（studio#153）
+ * PreToolUse 执法脚本 — command-gate hook 固化版
  *
- * 内容 = studio-agent provider-hooks.buildHookScriptContent 生成脚本（#147）的固化版，
+ * 内容 = 下游消费方 provider-hooks 生成脚本的固化版，
  * 归属归位：谁的东西谁发货——CommandGate 是 harness 的，hook 脚本随 harness 包出厂。
  * 编译产物 = 包内 dist/pretool-use-hook.js，provider hook 配置（codex hooks.json /
  * kimi config.toml）直接指向 require.resolve('@dommaker/harness') 同目录的该文件，
- * 不再由 studio-agent 按 worktree 生成、不再内嵌绝对路径。
+ * 不再由下游消费方按 worktree 生成、不再内嵌绝对路径。
  *
  * 语义（与生成版一致）：
  * - stdin 收 provider PreToolUse JSON（tool_input.command）；
@@ -20,7 +20,7 @@
  * 在写。留痕失败经 try/catch 吞掉，fail-open 口径与 shim 主路径一致。
  *
  * P1-5 harness 半边（ADR-0031，wayfinder 票08）：识别 tool_name 非 Bash 的事件
- * （Edit/Write/apply_patch/MCP 工具，studio 侧补全 codex hooks matcher 后会到达），
+ * （Edit/Write/apply_patch/MCP 工具，下游消费方补全 codex hooks matcher 后会到达），
  * 只留痕不拦截——这些事件的 tool_input 没有 command 字段，旧形状会因缺字段
  * fail-open 空转；拦截归 codex 沙箱，本 shim 对它们只记账。
  */
@@ -28,7 +28,7 @@ import { CommandGate } from './gates/command';
 import type { CommandBlacklistRule } from './gates/types';
 import { TraceCollector } from './monitoring/traces';
 
-/** hook 标识：与 studio-agent 生成版同一 marker（配置幂等检测共用口径） */
+/** hook 标识：下游消费方 hook 配置共用同一 marker 做幂等检测（值不可变，改动会破坏存量配置的幂等识别） */
 export const HOOK_MARKER = 'harness-command-gate';
 
 interface PreToolUseInput {

@@ -25,14 +25,20 @@ const getTraceCollector = jest.requireMock('../../../monitoring/traces')
 
 describe('trace 记录器构造注入（harness#88）', () => {
   let projectDir: string;
-  /** 与 skip-semantics 同族的 fixture：目录不存在 → 存在性探测走 skip，不阻断 */
+  /**
+   * fixture 带真验证证据（harness#183：.harness/evidence 落盘）：本套件测 trace 接线
+   * 而非判定，证据在位即不触发 block 模式的 throw
+   */
   const context = () => ({
     operation: 'code_implementation' as const,
-    projectPath: path.join(projectDir, 'not-created'),
+    projectPath: projectDir,
+    changedFiles: [] as string[],
   });
 
   beforeAll(() => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-trace-injection-'));
+    fs.mkdirSync(path.join(projectDir, '.harness', 'evidence'), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, '.harness', 'evidence', 'test.log'), 'ok');
     getTraceCollector.mockClear();
   });
 

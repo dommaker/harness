@@ -70,7 +70,7 @@ export const WARNING_CONSTRAINTS: Record<string, Constraint> = {
   },
 
   /**
-   * 治理契约在场守护（studio #302，ADR 2026-08-21 落点模型）
+   * 治理契约在场守护（ADR 2026-08-21 落点模型）
    * 原因：PRESERVE 只保「存在」不保「在场」——AGENTS.md 治理段被删除/掏空后
    *       sync-docs 重新生成会静默丢失约束正本
    */

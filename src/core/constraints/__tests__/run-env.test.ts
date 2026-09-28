@@ -222,7 +222,7 @@ describe('context-builder 经注入的观察面取证据', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('hasFailingTest / hasVerificationEvidence 各按自己的窗口向 env 取数，不另开读', async () => {
+  it('hasFailingTest 按窗口向 env 取数，不另开读', async () => {
     const { env, limits } = countingEnv([
       { constraintId: 'p', severity: 'error', timestamp: 1, result: 'pass' },
       { constraintId: 'f', severity: 'error', timestamp: 2, result: 'fail' },
@@ -234,14 +234,15 @@ describe('context-builder 经注入的观察面取证据', () => {
       runEnv: env,
     });
 
-    expect(limits).toEqual([TRACE_TAIL_WINDOW, 10]);
+    // harness#183：验证证据探测（10 条窗口）随 traces 语义循环拆除移除，
+    // trace 尾部只剩 hasFailingTest 一个消费方
+    expect(limits).toEqual([TRACE_TAIL_WINDOW]);
     expect(ctx.hasFailingTest).toBe(true);
-    expect(ctx.hasVerificationEvidence).toBe(true);
   });
 
-  it('窗口里没有 pass 时验证证据为 false（合并读取不改判定）', async () => {
+  it('窗口里没有 fail 时 hasFailingTest 为 false（合并读取不改判定）', async () => {
     const { env } = countingEnv([
-      { constraintId: 'f', severity: 'error', timestamp: 2, result: 'fail' },
+      { constraintId: 'p', severity: 'error', timestamp: 2, result: 'pass' },
     ]);
     const ctx = await buildConstraintContext({
       projectPath: dir,
@@ -249,8 +250,7 @@ describe('context-builder 经注入的观察面取证据', () => {
       evidence: fakeGit(dir, ['README.md']),
       runEnv: env,
     });
-    expect(ctx.hasFailingTest).toBe(true);
-    expect(ctx.hasVerificationEvidence).toBe(false);
+    expect(ctx.hasFailingTest).toBe(false);
   });
 
   it('不注入 env 时自造一份并按 projectPath 锚定读取', async () => {

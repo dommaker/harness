@@ -2,7 +2,7 @@
  * 坏行计数跨层透传（harness#100，承接 #82 裁决 4 的范围外项）
  *
  * #82 统一了 JSONL 读协议并让读「不抛 + 返回部分结果」，但计数在 TraceCollector
- * 这一层被 `read()` 的兼容签名吞掉：studio 端点拿到部分结果却零提示。
+ * 这一层被 `read()` 的兼容签名吞掉：跨仓消费端点拿到部分结果却零提示。
  * 本套件钉住收口后的形状——
  * - 新报告入口 `readReport()` / `analyzeRecentReport()` 把计数带到消费面
  * - 旧入口 `read()` / `readRecent()` / `readByConstraint()` / `getStats()` /
@@ -113,7 +113,7 @@ describe('TraceCollector.readReport / TraceAnalyzer.analyzeRecentReport（harnes
     expect(collector.readReport()).toEqual({ traces: [], skippedLines: 0 });
   });
 
-  it('时间窗内被丢掉的合法行不减计数：文件级口径（studio 无法自算的根因）', () => {
+  it('时间窗内被丢掉的合法行不减计数：文件级口径（跨仓消费端点无法自算的根因）', () => {
     const lines = [
       validLine('old', NOW - 10 * 3600 * 1000),
       BAD_LINE_1,

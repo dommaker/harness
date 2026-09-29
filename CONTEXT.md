@@ -13,3 +13,6 @@ harness 作为标准提供的、代码写死实现的成品质量检查，仅指
 _Avoid_: 检查点
 
 > 两者分工与判定尺见 ADR-0036。
+
+**变更面（mutation surface）**:
+改变约束状态的写操作集合（retire/reactivate/disable 等），与只读面（清单、元数据、报告）相对。消费方只能经 harness 公共接口走变更，不直读写 `.harness/` 内部文件；`.harness/` 文件布局是 harness 私产。

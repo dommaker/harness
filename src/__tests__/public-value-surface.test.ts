@@ -86,7 +86,6 @@ const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {
     'KnowledgeInjector',
     'SessionManager',
     'TokenBudget',
-    'TokenEstimator',
   ],
   './gates': [
     'CommandGate',

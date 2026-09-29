@@ -63,7 +63,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'TESTED_BY_RE',
   'TESTS_NONE_RE',
   'TokenBudget',
-  'TokenEstimator',
   'TraceAnalyzer',
   'TraceCollector',
   'assertGateRegistryClosed',

@@ -6,7 +6,6 @@
  */
 
 import { KnowledgeQuery, EXTERNAL_SOURCE_MARKER } from '../knowledge/query';
-import { TokenEstimator } from './token-budget';
 import type { KnowledgeEntry, KnowledgeSubsystem } from '../knowledge/types';
 import type { ContextSource } from './types';
 
@@ -73,7 +72,7 @@ export class KnowledgeInjector {
         // 注入摘要版本
         if (injectSummaryForExcluded) {
           const summary = this.formatEntrySummary(entry);
-          const summaryTokens = TokenEstimator.estimateText(summary);
+          const summaryTokens = this.query.estimateTokens(summary);
 
           if (tokensUsed + summaryTokens <= budget) {
             sources.push({
@@ -93,7 +92,7 @@ export class KnowledgeInjector {
 
       // 注入完整版本
       const formatted = this.formatEntry(entry);
-      const entryTokens = TokenEstimator.estimateText(formatted);
+      const entryTokens = this.query.estimateTokens(formatted);
 
       if (tokensUsed + entryTokens <= budget) {
         sources.push({
@@ -108,7 +107,7 @@ export class KnowledgeInjector {
       } else {
         // 预算不足，尝试注入摘要
         const summary = this.formatEntrySummary(entry);
-        const summaryTokens = TokenEstimator.estimateText(summary);
+        const summaryTokens = this.query.estimateTokens(summary);
 
         if (tokensUsed + summaryTokens <= budget) {
           sources.push({

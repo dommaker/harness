@@ -271,7 +271,6 @@ export type {
 // ========================================
 export {
   TokenBudget,
-  TokenEstimator,
   SessionManager,
   KnowledgeInjector,
 } from './context';

@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- refactor(context)!: token 估算双尺子合一——`TokenEstimator` 整体退场（公共面 breaking，harness#197，架构评审候选 7；按 ADR-0019 判例随 minor 发布）。仓内唯一 token 估算实现收束为 `KnowledgeQuery.estimateTokens`（逐字符：CJK 2 token/字、ASCII 0.25 token/字），`KnowledgeInjector` 注入预算改委托同一实现，budget 截断与注入预算对同一条目结论一致。外部消费方（studio `knowledge-service.ts` / `prompt-composer.ts` / `agent-loop.ts` 对 `TokenEstimator` 的引用）需在下个版本适配时改走 `KnowledgeQuery.estimateTokens`
+
 ## [1.15.0] - 2026-09-28
 
 ### Changes

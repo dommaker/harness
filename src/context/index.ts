@@ -23,7 +23,7 @@ export type {
 export type { ContextUsageSnapshot } from '../monitoring/context-tracker';
 
 // Token 预算
-export { TokenBudget, TokenEstimator } from './token-budget';
+export { TokenBudget } from './token-budget';
 
 // 会话管理
 export { SessionManager } from './session-manager';

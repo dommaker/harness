@@ -5,82 +5,9 @@
  * 
  * Token Budget Manager
  * 
- * Token 预算管理和估算工具
+ * Token 预算管理工具（token 估算唯一正本是 `knowledge/query.ts` 的
+ * `KnowledgeQuery.estimateTokens`，本目录不另存估算实现，harness#197）
  */
-
-/**
- * Token 估算器
- * 
- * 提供常用的 Token 估算方法
- */
-export class TokenEstimator {
-  /**
-   * 估算文本的 Token 数（简化版）
-   * 
-   * 基于字符数估算，假设 1 token ≈ 4 字符（英文）
-   * 中文按 1 token ≈ 1.5 字符计算
-   * 
-   * 注意：这是快速估算，不是精确值
-   * 精确值需要使用 tokenizer（如 tiktoken）
-   */
-  static estimateText(text: string): number {
-    if (!text) return 0;
-    
-    // 检测是否包含中文
-    const hasChinese = /[\u4e00-\u9fa5]/.test(text);
-    
-    if (hasChinese) {
-      // 中文：1 token ≈ 1.5 字符
-      return Math.ceil(text.length / 1.5);
-    } else {
-      // 英文：1 token ≈ 4 字符
-      return Math.ceil(text.length / 4);
-    }
-  }
-
-  /**
-   * 估算对象的 Token 数
-   * 
-   * 将对象转为 JSON 字符串后估算
-   */
-  static estimateObject(obj: any): number {
-    try {
-      const json = JSON.stringify(obj);
-      return this.estimateText(json);
-    } catch {
-      return 0;
-    }
-  }
-
-  /**
-   * 估算数组的 Token 数
-   */
-  static estimateArray<T>(
-    items: T[],
-    itemEstimator?: (item: T) => number
-  ): number {
-    if (itemEstimator) {
-      return items.reduce((sum, item) => sum + itemEstimator(item), 0);
-    }
-    return this.estimateObject(items);
-  }
-
-  /**
-   * 创建自定义估算器
-   */
-  static createFieldEstimator<T>(
-    fieldMap: Record<string, (value: any) => number>
-  ): (item: T) => number {
-    return (item: T) => {
-      let total = 0;
-      for (const [field, estimator] of Object.entries(fieldMap)) {
-        const value = (item as any)[field];
-        total += estimator(value);
-      }
-      return total;
-    };
-  }
-}
 
 /**
  * Token 预算分配器

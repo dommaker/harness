@@ -1,13 +1,15 @@
 /**
  * CONTEXT.md 同步器（工单 22）：缺失模板生成 + 既有文件发现 + 过时判定
  * + 目录导出面采集（harness#142，供 context-reconcile 的内容判定喂数）
+ * + 构造点计数采集（harness#202，供 construction-sites 的标记判定喂数）
  */
 
 import * as fs from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
 import { DEFAULT_SKIP_DIRS, findTsSourceFiles } from '../../../utils/file-walk';
 import { parseExportStatements } from '../../../core/constraints/context-reconcile';
+import { tallyConstructionSites } from '../../../core/constraints/construction-sites';
 import type { CommandIO } from '../../command-contract';
 import {
   contextDocFile,
@@ -212,4 +214,44 @@ export async function collectContextExportSurface(
   }
 
   return { surface: [...surface], barrelExports };
+}
+
+/**
+ * 构造点计数器（harness#202 / ADR-0039）：(类名, 是否计测试目录) → 全仓
+ * `new X(` 直构造出现次数。fs 采集全在此，计数口径正本是 core 侧
+ * `tallyConstructionSites`（逐文件调用后累加）。
+ *
+ * 排除口径沿用 DEFAULT_SKIP_DIRS（node_modules/__tests__/dist）；
+ * includeTests 时把 `__tests__` 从跳过名单放出。两种口径各自懒采集一次
+ * （全仓走一遍不便宜），结果按口径 memo——一次 sync-docs 运行里同口径
+ * 的多个标记共用同一份计数。
+ */
+export type ConstructionSiteCounter = (className: string, includeTests: boolean) => number;
+
+export function createConstructionSiteCounter(projectPath: string): ConstructionSiteCounter {
+  const tallies = new Map<boolean, Map<string, number>>();
+
+  const tallyFor = (includeTests: boolean): Map<string, number> => {
+    let tally = tallies.get(includeTests);
+    if (tally) return tally;
+    tally = new Map();
+    const skipDirs = includeTests
+      ? DEFAULT_SKIP_DIRS.filter((d) => d !== '__tests__')
+      : DEFAULT_SKIP_DIRS;
+    for (const file of findTsSourceFiles(projectPath, { skipDirs })) {
+      let source: string;
+      try {
+        source = readFileSync(file, 'utf-8');
+      } catch {
+        continue;
+      }
+      for (const [name, count] of tallyConstructionSites(source)) {
+        tally.set(name, (tally.get(name) ?? 0) + count);
+      }
+    }
+    tallies.set(includeTests, tally);
+    return tally;
+  };
+
+  return (className, includeTests) => tallyFor(includeTests).get(className) ?? 0;
 }

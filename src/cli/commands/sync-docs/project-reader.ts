@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { loadRawProjectConfig, resolveContextFiles } from '../../../core/project-config-loader';
+import type { ConstructionSiteDrift } from '../../../core/constraints/construction-sites';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';
 
@@ -21,6 +22,8 @@ const DESCRIPTION_CONCURRENCY = 16;
 /**
  * CONTEXT.md「核心导出」节与目录导出面的内容漂移（harness#142 / ADR-0025）。
  * 两清单任一非空即漂移；判定本体在 core/constraints/context-reconcile。
+ * constructionSites（harness#202 / ADR-0039）：构造点计数标记的漂移明细，
+ * 判定本体在 core/constraints/construction-sites；无标记文档不出现该字段。
  */
 export interface ContextContentDrift {
   dir: string;
@@ -28,6 +31,8 @@ export interface ContextContentDrift {
   ghosts: string[];
   /** 未登记：barrel 公开值符号未进「核心导出」节 */
   unlisted: string[];
+  /** 构造点计数漂移：标记声明的期望数与实况不符 */
+  constructionSites?: ConstructionSiteDrift[];
 }
 
 export interface SyncResult {

@@ -26,7 +26,7 @@ export interface GateDefinition {
   id: string;
   /** 一句话描述 */
   description: string;
-  /** 默认顺序（config.yml `gates.order` 可覆盖），小者先执行 */
+  /** 默认顺序（以此定义表为准，config.yml 无覆盖口——gates.order 生效集已删，ADR-0002「后续变更」），小者先执行 */
   order: number;
   /** CLI 元数据（形状 = CommandDefinition，bin/harness.js 通用引擎驱动生成） */
   cli: CommandDefinition;

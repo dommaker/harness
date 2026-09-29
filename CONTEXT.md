@@ -16,3 +16,6 @@ _Avoid_: 检查点
 
 **变更面（mutation surface）**:
 改变约束状态的写操作集合（retire/reactivate/disable 等），与只读面（清单、元数据、报告）相对。消费方只能经 harness 公共接口走变更，不直读写 `.harness/` 内部文件；`.harness/` 文件布局是 harness 私产。
+
+**构造点（construction site）**:
+仓内源码中 `new X(...)` 直构造某类的位置（工厂封装调用点不算——`openKnowledgeStore()` 内部的一处 `new FileKnowledgeStore(...)` 是一个构造点，它的 N 个调用方不是）。CONTEXT.md 里涉及构造点数量的陈述可用机器可读标记钉住：`<!-- sync-docs:construction-sites X = N -->`（可选 `include: tests` 把测试目录计入），`harness sync-docs --check` 对不符者判 fail 并点名文件与类名；无标记的散文不判。计数口径与判定见 ADR-0039。

@@ -8,7 +8,7 @@
 - `core/index.ts`: 核心约束引擎
 - `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理
-- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径；P1-7（ADR-0031，wayfinder 票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
+- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径；P1-7（ADR-0031，票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
 
 ## 目录
 | 目录 | 职责 |
@@ -25,7 +25,7 @@
 | knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Linter、Reference Tracker |
 | presets/ | 预设纯数据（strict/standard/relaxed） |
 | release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
-| sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md） |
+| sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md） |
 | types/ | 公共类型（checkpoint / constraint / cso / failure / passes-gate / project-config / spec） |
 | utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-version / detect-source-roots / glob-match） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |

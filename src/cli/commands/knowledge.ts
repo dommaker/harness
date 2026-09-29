@@ -412,7 +412,7 @@ function syncRagRows(docsPresent: boolean, docsDir: string, files: string[]): Di
     blankLine(),
     ...files.map((file, i) => ({ cells: [{ field: `files.${i}`, text: `  ${file}`, tone: 'accent' as const }] })),
     blankLine(),
-    { cells: [{ label: 'Run `mcp__local-rag__ingest_file` for each to sync to RAG', tone: 'muted' }] },
+    { cells: [{ label: 'Ingest each file into your own knowledge-base backend to sync to RAG', tone: 'muted' }] },
   ];
 }
 

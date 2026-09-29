@@ -364,7 +364,7 @@ const HUMAN_BASELINE: Record<SubName, string[]> = {
     '  a.md',
     '  b.md',
     '',
-    'Run `mcp__local-rag__ingest_file` for each to sync to RAG',
+    'Ingest each file into your own knowledge-base backend to sync to RAG',
   ],
   audit: [
     '🔍 知识库质量审计...',

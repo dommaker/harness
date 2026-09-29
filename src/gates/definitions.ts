@@ -173,7 +173,7 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
       ],
       subcommands: {
         audit: { impl: { module: 'security', export: 'auditDetails' } },
-        // P1-8（ADR-0031，wayfinder 票08）：gitleaks 全历史机密扫描；
+        // P1-8（ADR-0031，票08）：gitleaks 全历史机密扫描；
         // 二进制缺失 skip 不 fail，CI 安装后才是真门
         secrets: { impl: { module: 'security', export: 'secretsScan' } },
       },

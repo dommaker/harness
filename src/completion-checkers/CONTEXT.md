@@ -18,7 +18,7 @@
 - 与 ConstraintCheck 闭环注册表无关：直接 export，禁止注册进 checkers/index.ts
 - verdict 四态：pass / violation / waiver（豁免放行，commit 级）/ skip（不适用，不记台账）
 - 新增契约类型 = `CONTRACT_JUDGMENTS` 加一条映射 + 测试
-- 协议格式（Tested-By、Tests: none、phase 结构）写死为机制本体，不得配置化
+- 协议格式（Tested-By、Tests: none、phase 结构）写死为机制本体，不得配置化；协议语义权威文档 = `docs/commit-protocol.md`（harness 提交协议）
 
 ## 注意事项
 - commits 输入有序（base..HEAD 升序），位置判定比索引不比时间戳

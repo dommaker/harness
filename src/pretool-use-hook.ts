@@ -15,11 +15,11 @@
  *   也不全体 Bash 秒断，拦截层只是纵深防御的一道；
  * - warn/audit 级命中同样放行（只拦 block 级），与生成版行为一致。
  *
- * P1-7（ADR-0031，wayfinder 票08）：判定后对命中写审计 trace（只记账不加新拦截
+ * P1-7（ADR-0031，票08）：判定后对命中写审计 trace（只记账不加新拦截
  * 能力）——此前拦下/放行的危险命令只写 stderr 不落盘，traces.log 里只有约束检查
  * 在写。留痕失败经 try/catch 吞掉，fail-open 口径与 shim 主路径一致。
  *
- * P1-5 harness 半边（ADR-0031，wayfinder 票08）：识别 tool_name 非 Bash 的事件
+ * P1-5 harness 半边（ADR-0031，票08）：识别 tool_name 非 Bash 的事件
  * （Edit/Write/apply_patch/MCP 工具，下游消费方补全 codex hooks matcher 后会到达），
  * 只留痕不拦截——这些事件的 tool_input 没有 command 字段，旧形状会因缺字段
  * fail-open 空转；拦截归 codex 沙箱，本 shim 对它们只记账。

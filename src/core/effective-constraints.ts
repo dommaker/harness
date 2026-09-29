@@ -18,13 +18,13 @@ import type { RunTarget } from './constraints/run-env';
  * 生效集链路同 getMergedConstraintsConfig：内置 → preset 裁剪 → config.yml
  * `constraints.<id>.enabled:false` 删除。
  *
- * @param target 项目根路径，或本 run 的运行级观察面（缺省 process.cwd()）
+ * @param target 项目根路径，或本 run 的运行级观察面（必传，无 cwd 缺省——harness#201）
  *   传观察面 = config.yml 读取与本 run 其余消费方共用同一份（ADR-0023 决策 2）
  * @param options.preset 覆盖 config.yml 的 preset；仅在项目无自定义配置时生效
  *   （与 getMergedConstraintsConfig 同一优先级规则），不传则尊重 config.yml
  */
 export function getEffectiveConstraints(
-  target: RunTarget = process.cwd(),
+  target: RunTarget,
   options?: { preset?: string }
 ): Constraint[] {
   return constraintsFromMerged(getMergedConstraintsConfig(target, options));
@@ -50,10 +50,10 @@ export function constraintsFromMerged(merged: MergedConstraintsConfig): Constrai
  * preset（工单 23 语义：项目自定义配置优先于 CLI 预设）；不传 preset 时
  * 完全尊重 config.yml 的 preset 键。
  *
- * @param target 项目根路径，或本 run 的运行级观察面（缺省 process.cwd()）
+ * @param target 项目根路径，或本 run 的运行级观察面（必传，无 cwd 缺省——harness#201）
  */
 export function getMergedConstraintsConfig(
-  target: RunTarget = process.cwd(),
+  target: RunTarget,
   options?: { preset?: string }
 ): MergedConstraintsConfig {
   const loader = new ProjectConfigLoader(target);
@@ -81,9 +81,9 @@ export interface EffectiveConfigLint {
  *
  * 不抛错、不修改任何文件，供 report / check 的诊断输出使用。
  *
- * @param projectRoot 项目根路径（缺省 process.cwd()）
+ * @param projectRoot 项目根路径（必传，无 cwd 缺省——harness#201）
  */
-export function lintEffectiveConfig(projectRoot: string = process.cwd()): EffectiveConfigLint {
+export function lintEffectiveConfig(projectRoot: string): EffectiveConfigLint {
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
   const merged = loader.mergeConstraints();

@@ -142,18 +142,6 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
       'resolveRunEnv 的根兜底：RunTarget 只给了路径或什么也没给时自造一枚一次性观察面' +
       '（配置访问器族与 ProjectConfigLoader 的入参归一点，ADR-0023 决策 2）',
   },
-  'src/core/constraints/usage-report.ts': {
-    lines: ['projectRoot: string = process.cwd(),'],
-    reason: 'projectRoot 形参默认值（库层可选根）',
-  },
-  'src/core/effective-constraints.ts': {
-    lines: [
-      'target: RunTarget = process.cwd(),',
-      'target: RunTarget = process.cwd(),',
-      'export function lintEffectiveConfig(projectRoot: string = process.cwd()): EffectiveConfigLint {',
-    ],
-    reason: '生效集三函数根形参默认值（库层可选根，JSDoc 已声明；前两者入参含 RunEnv，ADR-0023）',
-  },
   'src/core/spec/validator.ts': {
     lines: ['const cwd = projectPath || process.cwd();'],
     reason: 'validateAll 的可选 projectPath 兜底（其相对 schemaPath 默认值见闸 3 豁免）',

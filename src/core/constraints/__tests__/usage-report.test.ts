@@ -172,4 +172,13 @@ describe('应用层约束进候选诊断（ADR-0033 块 3 子项 3）', () => {
     expect(report.stats.some(s => s.id === 'app_no_internal_url')).toBe(false);
     expect(report.candidates.some(c => c.id === 'app_no_internal_url')).toBe(false);
   });
+
+  it('buildConstraintsUsageReport 根参数必传（harness#201，同族同形）', () => {
+    // 永不执行：只钉签名形状——不传根在类型层即被拒绝，无 process.cwd() 缺省
+    const neverCalled = (): void => {
+      // @ts-expect-error 根参数必传（harness#201）
+      buildConstraintsUsageReport();
+    };
+    void neverCalled;
+  });
 });

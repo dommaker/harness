@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { TraceAnalyzer, createAnalyzer } from '../monitoring/trace-analyzer';
+import { TraceAnalyzer } from '../monitoring/trace-analyzer';
 import { TraceCollector } from '../monitoring/traces';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -212,18 +212,6 @@ describe('TraceAnalyzer - 补充覆盖', () => {
 
       const risingFail = anomalies.find(a => a.type === 'rising_fail_rate');
       expect(risingFail).toBeDefined();
-    });
-  });
-
-  describe('createAnalyzer 工厂函数', () => {
-    it('应该创建分析器实例', () => {
-      const a = createAnalyzer();
-      expect(a).toBeDefined();
-    });
-
-    it('应该支持自定义配置', () => {
-      const a = createAnalyzer({ thresholds: { failRate: 0.05 } });
-      expect(a).toBeDefined();
     });
   });
 });

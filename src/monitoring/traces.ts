@@ -338,32 +338,3 @@ export class TraceCollector {
     };
   }
 }
-
-/**
- * 全局单例（**cwd 锚定**的兼容面）
- *
- * harness#139 起本仓生产代码不再消费它：CLI check/report 与 bootstrap 四个组合根
- * 各自 `new TraceCollector({ projectPath })` 锚根构造（守卫见 project-path-convention
- * 闸 4）。保留是给跨仓调用方的既有形状——它依赖「调用方进程 cwd 恰好是项目」。
- * 传 `projectPath` 是它的锚根出口；不传则落点按 cwd 解析（行为逐字不变）。
- */
-let globalCollector: TraceCollector | null = null;
-
-/**
- * 获取全局收集器（cwd 锚定，兼容语义见上）
- */
-export function getTraceCollector(): TraceCollector {
-  if (!globalCollector) {
-    globalCollector = new TraceCollector();
-  }
-  return globalCollector;
-}
-
-/**
- * 配置全局收集器（cwd 锚定，兼容语义见 `getTraceCollector()`）
- *
- * 需要把 trace 落进指定项目的调用方直接构造实例：`new TraceCollector({ projectPath })`。
- */
-export function configureTraceCollector(config: Partial<TraceCollectorConfig>): void {
-  globalCollector = new TraceCollector(config);
-}

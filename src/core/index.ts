@@ -16,7 +16,6 @@ export {
   checkConstraints,
   checkBeforeExecution,
   constraintChecker,
-  CheckCache,
   ConstraintViolationError,
   buildCheckEnv,
   normalizeCheckOutcome,
@@ -26,8 +25,6 @@ export {
 } from './constraints';
 export type {
   CheckConstraintsOptions,
-  CheckCacheConfig,
-  CheckSamplingConfig,
   ConstraintId,
   ConstraintKind,
   ConstraintChannel,
@@ -70,16 +67,6 @@ export type {
   TaskTestResult,
 } from './validators';
 
-// Spec 验证器
-export { SpecValidator } from './spec/validator';
-export type {
-  SpecValidatorConfig,
-  SpecValidationResult,
-  BatchSpecValidationResult,
-  SpecSchemaDefinition,
-  SpecType,
-} from '../types/spec';
-
 // 项目配置加载器（governance 段读取一律经访问器，禁止消费方手写钻取）
 export {
   ProjectConfigLoader,
@@ -95,6 +82,4 @@ export type { RunEnv, RunTarget } from './constraints/run-env';
 // 生效约束集（ADR-0001：唯一生效集来源）
 export {
   getEffectiveConstraints,
-  lintEffectiveConfig,
 } from './effective-constraints';
-export type { EffectiveConfigLint } from './effective-constraints';

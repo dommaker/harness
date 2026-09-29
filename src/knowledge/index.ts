@@ -42,6 +42,3 @@ export { ColdStartImporter } from './import';
 export { KnowledgeHealthScorer } from './doctor';
 export { KnowledgeAudit } from './audit';
 export type { AuditRuleName, AuditAction, AuditIssue, AuditReport, AuditOptions } from './audit-scoring';
-export { migrateKnowledgeEntries } from './migration';
-export { extractCodeStructure } from './primitives/code-structure';
-export type { CodeStructure, DeclarationInfo, ImportInfo } from './primitives/code-structure';

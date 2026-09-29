@@ -186,13 +186,6 @@ describe('SessionManager', () => {
     });
   });
 
-  describe('getTracker', () => {
-    it('应该返回 tracker', () => {
-      const tracker = manager.getTracker();
-      expect(tracker).toBeDefined();
-    });
-  });
-
   describe('loadSession (disk loading via getSession)', () => {
     it('loads session from disk when events.jsonl exists', () => {
       (mockFs.existsSync as jest.Mock).mockImplementation((p: any) => {

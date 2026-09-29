@@ -10,7 +10,7 @@ check, validate, passes-gate, init, report, status, spec, acceptance, performanc
 ## Quality Gates (6)
 AcceptanceGate, CommandGate, ContractGate, PerformanceGate, ReviewGate, SecurityGate
 
-统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。6 个门禁 CLI 命令的判定一律穿过 `evaluate()`，`GateDecision → CommandResult` 的映射与失败措辞收在 `src/cli/gate-command.ts` 一处（架构评审候选1）。`runGates`：deny 单调不可被下游改回 allow（决策浅冻结契约）；ask 枚举预留、无实现 fail-closed = deny；链级暂无调用方，`order` 与本执行器按 #115 的复开条件保留（config.yml 声明式顺序/开关面已收缩，见 ADR-0002「后续变更」）。checker-as-guard 接线点 `createCheckerGate(check)`（下游消费方随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
+统一 Gate 接口（G1，H4）：`Gate{id, order, evaluate(ctx)}` → `GateDecision` 三态 deny | abstain | ask；`GateResult` 保留为报告结构。`gateRegistry` 定义即注册 + 构建期双向闭环（定义无实现/实现无定义/重复 id → 加载期抛错；`getGate` 引用未注册抛错）。6 个门禁 CLI 命令的判定一律穿过 `evaluate()`，`GateDecision → CommandResult` 的映射与失败措辞收在 `src/cli/gate-command.ts` 一处（架构评审候选1）。链执行器 `runGates` 已随 #199（ADR-0038「CLI 可达 ≠ 导出理由」）删除——链级无生产调用方，#115 复开点随之失效；聚合语义（deny 单调不可被下游改回 allow、ask 枚举预留 fail-closed = deny、决策浅冻结）正本在 `src/gates/CONTEXT.md`「决策契约」。Gate 类与 `create*` 工厂同轮收回内部（CLI 经实现文件直引，公共面不再导出）。checker-as-guard 接线点 `createCheckerGate(check)`（下游消费方随动）。6 个门禁 CLI 命令由 `GATE_DEFINITIONS` 注册表驱动生成，命令名/别名/选项兼容。
 
 ## Constraint Model (severity 显式, ADR-0029)
 - check (7)：全部约束 kind='check'，必须带真实 checker，注册表闭环；severity 写死在定义上——errors (4) 违规阻断；warnings (3) 违规告警。（ADR-0029：三层命名与 kind 二元模型废止，纯文本提示层（prompt 类 9 条 + promptInjection/injectPrompt/appliesTo 字段 + 注入段渲染/漂移校验）整体关停，文本规则由消费方手写治理段承接）
@@ -26,10 +26,10 @@ getEffectiveConstraints(projectRoot)：全仓唯一生效集来源——内置 �
 buildConstraintsUsageReport：check 约束统计表（total/pass/fail/skip、fail 率、首末触发）、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、配置健康；report 与 retire 共用此数据层，只读。
 
 ## Monitoring
-TraceCollector, TraceAnalyzer, ContextTracker
+TraceCollector, TraceAnalyzer
 
 ## Knowledge Infrastructure
-KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), SDDIndexGenerator (scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md), migrateKnowledgeEntries (AS-021 migration), extractCodeStructure (TS Compiler API code analysis)
+KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), SDDIndexGenerator (scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md), migrateKnowledgeEntries (AS-021 migration, 内部实现，CLI `knowledge migrate` 直引)
 
 ## Agent Infrastructure
 AgentLifecycle (init→running→paused→completed→failed)

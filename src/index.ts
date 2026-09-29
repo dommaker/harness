@@ -9,11 +9,9 @@
  *
  * 门禁系统：
  * - PassesGate：测试门控
- * - ReviewGate：审查门禁
- * - SecurityGate：安全门禁
- * - PerformanceGate：性能门禁
- * - ContractGate：契约门禁
  * - CheckpointValidator：检查点验证
+ * （其余 Gate 类随 #199/ADR-0038 收回内部：CLI 可达 ≠ 导出理由，
+ *  消费方经实现文件直引，见 src/gates/CONTEXT.md）
  *
  * 公共导出（ADR-0003）：显式清单，禁 export *。
  * 收录标准：属 harness 定位（约束数据 / 执行引擎 / 知识基建）、
@@ -50,9 +48,7 @@ export {
 } from './core/constraints/definitions';
 export {
   getEffectiveConstraints,
-  lintEffectiveConfig,
 } from './core/effective-constraints';
-export type { EffectiveConfigLint } from './core/effective-constraints';
 export {
   listRetiredConstraints,
 } from './core/retired-constraints';
@@ -161,12 +157,6 @@ export type {
 } from './core/constraints/checkers';
 
 // ========================================
-// 约束缓存
-// ========================================
-export { CheckCache } from './core/constraints/check-cache';
-export type { CheckCacheConfig, CheckSamplingConfig } from './core/constraints/check-cache';
-
-// ========================================
 // 检查点与验证器
 // ========================================
 export type {
@@ -199,70 +189,7 @@ export type {
 } from './types/cso';
 
 // ========================================
-// Spec 验证（已接线的 spec 故事：validator + SpecAcceptanceGate）
-// ========================================
-export { SpecValidator, validateSpec, validateAllSpecs } from './core/spec/validator';
-export type {
-  SpecValidatorConfig,
-  SpecValidationResult,
-  BatchSpecValidationResult,
-  SpecSchemaDefinition,
-  SpecType,
-  SpecValidationError,
-  SchemaLoader,
-} from './types/spec';
-
-// ========================================
-// 门禁系统（公共面 = ./gates 子路径出口）
-// ========================================
-export {
-  ReviewGate,
-  SecurityGate,
-  PerformanceGate,
-  ContractGate,
-  SpecAcceptanceGate,
-  CommandGate,
-  createCommandGate,
-  getCommandGate,
-  isCommandAllowed,
-  getCommandRiskLevel,
-  DEFAULT_COMMAND_BLACKLIST,
-  createReviewGate,
-  createSecurityGate,
-  createPerformanceGate,
-  createContractGate,
-  createSpecAcceptanceGate,
-  decisionFromResult,
-  GATE_DEFINITIONS,
-  getGate,
-  listRegisteredGates,
-  registeredGateCount,
-  assertGateRegistryClosed,
-  runGates,
-  createCheckerGate,
-} from './gates';
-export type {
-  GateResult,
-  GateContext,
-  Gate,
-  GateDecision,
-  GateDecisionStatus,
-  GateDefinition,
-  GateRunResult,
-  PerformanceThresholds,
-  ReviewGateConfig,
-  SecurityGateConfig,
-  PerformanceGateConfig,
-  ContractGateConfig,
-  SpecAcceptanceGateConfig,
-  AcceptanceGateContext,
-  AcceptanceCriteria,
-  CommandBlacklistRule,
-  CommandGateConfig,
-} from './gates';
-
-// ========================================
-// 监控（Execution Trace 收集/分析 + 上下文追踪）
+// 监控（Execution Trace 收集/分析）
 // ========================================
 export {
   DEFAULT_TRACE_FILE,
@@ -277,14 +204,9 @@ export type {
 } from './types/trace';
 export {
   TraceCollector,
-  getTraceCollector,
-  configureTraceCollector,
   pruneTraceLogs,
   TraceAnalyzer,
-  createAnalyzer,
-  ContextTracker,
 } from './monitoring';
-export type { ContextAverages, ContextUsageSnapshot } from './monitoring';
 
 // ========================================
 // 失败处理（错误分类 + 记录 + 违规处理策略）
@@ -311,10 +233,9 @@ export type {
 } from './failure';
 
 // ========================================
-// 上下文管理（Token 预算 + 会话管理 + 知识注入）
+// 上下文管理（会话管理 + 知识注入）
 // ========================================
 export {
-  TokenBudget,
   SessionManager,
   KnowledgeInjector,
 } from './context';
@@ -346,8 +267,6 @@ export {
   ColdStartImporter,
   KnowledgeHealthScorer,
   KnowledgeAudit,
-  migrateKnowledgeEntries,
-  extractCodeStructure,
   DEFAULT_DECAY_CONFIG,
 } from './knowledge';
 export type {
@@ -378,9 +297,6 @@ export type {
   AuditIssue,
   AuditReport,
   AuditOptions,
-  CodeStructure,
-  DeclarationInfo,
-  ImportInfo,
 } from './knowledge';
 
 // ========================================

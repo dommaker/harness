@@ -281,7 +281,7 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
       ['types/probe.ts', `import type { RunEnv } from '../core/constraints/run-env';`],
       ['knowledge/probe.ts', `import { DEFAULT_DECAY_CONFIG } from './types';`],
       ['context/probe.ts', `import { KnowledgeQuery } from '../knowledge/query';`],
-      ['hooks/probe.ts', `import { getTraceCollector } from '../monitoring/traces';`],
+      ['hooks/probe.ts', `import { TraceCollector } from '../monitoring/traces';`],
       ['core/probe.ts', `import { PRESETS_BY_NAME } from '../presets';`],
       ['failure/__tests__/probe.test.ts', `import { failureList } from '../../cli/commands/failure';`],
       ['core/constraints/__tests__/probe.test.ts', `import { checkConstraints } from '../../index';`],
@@ -337,7 +337,7 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
 
     it('规则只作用于 src/core/**：cli 侧值导入 monitoring 不误报', () => {
       const messages = probeCore(
-        `import { getTraceCollector } from '../../monitoring/traces';\nexport const c = getTraceCollector();\n`,
+        `import { TraceCollector } from '../../monitoring/traces';\nexport const c = TraceCollector;\n`,
         'src/cli/commands/__layering_probe__.ts'
       );
       expect(messages).toEqual([]);

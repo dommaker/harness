@@ -91,7 +91,7 @@ export type GateDecisionStatus = 'deny' | 'abstain' | 'ask';
  * 门禁决策：统一 Gate 接口的返回值
  *
  * status 是三态决策；result 携带 GateResult 报告结构。
- * 决策对象由 decisionFromResult / runGates 浅冻结——不可变是
+ * 决策对象由 decisionFromResult 浅冻结——不可变是
  * deny 单调语义的接口契约。
  */
 export interface GateDecision {

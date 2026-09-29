@@ -5,7 +5,7 @@
  * 兜底，之后必须传到每个 IO/执行点**——下游禁止再取一次 cwd，也禁止用相对路径默认值
  * （两者都会让 `-p` 半失效：读写/执行位置悄悄回到调用方的 cwd）。
  *
- * 本文件是这条约定的机器可检面，四道闸：
+ * 本文件是这条约定的机器可检面，三道闸：
  * 1. CLI 入口层：cwd 只能以 `xxx || process.cwd()` 的兜底形状出现，例外逐个点名并记理由
  * 2. 下游层（= src 减 cli，含 core / gates / context / monitoring / hooks 等）：cwd 站点**逐行**冻结
  *    （harness#98，不再只冻文件键集——豁免文件内新增站点/行变形同样失败），
@@ -13,8 +13,8 @@
  * 3. 相对路径默认值同理冻结（harness#98 收紧：对象字面量 `xxxPath: '相对'` 之外，
  *    参数默认值形 `xxxPath = '相对'`（含类型标注）与模板字面量同罪；harness#139 再扩两形：
  *    键名后缀 `Path` → `Path|File|Log`，以及引用常量的 `xxxFile: SOME_CONST` 臂；扫描域 = 整个下游层）
- * 4. 组合根自己锚根构造，不再消费 cwd 锚定的全局单例（harness#139：src/cli、src/hooks 生产代码
- *    对 `getTraceCollector()` 零消费——单例是留给跨仓消费者的兼容面，不是本仓的取用口）
+ * （原闸 4「组合根不消费 cwd 锚定的 getTraceCollector() 单例」随 #199 单例出口删除整体退役——
+ *  它钉的兼容面已不存在）
  *
  * 冻结集合还要求**每条豁免仍然成立**（站点消失却不删条目 → 同样失败），豁免不会烂成化石。
  * 「根参数已传入却又取 cwd」这类静态看不出的漂移，由 project-path-anchoring.test.ts 的真实 IO 行为用例守。
@@ -169,10 +169,6 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
     ],
     reason: 'bootstrapHarness 的可选 projectPath 兜底（组合根入口，2 处）',
   },
-  'src/monitoring/context-tracker.ts': {
-    lines: ['const base = basePath || process.cwd();'],
-    reason: 'basePath 构造参数缺省兜底',
-  },
 };
 
 // ========================================
@@ -288,22 +284,6 @@ describe('projectPath 传递约定（harness#95）', () => {
         write('lowercase-value.ts', 'export const cfg = { traceFile: resolvedFile };\n'),
         write('other-suffix.ts', 'export const cfg = { maxFileSize: 10 * 1024 * 1024 };\n'),
       ].map(f => relativePathDefaultSites([f]).size)).toEqual([0, 0, 0, 0]);
-    });
-  });
-
-  describe('闸 4：组合根锚根构造，不消费 cwd 锚定的单例（harness#139）', () => {
-    it('src/cli 与 src/hooks 的生产代码对 getTraceCollector() 零消费', () => {
-      const offenders: string[] = [];
-      for (const dir of ['cli', 'hooks']) {
-        for (const file of listTsFiles(path.join(SRC_ROOT, dir))) {
-          const lines = codeLines(file).filter(line => /getTraceCollector\s*\(/.test(line));
-          if (lines.length > 0) offenders.push(`${repoPath(file)}: ${lines.join(' | ')}`);
-        }
-      }
-
-      // 单例保留是给跨仓消费者的兼容面（#139 裁决：公共面不摘除）；本仓四个组合根各自
-      // new TraceCollector({ projectPath })，取用口一旦复活，-p 就又半失效一次
-      expect(offenders).toEqual([]);
     });
   });
 });

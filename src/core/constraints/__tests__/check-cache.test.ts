@@ -8,13 +8,6 @@
  */
 
 import { CheckCache } from '../check-cache';
-import { CheckCache as PublicCheckCache } from '../../../index';
-
-describe('公开导出（根 barrel）', () => {
-  test('CheckCache 经 src/index.ts 公开导出', () => {
-    expect(PublicCheckCache).toBe(CheckCache);
-  });
-});
 
 describe('CheckCache', () => {
   beforeEach(() => {

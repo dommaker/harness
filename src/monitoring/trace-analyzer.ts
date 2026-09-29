@@ -390,11 +390,3 @@ export class TraceAnalyzer {
     return lines.join('\n');
   }
 }
-
-/**
- * 创建分析器（使用全局收集器）
- */
-export function createAnalyzer(config?: Partial<TraceAnalyzerConfig>): TraceAnalyzer {
-  const collector = new TraceCollector();
-  return new TraceAnalyzer(collector, config);
-}

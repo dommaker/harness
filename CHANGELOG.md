@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changes
+- refactor(public-api)!: 公共面复评第三轮——「CLI 可达 ≠ 导出理由」（公共面 breaking，harness#199，ADR-0038；按 ADR-0022 判例随 minor 发布）。**删除**（双仓零编程消费者）：`TokenBudget`、`ContextTracker`（连 `ContextAverages`/`ContextUsageSnapshot`，SessionManager 死接线同删）、`extractCodeStructure`（连 `CodeStructure`/`DeclarationInfo`/`ImportInfo`）、`runGates`+`GateRunResult`（deny 单调契约正本迁至 `src/gates/CONTEXT.md`）、`getCommandGate`/`isCommandAllowed`/`getCommandRiskLevel`、`getTraceCollector`/`configureTraceCollector`、`createAnalyzer`。**收回公共导出**（实现不动，CLI/库内经实现文件直引）：`./gates` 入口值面类型面整体收回（6 个 Gate 类、`decisionFromResult`、`GATE_DEFINITIONS`、注册表四函数、`createCheckerGate`、`createCommandGate`、`DEFAULT_COMMAND_BLACKLIST` + 16 类型；入口本身保留待 maintainer 裁决）、包根与 `./core` 的 `lintEffectiveConfig`/`CheckCache`/`SpecValidator`/`validateSpec`/`validateAllSpecs` 及关联类型、包根的 `migrateKnowledgeEntries`。`TraceAnalyzer`/`TraceCollector`/`CheckpointValidator`/`CSOValidator` 有真实消费保留不动
 - refactor(context)!: token 估算双尺子合一——`TokenEstimator` 整体退场（公共面 breaking，harness#197，架构评审候选 7；按 ADR-0019 判例随 minor 发布）。仓内唯一 token 估算实现收束为 `KnowledgeQuery.estimateTokens`（逐字符：CJK 2 token/字、ASCII 0.25 token/字），`KnowledgeInjector` 注入预算改委托同一实现，budget 截断与注入预算对同一条目结论一致。外部消费方（studio `knowledge-service.ts` / `prompt-composer.ts` / `agent-loop.ts` 对 `TokenEstimator` 的引用）需在下个版本适配时改走 `KnowledgeQuery.estimateTokens`
 
 ## [1.15.0] - 2026-09-28

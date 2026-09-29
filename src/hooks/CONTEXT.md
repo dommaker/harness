@@ -6,7 +6,7 @@ Harness 运行环境的组合根：一次调用装配起约束检查器、会话
 ADR-0027（#170）起本层只剩 bootstrap 一个面。原先的通用 hook 管线（`registry` / `pipeline` / `config` / `types` 四文件：注册 → 排序 → 错误隔离 → 采样执行）双仓零生产消费者，整体删除——裁决记录 `docs/adr/0027-hooks-pipeline-surface-trim.md`（事实前提：下游消费方侧 hooks 层已删除）。目录名沿用历史，不再表示「提供 hook 能力」。
 
 ## 核心导出
-- `bootstrapHarness` — 异步组合根（S9：配置异步加载，不阻塞事件循环）；也是 trace 记录器的接线点：`new ConstraintChecker(new TraceCollector({ projectPath }))`（harness#88：core 不上行依赖 monitoring，故由本层接线；#139 收根：两个入口本就收 projectPath，落点随之锚定，不再取 cwd 锚定的 `getTraceCollector()` 单例）
+- `bootstrapHarness` — 异步组合根（S9：配置异步加载，不阻塞事件循环）；也是 trace 记录器的接线点：`new ConstraintChecker(new TraceCollector({ projectPath }))`（harness#88：core 不上行依赖 monitoring，故由本层接线；#139 收根：两个入口本就收 projectPath，落点随之锚定。原 cwd 锚定的 `getTraceCollector()` 单例已随 #199 删除）
 - `bootstrapHarnessSync` — 同形状的同步版，配置走 `readFileSync`，供不支持 top-level await 的环境与 `bootstrapHarness` 失败时的回落路径
 - `HarnessBootstrap`（type）— 返回值形状 `{ checker, sessions, projectPath, mergedConstraints }`
 

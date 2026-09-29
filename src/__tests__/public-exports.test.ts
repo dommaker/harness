@@ -22,15 +22,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'CANDIDATE_KIND_LABEL',
   'CONSTRAINTS',
   'CSOValidator',
-  'CheckCache',
   'CheckpointValidator',
   'ColdStartImporter',
-  'CommandGate',
   'ConstraintViolationError',
-  'ContextTracker',
-  'ContractGate',
   'DEFAULT_CLASSIFICATION_RULES',
-  'DEFAULT_COMMAND_BLACKLIST',
   'DEFAULT_DECAY_CONFIG',
   'DEFAULT_DIAGNOSE_THRESHOLDS',
   'DEFAULT_FAILURE_LOG_FILE',
@@ -43,7 +38,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'FailureLevel',
   'FailureRecorder',
   'FileKnowledgeStore',
-  'GATE_DEFINITIONS',
   'HARNESS_CONFIG_FILES',
   'KnowledgeAudit',
   'KnowledgeHealthScorer',
@@ -54,19 +48,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'KnowledgeQuery',
   'PHASE_SUBJECT_RE',
   'PassesGate',
-  'PerformanceGate',
   'ReferenceTracker',
-  'ReviewGate',
-  'SecurityGate',
   'SessionManager',
-  'SpecAcceptanceGate',
-  'SpecValidator',
   'TESTED_BY_RE',
   'TESTS_NONE_RE',
-  'TokenBudget',
   'TraceAnalyzer',
   'TraceCollector',
-  'assertGateRegistryClosed',
   'bootstrapHarness',
   'bootstrapHarnessSync',
   'buildCheckEnv',
@@ -79,45 +66,26 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'collectConstraints',
   'collectProposalMaterial',
   'collectUsageByConstraint',
-  'configureTraceCollector',
   'contextEvidenceFlag',
   'contextFlag',
-  'createAnalyzer',
-  'createCheckerGate',
-  'createCommandGate',
-  'createContractGate',
   'createErrorClassifier',
   'createFailureRecorder',
   'createPassesGate',
-  'createPerformanceGate',
-  'createReviewGate',
-  'createSecurityGate',
-  'createSpecAcceptanceGate',
-  'decisionFromResult',
   'diagnoseRetireCandidates',
   'disableConstraint',
-  'extractCodeStructure',
   'findConstraintsByTrigger',
   'formatEvidence',
   'getAllConstraints',
-  'getCommandGate',
-  'getCommandRiskLevel',
   'getConstraint',
   'getConstraintsMeta',
   'getCriticalArtifacts',
   'getEffectiveConstraints',
   'getFailureLevel',
-  'getGate',
   'getRegistryPath',
   'getToolsDir',
-  'getTraceCollector',
-  'isCommandAllowed',
-  'lintEffectiveConfig',
-  'listRegisteredGates',
   'listRetiredConstraints',
   'matchAnyGlob',
   'matchGlob',
-  'migrateKnowledgeEntries',
   'normalizeCheckOutcome',
   'packProposal',
   'propagateConfig',
@@ -126,14 +94,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'reactivateConstraint',
   'readProjectTraces',
   'readProjectTracesReport',
-  'registeredGateCount',
   'renderProposalMarkdown',
   'resolveGlobs',
   'retireConstraint',
-  'runGates',
   'sanitizeExternalContent',
-  'validateAllSpecs',
-  'validateSpec',
   'verifyContractPresence',
   'verifyPhaseFormat',
   'verifyReleaseArtifacts',
@@ -233,4 +197,176 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
       expect(ADR0027_DELETED_SYMBOLS.filter((name) => source.includes(name))).toEqual([]);
     });
   }
+
+  /**
+   * #199（ADR-0038「CLI 可达 ≠ 导出理由」）公共面复评第三轮的可达性负钉。
+   * A 桶 = 实现连删；B 桶 = 实现保留、仅收回公共导出（内部经实现文件直引）。
+   * 机制同上：编译期 `@ts-expect-error` 钉包根类型面 + 源形状钉 barrel 不再提名。
+   */
+  const ISSUE199_A_DELETED_SYMBOLS = [
+    'TokenBudget',
+    'ContextTracker',
+    'ContextAverages',
+    'ContextUsageSnapshot',
+    'extractCodeStructure',
+    'CodeStructure',
+    'DeclarationInfo',
+    'ImportInfo',
+    'runGates',
+    'GateRunResult',
+    'getCommandGate',
+    'isCommandAllowed',
+    'getCommandRiskLevel',
+    'getTraceCollector',
+    'configureTraceCollector',
+    'createAnalyzer',
+  ];
+
+  const ISSUE199_B_RETRACTED_SYMBOLS = [
+    'decisionFromResult',
+    'GATE_DEFINITIONS',
+    'getGate',
+    'listRegisteredGates',
+    'registeredGateCount',
+    'assertGateRegistryClosed',
+    'createCheckerGate',
+    'ReviewGate',
+    'SecurityGate',
+    'PerformanceGate',
+    'ContractGate',
+    'SpecAcceptanceGate',
+    'CommandGate',
+    'createCommandGate',
+    'DEFAULT_COMMAND_BLACKLIST',
+    'createReviewGate',
+    'createSecurityGate',
+    'createPerformanceGate',
+    'createContractGate',
+    'createSpecAcceptanceGate',
+    'GateResult',
+    'GateContext',
+    'GateDecision',
+    'GateDecisionStatus',
+    'GateDefinition',
+    'PerformanceThresholds',
+    'ReviewGateConfig',
+    'SecurityGateConfig',
+    'PerformanceGateConfig',
+    'ContractGateConfig',
+    'SpecAcceptanceGateConfig',
+    'AcceptanceGateContext',
+    'AcceptanceCriteria',
+    'CommandBlacklistRule',
+    'CommandGateConfig',
+    'lintEffectiveConfig',
+    'EffectiveConfigLint',
+    'CheckCache',
+    'CheckCacheConfig',
+    'CheckSamplingConfig',
+    'SpecValidator',
+    'validateSpec',
+    'validateAllSpecs',
+    'SpecValidatorConfig',
+    'SpecValidationResult',
+    'BatchSpecValidationResult',
+    'SpecSchemaDefinition',
+    'SpecType',
+    'SpecValidationError',
+    'SchemaLoader',
+    'migrateKnowledgeEntries',
+  ];
+
+  it('包根 barrel 不再提及 #199 A 桶（删除）与 B 桶（收回）符号', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../index.ts'), 'utf-8');
+    const all = [...ISSUE199_A_DELETED_SYMBOLS, ...ISSUE199_B_RETRACTED_SYMBOLS];
+    // 子串扫描的误报面逐个核过：留存符号（PassesGateCheckResult 等）不含上列任一名称
+    expect(all.filter((name) => source.includes(name))).toEqual([]);
+  });
+
+  it('#199 A 桶删除的类型不再是包根可导入类型（编译期钉）', () => {
+    // @ts-expect-error 随 ContextTracker 连删（#199 A2）
+    const t1: import('../index').ContextAverages | undefined = undefined;
+    // @ts-expect-error 随 ContextTracker 连删（#199 A2）
+    const t2: import('../index').ContextUsageSnapshot | undefined = undefined;
+    // @ts-expect-error 随 extractCodeStructure 连删（#199 A3）
+    const t3: import('../index').CodeStructure | undefined = undefined;
+    // @ts-expect-error 随 extractCodeStructure 连删（#199 A3）
+    const t4: import('../index').DeclarationInfo | undefined = undefined;
+    // @ts-expect-error 随 extractCodeStructure 连删（#199 A3）
+    const t5: import('../index').ImportInfo | undefined = undefined;
+    // @ts-expect-error 随 runGates 连删（#199 A4）
+    const t6: import('../index').GateRunResult | undefined = undefined;
+    expect([t1, t2, t3, t4, t5, t6]).toEqual(Array(6).fill(undefined));
+  });
+
+  it('#199 B 桶收回的类型不再是包根可导入类型（编译期钉；实现保留，CLI 直引）', () => {
+    // @ts-expect-error gates 面收回（#199 B）
+    const t1: import('../index').GateResult | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t2: import('../index').GateContext | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t3: import('../index').Gate | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t4: import('../index').GateDecision | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t5: import('../index').GateDecisionStatus | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t6: import('../index').GateDefinition | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t7: import('../index').PerformanceThresholds | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t8: import('../index').ReviewGateConfig | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t9: import('../index').SecurityGateConfig | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t10: import('../index').PerformanceGateConfig | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t11: import('../index').ContractGateConfig | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t12: import('../index').SpecAcceptanceGateConfig | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t13: import('../index').AcceptanceGateContext | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t14: import('../index').AcceptanceCriteria | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t15: import('../index').CommandBlacklistRule | undefined = undefined;
+    // @ts-expect-error gates 面收回（#199 B）
+    const t16: import('../index').CommandGateConfig | undefined = undefined;
+    // @ts-expect-error 随 lintEffectiveConfig 收回（#199 B）
+    const t17: import('../index').EffectiveConfigLint | undefined = undefined;
+    // @ts-expect-error 随 CheckCache 收回（#199 B）
+    const t18: import('../index').CheckCacheConfig | undefined = undefined;
+    // @ts-expect-error 随 CheckCache 收回（#199 B）
+    const t19: import('../index').CheckSamplingConfig | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t20: import('../index').SpecValidatorConfig | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t21: import('../index').SpecValidationResult | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t22: import('../index').BatchSpecValidationResult | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t23: import('../index').SpecSchemaDefinition | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t24: import('../index').SpecType | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t25: import('../index').SpecValidationError | undefined = undefined;
+    // @ts-expect-error 随 SpecValidator 收回（#199 B）
+    const t26: import('../index').SchemaLoader | undefined = undefined;
+    expect([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13]).toEqual(Array(13).fill(undefined));
+    expect([t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26]).toEqual(Array(13).fill(undefined));
+  });
+
+  it('#199 保留面仍可经包根导入（防止删多：下游仓真实消费的三类 + spec 面相邻活类型）', () => {
+    const liveCollector: import('../index').TraceCollectorConfig = {};
+    const liveAnalyzer: import('../index').TraceAnalyzerConfig = { summaryFile: 'x', periodMs: 1 };
+    const liveTrace: import('../index').ExecutionTrace = {
+      constraintId: 'c',
+      severity: 'error',
+      timestamp: 0,
+      result: 'pass',
+    };
+    expect(liveCollector).toEqual({});
+    expect(liveAnalyzer.periodMs).toBe(1);
+    expect(liveTrace.result).toBe('pass');
+  });
 });

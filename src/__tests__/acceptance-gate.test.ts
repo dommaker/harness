@@ -4,8 +4,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { SpecAcceptanceGate } from '../gates/acceptance';
-// 工厂与公共面同一 seam：gates/index 是唯一出口（harness#101）
-import { createSpecAcceptanceGate } from '../gates/index';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -359,9 +357,9 @@ describe('SpecAcceptanceGate', () => {
     });
   });
 
-  describe('createSpecAcceptanceGate', () => {
+  describe('createSpecAcceptanceGate（内联工厂已随 #199 入口清空删除，等价构造直走类）', () => {
     it('便捷函数应该创建 gate', () => {
-      const gate = createSpecAcceptanceGate({ tasksPath: tasksFile });
+      const gate = new SpecAcceptanceGate({ tasksPath: tasksFile });
       expect(gate).toBeDefined();
       expect(gate).toBeInstanceOf(SpecAcceptanceGate);
     });

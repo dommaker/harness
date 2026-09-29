@@ -31,7 +31,7 @@ import { createRunEnv, type RunEnv } from './run-env';
  *
  * core 不上行依赖 monitoring：记录器经**构造参数**注入，未注入 = no-op
  * （默认无副作用）。真实收集器由组合根接线——CLI check/report 与 bootstrap
- * 各自 `new ConstraintChecker(getTraceCollector())`。
+ * 各自 `new ConstraintChecker(new TraceCollector({ projectPath }))`。
  */
 export interface TraceRecorder {
   record(trace: ExecutionTrace): void;

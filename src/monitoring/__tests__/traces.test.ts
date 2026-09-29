@@ -2,7 +2,7 @@
  * TraceCollector 测试（简化版）
  */
 
-import { TraceCollector, getTraceCollector, configureTraceCollector } from '../traces';
+import { TraceCollector } from '../traces';
 import type { ExecutionTrace, TraceFilter } from '../../types/trace';
 import * as fs from 'fs';
 
@@ -217,21 +217,5 @@ describe('TraceCollector', () => {
       expect(readByConstraint).toBeDefined();
       expect(getStats).toBeDefined();
     });
-  });
-});
-
-describe('getTraceCollector()', () => {
-  it('should return global collector', () => {
-    const c1 = getTraceCollector();
-    const c2 = getTraceCollector();
-    expect(c1).toBe(c2);
-  });
-});
-
-describe('configureTraceCollector()', () => {
-  it('should create new global collector', () => {
-    configureTraceCollector({ traceFile: '/custom/traces.log' });
-    const c = getTraceCollector();
-    expect(c).toBeDefined();
   });
 });

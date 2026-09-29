@@ -2,7 +2,7 @@
  * CommandGate 测试
  */
 
-import { CommandGate, isCommandAllowed, getCommandRiskLevel, DEFAULT_COMMAND_BLACKLIST } from '../command';
+import { CommandGate, DEFAULT_COMMAND_BLACKLIST } from '../command';
 
 describe('CommandGate', () => {
   describe('check', () => {
@@ -133,18 +133,6 @@ describe('CommandGate', () => {
     it('should return low for safe commands', () => {
       const gate = new CommandGate();
       expect(gate.getRiskLevel('ls -la')).toBe('low');
-    });
-  });
-
-  describe('convenience functions', () => {
-    it('isCommandAllowed should work', () => {
-      expect(isCommandAllowed('rm -rf /')).toBe(false);
-      expect(isCommandAllowed('ls -la')).toBe(true);
-    });
-
-    it('getCommandRiskLevel should work', () => {
-      expect(getCommandRiskLevel('rm -rf /')).toBe('high');
-      expect(getCommandRiskLevel('ls -la')).toBe('low');
     });
   });
 

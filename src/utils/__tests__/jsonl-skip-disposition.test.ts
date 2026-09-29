@@ -50,7 +50,6 @@ const EXPECTED_SKIP_READ_SITES: Record<string, number> = {
   'src/core/constraints/usage-report.ts': 1,
   'src/failure/recorder.ts': 1,
   'src/knowledge/reference-tracker.ts': 1,
-  'src/monitoring/context-tracker.ts': 1,
   'src/monitoring/traces.ts': 2,
 };
 

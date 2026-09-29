@@ -445,32 +445,3 @@ export class CommandGate implements Gate {
 export function createCommandGate(config?: Partial<CommandGateConfig>): CommandGate {
   return new CommandGate(config);
 }
-
-/**
- * 默认实例
- */
-let defaultCommandGate: CommandGate | null = null;
-
-/**
- * 获取默认命令门禁
- */
-export function getCommandGate(): CommandGate {
-  if (!defaultCommandGate) {
-    defaultCommandGate = new CommandGate();
-  }
-  return defaultCommandGate;
-}
-
-/**
- * 快速检查命令是否允许
- */
-export function isCommandAllowed(command: string): boolean {
-  return getCommandGate().isAllowed(command);
-}
-
-/**
- * 快速获取命令风险等级
- */
-export function getCommandRiskLevel(command: string): 'high' | 'medium' | 'low' {
-  return getCommandGate().getRiskLevel(command);
-}

@@ -62,6 +62,49 @@ export type {
 } from './core/retired-constraints';
 
 // ========================================
+// 约束变更面（harness#198）：retire/reactivate/disable + 提案打包 + 元数据 + 配置铺放
+// 下游消费方经库面完成约束变更，不再偷看 `.harness/` 内部、免起子进程。
+// 知识沉淀写口是注入 seam（harness#88 分层纪律：core 不 value-import 知识层）——
+// retire/reactivate 缺省只落 config.yml，要沉淀经 options.openKnowledgeStore 注入；
+// CLI 命令是已接线的组合根。
+// ========================================
+export {
+  retireConstraint,
+  reactivateConstraint,
+  disableConstraint,
+} from './core/constraint-lifecycle';
+export type {
+  LifecycleKnowledgeSink,
+  RetireExecuteOptions,
+  RetireStatus,
+  RetireResult,
+  RetireTargetInfo,
+  ReactivateExecuteOptions,
+  ReactivateStatus,
+  ReactivateResult,
+  DisableStatus,
+  DisableResult,
+} from './core/constraint-lifecycle';
+export {
+  packProposal,
+  collectProposalMaterial,
+  renderProposalMarkdown,
+  proposalMaterialPath,
+} from './core/constraints/pack-proposal';
+export type {
+  ProposalMaterial,
+  PackProposalResult,
+} from './core/constraints/pack-proposal';
+export {
+  getConstraintsMeta,
+} from './core/constraints/meta';
+export type { ConstraintsMeta } from './core/constraints/meta';
+export {
+  HARNESS_CONFIG_FILES,
+  propagateConfig,
+} from './core/config-files';
+
+// ========================================
 // 约束使用报告（退役候选诊断数据层，下游消费方进化链路消费）
 // ========================================
 export {
@@ -236,6 +279,7 @@ export {
   TraceCollector,
   getTraceCollector,
   configureTraceCollector,
+  pruneTraceLogs,
   TraceAnalyzer,
   createAnalyzer,
   ContextTracker,

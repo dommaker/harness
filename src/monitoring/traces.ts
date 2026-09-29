@@ -18,6 +18,56 @@ import {
   type TraceFilter,
   type TraceCollectorConfig,
 } from '../types/trace';
+import type { RunTarget } from '../core/constraints/run-env';
+
+/**
+ * 清理某 trace 文件的轮转备份（traces-*.log）：删除超过 maxAgeDays 天的 `.log` 备份，
+ * 当前文件（traceFile 本体）与其他非 `.log` 文件不动。目录不存在 → 0。
+ *
+ * `TraceCollector.cleanupOldFiles` 与 `pruneTraceLogs` 共用的唯一实现（harness#198）。
+ */
+function pruneRotatedTraceFiles(traceFile: string, maxAgeDays: number): number {
+  const dir = path.dirname(traceFile);
+  if (!fs.existsSync(dir)) {
+    return 0;
+  }
+
+  const files = fs.readdirSync(dir);
+  const backupFiles = files.filter(f => f.endsWith('.log') && f !== path.basename(traceFile));
+
+  const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;
+  let deletedCount = 0;
+
+  for (const file of backupFiles) {
+    const filePath = path.join(dir, file);
+    const stats = fs.statSync(filePath);
+
+    if (stats.mtimeMs < cutoffTime) {
+      fs.unlinkSync(filePath);
+      deletedCount++;
+    }
+  }
+
+  return deletedCount;
+}
+
+/**
+ * traces 轮转备份清理的独立库入口（harness#198）
+ *
+ * `TraceCollector.cleanupOldFiles` 的薄包装：消费方不需要理解 traces 目录布局
+ * （不再手删 `.harness/logs/` 文件）。不构造 TraceCollector——traces 目录不存在
+ * 时 no-op 返回 0、不创建目录，零副作用。
+ *
+ * @param target 项目根路径，或本 run 的运行级观察面（与 `listRetiredConstraints` 同形）
+ * @returns 实际删除的备份文件数
+ */
+export function pruneTraceLogs(target: RunTarget, options: { maxAgeDays?: number } = {}): number {
+  const projectPath = typeof target === 'string' ? target : target.projectPath;
+  return pruneRotatedTraceFiles(
+    path.resolve(projectPath, DEFAULT_TRACE_FILE),
+    options.maxAgeDays ?? 30
+  );
+}
 
 /**
  * 默认配置
@@ -254,28 +304,7 @@ export class TraceCollector {
    * 删除超过 maxAge 天的备份文件
    */
   cleanupOldFiles(maxAgeDays: number = 30): number {
-    const dir = path.dirname(this.traceFile);
-    if (!fs.existsSync(dir)) {
-      return 0;
-    }
-
-    const files = fs.readdirSync(dir);
-    const backupFiles = files.filter(f => f.endsWith('.log') && f !== path.basename(this.traceFile));
-
-    const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;
-    let deletedCount = 0;
-
-    for (const file of backupFiles) {
-      const filePath = path.join(dir, file);
-      const stats = fs.statSync(filePath);
-
-      if (stats.mtimeMs < cutoffTime) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
-    }
-
-    return deletedCount;
+    return pruneRotatedTraceFiles(this.traceFile, maxAgeDays);
   }
 
   /**

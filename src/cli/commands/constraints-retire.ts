@@ -28,56 +28,39 @@
  * already_retired 幂等只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）：
  * 裸 enabled:false 是"禁用"不是"退休"，会被退休流程接管补上墓碑与沉淀。
  *
- * 交互与执行分离：retireConstraint 为纯执行逻辑（同步、可测），
- * runRetireInteractive 只做 readline 交互，IO 流可注入。
+ * harness#198：纯执行逻辑（retireConstraint / findRetireTarget 与结果类型）已搬入
+ * `core/constraint-lifecycle` 并上公共 barrel（消费方不再偷看 .harness/ 内部）；
+ * 本模块是 CLI 薄壳——交互、打印、人确认闸门，外加把知识沉淀写口接进 core 的
+ * wired 包装（harness#88 注入纪律：core 不 value-import 知识层）。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
-import { setYamlEntry } from '../yaml-edit';
 import chalk from 'chalk';
-import { getConstraint } from '../../core/constraints/definitions';
-import { ProjectConfigLoader } from '../../core/project-config-loader';
-import { isRetiredTombstone } from '../../core/retired-constraints';
-import { loadAppConstraints } from '../../core/app-constraints-loader';
-import type { RunTarget } from '../../core/constraints/run-env';
-import type { KnowledgeEntry } from '../../knowledge/types';
-import type { Constraint } from '../../types/constraint';
+import {
+  retireConstraint as coreRetireConstraint,
+  findRetireTarget,
+  type RetireExecuteOptions,
+  type RetireResult,
+} from '../../core/constraint-lifecycle';
 import { openKnowledgeStore } from './knowledge-view';
 import { fileStateIO } from '../state-io';
 import {
   buildConstraintsUsageReport,
   CANDIDATE_KIND_LABEL,
-  collectUsageByConstraint,
-  readProjectTraces,
   readProjectTracesReport,
   WATCHLIST_PERIOD_DAYS,
 } from '../../core/constraints/usage-report';
 
-export interface RetireExecuteOptions {
-  /** 退役原因（可空） */
-  reason?: string;
-  /** 注入当前时间（测试用） */
-  now?: Date;
-  /** 知识库路径解析的 io（注入给 openKnowledgeStore；当前 resolveKnowledgeBaseDir 已不消费，保留注入点与读口签名对齐。缺省 processIO） */
-  io?: CommandIO;
-}
-
-export type RetireStatus = 'retired' | 'already_retired' | 'unknown_id';
-
-export interface RetireResult {
-  id: string;
-  status: RetireStatus;
-  /** 是否 severity='error'（交互模式据此追加确认） */
-  isError: boolean;
-  stats: { total: number; fail: number; failRate: number };
-  /** KnowledgeStore 条目 id（status='retired' 时存在） */
-  knowledgeEntryId?: string;
-  /** 退役记录实际落盘的知识库根（status='retired' 时存在，harness#177） */
-  knowledgeBaseDir?: string;
-}
+export type {
+  RetireExecuteOptions,
+  RetireStatus,
+  RetireResult,
+  RetireTargetInfo,
+} from '../../core/constraint-lifecycle';
+export { findRetireTarget } from '../../core/constraint-lifecycle';
 
 export interface ConstraintsRetireOptions {
   projectPath?: string;
@@ -86,48 +69,21 @@ export interface ConstraintsRetireOptions {
   yes?: boolean;
 }
 
-export interface RetireTargetInfo {
-  severity: Constraint['severity'];
-  description?: string;
-  rule?: string;
-  message?: string;
-  /** 约束来源（ADR-0033）：app 层退休沉淀条目 tags 加 source:app */
-  source?: Constraint['source'];
-}
-
 /**
- * 查找约束定义（内置 definitions + 应用层 constraints.yml，ADR-0033）
- *
- * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
- * 不再自造 ProjectConfigLoader。应用层查找经 target 参数（项目根路径或观察面），
- * 不传 = 只查内置（历史行为）。
- *
- * 导出给 constraints-reactivate 复用（复活同样认内置 + 应用层 check 约束）。
+ * CLI 侧 wired 包装：core retireConstraint + 知识沉淀写口接线
+ * （openKnowledgeStore 同一解析点：KNOWLEDGE_BASE_DIR / 用户 home 缺省目录，harness#177）。
+ * 库消费方请直接用包根导出的 retireConstraint，按需注入 openKnowledgeStore。
  */
-export function findRetireTarget(id: string, target?: RunTarget): RetireTargetInfo | undefined {
-  const builtIn = getConstraint(id);
-  if (builtIn) {
-    return {
-      severity: builtIn.severity,
-      description: builtIn.description,
-      rule: builtIn.rule,
-      message: builtIn.message,
-      source: 'builtin',
-    };
-  }
-  if (target !== undefined) {
-    const app = loadAppConstraints(target).find(c => c.id === id);
-    if (app) {
-      return {
-        severity: app.severity,
-        description: app.description,
-        rule: app.rule,
-        message: app.message,
-        source: 'app',
-      };
-    }
-  }
-  return undefined;
+export function retireConstraint(
+  projectRoot: string,
+  id: string,
+  options: RetireExecuteOptions = {}
+): RetireResult {
+  return coreRetireConstraint(projectRoot, id, {
+    ...options,
+    openKnowledgeStore:
+      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, options.io ?? processIO)),
+  });
 }
 
 /**
@@ -137,149 +93,6 @@ export function findRetireTarget(id: string, target?: RunTarget): RetireTargetIn
 export function logCommitHint(projectRoot: string, io: CommandIO): void {
   if (!fs.existsSync(path.join(projectRoot, '.git'))) return;
   log(io, chalk.gray('   提示：config.yml 已改未提交——git add .harness/config.yml && git commit（下游审卡通道会自动 commit）'));
-}
-
-/**
- * 写 KnowledgeStore 退役记录（consumptionMode: 'signal'）
- *
- * baseDir 走 openKnowledgeStore 同一解析点（harness#177）：缺省与 knowledge 读口同根，
- * 不再硬编码 projectRoot 拼接（那会写进没有任何默认读口的 <repo>/.harness/knowledge）。
- */
-function saveRetireKnowledge(
-  id: string,
-  target: RetireTargetInfo,
-  reason: string,
-  stats: { total: number; fail: number; failRate: number },
-  iso: string,
-  io: CommandIO
-): { entryId: string; baseDir: string } {
-  const entryId = `constraint-retired-${id}`;
-  const contentLines = [
-    `# 约束退役：${id}`,
-    '',
-    '## 规则原文',
-    '',
-    target.description ? `description: ${target.description}` : undefined,
-    target.rule ? `rule: ${target.rule}` : undefined,
-    target.message ? `message: ${target.message}` : undefined,
-    '',
-    '## 退役原因',
-    '',
-    reason || '（未填写）',
-    '',
-    '## 历史统计',
-    '',
-    `- total: ${stats.total}`,
-    `- fail: ${stats.fail}`,
-    `- failRate: ${Math.round(stats.failRate * 100)}%`,
-    '',
-    `退役日期: ${iso}`,
-  ].filter((l): l is string => l !== undefined);
-
-  const entry: KnowledgeEntry = {
-    id: entryId,
-    type: 'decision',
-    title: `约束退役：${id}`,
-    content: contentLines.join('\n'),
-    maturity: 'verified',
-    layer: 'project',
-    created: iso,
-    lastReferenced: iso,
-    contributors: [],
-    projects: [],
-    // ADR-0033：应用层退休沉淀带 source:app 标签（内置条目不加，历史形状不动）
-    tags: [
-      'constraint-retired',
-      `constraint:${id}`,
-      `severity:${target.severity}`,
-      ...(target.source === 'app' ? ['source:app'] : []),
-    ],
-    applicablePhases: [],
-    sourceReferences: [{ timestamp: iso }],
-    referencedBy: [],
-    executionResults: [],
-    consumptionMode: 'signal',
-    origin: 'human',
-  };
-
-  const store = openKnowledgeStore({}, io);
-  store.save(entry);
-  return { entryId, baseDir: store.getBaseDir() };
-}
-
-/**
- * 执行单条约束退役（纯执行逻辑，无交互）
- *
- * 不存在的 id / 已退役的 id 通过 status 返回，由调用方提示。
- */
-export function retireConstraint(
-  projectRoot: string,
-  id: string,
-  options: RetireExecuteOptions = {}
-): RetireResult {
-  const now = options.now ?? new Date();
-  const iso = now.toISOString();
-  const reason = options.reason ?? '';
-
-  // 一次退役一份观察面（ADR-0023 决策 2）：定义查找与 already_retired 判定共用这一份装载结果。
-  const loader = new ProjectConfigLoader(projectRoot);
-  loader.load();
-
-  const target = findRetireTarget(id, projectRoot);
-  const emptyStats = { total: 0, fail: 0, failRate: 0 };
-  if (!target) {
-    return { id, status: 'unknown_id', isError: false, stats: emptyStats };
-  }
-  const isError = target.severity === 'error';
-
-  // 已退役保护：只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）——
-  // 裸 enabled:false 是"禁用"不是"退休"，落到下面正常退休流程：覆写墓碑 + 补写沉淀，
-  // 不让一次裸 disable 吞掉 retire 的知识沉淀。判定谓词唯一实现 = isRetiredTombstone。
-  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
-  if (isRetiredTombstone(existing)) {
-    return { id, status: 'already_retired', isError, stats: emptyStats };
-  }
-
-  // 历史统计（来自 traces.log）
-  // 计数去向：兼容包装 readProjectTraces() 丢计数（harness#100）——落盘的 retire stats 只计
-  // 合法记录，把坏行数写进 RetireResult.stats 属形状变更不在本票；本函数按契约「纯执行无交互」
-  // 不打印，告知由两条命令入口各自负责（runRetireInteractive 顶部 / constraintsRetire 的 --yes 分支）
-  const usage = collectUsageByConstraint(readProjectTraces(projectRoot)).get(id);
-  const evaluated = usage ? usage.total - usage.skip : 0;
-  const stats = {
-    total: usage?.total ?? 0,
-    fail: usage?.fail ?? 0,
-    failRate: evaluated > 0 ? (usage!.fail / evaluated) : 0,
-  };
-
-  // 1. 落盘退役（config.yml enabled:false + retired 段，原文保留）
-  const retiredMeta = { at: iso, reason, stats };
-  setYamlEntry(
-    path.join(projectRoot, '.harness', 'config.yml'),
-    'config.yml',
-    'constraints',
-    id,
-    { enabled: false, retired: retiredMeta }
-  );
-
-  // 2. KnowledgeStore
-  const { entryId: knowledgeEntryId, baseDir: knowledgeBaseDir } = saveRetireKnowledge(
-    id,
-    target,
-    reason,
-    stats,
-    iso,
-    options.io ?? processIO
-  );
-
-  return {
-    id,
-    status: 'retired',
-    isError,
-    stats,
-    knowledgeEntryId,
-    knowledgeBaseDir,
-  };
 }
 
 /**

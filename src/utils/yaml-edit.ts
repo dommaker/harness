@@ -1,5 +1,6 @@
 /**
- * YAML 配置文件条目编辑（cli 层共享模块，自 constraints-retire 抽出）
+ * YAML 配置文件条目编辑（utils 层共享模块，自 constraints-retire 抽出；
+ * harness#198 自 cli 下移——core 的约束变更面也要写 config.yml，分层闸禁止 core 值导入 cli）
  *
  * config.yml 类 YAML 的读-改-写单点（harness#137）。
  * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的

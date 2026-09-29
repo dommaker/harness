@@ -5,6 +5,7 @@
 
 ## 核心导出
 - `TraceCollector` — 执行追踪收集（append-only JSONL，`.harness/logs/traces.log`）。读入口三个：`readReport(filter?)` 报告入口（返回 `{ traces, skippedLines }`，harness#100）、`read()/readRecent()/readByConstraint()` 兼容包装（#82 裁决 4 冻结的签名，丢计数）、`getStats()` 文件级统计（`{ fileExists, fileSize, totalLines, oldestTrace?, newestTrace? }`，harness#114 起经 `readJsonlEnds` 只 parse 两端；坏行并进 `totalLines` 的原始行数口径，要单列坏行数用 `readReport()`）
+- `pruneTraceLogs(target, { maxAgeDays? })` — traces 轮转备份清理的独立库入口（harness#198，`TraceCollector.cleanupOldFiles` 的薄包装，默认 30 天，返回删除数）：消费方不需要理解 traces 目录布局、不再手删 `.harness/logs/` 文件；不构造 collector——目录不存在 no-op 返回 0、不创建目录，零副作用
 - 模块级出口：`getTraceCollector()` / `configureTraceCollector(config)`——进程级单例面，**cwd 锚定**（构造不带 projectPath），本仓生产代码零消费、保留仅为跨仓兼容（锚根约定见「约定」第一条）；`createAnalyzer(config?)` 同理，等价 `new TraceAnalyzer(new TraceCollector(), config)`
 - `TraceAnalyzer` — 追踪统计分析 + 异常检测（共用 analyzer-base 纯函数）。`analyzeRecentReport(hours)` 带坏行数，`analyzeRecent()/analyzeConstraint()` 仍返回 `TraceSummary[]`。**ADR-0020**：`summarize`/`detectAnomalies` 的判定本体是 trace-analyzer.ts 的模块级纯函数 `summarizeTraces(traces)` / `detectTraceAnomalies(summaries, config?)`（阈值经参数传入，不再是实例状态），类壳只转发——类壳是跨仓消费方的运行时消费面（`new TraceAnalyzer(c)` + `analyzeRecentReport`/`detectAnomalies`，签名逐字不动），已持有数据的消费端直调纯函数。两函数**不进包根导出**（ADR-0003 零扩张），仓内经相对 import
 - `ContextTracker` — LLM 调用上下文使用快照记录；`ContextUsageSnapshot` 类型正本同住 `context-tracker.ts`（自 `context/types.ts` 迁入，断 context↔monitoring 目录级环；`compactionLevel` 值域内联字面量，与 `context/types.ts` 的 `CompactionLevel` 同步维护）

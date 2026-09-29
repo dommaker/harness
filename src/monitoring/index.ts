@@ -9,7 +9,7 @@
  * - ContextTracker：LLM 调用上下文快照记录
  */
 
-export { TraceCollector, getTraceCollector, configureTraceCollector } from './traces';
+export { TraceCollector, getTraceCollector, configureTraceCollector, pruneTraceLogs } from './traces';
 export { TraceAnalyzer, createAnalyzer } from './trace-analyzer';
 export { ContextTracker } from './context-tracker';
 export type { ContextAverages, ContextUsageSnapshot } from './context-tracker';

@@ -16,76 +16,24 @@
  * retired 墓碑不接管不动：已退役条目返回 already_retired（要恢复请 reactivate）。
  * 人确认闸门与 retire/reactivate 同形（ADR-0001 决策 2）：直达必须显式 --yes，
  * 不提供交互模式——禁用是低频点对点操作（同 reactivate 定位）。
+ *
+ * harness#198：纯执行逻辑（disableConstraint 与结果类型）已搬入
+ * `core/constraint-lifecycle` 并上公共 barrel（下游消费方改调库函数，
+ * 不再直写 config.yml）；本模块是 CLI 薄壳——打印与人确认闸门。
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import chalk from 'chalk';
-import { ProjectConfigLoader } from '../../core/project-config-loader';
-import { isRetiredTombstone } from '../../core/retired-constraints';
-import { getEffectiveConstraints } from '../../core/effective-constraints';
-import { findRetireTarget, logCommitHint } from './constraints-retire';
-import { setYamlEntry } from '../yaml-edit';
+import { logCommitHint } from './constraints-retire';
+import { disableConstraint, type DisableResult } from '../../core/constraint-lifecycle';
 
-export type DisableStatus =
-  | 'disabled'
-  | 'already_disabled'
-  | 'already_retired'
-  | 'unknown_id'
-  | 'verify_failed';
-
-export interface DisableResult {
-  id: string;
-  status: DisableStatus;
-}
+export { disableConstraint };
+export type { DisableStatus, DisableResult } from '../../core/constraint-lifecycle';
 
 export interface ConstraintsDisableOptions {
   projectPath?: string;
   /** 直达模式显式确认（--yes）：与 retire/reactivate 同一道人确认闸门，无此 flag 直达拒绝执行 */
   yes?: boolean;
-}
-
-/**
- * 执行单条约束裸禁用（纯执行逻辑，无交互）
- *
- * 不存在的 id / 已禁用 / 已退役的 id 通过 status 返回，由调用方提示。
- */
-export function disableConstraint(projectRoot: string, id: string): DisableResult {
-  const target = findRetireTarget(id, projectRoot);
-  if (!target) {
-    return { id, status: 'unknown_id' };
-  }
-
-  // 幂等口径（ADR-0032 决策 6.6）：retired 墓碑优先判定——disable 不动墓碑不吞退休语义；
-  // 裸 enabled:false 即已禁用。判定谓词唯一实现 = isRetiredTombstone
-  const loader = new ProjectConfigLoader(projectRoot);
-  loader.load();
-  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
-  if (isRetiredTombstone(existing)) {
-    return { id, status: 'already_retired' };
-  }
-  if (existing?.enabled === false) {
-    return { id, status: 'already_disabled' };
-  }
-
-  // 1. 落盘裸禁用（config.yml enabled:false，无 retired 段；同文件其他条目不动）
-  const configPath = path.join(projectRoot, '.harness', 'config.yml');
-  const backup = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : null;
-  setYamlEntry(configPath, 'config.yml', 'constraints', id, { enabled: false });
-
-  // 2. 写后验证：生效集必须已缩小（与下游 applier 同一纪律），失败回滚备份
-  try {
-    if (getEffectiveConstraints(projectRoot).some(c => c.id === id)) {
-      throw new Error('constraint still present in effective set after disable');
-    }
-  } catch {
-    if (backup !== null) fs.writeFileSync(configPath, backup, 'utf-8');
-    else fs.rmSync(configPath, { force: true });
-    return { id, status: 'verify_failed' };
-  }
-
-  return { id, status: 'disabled' };
 }
 
 /**

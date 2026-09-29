@@ -10,37 +10,27 @@
  *
  * 人确认闸门与 retire 同形（ADR-0001 决策 2 语义）：直达必须显式 --yes。
  * 不提供交互批量模式——复活是低频点对点操作。
+ *
+ * harness#198：纯执行逻辑（reactivateConstraint 与结果类型）已搬入
+ * `core/constraint-lifecycle` 并上公共 barrel；本模块是 CLI 薄壳——打印、
+ * 人确认闸门，外加把知识沉淀写口接进 core 的 wired 包装（同 constraints-retire）。
  */
 
-import * as path from 'path';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import chalk from 'chalk';
-import { ProjectConfigLoader } from '../../core/project-config-loader';
-import { isRetiredTombstone } from '../../core/retired-constraints';
-import type { KnowledgeEntry } from '../../knowledge/types';
+import {
+  reactivateConstraint as coreReactivateConstraint,
+  type ReactivateExecuteOptions,
+  type ReactivateResult,
+} from '../../core/constraint-lifecycle';
 import { openKnowledgeStore } from './knowledge-view';
-import { findRetireTarget, logCommitHint, type RetireTargetInfo } from './constraints-retire';
-import { removeYamlEntry } from '../yaml-edit';
+import { logCommitHint } from './constraints-retire';
 
-export interface ReactivateExecuteOptions {
-  /** 复活原因（可空） */
-  reason?: string;
-  /** 注入当前时间（测试用） */
-  now?: Date;
-  /** 知识库路径解析的 io（缺省 processIO，与 retire 写口同形） */
-  io?: CommandIO;
-}
-
-export type ReactivateStatus = 'reactivated' | 'not_retired' | 'unknown_id';
-
-export interface ReactivateResult {
-  id: string;
-  status: ReactivateStatus;
-  /** KnowledgeStore 条目 id（status='reactivated' 时存在） */
-  knowledgeEntryId?: string;
-  /** 复活记录实际落盘的知识库根（status='reactivated' 时存在） */
-  knowledgeBaseDir?: string;
-}
+export type {
+  ReactivateExecuteOptions,
+  ReactivateStatus,
+  ReactivateResult,
+} from '../../core/constraint-lifecycle';
 
 export interface ConstraintsReactivateOptions {
   projectPath?: string;
@@ -50,101 +40,19 @@ export interface ConstraintsReactivateOptions {
 }
 
 /**
- * 写 KnowledgeStore 复活记录（consumptionMode: 'signal'）
- *
- * baseDir 走 openKnowledgeStore 同一解析点，与 retire 沉淀写口同根。
- */
-function saveReactivateKnowledge(
-  id: string,
-  target: RetireTargetInfo,
-  reason: string,
-  iso: string,
-  io: CommandIO
-): { entryId: string; baseDir: string } {
-  const entryId = `constraint-reactivated-${id}`;
-  const contentLines = [
-    `# 约束复活：${id}`,
-    '',
-    `原退役沉淀：constraint-retired-${id}（不改历史，原条目保留）`,
-    '',
-    '## 规则原文',
-    '',
-    target.description ? `description: ${target.description}` : undefined,
-    target.rule ? `rule: ${target.rule}` : undefined,
-    target.message ? `message: ${target.message}` : undefined,
-    '',
-    '## 复活原因',
-    '',
-    reason || '（未填写）',
-    '',
-    `复活日期: ${iso}`,
-  ].filter((l): l is string => l !== undefined);
-
-  const entry: KnowledgeEntry = {
-    id: entryId,
-    type: 'decision',
-    title: `约束复活：${id}`,
-    content: contentLines.join('\n'),
-    maturity: 'verified',
-    layer: 'project',
-    created: iso,
-    lastReferenced: iso,
-    contributors: [],
-    projects: [],
-    tags: ['constraint-reactivated', `constraint:${id}`, `severity:${target.severity}`],
-    applicablePhases: [],
-    sourceReferences: [{ timestamp: iso }],
-    referencedBy: [],
-    executionResults: [],
-    consumptionMode: 'signal',
-    origin: 'human',
-  };
-
-  const store = openKnowledgeStore({}, io);
-  store.save(entry);
-  return { entryId, baseDir: store.getBaseDir() };
-}
-
-/**
- * 执行单条约束复活（纯执行逻辑，无交互）
- *
- * 不存在的 id / 无 retired 墓碑的 id 通过 status 返回，由调用方提示。
+ * CLI 侧 wired 包装：core reactivateConstraint + 知识沉淀写口接线
+ * （openKnowledgeStore 同一解析点，与 retire 写口同根，harness#177）。
  */
 export function reactivateConstraint(
   projectRoot: string,
   id: string,
   options: ReactivateExecuteOptions = {}
 ): ReactivateResult {
-  const now = options.now ?? new Date();
-  const iso = now.toISOString();
-
-  const target = findRetireTarget(id, projectRoot);
-  if (!target) {
-    return { id, status: 'unknown_id' };
-  }
-
-  // 只认 retired 墓碑：裸 disable 与未配置一律 not_retired（与 retire 的幂等口径对偶，
-  // 判定谓词唯一实现 = isRetiredTombstone）
-  const loader = new ProjectConfigLoader(projectRoot);
-  loader.load();
-  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
-  if (!isRetiredTombstone(existing)) {
-    return { id, status: 'not_retired' };
-  }
-
-  // 1. 删 config.yml constraints.<id> 墓碑段（恢复 = 回生效集）
-  removeYamlEntry(path.join(projectRoot, '.harness', 'config.yml'), 'constraints', id);
-
-  // 2. KnowledgeStore 复活条目（不改历史，新写一条）
-  const { entryId: knowledgeEntryId, baseDir: knowledgeBaseDir } = saveReactivateKnowledge(
-    id,
-    target,
-    options.reason ?? '',
-    iso,
-    options.io ?? processIO
-  );
-
-  return { id, status: 'reactivated', knowledgeEntryId, knowledgeBaseDir };
+  return coreReactivateConstraint(projectRoot, id, {
+    ...options,
+    openKnowledgeStore:
+      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, options.io ?? processIO)),
+  });
 }
 
 /**

@@ -41,7 +41,7 @@ GovernanceExecutor (doc-code-config drift detection, detect-only)
 FreshnessRunner (config-driven doc freshness checking: changelog_version, context_docs, doc_dir_check, doc_regex_count), FreshnessAutoFix (regex count auto-fix)
 
 ## Release Integrity
-verifyReleaseArtifacts / getCriticalArtifacts（#75 N4 收编）：关键发布物清单 = package.json 声明面（main/exports/bin）运行时推导 + 运行时 extras（bin 引导定义表、dist/tools/definitions）随源码维护；pkgRoot 缺省自动解析本包根，外部消费者零参数即自检已安装的 harness。挂载点：release 命令第 4 步、下游消费方发布流 dist 校验配套
+verifyReleaseArtifacts / getCriticalArtifacts（#75 N4 收编）：关键发布物清单 = package.json 声明面（main/exports/bin）运行时推导 + 运行时 extras（bin 引导定义表）随源码维护；pkgRoot 缺省自动解析本包根，外部消费者零参数即自检已安装的 harness。挂载点：release 命令第 4 步、下游消费方发布流 dist 校验配套
 
 ## Runtime Bootstrap
 `bootstrapHarness` / `bootstrapHarnessSync` / `HarnessBootstrap`（type）：运行环境组合根，一次调用装配 `ConstraintChecker` + `TraceCollector`（锚 projectPath，harness#88/#139）+ `SessionManager`，并加载 `.harness/config.yml` 产出 `mergedConstraints`。原 `## Hooks` 段的通用管线面（`HookRegistry` / `HookPipeline` / `assertHookRegistryClosed` / `toErrorStrategy` 四值符号 + 八类型）双仓零生产消费者，已随 ADR-0027 整体删除（#170）。

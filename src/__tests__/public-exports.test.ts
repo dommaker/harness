@@ -81,8 +81,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'getCriticalArtifacts',
   'getEffectiveConstraints',
   'getFailureLevel',
-  'getRegistryPath',
-  'getToolsDir',
   'listRetiredConstraints',
   'matchAnyGlob',
   'matchGlob',
@@ -368,5 +366,14 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
     expect(liveCollector).toEqual({});
     expect(liveAnalyzer.periodMs).toBe(1);
     expect(liveTrace.result).toBe('pass');
+  });
+
+  /**
+   * #196（ADR-0037 workflow 引擎资产终局）删除符号的可达性负钉：
+   * `src/tools/` 整目录连删，机制同 ADR-0027 钉（barrel 源形状钉）。
+   */
+  it('包根 barrel 不再提及 #196 已删的 tools 路径函数', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../index.ts'), 'utf-8');
+    expect(['getRegistryPath', 'getToolsDir'].filter((name) => source.includes(name))).toEqual([]);
   });
 });

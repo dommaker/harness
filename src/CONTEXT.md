@@ -29,7 +29,6 @@
 | types/ | 公共类型（checkpoint / constraint / cso / failure / passes-gate / project-config / spec） |
 | utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-version / detect-source-roots / glob-match） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
-| tools/ | 工具定义 |
 
 ## 依赖关系
 - `src/core/` 被所有模块依赖（基础层）

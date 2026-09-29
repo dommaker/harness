@@ -70,7 +70,6 @@ const DOWNSTREAM: Record<string, string[]> = {
   monitoring: ['types', 'utils'],
   release: [], // 「无内部依赖（只依赖 node fs/path）」= release/CONTEXT.md 的自我声明落成闸
   sdd: ['types', 'utils'],
-  tools: ['types', 'utils'],
   // 同层互 import（现状冻结，不是许可）：context 注入取知识、SessionManager 取 trace 采集器。
   // 收口方向同 harness#88 对 core 的裁决——改注入，另票评估
   context: ['knowledge', 'monitoring', 'types', 'utils'],

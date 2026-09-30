@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - fix(validators): `command_success` 判据与输出体量解耦——旧实现走 `exec`（缺省 `maxBuffer` 1MiB），被测命令输出超线即被砍进程并报 `stdout maxBuffer length exceeded`，把「又吵又绿」的命令判成失败（消费方现场：pre-push 跑全量测试，测试全绿而钩子报「命令执行失败: npm test」，真因被 message 吞掉）。现改 `spawn` 执行、只看退出码，stdout/stderr 只留有界末段 4KiB 作失败证据；`validate` 在 `error ≠ message` 时把 error 缩进打出，失败原因不再只落在 `actual` 字段里没人读。同族 `command_output`/`output_contains`/`output_matches`/`json_path` 本就需要全量 stdout，仍走缓冲 `exec`，同一上限对它们是未观测的同类（未动，判据见 `src/core/CONTEXT.md`）
 
+- feat(knowledge): token 尺子提出为可直调纯函数——新增包根导出 `estimateTokens(text)`（正本 `knowledge/token-estimate.ts`），`KnowledgeQuery.estimateTokens` 改为委托它，实现仍只有一份（不重新长出第二把尺子）。动机是本班 #197 删除 `TokenEstimator` 后，消费方要量一段文本得先持有一个带 store 的 `KnowledgeQuery` 实例（studio 侧 30 处是 `TokenEstimator.estimateText(...)` 的静态调用形状，改造面被凭空放大）；纯函数导出后调用点只需换导入源。换算规则逐字不变（CJK 三段 2 token/字、其余 0.25、向上取整），值面钉子 `__tests__/public-exports.test.ts` 同步登记
+
 ## [1.15.0] - 2026-09-28
 
 ### Changes

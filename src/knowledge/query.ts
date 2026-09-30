@@ -15,6 +15,7 @@ import type {
 } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeLifecycle } from './lifecycle';
+import { estimateTokens } from './token-estimate';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -123,21 +124,10 @@ export class KnowledgeQuery {
 
   /**
    * Estimate token count for a piece of text.
-   * Rule of thumb: 1 CJK char ≈ 2 tokens, 1 ASCII char ≈ 0.25 tokens.
+   * 委托仓内唯一尺子正本 `token-estimate.ts`（本类不再自带实现）；保留方法名与语义不变。
    */
   estimateTokens(text: string): number {
-    let tokens = 0;
-    for (const ch of text) {
-      // CJK Unified Ideographs + common CJK ranges（charCodeAt 区间判断，与原正则等价）：
-      // U+3400–U+4DBF（Ext A）、U+4E00–U+9FFF（Unified）、U+F900–U+FAFF（兼容表意）
-      const code = ch.charCodeAt(0);
-      if ((code >= 0x3400 && code <= 0x4dbf) || (code >= 0x4e00 && code <= 0x9fff) || (code >= 0xf900 && code <= 0xfaff)) {
-        tokens += 2;
-      } else {
-        tokens += 0.25;
-      }
-    }
-    return Math.ceil(tokens);
+    return estimateTokens(text);
   }
 
   /** Clear the query cache. */

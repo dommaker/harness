@@ -268,6 +268,7 @@ export {
   KnowledgeHealthScorer,
   KnowledgeAudit,
   DEFAULT_DECAY_CONFIG,
+  estimateTokens,
 } from './knowledge';
 export type {
   KnowledgeEntry,

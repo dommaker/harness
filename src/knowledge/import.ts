@@ -109,10 +109,11 @@ export class ColdStartImporter {
           result = await this.importManual();
           break;
         default:
+          // sourceType 静态收窄为 never（switch 已穷尽四源）；分支防的是运行时脏配置
           result = {
-            source: { type: sourceType as any },
+            source: { type: sourceType },
             entries: [],
-            errors: [{ source: { type: sourceType as any }, message: `未知源类型: ${sourceType}`, recoverable: false }],
+            errors: [{ source: { type: sourceType }, message: `未知源类型: ${sourceType}`, recoverable: false }],
           };
       }
 

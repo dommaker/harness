@@ -163,7 +163,9 @@ export async function runMainSyncFlow(
     // 与 capability_sync / docs_freshness 检查器共享同一份规则，check 与 fix 口径必然一致
     const getBasename = (f: string) => {
       const clean = f.endsWith('/') ? f.slice(0, -1) : f;
-      return clean.split('/').pop()!;
+      // split('/') 恒产出 ≥1 段，末段索引恒有值
+      const segments = clean.split('/');
+      return segments[segments.length - 1];
     };
     const verdict = reconcileCapabilities({
       content: capsContent,
@@ -350,7 +352,10 @@ export async function runMainSyncFlow(
         });
       } else {
         jsonOutput.added = result.added.map(f => {
-          const getBasenameLocal = (s: string) => s.split('/').pop()!;
+          const getBasenameLocal = (s: string) => {
+            const segments = s.split('/');
+            return segments[segments.length - 1];
+          };
           return {
             file: f,
             module: currentModules.find(m => getBasenameLocal(m.file) === f),

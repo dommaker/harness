@@ -37,10 +37,13 @@ async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout
   try {
     const stdout = execSync(cmd, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
     return { stdout: stdout.trim(), stderr: '' };
-  } catch (e: any) {
-    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() || '';
-    const stdout = typeof e.stdout === 'string' ? e.stdout : e.stdout?.toString() || '';
-    return { stdout: stdout.trim(), stderr: stderr.trim() || e.message || String(e) };
+  } catch (e) {
+    // execSync 非零退出：rejection 形状 Error & { stdout?, stderr? }，逐字段窄化取数
+    const err = e as { stdout?: unknown; stderr?: unknown };
+    const chunk = (v: unknown): string => (typeof v === 'string' ? v : v != null ? String(v) : '');
+    const stderr = chunk(err.stderr);
+    const stdout = chunk(err.stdout);
+    return { stdout: stdout.trim(), stderr: stderr.trim() || (e instanceof Error ? e.message : String(e)) };
   }
 }
 

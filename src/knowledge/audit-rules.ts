@@ -57,7 +57,7 @@ const EVENT_NOISE_PATTERNS = [
   /^\[Triage Fix\]\s/,
   /^\[Session Feature\]\s/,
 ];
-const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'];
+const REQUIRED_FRONTMATTER = ['id', 'type', 'title', 'maturity'] as const satisfies readonly (keyof KnowledgeEntry)[];
 
 // ── Per-Entry Rules ───────────────────────────────────────
 
@@ -91,7 +91,8 @@ export const perEntryRules: AuditRule[] = [
     scope: 'all',
     detect: (entry) => {
       const missing = REQUIRED_FRONTMATTER.filter(f => {
-        const val = (entry as any)[f];
+        // 审计面对的是盘上脏数据：字段在类型上必填、运行时可能缺，取值先压成 unknown 再判空
+        const val: unknown = entry[f];
         return val === undefined || val === null || val === '';
       });
       if (missing.length > 0) {
@@ -221,8 +222,9 @@ export const perEntryRules: AuditRule[] = [
     action: 'trim',
     scope: 'all',
     detect: (entry) => {
-      if ((entry.sourceReferences?.length || 0) > MAX_SOURCE_REFS) {
-        return `sourceReferences ${entry.sourceReferences!.length} 条 (上限 ${MAX_SOURCE_REFS})`;
+      const refs = entry.sourceReferences ?? [];
+      if (refs.length > MAX_SOURCE_REFS) {
+        return `sourceReferences ${refs.length} 条 (上限 ${MAX_SOURCE_REFS})`;
       }
       return null;
     },

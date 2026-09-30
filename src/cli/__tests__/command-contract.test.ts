@@ -7,6 +7,8 @@
  */
 
 import { Writable } from 'stream';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   captureIO,
   lastJsonOutput,
@@ -150,6 +152,22 @@ describe('lastJsonOutput（--json 命令输出解析正本，harness#108）', ()
     const io = captureIO();
     log(io, 'not json');
     expect(() => lastJsonOutput(io)).toThrow();
+  });
+});
+
+describe('CommandIO 正本归属（Phase 4 倒挂修正）', () => {
+  // 类型定义权在 types 层（core 也消费，core→cli 边已消）；command-contract 只做 re-export
+  it('command-contract 的 CommandIO 即 types/command-io 的同一类型（编译期互赋）', () => {
+    const fromContract: CommandIO = processIO;
+    const fromTypes: import('../../types/command-io').CommandIO = fromContract;
+    const backAgain: CommandIO = fromTypes;
+    expect(backAgain.stdout).toBe(process.stdout);
+  });
+
+  it('command-contract.ts 不含 CommandIO 的 interface 定义（源形状钉：正本唯一）', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../command-contract.ts'), 'utf-8');
+    expect(source).not.toMatch(/export interface CommandIO/);
+    expect(source).toContain("from '../types/command-io'");
   });
 });
 

@@ -75,11 +75,11 @@ export function pruneTraceLogs(target: RunTarget, options: { maxAgeDays?: number
  * `traceFile` 这里是**未锚定的项目相对片段**（#95 病根形状），故本文件在
  * `project-path-convention.test.ts` 闸 3 的豁免表里点名带理由；锚定动作在构造函数里做。
  */
-const DEFAULT_CONFIG: TraceCollectorConfig = {
+const DEFAULT_CONFIG = {
   traceFile: DEFAULT_TRACE_FILE,
   maxFileSize: 10 * 1024 * 1024, // 10MB
   enabled: true,
-};
+} satisfies TraceCollectorConfig;
 
 /**
  * Trace 收集器
@@ -102,10 +102,12 @@ export class TraceCollector {
   constructor(config?: Partial<TraceCollectorConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     // 收根则相对落点按项目解析（harness#139：否则 -p 半失效——评估跑在 B、trace 写进 cwd）；
-    // 没收根则保持 cwd 解析，这是跨仓消费者依赖的兼容面，不是遗漏
+    // 没收根则保持 cwd 解析，这是跨仓消费者依赖的兼容面，不是遗漏；
+    // 显式 traceFile: undefined 回落缺省（satisfies 保住缺省值非可选类型）
+    const traceFile = this.config.traceFile ?? DEFAULT_CONFIG.traceFile;
     this.traceFile = this.config.projectPath
-      ? path.resolve(this.config.projectPath, this.config.traceFile!)
-      : this.config.traceFile!;
+      ? path.resolve(this.config.projectPath, traceFile)
+      : traceFile;
     this.ensureDirectory();
   }
 
@@ -277,7 +279,7 @@ export class TraceCollector {
     }
 
     const stats = fs.statSync(this.traceFile);
-    if (stats.size >= this.config.maxFileSize!) {
+    if (stats.size >= (this.config.maxFileSize ?? DEFAULT_CONFIG.maxFileSize)) {
       this.rotateFile();
     }
   }

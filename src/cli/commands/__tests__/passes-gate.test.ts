@@ -110,6 +110,58 @@ describe('passes-gate command', () => {
       expect(result).toEqual({ kind: 'fail', reason: 'passes-gate denied: 2/10 个测试失败' });
     });
 
+    it('失败计数读不到时如实显示「未取到计数」，不编造成 1 个用例失败', async () => {
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        scripts: { test: 'jest' },
+      }));
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: false,
+        passedTests: 0,
+        failedTests: null,
+        totalTests: 0,
+        duration: 1000,
+        failures: [],
+        message: '测试命令以退出码 137 终止',
+      });
+      (MockPassesGate as any).mockImplementation(() => ({
+        runTests: mockRunTests,
+      }));
+
+      const result = await runPassesGate({}, io);
+
+      expect(io.outText()).toContain('未取到计数');
+      expect(io.outText()).not.toMatch(/失败: 1\//);
+      expect(io.outText()).toContain('测试命令以退出码 137 终止');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'passes-gate denied: 未取到失败计数（命令判负且输出无汇总行）｜测试命令以退出码 137 终止',
+      });
+    });
+
+    it('失败计数为 0 但判负（allowPartialPass 之外的形状）仍显示数值而非「未取到」', async () => {
+      mockFs.readFile.mockResolvedValue(JSON.stringify({
+        scripts: { test: 'jest' },
+      }));
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: false,
+        passedTests: 10,
+        failedTests: 0,
+        totalTests: 10,
+        duration: 1000,
+        failures: [],
+      });
+      (MockPassesGate as any).mockImplementation(() => ({
+        runTests: mockRunTests,
+      }));
+
+      await runPassesGate({}, io);
+
+      expect(io.outText()).toContain('失败: 0/10');
+      expect(io.outText()).not.toContain('未取到计数');
+    });
+
     it('应该处理测试执行错误', async () => {
       mockFs.readFile.mockResolvedValue(JSON.stringify({
         scripts: { test: 'jest' },

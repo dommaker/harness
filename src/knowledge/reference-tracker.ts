@@ -67,10 +67,12 @@ export class ReferenceTracker {
 
     for (const record of records) {
       for (const entryId of record.entryIds) {
-        if (!entryToDecisions.has(entryId)) {
-          entryToDecisions.set(entryId, new Set());
+        let decisions = entryToDecisions.get(entryId);
+        if (!decisions) {
+          decisions = new Set();
+          entryToDecisions.set(entryId, decisions);
         }
-        entryToDecisions.get(entryId)!.add(record.decisionId);
+        decisions.add(record.decisionId);
       }
     }
 

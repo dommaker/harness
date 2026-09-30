@@ -157,8 +157,9 @@ export async function runRetireInteractive(
     console.error(chalk.yellow(`⚠️  trace 文件有 ${report.skippedLines} 行损坏已跳过，候选只基于其余合法记录`));
   }
   const { ask, close } = createAsk(io);
-  // 退役结果打印走注入流（与 readline 提示同一去向）
-  const out = { stdout: io.output, stderr: io.output } as unknown as CommandIO;
+  // 退役结果打印走注入流（与 readline 提示同一去向）；
+  // WritableStream.write(chunk: any) 结构化满足 CommandIO 的最小可写接口
+  const out: CommandIO = { stdout: io.output, stderr: io.output };
 
   try {
     let selectedIds: string[] = [];

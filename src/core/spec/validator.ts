@@ -19,6 +19,7 @@ import type {
   BatchSpecValidationResult,
   SpecSchemaDefinition,
   SpecType,
+  SpecValidationError,
 } from '../../types/spec';
 
 /**
@@ -30,6 +31,19 @@ const DEFAULT_CONFIG: SpecValidatorConfig = {
   files: ['ARCHITECTURE.md', 'specs/**/*.yml', 'specs/**/*.yaml'],
   failureLevel: 'error',
 };
+
+/**
+ * 动态导入的 Schema 模块形状守卫：只认「带 validate 函数的对象」，
+ * name/version 是否合法字符串由调用点各自窄化（坏形状按「无 Schema」处理，不 any 穿透）
+ */
+function isSchemaModule(m: unknown): m is { name?: unknown; version?: unknown; validate: SpecSchemaDefinition['validate'] } {
+  return (
+    typeof m === 'object' &&
+    m !== null &&
+    'validate' in m &&
+    typeof (m as { validate?: unknown }).validate === 'function'
+  );
+}
 
 /**
  * Spec 验证器
@@ -79,7 +93,7 @@ export class SpecValidator {
     const indexPath = path.join(absolutePath, 'index.ts');
     const indexPathJs = path.join(absolutePath, 'index.js');
 
-    let schemaModule: any;
+    let schemaModule: unknown;
 
     if (await this.fileExists(indexPath)) {
       // 动态导入 TypeScript 模块（需要 tsx 或编译后的 .js）
@@ -93,10 +107,10 @@ export class SpecValidator {
       return null;
     }
 
-    if (schemaModule && schemaModule.validate) {
+    if (isSchemaModule(schemaModule)) {
       const schema: SpecSchemaDefinition = {
-        name: schemaModule.name || 'custom',
-        version: schemaModule.version,
+        name: typeof schemaModule.name === 'string' ? schemaModule.name : 'custom',
+        version: typeof schemaModule.version === 'string' ? schemaModule.version : undefined,
         validate: schemaModule.validate,
       };
       this.schemaCache.set(schemaPath, schema);
@@ -186,8 +200,8 @@ export class SpecValidator {
   private async basicValidation(filePath: string, specType: SpecType): Promise<SpecValidationResult> {
     const absolutePath = path.resolve(filePath);
     const content = await fs.readFile(absolutePath, 'utf-8');
-    const errors: any[] = [];
-    const warnings: any[] = [];
+    const errors: SpecValidationError[] = [];
+    const warnings: SpecValidationError[] = [];
 
     // ARCHITECTURE.md 基础检查
     if (specType === 'architecture') {
@@ -337,7 +351,7 @@ export class SpecValidator {
   /**
    * 动态导入模块（fail-fast：导入失败抛出；唯一回退 = .ts 导入失败试编译后的同名 .js）
    */
-  private async dynamicImport(modulePath: string): Promise<any> {
+  private async dynamicImport(modulePath: string): Promise<unknown> {
     try {
       // 尝试直接导入
       return await import(modulePath);

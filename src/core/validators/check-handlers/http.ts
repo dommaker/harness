@@ -53,14 +53,15 @@ export async function checkHttpStatus(check: CheckpointCheck, context: Checkpoin
       actual,
       expected,
     };
-  } catch (error: any) {
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       checkId: check.id,
       passed: false,
       message: `HTTP 请求失败: ${url}`,
-      actual: error.message,
+      actual: detail,
       expected,
-      error: error.message,
+      error: detail,
     };
   }
 }
@@ -86,14 +87,15 @@ export async function checkHttpBody(check: CheckpointCheck, context: CheckpointC
       actual,
       expected,
     };
-  } catch (error: any) {
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       checkId: check.id,
       passed: false,
       message: `HTTP 请求失败: ${url}`,
-      actual: error.message,
+      actual: detail,
       expected,
-      error: error.message,
+      error: detail,
     };
   }
 }

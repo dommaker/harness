@@ -33,13 +33,13 @@ import {
 /**
  * 默认配置
  */
-const DEFAULT_CONFIG: TraceAnalyzerConfig = {
+const DEFAULT_CONFIG = {
   summaryFile: '.harness/logs/traces-summary.json',
   periodMs: 3600 * 1000, // 1 小时
   thresholds: {
     failRate: 0.5,        // 失败率 > 50% 视为异常
   },
-};
+} satisfies TraceAnalyzerConfig;
 
 /**
  * 计算趋势（`summarizeTraces` 的模块内助手）
@@ -139,19 +139,22 @@ export function summarizeTraces(traces: ExecutionTrace[]): TraceSummary[] {
 /**
  * 检测异常
  *
- * 基于阈值检测异常模式。阈值来自参数而非实例状态（ADR-0020）：省略 `config` 时
- * 与类壳同一默认口径（`{ ...DEFAULT_CONFIG, ...config }`）。
+ * 基于阈值检测异常模式。阈值来自参数而非实例状态（ADR-0020）：省略 `config`
+ * （或只给 `thresholds: {}`）时回落 `DEFAULT_CONFIG.thresholds` 的缺省口径。
  */
 export function detectTraceAnomalies(
   summaries: TraceSummary[],
   config?: Partial<TraceAnalyzerConfig>
 ): TraceAnomaly[] {
   const anomalies: TraceAnomaly[] = [];
-  const thresholds = { ...DEFAULT_CONFIG, ...config }.thresholds!;
+  // 阈值缺省由 DEFAULT_CONFIG 供给（satisfies 保住字面量非可选类型，无需断言）；
+  // 调用方显式传 undefined/缺槽时回落缺省，不穿透成运行期 undefined 比较
+  const failRateThreshold =
+    config?.thresholds?.failRate ?? DEFAULT_CONFIG.thresholds.failRate;
 
   for (const summary of summaries) {
     // 检测失败率上升
-    if (summary.failRate > thresholds.failRate! && summary.recentTrend === 'rising') {
+    if (summary.failRate > failRateThreshold && summary.recentTrend === 'rising') {
       anomalies.push({
         type: 'rising_fail_rate',
         constraintId: summary.constraintId,
@@ -159,7 +162,7 @@ export function detectTraceAnomalies(
         message: `约束 ${summary.constraintId} 失败率 ${Math.round(summary.failRate * 100)}% 且趋势上升`,
         data: {
           currentRate: summary.failRate,
-          threshold: thresholds.failRate!,
+          threshold: failRateThreshold,
           trend: 'rising',
         },
         detectedAt: Date.now(),
@@ -297,14 +300,14 @@ export class TraceAnalyzer {
    * 保存汇总结果
    */
   saveSummary(summaries: TraceSummary[]): void {
-    writeSummaryJson(this.config.summaryFile!, summaries);
+    writeSummaryJson(this.config.summaryFile ?? DEFAULT_CONFIG.summaryFile, summaries);
   }
 
   /**
    * 加载上次汇总结果
    */
   loadSummary(): TraceSummary[] | null {
-    return readSummaryJson<TraceSummary[]>(this.config.summaryFile!);
+    return readSummaryJson<TraceSummary[]>(this.config.summaryFile ?? DEFAULT_CONFIG.summaryFile);
   }
 
   /**

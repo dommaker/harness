@@ -96,13 +96,16 @@ export class FreshnessRunner {
         return this.checkDocDir(check, context);
       case 'doc_regex_count':
         return this.checkDocRegexCount(check, context);
-      default:
+      default: {
+        // 运行时可达（check 来自 yml 反序列化，未登记类型漏过校验）：窄化取 type 上报
+        const raw = check as { type?: string };
         return {
-          type: (check as any).type || 'unknown',
+          type: raw.type || 'unknown',
           label: 'Unknown',
           pass: true,
-          message: `未知的检查类型: ${(check as any).type}`,
+          message: `未知的检查类型: ${raw.type}`,
         };
+      }
     }
   }
 

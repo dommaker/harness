@@ -62,7 +62,7 @@ export const fileExists: TemplatedCheckerFactory = {
 
         // mustExist=false：任何目标存在即违规
         const present: string[] = [
-          ...(pathHit ? [rel!] : []),
+          ...(pathHit && rel !== undefined ? [rel] : []),
           ...globHits,
         ];
         if (present.length > 0) {

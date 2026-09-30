@@ -173,8 +173,9 @@ export class KnowledgeQuery {
       : allRefs.slice(0, 3);
 
     const allContext = grouped.context;
-    const context = taskContext.phase
-      ? allContext.filter(e => e.applicablePhases.includes(taskContext.phase!))
+    const phase = taskContext.phase;
+    const context = phase
+      ? allContext.filter(e => e.applicablePhases.includes(phase))
       : allContext;
 
     return { rules, references, context };

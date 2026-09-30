@@ -7,12 +7,18 @@
  *   bin/harness.js 一处）。
  * - **写入面 `CommandIO`**：流式输出去向。命令一律经注入的 io 打印，缺省 process
  *   标准流——长命令（如 release）边跑边输出，不憋到结束由 bin 统一打印。
+ *   类型正本在 `src/types/command-io.ts`（core 消费造成的 core→cli 倒挂修正，
+ *   Phase 4 下沉），本模块 re-export，CLI 消费路径不变。
  *
  * 对外行为护栏：`processIO` 下 log/logError 的输出字节与 console.log/console.error
  * 逐字一致（见 __tests__/command-contract.test.ts），CLI 语法与文案冻结。
  */
 
 import { format } from 'util';
+import type { CommandIO } from '../types/command-io';
+
+// 类型正本下沉 types 层（core 也消费，倒挂修正）；本模块 re-export，CLI 消费路径不变
+export type { CommandIO } from '../types/command-io';
 
 /**
  * 命令判定类别。
@@ -32,12 +38,9 @@ export type CommandResult =
   | { kind: Extract<CommandKind, 'usage-error'>; reason: string };
 
 /**
- * 命令输出流注入面（最小可写接口，`process.stdout` / `process.stderr` 结构化满足）
+ * 命令输出流注入面：类型正本已下沉 `src/types/command-io.ts`（core 消费造成的
+ * core→cli 倒挂修正，Phase 4），上方经 re-export 保持本模块消费路径不变。
  */
-export interface CommandIO {
-  stdout: { write(chunk: string): boolean };
-  stderr: { write(chunk: string): boolean };
-}
 
 /** 缺省 io：process 标准流（bin 不注入时的现状行为） */
 export const processIO: CommandIO = {

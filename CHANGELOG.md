@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- fix(passes-gate): 失败计数读不到时不再编造成 1——`runTests` 判负但输出里没有失败计数行（进程被杀 / 无汇总 / 输出溢出）时 `failedTests` 给 `null`，CLI 如实显示「未取到计数」并在判负时带出 `message`（旧写法显示成「失败: 1/202」，把「命令没跑成」伪装成「1 个用例失败」，实发一次把人引去查并不存在的红用例）。`passedTests` 的对应兜底未动（判过时给 1，性质不同，未观测到误导）
+
 ## [1.16.0] - 2026-09-30
 
 ### Changes

@@ -159,7 +159,8 @@ export class PassesGate {
   async runTests(workDir: string): Promise<{
     passed: boolean;
     passedTests: number;
-    failedTests: number;
+    /** 失败用例数；`null` = 命令判负但输出里读不到失败计数（进程被杀 / 输出无汇总行 / buffer 溢出等），不编造成 1 */
+    failedTests: number | null;
     totalTests: number;
     duration: number;
     failures?: { name: string; message: string }[];
@@ -190,25 +191,28 @@ export class PassesGate {
       const failedMatch = output.match(/(\d+) failed/i);
       
       const passedTests = passedMatch?.[1] ? parseInt(passedMatch[1], 10) : (result.passed ? 1 : 0);
-      const failedTests = failedMatch?.[1] ? parseInt(failedMatch[1], 10) : (result.passed ? 0 : 1);
+      // 判负但输出里读不到失败计数 → 如实给 null。旧写法在这里写死 1，于是「命令没跑成」
+      // （进程被杀 / 输出溢出 / 无汇总行）在屏幕上长成「1 个用例失败」，把人往查测试上引
+      // （2026-09-30 实发：一次非零退出被显示成 201/202 失败 1，实际没有任何用例红）。
+      const failedTests = failedMatch?.[1] ? parseInt(failedMatch[1], 10) : (result.passed ? 0 : null);
 
       return {
         passed: result.passed,
         passedTests,
         failedTests,
-        totalTests: passedTests + failedTests,
+        totalTests: passedTests + (failedTests ?? 0),
         duration,
         failures: result.failures?.map(f => ({ name: f, message: f })),
         message: result.passed ? '测试通过' : '测试失败',
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         passed: false,
         passedTests: 0,
-        failedTests: 1,
-        totalTests: 1,
+        failedTests: null,
+        totalTests: 0,
         duration: Date.now() - startTime,
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -239,10 +243,13 @@ export class PassesGate {
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
       output = result.stdout + result.stderr;
-    } catch (error: any) {
-      // 非零退出（超时 / buffer 溢出等执行失败也落这里）：判定依据就是退出码，文本不参与
-      exitCode = typeof error.code === 'number' ? error.code : 1;
-      output = (error.stdout || '') + '\n' + (error.stderr || '');
+    } catch (error) {
+      // 非零退出（超时 / buffer 溢出等执行失败也落这里）：判定依据就是退出码，文本不参与。
+      // exec 的 rejection 形状是 Error & { code?, stdout?, stderr? }，逐字段窄化取数
+      const execError = error as { code?: unknown; stdout?: unknown; stderr?: unknown };
+      exitCode = typeof execError.code === 'number' ? execError.code : 1;
+      output = (typeof execError.stdout === 'string' ? execError.stdout : '')
+        + '\n' + (typeof execError.stderr === 'string' ? execError.stderr : '');
     }
 
     const { passed, failures } = judgeTestRun({

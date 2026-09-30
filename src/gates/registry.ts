@@ -34,12 +34,15 @@ const IMPLEMENTATIONS: Gate[] = [
 
 assertGateRegistryClosed(GATE_DEFINITIONS, IMPLEMENTATIONS);
 
+const registry = new Map<string, Gate>(IMPLEMENTATIONS.map(g => [g.id, g]));
+
 // 默认 order 以定义表为准（生效集层已删：config.yml 不再有 gates.order 覆盖口，ADR-0002「后续变更」）
 for (const def of GATE_DEFINITIONS) {
-  IMPLEMENTATIONS.find(g => g.id === def.id)!.order = def.order;
+  // assertGateRegistryClosed 已保证定义必有实现；取不到即注册表闭环被破坏，fail-fast
+  const impl = registry.get(def.id);
+  if (!impl) throw new Error(`gate registry: 定义 ${def.id} 无实现（闭环校验后仍缺，不可能路径）`);
+  impl.order = def.order;
 }
-
-const registry = new Map<string, Gate>(IMPLEMENTATIONS.map(g => [g.id, g]));
 
 /**
  * 注册表闭环双向校验（加载期调用；测试用坏输入验证两个失败方向）

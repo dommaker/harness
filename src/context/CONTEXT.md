@@ -9,7 +9,7 @@
 
 ## 依赖关系
 - 依赖 `src/knowledge/`（`knowledge/types` 类型 + `knowledge/query` 的 `KnowledgeQuery`/`EXTERNAL_SOURCE_MARKER` 值）、`src/utils/`（jsonl）
-- 仓内消费方只有 `src/index.ts` 的公共导出 re-export（`./context` 子路径面）
+- 仓内消费方：`src/index.ts` 的公共导出 re-export（`./context` 子路径面）+ `src/hooks/bootstrap.ts` 直引并构造 `SessionManager`（hook 单例生命周期）
 
 ## 约定
 - 压缩只剩词汇不留引擎：`types.ts` 保留 `CompactionLevel`（被 `CompactionConfig` 引用）与 `CompactionConfig`，但 `SessionCompaction` 引擎、`CompactionResult`、`DEFAULT_COMPACTION_CONFIG` 与 `AdaptiveTokenBudget` 已随 ADR-0022（零生产消费者）删除，本目录不再提供压缩策略组合点

@@ -6,11 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changes
-- refactor(context)!: `KnowledgeInjector` 退场（公共面 breaking，repositioning 定位裁决：知识注入是消费编排，归 studio；harness 只留家具与标准）。删除 `src/context/knowledge-injector.ts` 及包根/`./context` 子路径的 `KnowledgeInjector` 值导出与 `InjectionConfig`/`InjectionResult` 类型导出；`src/context/` 其余文件（`session-manager.ts`/`types.ts`/`index.ts`）经消费方核查保留（SessionManager 有 `hooks/bootstrap.ts` 生产消费）。标准/家具保留并补强：`EXTERNAL_SOURCE_MARKER` 新增包根公开导出（正本 `knowledge/query.ts`，外部来源标记标准，供消费方格式化注入内容时对齐，仓内不允许第二份字面量）；`KnowledgeQuery`（含 `formatForPrompt`）与 `estimateTokens` 公共可用不变。迁移：唯一消费方 studio 已并行内联注入编排，不再依赖本导出
-- fix(constraints): `docs_freshness` 降 warning（ADR-0032 决策 3 级别错配修正）——能力兜底类约束（会退化）配 error 阻断级是级别错配，自 iron-laws（error）组移至 guidelines（warning）组，进退化观察；checker 实现与注册表闭环不动，channel 维持 `gate`（与组内既有 warning 约束同例）。原 inline 注释「只警告不阻断会导致文档持续腐烂」系无出处翻案，随降级删除。熔断核查：`.harness/logs/traces.log` 7922 次评估中 fail 140，其中 126 例证据指向从未进过 CAPABILITIES.md git 历史的合成幽灵条目 `src/gone.ts`（测试态产物），无持续真实文档漂移拦截，数据支持降级。CAPABILITIES.md 计数 errors (4)→(3) / warnings (3)→(4) 由 sync-docs 重建
-- docs: 两份 2026-05 转型文档标注已被取代——`docs/2026-05-01-harness-transformation.md`（方向大半被 ADR-0031 否决或划归 studio/CLI）与 `docs/2026-05-02-workflows-migration-plan.md`（依据被 ADR-0031 否决、迁移产物被 ADR-0037 整删），头部加 superseded 标注指向当前权威定位（`docs/positioning.md` + ADR-0031~0034），正文不动
-
 ## [2.0.0] - 2026-09-30
 
 ### Changes
@@ -23,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(adr): ADR-0040 记录本班次总决策（fail-fast 取向、兼容性破除、类型收口、allowEmptyCatch 废除、index-generator 平行实现不合并裁决——理由写进 `knowledge/CONTEXT.md` 约定节）
 
 - fix(passes-gate): 失败计数读不到时不再编造成 1——`runTests` 判负但输出里没有失败计数行（进程被杀 / 无汇总 / 输出溢出）时 `failedTests` 给 `null`，CLI 如实显示「未取到计数」并在判负时带出 `message`（旧写法显示成「失败: 1/202」，把「命令没跑成」伪装成「1 个用例失败」，实发一次把人引去查并不存在的红用例）。`passedTests` 的对应兜底未动（判过时给 1，性质不同，未观测到误导）
+- refactor(context)!: `KnowledgeInjector` 退场（公共面 breaking，repositioning 定位裁决：知识注入是消费编排，归 studio；harness 只留家具与标准）。删除 `src/context/knowledge-injector.ts` 及包根/`./context` 子路径的 `KnowledgeInjector` 值导出与 `InjectionConfig`/`InjectionResult` 类型导出；`src/context/` 其余文件（`session-manager.ts`/`types.ts`/`index.ts`）经消费方核查保留（SessionManager 有 `hooks/bootstrap.ts` 生产消费）。标准/家具保留并补强：`EXTERNAL_SOURCE_MARKER` 新增包根公开导出（正本 `knowledge/query.ts`，外部来源标记标准，供消费方格式化注入内容时对齐，仓内不允许第二份字面量）；`KnowledgeQuery`（含 `formatForPrompt`）与 `estimateTokens` 公共可用不变。迁移：唯一消费方 studio 已并行内联注入编排，不再依赖本导出
+- fix(constraints): `docs_freshness` 降 warning（ADR-0032 决策 3 级别错配修正）——能力兜底类约束（会退化）配 error 阻断级是级别错配，自 iron-laws（error）组移至 guidelines（warning）组，进退化观察；checker 实现与注册表闭环不动，channel 维持 `gate`（与组内既有 warning 约束同例）。原 inline 注释「只警告不阻断会导致文档持续腐烂」系无出处翻案，随降级删除。熔断核查：`.harness/logs/traces.log` 7922 次评估中 fail 140，其中 126 例证据指向从未进过 CAPABILITIES.md git 历史的合成幽灵条目 `src/gone.ts`（测试态产物），无持续真实文档漂移拦截，数据支持降级。CAPABILITIES.md 计数 errors (4)→(3) / warnings (3)→(4) 由 sync-docs 重建
+- docs: 两份 2026-05 转型文档标注已被取代——`docs/2026-05-01-harness-transformation.md`（方向大半被 ADR-0031 否决或划归 studio/CLI）与 `docs/2026-05-02-workflows-migration-plan.md`（依据被 ADR-0031 否决、迁移产物被 ADR-0037 整删），头部加 superseded 标注指向当前权威定位（`docs/positioning.md` + ADR-0031~0034），正文不动
 
 ## [1.16.0] - 2026-09-30
 

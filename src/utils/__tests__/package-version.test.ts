@@ -41,7 +41,12 @@ describe('getHarnessPackageVersion', () => {
     jest.isolateModules(() => {
       jest.doMock('fs', () => ({
         ...jest.requireActual('fs'),
-        existsSync: () => false,
+        // readPackageJson 口径：单次 readFileSync，ENOENT = 缺失（与真实缺文件行为一致）
+        readFileSync: () => {
+          const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          throw err;
+        },
       }));
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fresh = require('../package-version') as typeof import('../package-version');

@@ -9,6 +9,7 @@
 
 import { execAsync } from '../../utils/exec';
 import { judgeTestRun } from './test-output';
+import { readPackageJson } from '../../utils/package-json';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
@@ -41,10 +42,8 @@ const DEFAULT_CONFIG: Required<PassesGateConfig> = {
  */
 export async function detectTestCommand(projectPath: string): Promise<string | undefined> {
   // package.json 缺失 = 非 Node 项目（继续探测其余类型）；在场但 JSON 损坏 → 抛出（fail-fast）
-  const pkgPath = path.join(projectPath, 'package.json');
-  if (existsSync(pkgPath)) {
-    const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
-
+  const pkg = readPackageJson(projectPath);
+  if (pkg) {
     if (pkg.scripts?.['test:ci']) {
       return 'npm run test:ci';
     }

@@ -11,7 +11,7 @@
 - `getCriticalArtifacts(pkgRoot?)` / `verifyReleaseArtifacts(pkgRoot?)`——公开 API；pkgRoot 缺省自动解析，外部消费者零参数即自检已安装的 harness
 
 ## 依赖关系
-- 无内部依赖（只依赖 node fs/path）
+- 内部依赖仅 `utils/package-json`（readPackageJson 正本，重构 Phase 5 收口）；其余只依赖 node fs/path
 
 ## 约定
 - 清单维护模型：声明面推导为主（目录重构动到 package.json 时清单自动跟随）+ extras 随源码维护；**不新增第三处硬编码清单**

@@ -11,15 +11,15 @@
  * - 无 cwd 兜底——cwd 的 package.json 是消费者项目的，不是 harness 的；
  * - 清单缺失或无 version 字段 → 'unknown'（沿用收口前各处一致语义）；
  *   清单在场但 JSON 损坏 → 抛出（fail-fast：发布包清单损坏是发布事故，不装 unknown）。
+ *
+ * 读取链走 `utils/package-json` 正本（readPackageJson：缺失 → null，损坏 → 抛）。
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
+import { readPackageJson } from './package-json';
 
 /** 读取 harness 包版本；清单缺失/无 version 字段返回 'unknown'，清单损坏抛错 */
 export function getHarnessPackageVersion(): string {
-  const pkgPath = path.join(__dirname, '..', '..', 'package.json');
-  if (!fs.existsSync(pkgPath)) return 'unknown';
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-  return typeof pkg.version === 'string' && pkg.version ? pkg.version : 'unknown';
+  const pkg = readPackageJson(path.join(__dirname, '..', '..'));
+  return typeof pkg?.version === 'string' && pkg.version ? pkg.version : 'unknown';
 }

@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { walkFiles } from '../../utils/file-walk';
+import { readPackageJson } from '../../utils/package-json';
 
 export interface SpecBaselineCheckOptions {
   /** 项目路径 */
@@ -184,14 +185,12 @@ export function createBaselineIndex(
     dependencies() {
       if (!dependencySnapshot) {
         try {
-          const pkgJson = JSON.parse(
-            fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8')
-          );
-          dependencySnapshot = {
-            ok: true,
-            deps: { ...pkgJson.dependencies, ...pkgJson.devDependencies },
-          };
+          const pkgJson = readPackageJson(projectPath);
+          dependencySnapshot = pkgJson
+            ? { ok: true, deps: { ...pkgJson.dependencies, ...pkgJson.devDependencies } }
+            : { ok: false };
         } catch {
+          // #146：读取失败态（含损坏清单）同样入库，不逐条重试
           dependencySnapshot = { ok: false };
         }
       }

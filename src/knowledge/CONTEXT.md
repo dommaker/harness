@@ -47,6 +47,7 @@
 - **写入闸不管读**（E1 复盘修正 M1）：枚举校验只在 save/saveAll/applyAll/update 落盘前执行，读取（parseFile）不校验——盘上脏条目可读可列，但任一写入路径触及即抛错（含「只改其他字段」的部分更新），先修脏值再写；绕过本 store 直写文件的外部写入方不受闸约束
 - **审计判定脱离文件系统可测**（harness#134）：规则表与 D1–D7 打分住 `audit-rules.ts` / `audit-scoring.ts` / `audit-dimensions.ts` 三块的纯模块组（Phase 3 拆分），零 fs（源形状闸钉在 `audit-scoring.test.ts`，扫整组）；引擎 `audit.ts` 只做 store 装配，环境数据经 `store.getConsumptionStats()` / `getSurvivalRate()` 取好喂入
 - 知识条目有明确的生命周期状态（按 consumptionMode 分化）
+- **两个 index-generator 是刻意平行、不合并**（重构 Phase 5 裁决）：`knowledge/index-generator.ts` 只管知识库树（文件即条目、递归遍历、走 tree-walker 排除口径、type 推断 + 标题提取），`sdd/index-generator.ts` 只管 `docs/sdd/` 项目文档树（目录即条目、平铺不递归、字段固定、stale 跳过）。两者只是形状相似（扫树 → frontmatter → 竖线行 → `_index.md`）：frontmatter 解析已共用 `utils/frontmatter` 正本，剩余相似仅 sanitize 一行与竖线 join；抽共享框架要参数化的恰是两者全部差异（扫描策略/条目提取/排序/过滤/表头），共享核不足 20 行，属投机抽象。改任一侧时禁止以「统一」为名把另一侧的领域逻辑搬进来
 - 约束退役（`harness constraints retire`，人确认）时写入 KnowledgeStore：规则原文 + 退役原因 + 历史统计
 - Linter 检查完整性/一致性/时效性三个维度
 - Audit 7 维度评分：D1结构 D2内容 D3去重 D4成熟度 D5新鲜度 D6飞轮 D7增量存活

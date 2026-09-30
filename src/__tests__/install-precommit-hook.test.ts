@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-const REPO_ROOT = path.resolve(__dirname, '..');
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const INSTALLER = path.join(REPO_ROOT, 'bin', 'install-precommit-hook.sh');
 
 function install(gitDir: string): void {

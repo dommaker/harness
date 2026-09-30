@@ -22,10 +22,9 @@
  */
 
 import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 import chalk from 'chalk';
 import { verifyReleaseArtifacts } from '../../release';
+import { readPackageJson } from '../../utils/package-json';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ReleaseOptions {
@@ -58,14 +57,17 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   const dryRun = options.dryRun === 'true';
 
   // ── 1. Verify package ──
-  const pkgJsonPath = path.join(pkgPath, 'package.json');
-  if (!fs.existsSync(pkgJsonPath)) {
+  const pkgJson = readPackageJson(pkgPath);
+  if (!pkgJson) {
     logError(io, chalk.red(`❌ Not a package: ${pkgPath}`));
     return gateFail('package', `not a package: ${pkgPath}`);
   }
-  const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
   const pkgName = pkgJson.name;
   const oldVersion = pkgJson.version;
+  if (typeof oldVersion !== 'string' || !oldVersion) {
+    logError(io, chalk.red('❌ package.json 缺少 version 字段'));
+    return gateFail('version-field', 'package.json missing version field');
+  }
   log(io, chalk.cyan(`📦 ${pkgName}@${oldVersion}`));
   log(io, chalk.cyan(`   bump: ${bumpType}${dryRun ? ' (dry-run)' : ''}`));
 

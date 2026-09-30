@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readPackageJson } from '../utils/package-json';
 
 /** 本包名（包根向上解析的身份锚点，同 bin 名同源） */
 export const HARNESS_PACKAGE_NAME = '@dommaker/harness';
@@ -72,10 +73,7 @@ export function deriveCriticalArtifacts(manifest: PackagePublishManifest): strin
 function isHarnessPackageRoot(dir: string): boolean {
   // 探测语义：该目录没有 package.json → false（向上继续找）；
   // 有但 JSON 损坏 → 抛出（fail-fast，不把损坏清单当「不是包根」跳过）
-  const pkgPath = path.join(dir, 'package.json');
-  if (!fs.existsSync(pkgPath)) return false;
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-  return pkg?.name === HARNESS_PACKAGE_NAME;
+  return readPackageJson(dir)?.name === HARNESS_PACKAGE_NAME;
 }
 
 /**
@@ -106,9 +104,10 @@ function resolveRoot(pkgRoot?: string): string {
  */
 export function getCriticalArtifacts(pkgRoot?: string): string[] {
   const root = resolveRoot(pkgRoot);
-  const manifest: PackagePublishManifest = JSON.parse(
-    fs.readFileSync(path.join(root, 'package.json'), 'utf-8')
-  );
+  const manifest = readPackageJson<PackagePublishManifest>(root);
+  if (!manifest) {
+    throw new Error(`[harness] 包根缺少 package.json: ${root}`);
+  }
   return [...new Set([...deriveCriticalArtifacts(manifest), ...EXTRA_CRITICAL_ARTIFACTS])].sort();
 }
 

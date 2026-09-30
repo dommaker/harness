@@ -68,7 +68,7 @@ const DOWNSTREAM: Record<string, string[]> = {
   gates: ['core', 'types', 'utils'],
   knowledge: ['types', 'utils'],
   monitoring: ['types', 'utils'],
-  release: [], // 「无内部依赖（只依赖 node fs/path）」= release/CONTEXT.md 的自我声明落成闸
+  release: ['utils'], // utils 边 = readPackageJson 正本（重构 Phase 5 收口），release/CONTEXT.md 自我声明同步更新
   sdd: ['types', 'utils'],
   // 同层互 import（现状冻结，不是许可）：context 注入取知识、SessionManager 取 trace 采集器。
   // 收口方向同 harness#88 对 core 的裁决——改注入，另票评估

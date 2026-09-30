@@ -10,6 +10,7 @@ import type { ConstructionSiteDrift } from '../../../core/constraints/constructi
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';
 import { attemptAsync } from '../../../utils/attempt';
+import { readPackageJson } from '../../../utils/package-json';
 
 export interface ModuleInfo {
   name: string;
@@ -53,9 +54,7 @@ export interface PackageJsonLite {
 
 /** 读取 package.json（不存在返回 null；在场但损坏 → 抛出，fail-fast 不装「没有」） */
 export async function readPackageJsonLite(dir: string): Promise<PackageJsonLite | null> {
-  const pkgPath = path.join(dir, 'package.json');
-  if (!existsSync(pkgPath)) return null;
-  return JSON.parse(await fs.readFile(pkgPath, 'utf-8')) as PackageJsonLite;
+  return readPackageJson<PackageJsonLite>(dir);
 }
 
 /** 从 .harness/config.yml 读取项目描述（package.json 无 description 时的兜底） */

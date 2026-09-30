@@ -14,9 +14,11 @@ jest.mock('fs/promises', () => ({
   access: jest.fn(),
 }));
 
-// Mock fs（detectTestCommand 的存在性探测走 existsSync）
+// Mock fs（detectTestCommand 经 utils/package-json 正本读 package.json：
+// readFileSync + ENOENT 判缺失；existsSync 仍供 pyproject/go.mod 等标记探测）
 jest.mock('fs', () => ({
   existsSync: jest.fn(),
+  readFileSync: jest.fn(),
 }));
 
 // Mock execAsync
@@ -42,18 +44,32 @@ jest.mock('chalk', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockExistsSync = (require('fs') as { existsSync: jest.Mock }).existsSync;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockReadFileSync = (require('fs') as { readFileSync: jest.Mock }).readFileSync;
 const MockPassesGate = PassesGate as jest.MockedClass<typeof PassesGate>;
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
 describe('passes-gate command', () => {
   let io: CapturingIO;
+  /** 当轮 fixture 的 package.json 内容（detectTestCommand 经 readPackageJson 消费） */
+  let pkgContent: string;
 
   beforeEach(() => {
 
     io = captureIO();
     jest.clearAllMocks();
+    pkgContent = JSON.stringify({ scripts: { test: 'jest' } });
     // 缺省：package.json 在场（多数用例喂 readFile 脚本表），其余探测标记不在场
     mockExistsSync.mockImplementation((p: string) => String(p).endsWith('package.json'));
+    // readPackageJson 口径：单次 readFileSync，ENOENT = 缺失（与真实缺文件行为一致）
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (!mockExistsSync(p)) {
+        const err = new Error(`ENOENT: no such file or directory, open '${p}'`) as NodeJS.ErrnoException;
+        err.code = 'ENOENT';
+        throw err;
+      }
+      return pkgContent;
+    });
   });
 
   describe('runPassesGate', () => {
@@ -66,9 +82,9 @@ describe('passes-gate command', () => {
     });
 
     it('应该通过测试门控', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true,
@@ -87,9 +103,9 @@ describe('passes-gate command', () => {
     });
 
     it('应该失败测试门控', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: false,
@@ -111,9 +127,9 @@ describe('passes-gate command', () => {
     });
 
     it('失败计数读不到时如实显示「未取到计数」，不编造成 1 个用例失败', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: false,
@@ -140,9 +156,9 @@ describe('passes-gate command', () => {
     });
 
     it('失败计数为 0 但判负（allowPartialPass 之外的形状）仍显示数值而非「未取到」', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: false,
@@ -163,9 +179,9 @@ describe('passes-gate command', () => {
     });
 
     it('应该处理测试执行错误', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockRejectedValue(new Error('test failed'));
       (MockPassesGate as any).mockImplementation(() => ({
@@ -285,15 +301,15 @@ describe('passes-gate command', () => {
 
     it('package.json 在场但 JSON 损坏 → 抛出（fail-fast，不再吞成「无测试命令」）', async () => {
       mockExistsSync.mockImplementation((p: string) => String(p).endsWith('package.json'));
-      mockFs.readFile.mockResolvedValue('NOT VALID JSON{{{');
+      pkgContent = 'NOT VALID JSON{{{';
 
       await expect(runPassesGate({}, io)).rejects.toThrow(SyntaxError);
     });
 
     it('应该检测 test:ci 脚本', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { 'test:ci': 'jest --ci' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -305,10 +321,9 @@ describe('passes-gate command', () => {
     });
 
     it('应该跳过默认 echo 测试脚本', async () => {
-      mockFs.readFile.mockReset();
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'echo "Error: no test specified"' },
-      }));
+      });
       mockFs.access.mockReset();
       mockFs.access.mockRejectedValue(new Error('no file'));
 

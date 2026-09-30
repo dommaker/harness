@@ -1,6 +1,10 @@
 // SDD Index Generator
 // Scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md
 // Format: slug|pmoNumber|status|title|tags
+//
+// 与 knowledge/index-generator.ts 的相似是表面形状（扫树 → frontmatter → 竖线行），
+// 不合并是刻意裁决（重构 Phase 5，理由见 src/knowledge/CONTEXT.md 约定节）：
+// 本生成器只管 docs/sdd 项目文档树（目录即条目、平铺、stale 跳过）。
 
 import * as fs from 'fs';
 import * as path from 'path';

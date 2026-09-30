@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`@dommaker/harness` is a TypeScript framework for enforcing engineering constraints on AI coding agents. It provides a check/prompt dual-model constraint system (ADR-0001), quality gates, trace monitoring, and a CLI. Documentation is primarily in Chinese.
+`@dommaker/harness` is a TypeScript framework for enforcing engineering constraints on AI coding agents. It provides a check-based constraint system（ADR-0001；纯文本 prompt 层已随 ADR-0029 退役）, quality gates, trace monitoring, and a CLI. Documentation is primarily in Chinese.
 
 ## Commands
 
@@ -58,7 +58,7 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 
 - **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`、`checkBeforeExecution()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
-- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management), `./gates`（#199 起为空面入口——gates 面整体收回、双仓零编程消费者，入口保留待 maintainer 裁决，ADR-0038）
+- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management)。`./gates` 入口已删除（ADR-0038 收回面，重构班次连壳出清，ADR-0040）
 
 ### Design Principles
 

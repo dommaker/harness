@@ -7,11 +7,10 @@
  * 删它非 breaking」这类定级断言在子路径入口仍无闸可跑，只能靠人工逐条附「各入口源文件 +
  * 已发布产物 `.d.ts`」双证据（能防这一次，防不了下一次）。
  *
- * 落闸前实测的洞（五个入口的运行时键集合 106/29/4/4/24）：`./core` 有 7 个值导出、
- * `./presets` 有 4 个（即该入口全部）不在包根清单里——删掉它们当前**零测试变红**。
- * `./gates` 与 `./context` 的值导出曾是包根的子集（#199 起 `./gates` 面已整体收回、
- * 以空清单显式冻结），删除会经 `src/index.ts` 的 barrel 链撞上包根那条闸，但红名报的是
- * `.`、不是真正被删的那个入口——定级时照样得再人肉查一遍。
+ * 落闸前实测的洞（各入口的运行时键集合）：`./core` 有 7 个值导出、
+ * `./presets` 有 4 个（即该入口全部）不在包根清单里——删掉它们当时**零测试变红**。
+ * 子路径值导出若曾是包根子集，删除会经 `src/index.ts` 的 barrel 链撞上包根那条闸，
+ * 但红名报的是 `.`、不是真正被删的那个入口——定级时照样得再人肉查一遍。
  *
  * 口径与类型面闸一致：**公开面 = `exports` 映射，不是只有包根**，入口清单从 `exports` 派生
  * 而非硬编码，新增子路径未登记冻结清单即红。分工：
@@ -25,9 +24,9 @@
  * 被改时会让那个套件「failed to run」（实测向 `src/index.ts` 注一条 `export type { DynamicTask }`
  * 得 TS2578），本闸在同一注入下 7 项照跑且全绿，值面的清单 diff 不会被类型面的编译期钉连带抹掉。
  *
- * 冻结清单不手抄：四子路径 + 包根的 `src` 侧 ts-jest 运行时键与各自 tsc 产物
- * （`dist/**\/index.js`）逐入口 `Object.keys` 对撞，120/25/4/2/0 全部逐字一致
- * （`./gates` 自 #199 起为空面入口，见清单内注释）。改动入口清单
+ * 冻结清单不手抄：子路径 + 包根的 `src` 侧 ts-jest 运行时键与各自 tsc 产物
+ * （`dist/**\/index.js`）逐入口 `Object.keys` 对撞，全部逐字一致。
+ * 改动入口清单
  * 文件时同步改本文件对应条目，diff 即 PR 评审材料；增删符号属公共面 breaking，须按
  * ADR-0003/0022 走发布级别裁决。
  */
@@ -82,12 +81,8 @@ const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {
     'STRICT_PRESET',
   ],
   './context': [
-    'KnowledgeInjector',
     'SessionManager',
   ],
-  // #199（ADR-0038）：./gates 面整体收回（双仓零编程消费者），入口本身保留、
-  // 以空清单显式冻结——复活任一值导出即红
-  './gates': [],
 };
 
 /** exports 子路径 → 承载它的显式清单源文件。形态对不上返回 null，由映射闸 fail-loud。 */
@@ -140,11 +135,8 @@ describe('已发布子路径值面全量冻结（ADR-0022 追记 5）', () => {
     describe(`入口点 ${sub}`, () => {
       it('运行时导出键集合与冻结清单逐字一致（增删即 breaking，需发布级别裁决）', async () => {
         const actual = await runtimeKeysOf(sub);
-        // 解析塌掉不得退化成空集合假绿（唯一例外是 ./gates——#199（ADR-0038）面整体收回、
-        // 入口保留，以空清单显式冻结）；冻结清单自身不得有重复项（重复 + 缺失会互相抵掉 diff）
-        if (frozen.length > 0) {
-          expect(actual.length).toBeGreaterThan(0);
-        }
+        // 解析塌掉不得退化成空集合假绿；冻结清单自身不得有重复项（重复 + 缺失会互相抵掉 diff）
+        expect(actual.length).toBeGreaterThan(0);
         expect(new Set(frozen).size).toBe(frozen.length);
         expect({
           entry: sub,

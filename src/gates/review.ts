@@ -1,6 +1,6 @@
 /**
  * 审查门禁
- * 
+ *
  * 检查代码审查状态：
  * - 是否有足够的审批
  * - 是否有变更请求
@@ -11,6 +11,34 @@ import { execAsync } from '../utils/exec';
 import { gateResult, fromError } from './types';
 import type { GateResult, GateContext, ReviewGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
+
+/**
+ * `gh pr view --json reviews,state` 的返回形状（只声明判定读取的字段）
+ */
+interface GhReview {
+  state?: string;
+  author?: { login?: string };
+}
+
+interface GhPrView {
+  reviews?: GhReview[];
+  state?: string;
+}
+
+/**
+ * JSON.parse 结果 → GhPrView：不是对象即抛错（fail-fast，不拿畸形输出假评）
+ */
+function parsePrView(stdout: string): GhPrView {
+  const raw: unknown = JSON.parse(stdout);
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('gh pr view 返回不是 JSON 对象');
+  }
+  const reviews = (raw as { reviews?: unknown }).reviews;
+  if (reviews !== undefined && !Array.isArray(reviews)) {
+    throw new Error('gh pr view 返回的 reviews 不是数组');
+  }
+  return raw as GhPrView;
+}
 
 /**
  * 审查门禁
@@ -50,7 +78,7 @@ export class ReviewGate implements Gate {
 
       // 否则尝试从 git 获取
       return this.checkLocalGit(context);
-    } catch (error: any) {
+    } catch (error: unknown) {
       return fromError('review', '审查检查失败', error, startTime);
     }
   }
@@ -68,16 +96,16 @@ export class ReviewGate implements Gate {
         { cwd: context.projectPath }
       );
 
-      const pr = JSON.parse(stdout);
-      const reviews = pr.reviews || [];
+      const pr = parsePrView(stdout);
+      const reviews = pr.reviews ?? [];
 
       // 统计审批和变更请求
-      const approvals = reviews.filter((r: any) => r.state === 'APPROVED');
-      const changesRequested = reviews.filter((r: any) => r.state === 'CHANGES_REQUESTED');
-      const pending = reviews.filter((r: any) => r.state === 'PENDING' || r.state === 'COMMENTED');
+      const approvals = reviews.filter((r) => r.state === 'APPROVED');
+      const changesRequested = reviews.filter((r) => r.state === 'CHANGES_REQUESTED');
+      const pending = reviews.filter((r) => r.state === 'PENDING' || r.state === 'COMMENTED');
 
       // 检查是否满足条件
-      const passed = 
+      const passed =
         approvals.length >= this.config.minReviewers &&
         (!this.config.blockOnChangesRequested || changesRequested.length === 0);
 
@@ -95,7 +123,7 @@ export class ReviewGate implements Gate {
           minReviewers: this.config.minReviewers,
         }
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       // gh CLI 不可用或 PR 不存在
       return fromError('review', '无法获取 PR 状态', error, startTime, {
         suggestion: '确保已安装 gh CLI 并配置了 GitHub token',
@@ -138,7 +166,7 @@ export class ReviewGate implements Gate {
           requireApproval: this.config.requireApproval,
         }
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       return fromError('review', 'Git 检查失败', error, startTime);
     }
   }

@@ -27,7 +27,7 @@ import { getEffectiveConstraints } from './effective-constraints';
 import type { RunTarget } from './constraints/run-env';
 import type { Constraint } from '../types/constraint';
 import type { KnowledgeEntry } from '../knowledge/types';
-import type { CommandIO } from '../cli/command-contract';
+import type { CommandIO } from '../types/command-io';
 import { setYamlEntry, removeYamlEntry } from '../utils/yaml-edit';
 import { collectUsageByConstraint, readProjectTraces } from './constraints/usage-report';
 
@@ -273,7 +273,7 @@ export function retireConstraint(
   const stats = {
     total: usage?.total ?? 0,
     fail: usage?.fail ?? 0,
-    failRate: evaluated > 0 ? (usage!.fail / evaluated) : 0,
+    failRate: usage && evaluated > 0 ? usage.fail / evaluated : 0,
   };
 
   // 1. 落盘退役（config.yml enabled:false + retired 段，原文保留）

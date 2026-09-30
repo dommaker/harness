@@ -18,6 +18,18 @@ import { splitFrontmatter } from '../utils/frontmatter';
 const MAX_SOURCE_REFS = 20;
 const MAX_EXTERNAL_CONTENT_LENGTH = 5000;
 
+/**
+ * `ingestEntry` / `ingestBatch` / `ingestExternal` 的返回（判别联合）：
+ * - `accepted`：已落盘（新建或去重合并），`entry` 为最终形态
+ * - `rejected`：审计质量门拒收、未落盘，`reasons` 为逐条拒绝理由
+ *
+ * 原实现把 `__rejected` / `__rejectReasons` 经 `as any` 偷挂在返回条目上——
+ * 类型面看不见、全仓零消费点（Phase 4 any 清零时核实），改为显式判别联合。
+ */
+export type IngestResult =
+  | { status: 'accepted'; entry: KnowledgeEntry }
+  | { status: 'rejected'; entry: KnowledgeEntry; reasons: string[] };
+
 /** Known prompt injection patterns to strip from external content */
 const INJECTION_PATTERNS = [
   /ignore\s+(all\s+)?previous\s+instructions/gi,
@@ -62,12 +74,12 @@ export class KnowledgeIngest {
   /**
    * Ingest a single knowledge entry.
    * Auto-fills id, created, maturity, and other defaults.
-   * Returns the fully-formed entry that was saved.
+   * Returns a discriminated result: accepted = saved (new or merged), rejected = audit gate refusal.
    */
   ingestEntry(
     partial: Partial<KnowledgeEntry>,
     options: IngestOptions,
-  ): KnowledgeEntry {
+  ): IngestResult {
     const entry = this.buildEntry(partial, options);
 
     // Quality gate: audit before saving
@@ -75,10 +87,8 @@ export class KnowledgeIngest {
     let issues = audit.validate(entry);
     const critical = issues.filter(i => i.action === 'reject');
     if (critical.length > 0) {
-      // Reject: return entry without saving, caller can check issues
-      (entry as any).__rejected = true;
-      (entry as any).__rejectReasons = critical.map(i => i.detail);
-      return entry;
+      // Reject: return without saving; caller branches on status / reasons
+      return { status: 'rejected', entry, reasons: critical.map(i => i.detail) };
     }
 
     // If caller explicitly set maturity, skip demote actions from audit.
@@ -91,7 +101,7 @@ export class KnowledgeIngest {
     const existing = this.findDuplicate(entry.title, entry.content, entry.type);
     if (existing) {
       // Merge: update existing entry with new content and metadata
-      return this.mergeEntries(existing, entry, options);
+      return { status: 'accepted', entry: this.mergeEntries(existing, entry, options) };
     }
 
     this.store.save(entry);
@@ -113,17 +123,17 @@ export class KnowledgeIngest {
       }
     }
 
-    return entry;
+    return { status: 'accepted', entry };
   }
 
   /**
    * Ingest multiple entries in batch.
-   * Returns all ingested entries.
+   * Returns one result per input (accepted/rejected).
    */
   ingestBatch(
     partials: Partial<KnowledgeEntry>[],
     options: IngestOptions,
-  ): KnowledgeEntry[] {
+  ): IngestResult[] {
     return partials.map(p => this.ingestEntry(p, options));
   }
 
@@ -136,7 +146,7 @@ export class KnowledgeIngest {
   ingestExternal(
     partial: Partial<KnowledgeEntry>,
     options: Omit<IngestOptions, 'origin'> & { fullContentPath?: string },
-  ): KnowledgeEntry {
+  ): IngestResult {
     const sanitizedContent = sanitizeExternalContent(partial.content || '');
     return this.ingestEntry(
       { ...partial, content: sanitizedContent },
@@ -282,7 +292,12 @@ export class KnowledgeIngest {
       tags: [...new Set([...existing.tags, ...incoming.tags])],
       sourceReferences: [...existing.sourceReferences, ...incoming.sourceReferences].slice(-MAX_SOURCE_REFS),
     };
-    return this.store.update(existing.id, merged)!;
+    // fail-fast：刚经 readEntriesFromDisk 读到的条目 update 不到 = 并发删除/索引漂移，不静默吞
+    const updated = this.store.update(existing.id, merged);
+    if (!updated) {
+      throw new Error(`mergeEntries: 条目 ${existing.id} 落盘更新失败（读得到写不回）`);
+    }
+    return updated;
   }
 
   private defaultSourceRef(source: string): SourceRef[] {

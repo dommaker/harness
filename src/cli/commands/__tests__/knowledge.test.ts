@@ -2,9 +2,12 @@
  * knowledge 命令测试 — knowledgeAudit
  */
 
-import { knowledgeAudit, knowledgeStats, knowledgeHealth, knowledgeSearch } from '../knowledge';
+import { knowledgeAudit } from '../knowledge/audit';
+import { knowledgeStats } from '../knowledge/stats';
+import { knowledgeHealth } from '../knowledge/health';
+import { knowledgeSearch } from '../knowledge/search';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import type { AuditReport } from '../../../knowledge/audit-scoring';
+import type { AuditReport } from '../../../knowledge/audit-dimensions';
 
 // Mock chalk
 jest.mock('chalk', () => ({
@@ -102,6 +105,7 @@ describe('getKnowledgeDir', () => {
     homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(tmpHome);
     storeCtorSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([]),
+      getBaseDir: jest.fn().mockReturnValue(tmpHome),
     }));
   });
 

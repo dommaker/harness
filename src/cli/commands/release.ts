@@ -22,10 +22,9 @@
  */
 
 import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 import chalk from 'chalk';
 import { verifyReleaseArtifacts } from '../../release';
+import { readPackageJson } from '../../utils/package-json';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ReleaseOptions {
@@ -37,10 +36,13 @@ async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout
   try {
     const stdout = execSync(cmd, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
     return { stdout: stdout.trim(), stderr: '' };
-  } catch (e: any) {
-    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() || '';
-    const stdout = typeof e.stdout === 'string' ? e.stdout : e.stdout?.toString() || '';
-    return { stdout: stdout.trim(), stderr: stderr.trim() || e.message || String(e) };
+  } catch (e) {
+    // execSync 非零退出：rejection 形状 Error & { stdout?, stderr? }，逐字段窄化取数
+    const err = e as { stdout?: unknown; stderr?: unknown };
+    const chunk = (v: unknown): string => (typeof v === 'string' ? v : v != null ? String(v) : '');
+    const stderr = chunk(err.stderr);
+    const stdout = chunk(err.stdout);
+    return { stdout: stdout.trim(), stderr: stderr.trim() || (e instanceof Error ? e.message : String(e)) };
   }
 }
 
@@ -55,14 +57,17 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   const dryRun = options.dryRun === 'true';
 
   // ── 1. Verify package ──
-  const pkgJsonPath = path.join(pkgPath, 'package.json');
-  if (!fs.existsSync(pkgJsonPath)) {
+  const pkgJson = readPackageJson(pkgPath);
+  if (!pkgJson) {
     logError(io, chalk.red(`❌ Not a package: ${pkgPath}`));
     return gateFail('package', `not a package: ${pkgPath}`);
   }
-  const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
   const pkgName = pkgJson.name;
   const oldVersion = pkgJson.version;
+  if (typeof oldVersion !== 'string' || !oldVersion) {
+    logError(io, chalk.red('❌ package.json 缺少 version 字段'));
+    return gateFail('version-field', 'package.json missing version field');
+  }
   log(io, chalk.cyan(`📦 ${pkgName}@${oldVersion}`));
   log(io, chalk.cyan(`   bump: ${bumpType}${dryRun ? ' (dry-run)' : ''}`));
 

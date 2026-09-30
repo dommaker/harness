@@ -3,6 +3,17 @@
  */
 
 import { CommandGate, DEFAULT_COMMAND_BLACKLIST } from '../command';
+import type { CommandBlacklistRule, GateResult } from '../types';
+
+/** details 负载窄化（报告袋是 Record<string, unknown>，测试按裁决形状读取） */
+interface CommandDetails {
+  blocked: CommandBlacklistRule[];
+  warnings: CommandBlacklistRule[];
+  audits: CommandBlacklistRule[];
+}
+function detailsOf(r: GateResult): CommandDetails {
+  return r.details as unknown as CommandDetails;
+}
 
 describe('CommandGate', () => {
   describe('check', () => {
@@ -10,7 +21,7 @@ describe('CommandGate', () => {
       const gate = new CommandGate();
       const result = await gate.check('rm -rf /');
       expect(result.passed).toBe(false);
-      expect(result.details?.blocked.length).toBe(1);
+      expect(detailsOf(result).blocked.length).toBe(1);
     });
 
     it('should block rm -rf *', async () => {
@@ -23,14 +34,14 @@ describe('CommandGate', () => {
       const gate = new CommandGate();
       const result = await gate.check('sudo rm -rf /home');
       expect(result.passed).toBe(false);
-      expect(result.details?.blocked.some((r: any) => r.category === 'privilege')).toBe(true);
+      expect(detailsOf(result).blocked.some((r) => r.category === 'privilege')).toBe(true);
     });
 
     it('should warn on DROP TABLE', async () => {
       const gate = new CommandGate();
       const result = await gate.check('DROP TABLE users;');
       expect(result.passed).toBe(true); // warn, not block
-      expect(result.details?.warnings.length).toBe(1);
+      expect(detailsOf(result).warnings.length).toBe(1);
     });
 
     it('should block DROP DATABASE', async () => {
@@ -67,7 +78,7 @@ describe('CommandGate', () => {
       const gate = new CommandGate();
       const result = await gate.check('cat ~/.ssh/id_rsa');
       expect(result.passed).toBe(true); // audit, not block
-      expect(result.details?.audits.length).toBe(1);
+      expect(detailsOf(result).audits.length).toBe(1);
     });
 
     it('should allow safe commands', async () => {
@@ -83,7 +94,7 @@ describe('CommandGate', () => {
       for (const cmd of safeCommands) {
         const result = await gate.check(cmd);
         expect(result.passed).toBe(true);
-        expect(result.details?.blocked.length).toBe(0);
+        expect(detailsOf(result).blocked.length).toBe(0);
       }
     });
 
@@ -155,7 +166,7 @@ describe('CommandGate', () => {
     it('should block rm -rf ~', async () => {
       const r = await gate.check('rm -rf /home/user/.cache');
       expect(r.passed).toBe(false);
-      expect(r.details?.blocked.some((b: any) => b.id === 'rm-rf-home')).toBe(true);
+      expect(detailsOf(r).blocked.some((b) => b.id === 'rm-rf-home')).toBe(true);
     });
 
     it('should block rm -rf .', async () => {
@@ -171,12 +182,12 @@ describe('CommandGate', () => {
     it('should block chmod -R 777', async () => {
       const r = await gate.check('chmod -R 777 /home');
       expect(r.passed).toBe(false);
-      expect(r.details?.blocked.some((b: any) => b.category === 'permission')).toBe(true);
+      expect(detailsOf(r).blocked.some((b) => b.category === 'permission')).toBe(true);
     });
 
     it('should warn on chown root', async () => {
       const r = await gate.check('chown root:root /etc/config');
-      expect(r.details?.warnings.some((w: any) => w.id === 'chown-root')).toBe(true);
+      expect(detailsOf(r).warnings.some((w) => w.id === 'chown-root')).toBe(true);
     });
 
     it('should allow safe uninstall commands', async () => {
@@ -192,7 +203,7 @@ describe('CommandGate', () => {
     it('should block git push --force', async () => {
       const r = await gate.check('git push --force origin master');
       expect(r.passed).toBe(false);
-      expect(r.details?.blocked.some((b: any) => b.id === 'git-push-force')).toBe(true);
+      expect(detailsOf(r).blocked.some((b) => b.id === 'git-push-force')).toBe(true);
     });
 
     it('should block git push -f and --force-with-lease', async () => {
@@ -204,7 +215,7 @@ describe('CommandGate', () => {
       for (const cmd of ['git clean -f', 'git clean -fd', 'git clean -fdx']) {
         const r = await gate.check(cmd);
         expect(r.passed).toBe(false);
-        expect(r.details?.blocked.some((b: any) => b.id === 'git-clean-force')).toBe(true);
+        expect(detailsOf(r).blocked.some((b) => b.id === 'git-clean-force')).toBe(true);
       }
     });
 
@@ -218,7 +229,7 @@ describe('CommandGate', () => {
       ];
       for (const [cmd, id] of cases) {
         const r = await gate.check(cmd);
-        expect(r.details?.warnings.some((w: any) => w.id === id)).toBe(true);
+        expect(detailsOf(r).warnings.some((w) => w.id === id)).toBe(true);
       }
     });
 
@@ -234,7 +245,7 @@ describe('CommandGate', () => {
       ]) {
         const r = await gate.check(cmd);
         expect(r.passed).toBe(true);
-        expect(r.details?.warnings ?? []).toEqual([]);
+        expect(detailsOf(r).warnings).toEqual([]);
       }
     });
   });

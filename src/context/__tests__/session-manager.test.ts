@@ -121,6 +121,7 @@ describe('SessionManager', () => {
   describe('restoreSession', () => {
     it('应该从 checkpoint 恢复会话', () => {
       (mockFs.existsSync as jest.Mock).mockImplementation((p: string) => {
+        if (p.endsWith('sessions')) return true;
         if (p.includes('checkpoints')) return true;
         if (p.includes('events.jsonl')) return true;
         return false;
@@ -155,6 +156,23 @@ describe('SessionManager', () => {
       expect(() => {
         manager.restoreSession('nonexistent');
       }).toThrow('不存在');
+    });
+
+    it('checkpoint 文件损坏（坏 JSON）→ 抛 SyntaxError，不再伪装成「不存在」', () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      (mockFs.readdirSync as jest.Mock).mockReturnValue(['session-1']);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue('NOT VALID JSON{{{');
+
+      try {
+        expect(() => {
+          manager.restoreSession('cp-123');
+        }).toThrow(SyntaxError);
+      } finally {
+        // 本文件用 clearAllMocks（不清 mockReturnValue），恢复套件默认值防泄漏
+        (mockFs.existsSync as jest.Mock).mockReturnValue(false);
+        (mockFs.readdirSync as jest.Mock).mockReturnValue([]);
+        (mockFs.readFileSync as jest.Mock).mockReturnValue('');
+      }
     });
   });
 

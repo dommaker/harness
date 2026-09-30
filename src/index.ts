@@ -233,19 +233,16 @@ export type {
 } from './failure';
 
 // ========================================
-// 上下文管理（会话管理 + 知识注入）
+// 上下文管理（会话管理）
 // ========================================
 export {
   SessionManager,
-  KnowledgeInjector,
 } from './context';
 export type {
   CompactionConfig,
   CompactionLevel,
   ContextSource,
   ContextSourceType,
-  InjectionConfig,
-  InjectionResult,
   SessionCheckpoint,
   SessionEvent,
   SessionEventType,
@@ -270,6 +267,13 @@ export {
   DEFAULT_DECAY_CONFIG,
   estimateTokens,
 } from './knowledge';
+/**
+ * 外部来源条目的 prompt 标记标准（harness#161 三层防御第二层 marking 的唯一正本，
+ * 定义在 `knowledge/query.ts`）。知识注入编排已归下游编排消费方（定位文档裁决），
+ * 本标记作为标准/家具保留公开导出：消费方自行格式化注入内容时以此常量对齐标记，
+ * 不得另存字面量。
+ */
+export { EXTERNAL_SOURCE_MARKER } from './knowledge';
 export type {
   KnowledgeEntry,
   KnowledgeStore,

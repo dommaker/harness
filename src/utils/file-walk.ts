@@ -20,18 +20,14 @@ export interface FileWalkOptions {
 /**
  * 递归收集 root 下的文件路径（同步）
  *
- * 目录不可读时静默跳过（与原各处实现行为一致）。
+ * fail-fast：目录不可读（权限等）直接抛出，不再静默跳过——
+ * 遍历缺一块而调用方不知情，比报错更难查。
  */
 export function walkFiles(root: string, options: FileWalkOptions = {}): string[] {
   const { skipDirs = [], skipHidden = false, filter } = options;
   const results: string[] = [];
 
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return results;
-  }
+  const entries = fs.readdirSync(root, { withFileTypes: true });
 
   for (const entry of entries) {
     if (skipHidden && entry.name.startsWith('.')) continue;

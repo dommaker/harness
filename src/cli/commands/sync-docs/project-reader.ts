@@ -9,6 +9,8 @@ import { loadRawProjectConfig, resolveContextFiles } from '../../../core/project
 import type { ConstructionSiteDrift } from '../../../core/constraints/construction-sites';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';
+import { attemptAsync } from '../../../utils/attempt';
+import { readPackageJson } from '../../../utils/package-json';
 
 export interface ModuleInfo {
   name: string;
@@ -50,23 +52,16 @@ export interface PackageJsonLite {
   scripts?: Record<string, string>;
 }
 
-/** 读取 package.json（不存在或无法解析时返回 null） */
+/** 读取 package.json（不存在返回 null；在场但损坏 → 抛出，fail-fast 不装「没有」） */
 export async function readPackageJsonLite(dir: string): Promise<PackageJsonLite | null> {
-  try {
-    return JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf-8')) as PackageJsonLite;
-  } catch {
-    return null;
-  }
+  return readPackageJson<PackageJsonLite>(dir);
 }
 
 /** 从 .harness/config.yml 读取项目描述（package.json 无 description 时的兜底） */
 export async function getConfigDescription(projectPath: string): Promise<string> {
-  try {
-    const config = loadRawProjectConfig(projectPath);
-    return typeof config?.description === 'string' ? config.description : '';
-  } catch {
-    return '';
-  }
+  // loadRawProjectConfig：文件缺失 → undefined；YAML 损坏 → 抛出（fail-fast）
+  const config = loadRawProjectConfig(projectPath);
+  return typeof config?.description === 'string' ? config.description : '';
 }
 
 /** 检测包管理器（决定命令前缀）：pnpm workspace/lockfile → yarn lockfile → 默认 npm */
@@ -124,12 +119,9 @@ export async function getSourceDirs(projectPath: string): Promise<string[]> {
 export async function scanSourceModules(srcDir: string, projectPath: string): Promise<ModuleInfo[]> {
   const found: { absPath: string; name: string; file: string }[] = [];
 
-  let entries: string[];
-  try {
-    entries = await fs.readdir(srcDir);
-  } catch {
-    return [];
-  }
+  // srcDir 不存在 → 空清单（未配置该源码根不算异常）；存在但读不出 → 抛出（fail-fast）
+  if (!existsSync(srcDir)) return [];
+  const entries = await fs.readdir(srcDir);
 
   for (const entry of entries) {
     // 跳过依赖/旁测/构建产物目录（名单正本见 utils/file-walk）
@@ -188,14 +180,19 @@ export async function extractFileDescriptions(filePaths: string[]): Promise<stri
 
 /**
  * 从文件提取描述
+ *
+ * 显式降级（attemptAsync）：文件清单来自此前的目录扫描，扫描→读取之间存在
+ * 文件被删除的竞态窗口；描述只是文档生成的美容字段，少一份描述不该炸掉整个
+ * sync-docs——读不到的文件交回文件名占位（harness#147 原 try/catch 兜底语义保留）。
  */
 async function extractFileDescription(filePath: string): Promise<string> {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return extractFirstComment(content) || path.basename(filePath, path.extname(filePath));
-  } catch {
-    return path.basename(filePath, path.extname(filePath));
-  }
+  return attemptAsync(
+    async () => {
+      const content = await fs.readFile(filePath, 'utf-8');
+      return extractFirstComment(content) || path.basename(filePath, path.extname(filePath));
+    },
+    () => path.basename(filePath, path.extname(filePath)),
+  );
 }
 
 /**

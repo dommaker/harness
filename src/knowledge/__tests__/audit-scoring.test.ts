@@ -1,28 +1,30 @@
 /**
- * audit-scoring 纯模块测试（harness#134）
+ * audit 打分纯模块组测试（harness#134；Phase 3 拆分为 audit-rules / audit-scoring / audit-dimensions）
  *
- * 本模块的立身之本是**零 IO**：判定只吃条目数组与已取好的环境数据。
+ * 本模块组的立身之本是**零 IO**：判定只吃条目数组与已取好的环境数据。
  * 因此这里既有行为断言，也有一道源形状闸——有人往打分核心塞回 fs，就跑红。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { AUDIT_RULE_LABELS, MAX_SOURCE_REFS } from '../audit-rules';
+import type { AuditIssue } from '../audit-rules';
 import {
-  AUDIT_RULE_LABELS,
   DEFAULT_PROMOTION_BLOCK_DAYS,
   DEFAULT_SHORT_CONTENT_THRESHOLD,
   DEFAULT_STALE_DAYS,
-  MAX_SOURCE_REFS,
   calculateHealthScore,
-  computeDimensions,
   resolveThresholds,
   scanEntries,
   summarizeIssues,
 } from '../audit-scoring';
-import type { AuditIssue } from '../audit-scoring';
+import { computeDimensions } from '../audit-dimensions';
 import type { KnowledgeEntry } from '../types';
 
-const SOURCE = fs.readFileSync(path.join(__dirname, '../audit-scoring.ts'), 'utf-8');
+// 源形状闸扫拆分后的整个打分模块组（规则表 / 评分 / 维度三块同判）
+const SOURCE = ['audit-rules.ts', 'audit-scoring.ts', 'audit-dimensions.ts']
+  .map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf-8'))
+  .join('\n');
 
 function makeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
   return {

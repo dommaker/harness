@@ -68,9 +68,11 @@ export class KnowledgeIndexGenerator {
 
   /**
    * 扫描目录，返回索引数据行（无 header）
+   *
+   * baseDir 不存在 = 空知识库（领域语义，返回空）；扫到一半目录不可读 = 真故障，抛出。
    */
   generateIndexLines(): string[] {
-    const files = this.scanFiles(this.baseDir);
+    const files = fs.existsSync(this.baseDir) ? this.scanFiles(this.baseDir) : [];
     const entries: IndexEntry[] = [];
 
     for (const filePath of files) {
@@ -97,12 +99,8 @@ export class KnowledgeIndexGenerator {
   private scanFiles(dir: string, relative: string = ''): string[] {
     const results: string[] = [];
 
-    let items: fs.Dirent[];
-    try {
-      items = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return results;
-    }
+    // fail-fast：目录不可读直接抛，不返回半截清单
+    const items = fs.readdirSync(dir, { withFileTypes: true });
 
     for (const item of items) {
       const name = item.name;
@@ -122,59 +120,56 @@ export class KnowledgeIndexGenerator {
   }
 
   private parseFile(filePath: string): IndexEntry | null {
-    try {
-      const raw = fs.readFileSync(filePath, 'utf-8');
-      const filename = path.relative(this.baseDir, filePath);
+    // fail-fast：读失败（IO）直接抛；frontmatter 损坏由下方 splitFrontmatter 分支显式上报
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const filename = path.relative(this.baseDir, filePath);
 
-      // 跳过 ghost 文件（文件名为 .md）
-      if (path.basename(filename) === '.md') return null;
+    // 跳过 ghost 文件（文件名为 .md）
+    if (path.basename(filename) === '.md') return null;
 
-      // 尝试解析 YAML frontmatter（语法与失败走法正本：utils/frontmatter）
-      const fm = splitFrontmatter(raw);
-      if (fm.state === 'malformed') {
-        // 统一口径（harness#89）：损坏必须显式上报，恢复动作是 best-effort 索引原文
-        console.error(
-          `[harness] 知识索引 frontmatter ${fm.reason}（${fm.detail}），按无 frontmatter 处理 ${filename}`
-        );
-      }
-      if (fm.state === 'ok') {
-        const meta = fm.meta;
-        const headings = this.extractHeadings(fm.body);
+    // 尝试解析 YAML frontmatter（语法与失败走法正本：utils/frontmatter）
+    const fm = splitFrontmatter(raw);
+    if (fm.state === 'malformed') {
+      // 统一口径（harness#89）：损坏必须显式上报，恢复动作是 best-effort 索引原文
+      console.error(
+        `[harness] 知识索引 frontmatter ${fm.reason}（${fm.detail}），按无 frontmatter 处理 ${filename}`
+      );
+    }
+    if (fm.state === 'ok') {
+      const meta = fm.meta;
+      const headings = this.extractHeadings(fm.body);
 
-        // 检测 skill schema（name/description 而非 id/type）
-        const type = meta.type
-          ? String(meta.type)
-          : meta.name
-            ? 'skill'
-            : this.inferType(filename);
-
-        return {
-          filename,
-          id: String(meta.id ?? meta.name ?? path.basename(filePath, '.md')),
-          type,
-          title: String(meta.title ?? meta.description ?? ''),
-          maturity: String(meta.maturity ?? 'unknown'),
-          tags: Array.isArray(meta.tags) ? (meta.tags as unknown[]).map(String) : [],
-          headings,
-        };
-      }
-
-      // absent（含空 meta）或已上报的 malformed — best effort
-      const headings = this.extractHeadings(raw);
-      const h1Match = raw.match(/^#\s+(.+)$/m);
+      // 检测 skill schema（name/description 而非 id/type）
+      const type = meta.type
+        ? String(meta.type)
+        : meta.name
+          ? 'skill'
+          : this.inferType(filename);
 
       return {
         filename,
-        id: path.basename(filePath, '.md'),
-        type: this.inferType(filename),
-        title: h1Match ? h1Match[1].trim() : '',
-        maturity: 'unknown',
-        tags: [],
+        id: String(meta.id ?? meta.name ?? path.basename(filePath, '.md')),
+        type,
+        title: String(meta.title ?? meta.description ?? ''),
+        maturity: String(meta.maturity ?? 'unknown'),
+        tags: Array.isArray(meta.tags) ? (meta.tags as unknown[]).map(String) : [],
         headings,
       };
-    } catch {
-      return null;
     }
+
+    // absent（含空 meta）或已上报的 malformed — best effort
+    const headings = this.extractHeadings(raw);
+    const h1Match = raw.match(/^#\s+(.+)$/m);
+
+    return {
+      filename,
+      id: path.basename(filePath, '.md'),
+      type: this.inferType(filename),
+      title: h1Match ? h1Match[1].trim() : '',
+      maturity: 'unknown',
+      tags: [],
+      headings,
+    };
   }
 
   /**

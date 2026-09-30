@@ -120,7 +120,11 @@ describe('SpecValidator', () => {
 
   describe('validateFile() with YAML', () => {
     it('should validate valid YAML file', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('name: test\nversion: 1');
 
       const result = await validator.validateFile('specs/test.yml');
@@ -129,7 +133,11 @@ describe('SpecValidator', () => {
     });
 
     it('should detect invalid YAML', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('invalid: yaml: content:');
 
       const result = await validator.validateFile('specs/bad.yml');
@@ -140,7 +148,11 @@ describe('SpecValidator', () => {
 
   describe('validateFile() with ARCHITECTURE.md', () => {
     it('should validate valid ARCHITECTURE.md', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('# Architecture\n\n## Module A\n\nContent...');
 
       const result = await validator.validateFile('ARCHITECTURE.md');
@@ -149,7 +161,11 @@ describe('SpecValidator', () => {
     });
 
     it('should warn on missing headers', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('Just plain text without headers');
 
       const result = await validator.validateFile('ARCHITECTURE.md');
@@ -169,7 +185,11 @@ describe('SpecValidator', () => {
 
     it('should identify specs directory files', async () => {
       // specs/ 下的文件应该被识别
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('# Test\n\nContent');
       const result = await validator.validateFile('specs/modules/test.md');
       expect(result.file).toBe('specs/modules/test.md');
@@ -178,7 +198,11 @@ describe('SpecValidator', () => {
 
   describe('basicValidation()', () => {
     it('should return valid for empty content', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('');
 
       const result = await validator.validateFile('specs/empty.yml');
@@ -190,7 +214,11 @@ describe('SpecValidator', () => {
 
   describe('fileExists()', () => {
     it('should return true for existing file', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('test');
 
       const result = await validator.validateFile('specs/existing.yml');
@@ -291,7 +319,11 @@ describe('SpecValidator', () => {
 
   describe('validate with custom schema', () => {
     it('should use provided schema', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('custom content');
 
       const customSchema = {
@@ -311,7 +343,11 @@ describe('SpecValidator', () => {
     });
 
     it('should handle schema validation errors', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('bad content');
 
       const failingSchema = {
@@ -332,7 +368,11 @@ describe('SpecValidator', () => {
     });
 
     it('should handle schema throwing exception', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('content');
 
       const throwingSchema = {
@@ -351,7 +391,11 @@ describe('SpecValidator', () => {
 
   describe('validateFile() without schema', () => {
     it('should use basicValidation when no schema provided', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('# Title\n\n## Section\n\nContent');
 
       const result = await validator.validateFile('ARCHITECTURE.md');
@@ -361,7 +405,11 @@ describe('SpecValidator', () => {
     });
 
     it('should detect missing headers in architecture file', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('Plain text without any headers');
 
       const result = await validator.validateFile('ARCHITECTURE.md');
@@ -375,7 +423,11 @@ describe('SpecValidator', () => {
 
   describe('convenience functions', () => {
     it('validateSpec should work without schemaPath', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.access.mockImplementation((p: any) =>
+      String(p).includes('schemas')
+        ? Promise.reject(new Error('no schema'))
+        : Promise.resolve(undefined)
+    );
       mockFs.readFile.mockResolvedValue('content');
 
       const result = await validateSpec('specs/test.yml');

@@ -17,7 +17,7 @@
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
 | monitoring/ | Execution Trace 收集/分析 |
 | failure/ | 错误分类、失败记录 |
-| context/ | 会话管理、压缩、知识注入 |
+| context/ | 会话管理 |
 | cli/commands/ | 20 个顶层命令（COMMAND_DEFINITIONS 14 + GATE_DEFINITIONS 6）+ constraints 治理子命令 |
 | agents/ | Agent 生命周期状态机（7 状态） |
 | completion-checkers/ | 提交集收尾软观测三纯判定（tdd-chain / phase-format / contract-presence） |
@@ -25,9 +25,9 @@
 | knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Linter、Reference Tracker |
 | presets/ | 预设纯数据（strict/standard/relaxed） |
 | release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
-| sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md） |
-| types/ | 公共类型（checkpoint / constraint / cso / failure / passes-gate / project-config / spec） |
-| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-version / detect-source-roots / glob-match） |
+| sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md；与 knowledge/index-generator 平行不合并是刻意分工，裁决见 knowledge/CONTEXT.md） |
+| types/ | 公共类型（checkpoint / command-io / constraint / cso / failure / gate / passes-gate / project-config / spec） |
+| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-json / package-version / detect-source-roots / glob-match / attempt） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
 
 ## 依赖关系
@@ -58,6 +58,7 @@
 
 ## 注意事项
 - 公共包，禁止硬编码业务路径
+- 错误处理口径（吞错治理 Phase 2）：默认 fail-fast——异常要么抛出，要么经 `utils/attempt` 显式降级并在调用点注明理由；存在性探测用 `existsSync` 而非 try/catch；`catch {}` 空吞由 eslint `no-empty`（无 allowEmptyCatch）直接拦
 - 约束定义在 `core/constraints/definitions/{iron-laws,guidelines}.ts`（按 severity 分组），不应在运行时代码中定义
 - `bin/` 只有 CLI 入口发布到 npm
 - `__tests__` 的文件系统夹具根一律经 `fs.mkdtempSync` 取每轮唯一目录（缺省父目录 = tmpdir；被测语义本身是 cwd 相对解析的，才显式 opt-out 留在 cwd），固定名会在并发/被 kill 的运行之间互删或被复用成脏夹具；闸 = `__tests__/test-fixture-hygiene.test.ts`（harness#145）

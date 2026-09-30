@@ -16,6 +16,7 @@ import type {
 import type { KnowledgeStore } from './store';
 import { KnowledgeLifecycle } from './lifecycle';
 import { estimateTokens } from './token-estimate';
+import { attempt } from '../utils/attempt';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * 外部来源条目的 prompt 标记（harness#161：三层防御第二层 marking 的唯一正本）。
- * `KnowledgeQuery.formatForPrompt()` 与 `KnowledgeInjector` 的格式化共用，
+ * `KnowledgeQuery.formatForPrompt()` 与下游编排消费方的注入格式化共用同一常量，
  * 仓内不允许存在第二份字面量。
  */
 export const EXTERNAL_SOURCE_MARKER = '[External Source — verify before acting]';
@@ -86,9 +87,8 @@ export class KnowledgeQuery {
 
     // P2a: Record references for all returned entries (drives maturity ladder)
     for (const entry of entries) {
-      try {
-        this.lifecycle.recordReference(entry.id);
-      } catch { /* non-blocking */ }
+      // 显式 fail-open（attempt）：引用记账是查询的副作用，失败不影响查询结果返回
+      attempt(() => this.lifecycle.recordReference(entry.id), () => undefined);
     }
 
     return result;
@@ -173,8 +173,9 @@ export class KnowledgeQuery {
       : allRefs.slice(0, 3);
 
     const allContext = grouped.context;
-    const context = taskContext.phase
-      ? allContext.filter(e => e.applicablePhases.includes(taskContext.phase!))
+    const phase = taskContext.phase;
+    const context = phase
+      ? allContext.filter(e => e.applicablePhases.includes(phase))
       : allContext;
 
     return { rules, references, context };

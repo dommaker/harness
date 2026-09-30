@@ -6,8 +6,9 @@
  * 铁律违规被报成 violations: [] / passed = 全量（假绿）。
  * 修复后 report 直调 checker.collectConstraints（不抛、全量收集），违规如实上报。
  *
- * fixture：CAPABILITIES.md 登记幽灵文件 → docs_freshness（file_modification
- * 触发域内唯一铁律）必违规。
+ * fixture：CAPABILITIES.md 登记幽灵文件 → docs_freshness 必违规
+ * （file_modification 触发域内唯一铁律；ADR-0032 起降 warning 级，
+ * 违规落 warningViolations/violations，`failed` 只计 error 级）。
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -28,8 +29,8 @@ function parseJsonReport(output: string) {
   return JSON.parse(output.slice(start, end + 1));
 }
 
-describe('report 铁律违规如实上报（假绿回归）', () => {
-  it('docs_freshness 违规 → failed ≥ 1、violations 点名、passed < total', async () => {
+describe('report 违规如实上报（假绿回归）', () => {
+  it('docs_freshness 违规 → warningViolations ≥ 1、violations 点名、passed < total', async () => {
     const root = createProjectFixture({
       name: 'report-false-green',
       files: { 'CAPABILITIES.md': GHOST_CAPABILITIES },
@@ -39,8 +40,11 @@ describe('report 铁律违规如实上报（假绿回归）', () => {
     await report({ format: 'json', projectPath: root }, io);
 
     const data = parseJsonReport(io.outText());
-    expect(data.constraints.failed).toBeGreaterThanOrEqual(1);
+    expect(data.constraints.warningViolations).toBeGreaterThanOrEqual(1);
     expect(data.constraints.violations.map((v: { id: string }) => v.id)).toContain('docs_freshness');
-    expect(data.constraints.passed).toBeLessThan(data.constraints.total);
+    // ADR-0032：docs_freshness 降 warning 级——违规不再计 error 级 failed，
+    // report 的 passed 公式（result.passed ? total : total - violations.length）
+    // 对纯 warning 违规保持 passed = total，原 passed < total 钉随之失效
+    expect(data.constraints.failed).toBe(0);
   });
 });

@@ -32,7 +32,7 @@ export type {
 } from './types';
 export type { KnowledgeStore } from './store';
 export { FileKnowledgeStore } from './store';
-export { KnowledgeQuery } from './query';
+export { KnowledgeQuery, EXTERNAL_SOURCE_MARKER } from './query';
 export { estimateTokens } from './token-estimate';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';
@@ -42,4 +42,6 @@ export { KnowledgeLinter } from './lint';
 export { ColdStartImporter } from './import';
 export { KnowledgeHealthScorer } from './doctor';
 export { KnowledgeAudit } from './audit';
-export type { AuditRuleName, AuditAction, AuditIssue, AuditReport, AuditOptions } from './audit-scoring';
+export type { AuditRuleName, AuditAction, AuditIssue } from './audit-rules';
+export type { AuditOptions } from './audit-scoring';
+export type { AuditReport } from './audit-dimensions';

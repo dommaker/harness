@@ -14,6 +14,13 @@ jest.mock('fs/promises', () => ({
   access: jest.fn(),
 }));
 
+// Mock fs（detectTestCommand 经 utils/package-json 正本读 package.json：
+// readFileSync + ENOENT 判缺失；existsSync 仍供 pyproject/go.mod 等标记探测）
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+}));
+
 // Mock execAsync
 jest.mock('../../../utils/exec', () => ({
   execAsync: jest.fn(),
@@ -35,31 +42,49 @@ jest.mock('chalk', () => ({
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockExistsSync = (require('fs') as { existsSync: jest.Mock }).existsSync;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockReadFileSync = (require('fs') as { readFileSync: jest.Mock }).readFileSync;
 const MockPassesGate = PassesGate as jest.MockedClass<typeof PassesGate>;
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
 describe('passes-gate command', () => {
   let io: CapturingIO;
+  /** 当轮 fixture 的 package.json 内容（detectTestCommand 经 readPackageJson 消费） */
+  let pkgContent: string;
 
   beforeEach(() => {
 
     io = captureIO();
     jest.clearAllMocks();
+    pkgContent = JSON.stringify({ scripts: { test: 'jest' } });
+    // 缺省：package.json 在场（多数用例喂 readFile 脚本表），其余探测标记不在场
+    mockExistsSync.mockImplementation((p: string) => String(p).endsWith('package.json'));
+    // readPackageJson 口径：单次 readFileSync，ENOENT = 缺失（与真实缺文件行为一致）
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (!mockExistsSync(p)) {
+        const err = new Error(`ENOENT: no such file or directory, open '${p}'`) as NodeJS.ErrnoException;
+        err.code = 'ENOENT';
+        throw err;
+      }
+      return pkgContent;
+    });
   });
 
   describe('runPassesGate', () => {
     it('应该跳过无测试命令的情况', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('no package.json'));
-      mockFs.access.mockRejectedValue(new Error('no file'));
+      // 任何项目标记都不在场（package.json / pyproject.toml / pytest.ini / go.mod）
+      mockExistsSync.mockReturnValue(false);
 
       await runPassesGate({}, io);
       expect(io.outText()).toContain('未检测到测试命令');
     });
 
     it('应该通过测试门控', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true,
@@ -78,9 +103,9 @@ describe('passes-gate command', () => {
     });
 
     it('应该失败测试门控', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: false,
@@ -101,10 +126,62 @@ describe('passes-gate command', () => {
       expect(result).toEqual({ kind: 'fail', reason: 'passes-gate denied: 2/10 个测试失败' });
     });
 
-    it('应该处理测试执行错误', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+    it('失败计数读不到时如实显示「未取到计数」，不编造成 1 个用例失败', async () => {
+      pkgContent = JSON.stringify({
         scripts: { test: 'jest' },
+      });
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: false,
+        passedTests: 0,
+        failedTests: null,
+        totalTests: 0,
+        duration: 1000,
+        failures: [],
+        message: '测试命令以退出码 137 终止',
+      });
+      (MockPassesGate as any).mockImplementation(() => ({
+        runTests: mockRunTests,
       }));
+
+      const result = await runPassesGate({}, io);
+
+      expect(io.outText()).toContain('未取到计数');
+      expect(io.outText()).not.toMatch(/失败: 1\//);
+      expect(io.outText()).toContain('测试命令以退出码 137 终止');
+      expect(result).toEqual({
+        kind: 'fail',
+        reason: 'passes-gate denied: 未取到失败计数（命令判负且输出无汇总行）｜测试命令以退出码 137 终止',
+      });
+    });
+
+    it('失败计数为 0 但判负（allowPartialPass 之外的形状）仍显示数值而非「未取到」', async () => {
+      pkgContent = JSON.stringify({
+        scripts: { test: 'jest' },
+      });
+
+      const mockRunTests = jest.fn().mockResolvedValue({
+        passed: false,
+        passedTests: 10,
+        failedTests: 0,
+        totalTests: 10,
+        duration: 1000,
+        failures: [],
+      });
+      (MockPassesGate as any).mockImplementation(() => ({
+        runTests: mockRunTests,
+      }));
+
+      await runPassesGate({}, io);
+
+      expect(io.outText()).toContain('失败: 0/10');
+      expect(io.outText()).not.toContain('未取到计数');
+    });
+
+    it('应该处理测试执行错误', async () => {
+      pkgContent = JSON.stringify({
+        scripts: { test: 'jest' },
+      });
 
       const mockRunTests = jest.fn().mockRejectedValue(new Error('test failed'));
       (MockPassesGate as any).mockImplementation(() => ({
@@ -197,10 +274,8 @@ describe('passes-gate command', () => {
 
   describe('detectTestCommand', () => {
     it('应该检测 pytest 项目', async () => {
-      // package.json 不存在
-      mockFs.readFile.mockRejectedValue(new Error('no file'));
-      // pyproject.toml 存在（Python 标记任一命中即 pytest）
-      mockFs.access.mockResolvedValueOnce(undefined); // pyproject.toml
+      // package.json 不存在；pyproject.toml 存在（Python 标记任一命中即 pytest）
+      mockExistsSync.mockImplementation((p: string) => String(p).endsWith('pyproject.toml'));
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -212,13 +287,8 @@ describe('passes-gate command', () => {
     });
 
     it('应该检测 Go 项目', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('no file'));
-      // Reset access mock to avoid leaking from previous tests
-      mockFs.access.mockReset();
-      mockFs.access
-        .mockRejectedValueOnce(new Error('no file')) // pyproject.toml
-        .mockRejectedValueOnce(new Error('no file')) // pytest.ini
-        .mockResolvedValueOnce(undefined); // go.mod
+      // package.json / pyproject.toml / pytest.ini 均不在场，go.mod 在
+      mockExistsSync.mockImplementation((p: string) => String(p).endsWith('go.mod'));
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -229,10 +299,17 @@ describe('passes-gate command', () => {
       expect(MockPassesGate).toHaveBeenCalledWith(expect.objectContaining({ testCommand: 'go test ./...' }));
     });
 
+    it('package.json 在场但 JSON 损坏 → 抛出（fail-fast，不再吞成「无测试命令」）', async () => {
+      mockExistsSync.mockImplementation((p: string) => String(p).endsWith('package.json'));
+      pkgContent = 'NOT VALID JSON{{{';
+
+      await expect(runPassesGate({}, io)).rejects.toThrow(SyntaxError);
+    });
+
     it('应该检测 test:ci 脚本', async () => {
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { 'test:ci': 'jest --ci' },
-      }));
+      });
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -244,10 +321,9 @@ describe('passes-gate command', () => {
     });
 
     it('应该跳过默认 echo 测试脚本', async () => {
-      mockFs.readFile.mockReset();
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
+      pkgContent = JSON.stringify({
         scripts: { test: 'echo "Error: no test specified"' },
-      }));
+      });
       mockFs.access.mockReset();
       mockFs.access.mockRejectedValue(new Error('no file'));
 

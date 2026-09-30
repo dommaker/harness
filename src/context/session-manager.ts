@@ -36,13 +36,8 @@ export class SessionManager {
 
     this.sessions.set(id, handle);
 
-    // 创建会话目录
-    const sessionDir = this.getSessionDir(id);
-    try {
-      fs.mkdirSync(sessionDir, { recursive: true });
-    } catch {
-      // 目录创建失败，静默处理
-    }
+    // 创建会话目录（fail-fast：建不出来说明 basePath 不可写，后续持久化必败，早抛）
+    fs.mkdirSync(this.getSessionDir(id), { recursive: true });
 
     return handle;
   }
@@ -60,29 +55,26 @@ export class SessionManager {
     const cached = this.sessions.get(id);
     if (cached) return cached;
 
-    // 从磁盘恢复
+    // 从磁盘恢复（fail-fast：readJsonl 对缺文件返回空结果、坏行按 skip 跳过，
+    // 走到抛错只剩真 IO 故障——曾经整体 catch 吞成 undefined，把 bug 伪装成「会话不存在」）
     const eventsPath = path.join(this.getSessionDir(id), 'events.jsonl');
-    try {
-      // 坏行策略：skip（原逐行 catch 跳过语义不变，harness#82）；
-      // 空文件判定保持原始非空行数口径（合法 + 坏行 = 0 才算空）
-      // 计数去向：并进空事件判定的原始行数口径（harness#100 记名豁免：会话恢复面只区分
-      // "有没有事件"，单列坏行数不改变任何输出；会话事件写链在本地，损坏=半写入截断）
-      const { records: events, skippedLines } = readJsonl<SessionEvent>(eventsPath, 'skip');
-      if (events.length + skippedLines === 0) return undefined;
+    // 坏行策略：skip（原逐行 catch 跳过语义不变，harness#82）；
+    // 空文件判定保持原始非空行数口径（合法 + 坏行 = 0 才算空）
+    // 计数去向：并进空事件判定的原始行数口径（harness#100 记名豁免：会话恢复面只区分
+    // "有没有事件"，单列坏行数不改变任何输出；会话事件写链在本地，损坏=半写入截断）
+    const { records: events, skippedLines } = readJsonl<SessionEvent>(eventsPath, 'skip');
+    if (events.length + skippedLines === 0) return undefined;
 
-      const stat = fs.statSync(eventsPath);
-      const handle: SessionHandle = {
-        id,
-        events,
-        createdAt: stat.birthtime.toISOString(),
-        lastActiveAt: stat.mtime.toISOString(),
-      };
+    const stat = fs.statSync(eventsPath);
+    const handle: SessionHandle = {
+      id,
+      events,
+      createdAt: stat.birthtime.toISOString(),
+      lastActiveAt: stat.mtime.toISOString(),
+    };
 
-      this.sessions.set(id, handle);
-      return handle;
-    } catch {
-      return undefined;
-    }
+    this.sessions.set(id, handle);
+    return handle;
   }
 
   /**
@@ -150,16 +142,18 @@ export class SessionManager {
    * 从 checkpoint 恢复会话
    */
   restoreSession(checkpointId: string): SessionHandle {
-    // 搜索所有会话的 checkpoints
+    // 搜索所有会话的 checkpoints（sessions 目录不存在 = 没有任何 checkpoint，直接落底部抛错）
     const sessionsDir = path.join(this.basePath, '.harness', 'sessions');
 
-    try {
+    if (fs.existsSync(sessionsDir)) {
       const sessionIds = fs.readdirSync(sessionsDir);
 
       for (const sessionId of sessionIds) {
         const checkpointPath = path.join(sessionsDir, sessionId, 'checkpoints', `${checkpointId}.json`);
 
         if (fs.existsSync(checkpointPath)) {
+          // checkpoint 文件损坏（JSON 解析失败）直接抛出——曾经整体 catch 吞掉
+          // 真错再抛「不存在」，把损坏伪装成查无此 checkpoint
           const checkpointData = JSON.parse(fs.readFileSync(checkpointPath, 'utf-8')) as SessionCheckpoint;
 
           // 恢复会话
@@ -183,8 +177,6 @@ export class SessionManager {
           return handle;
         }
       }
-    } catch {
-      // 恢复失败
     }
 
     throw new Error(`Checkpoint ${checkpointId} 不存在`);
@@ -210,30 +202,22 @@ export class SessionManager {
   }
 
   /**
-   * 持久化事件到 JSONL
+   * 持久化事件到 JSONL（fail-fast：写失败即抛——静默吞掉会让事件日志悄悄缺行）
    */
   private appendEvent(sessionId: string, event: SessionEvent): void {
-    try {
-      // 写链收口：ensureDir + append（harness#82）
-      appendJsonl(path.join(this.getSessionDir(sessionId), 'events.jsonl'), event);
-    } catch {
-      // 持久化失败，静默处理
-    }
+    // 写链收口：ensureDir + append（harness#82）
+    appendJsonl(path.join(this.getSessionDir(sessionId), 'events.jsonl'), event);
   }
 
   /**
-   * 保存 checkpoint
+   * 保存 checkpoint（fail-fast：写失败即抛，理由同 appendEvent）
    */
   private saveCheckpoint(sessionId: string, checkpoint: SessionCheckpoint): void {
-    try {
-      const checkpointDir = path.join(this.getSessionDir(sessionId), 'checkpoints');
-      fs.mkdirSync(checkpointDir, { recursive: true });
+    const checkpointDir = path.join(this.getSessionDir(sessionId), 'checkpoints');
+    fs.mkdirSync(checkpointDir, { recursive: true });
 
-      const checkpointPath = path.join(checkpointDir, `${checkpoint.id}.json`);
-      fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
-    } catch {
-      // 保存失败，静默处理
-    }
+    const checkpointPath = path.join(checkpointDir, `${checkpoint.id}.json`);
+    fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
   }
 
   /**

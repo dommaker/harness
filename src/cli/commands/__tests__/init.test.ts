@@ -65,7 +65,7 @@ describe('init command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     existingFiles.clear();
-    mockExistsSync.mockReturnValue(false);
+    mockExistsSync.mockImplementation((p: string) => existingFiles.has(p));
     mockReaddirSync.mockReturnValue([]);
   });
 

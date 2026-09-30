@@ -4,7 +4,8 @@
  * Seam：release(options, io) 公开入口。
  * 隔离面：
  *   - child_process.execSync → 按命令前缀分发的 fixture（git/npm/tsc 全部 mock，绝不真执行）
- *   - fs.existsSync / readFileSync → fixture 包（package.json + dist 关键文件）
+ *   - fs.existsSync → dist 关键文件视为存在；fs.readFileSync → fixture 包 package.json
+ *     （pkgExists=false 时抛 ENOENT，与真实缺文件行为一致）
  *   - 输出 → 注入 captureIO（不再 spyOn(process,'exit') / 断言彩色字符串）
  *
  * 判定结果经返回值外溢：每个前置闸门的失败原因含闸门标识（gate <id>），
@@ -117,7 +118,18 @@ describe('release command', () => {
       if (String(p).endsWith('package.json')) return pkgExists;
       return true; // dist 关键文件视为存在
     });
-    mockFs.readFileSync.mockReturnValue(PKG_JSON);
+    mockFs.readFileSync.mockImplementation(((p: fs.PathOrFileDescriptor) => {
+      if (String(p).endsWith('package.json')) {
+        if (!pkgExists) {
+          // 与真实缺文件行为一致：readFileSync 抛 ENOENT（readPackageJson 据此判缺失）
+          const err = new Error(`ENOENT: no such file or directory, open '${String(p)}'`) as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          throw err;
+        }
+        return PKG_JSON;
+      }
+      return PKG_JSON;
+    }) as typeof fs.readFileSync);
 
     flow();
   });
@@ -129,6 +141,16 @@ describe('release command', () => {
 
     expect(result).toEqual(gateFail('package'));
     expect(io.errLines().join('\n')).toContain('Not a package');
+    expect(execCommands()).toEqual([]);
+  });
+
+  test('闸门 1b package.json 缺 version 字段：fail 定位 version-field 闸门，零子进程调用', async () => {
+    mockFs.readFileSync.mockImplementation((() => JSON.stringify({ name: '@dommaker/harness' })) as unknown as typeof fs.readFileSync);
+
+    const result = await release({}, io);
+
+    expect(result).toEqual(gateFail('version-field'));
+    expect(io.errLines().join('\n')).toContain('version');
     expect(execCommands()).toEqual([]);
   });
 

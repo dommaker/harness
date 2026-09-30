@@ -302,12 +302,10 @@ describe('KnowledgeStore', () => {
       fs.rmSync(root, { recursive: true, force: true });
     });
 
-    it('should handle corrupt index.json gracefully', () => {
+    it('corrupt index.json → 抛出（fail-fast：吞成 [] 会让 store 误以为库是空的）', () => {
       const indexPath = path.join(tempDir, 'index.json');
       fs.writeFileSync(indexPath, 'NOT VALID JSON{{{', 'utf-8');
-      // Should not throw, returns empty list
-      const list = store.list();
-      expect(list).toHaveLength(0);
+      expect(() => store.list()).toThrow(SyntaxError);
     });
 
     it('should fallback to indexToEntry when file is missing', () => {
@@ -789,9 +787,9 @@ describe('KnowledgeStore', () => {
       expect(store.getConsumptionStats()).toEqual({ dailyEvents: 12 });
     });
 
-    it('坏 JSON → undefined，不抛（沿用直读侧 best-effort 语义）', () => {
+    it('坏 JSON → 抛出（fail-fast：统计文件在场但损坏不装成「无统计」）', () => {
       fs.writeFileSync(statsPath(), 'NOT VALID JSON{{{', 'utf-8');
-      expect(store.getConsumptionStats()).toBeUndefined();
+      expect(() => store.getConsumptionStats()).toThrow(SyntaxError);
     });
 
     it('缺 dailyEvents 字段 → 0（有文件但无该计数）', () => {

@@ -43,23 +43,16 @@ export async function findExistingContextFiles(projectPath: string, srcDirs: str
   const dirs: string[] = [];
 
   async function scan(dir: string): Promise<void> {
-    let entries: string[];
-    try {
-      entries = await fs.readdir(dir);
-    } catch {
-      return;
-    }
+    // fail-fast：目录不可读直接抛，不静默漏掉整棵子树的 CONTEXT.md
+    const entries = await fs.readdir(dir);
     for (const entry of entries) {
       if (DEFAULT_SKIP_DIRS.includes(entry)) continue;
       const entryPath = path.join(dir, entry);
       const stat = await fs.stat(entryPath);
       if (stat.isDirectory()) {
         // 检查该目录是否有 CONTEXT.md
-        try {
-          await fs.access(path.join(entryPath, 'CONTEXT.md'));
+        if (existsSync(path.join(entryPath, 'CONTEXT.md'))) {
           dirs.push(path.relative(projectPath, entryPath));
-        } catch {
-          // 没有，继续递归
         }
         await scan(entryPath);
       }
@@ -67,7 +60,9 @@ export async function findExistingContextFiles(projectPath: string, srcDirs: str
   }
 
   for (const srcDir of srcDirs) {
-    await scan(path.join(projectPath, srcDir));
+    // 源码根不在场 = 无可发现（缺失判定归调用方 4a 的 contextMissing），不扫
+    const root = path.join(projectPath, srcDir);
+    if (existsSync(root)) await scan(root);
   }
   return dirs;
 }
@@ -80,12 +75,8 @@ export async function getLatestTsMtime(dirPath: string): Promise<number | null> 
   let latest: number | null = null;
 
   async function scan(dir: string): Promise<void> {
-    let entries: string[];
-    try {
-      entries = await fs.readdir(dir);
-    } catch {
-      return;
-    }
+    // fail-fast：目录不可读直接抛（理由同 findExistingContextFiles）
+    const entries = await fs.readdir(dir);
     for (const entry of entries) {
       if (DEFAULT_SKIP_DIRS.includes(entry)) continue;
       const entryPath = path.join(dir, entry);
@@ -100,6 +91,8 @@ export async function getLatestTsMtime(dirPath: string): Promise<number | null> 
     }
   }
 
+  // 目录不存在 → null（函数契约）；存在但扫不出 → 抛（fail-fast）
+  if (!existsSync(dirPath)) return null;
   await scan(dirPath);
   return latest;
 }
@@ -151,14 +144,9 @@ async function collectFileExports(
   inProgress.add(file);
 
   const out: ExportMap = new Map();
-  let source: string;
-  try {
-    source = await fs.readFile(file, 'utf-8');
-  } catch {
-    inProgress.delete(file);
-    cache.set(file, out);
-    return out;
-  }
+  // fail-fast：文件来自导出面扫描/相对导入解析，读失败 = 真 IO 故障。
+  // 曾经 catch 成空表并写进 cache——把「读不了」伪装成「没有导出」，幽灵判定就此失真
+  const source = await fs.readFile(file, 'utf-8');
 
   const { symbols, starFrom } = parseExportStatements(source);
   for (const symbol of symbols) {
@@ -239,12 +227,8 @@ export function createConstructionSiteCounter(projectPath: string): Construction
       ? DEFAULT_SKIP_DIRS.filter((d) => d !== '__tests__')
       : DEFAULT_SKIP_DIRS;
     for (const file of findTsSourceFiles(projectPath, { skipDirs })) {
-      let source: string;
-      try {
-        source = readFileSync(file, 'utf-8');
-      } catch {
-        continue;
-      }
+      // fail-fast：文件来自 walk 结果，读失败直接抛，不静默漏计构造点
+      const source = readFileSync(file, 'utf-8');
       for (const [name, count] of tallyConstructionSites(source)) {
         tally.set(name, (tally.get(name) ?? 0) + count);
       }

@@ -45,8 +45,8 @@ export interface CheckConfig {
   /** HTTP 方法 */
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   
-  /** HTTP 请求体 */
-  body?: any;
+  /** HTTP 请求体（JSON 序列化后发送，形状由被测端点决定） */
+  body?: unknown;
   
   /** HTTP 请求头 */
   headers?: Record<string, string>;
@@ -126,11 +126,11 @@ export interface CheckResult {
   /** 错误详情 */
   error?: string;
   
-  /** 实际值 */
-  actual?: any;
+  /** 实际值（形状随检查类型而异，消费端自行窄化） */
+  actual?: unknown;
   
-  /** 预期值 */
-  expected?: any;
+  /** 预期值（同 actual，开放形状） */
+  expected?: unknown;
 }
 
 /**
@@ -166,8 +166,8 @@ export interface CheckpointContext {
   /** 环境变量 */
   env?: Record<string, string>;
   
-  /** 步骤输出（用于 output_* 检查） */
-  output?: any;
+  /** 步骤输出（用于 output_* 检查；string 直用，其余 JSON 序列化） */
+  output?: unknown;
   
   /** 自定义检查处理器 */
   customHandlers?: Map<string, (config: CheckConfig) => Promise<CheckResult>>;

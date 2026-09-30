@@ -37,15 +37,34 @@ describe('getHarnessPackageVersion', () => {
     }
   });
 
-  it('package.json 读取失败（缺失/损坏）时返回 unknown', () => {
+  it('package.json 缺失时返回 unknown', () => {
     jest.isolateModules(() => {
       jest.doMock('fs', () => ({
         ...jest.requireActual('fs'),
-        readFileSync: () => { throw new Error('ENOENT'); },
+        // readPackageJson 口径：单次 readFileSync，ENOENT = 缺失（与真实缺文件行为一致）
+        readFileSync: () => {
+          const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          throw err;
+        },
       }));
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fresh = require('../package-version') as typeof import('../package-version');
       expect(fresh.getHarnessPackageVersion()).toBe('unknown');
+      jest.dontMock('fs');
+    });
+  });
+
+  it('package.json 在场但读取失败（损坏/IO 故障）时抛出（fail-fast，不装 unknown）', () => {
+    jest.isolateModules(() => {
+      jest.doMock('fs', () => ({
+        ...jest.requireActual('fs'),
+        existsSync: () => true,
+        readFileSync: () => { throw new Error('ENOENT'); },
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fresh = require('../package-version') as typeof import('../package-version');
+      expect(() => fresh.getHarnessPackageVersion()).toThrow('ENOENT');
       jest.dontMock('fs');
     });
   });

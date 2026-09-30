@@ -11,7 +11,7 @@
  */
 
 import { createCommandGate, DEFAULT_COMMAND_BLACKLIST } from '../../gates/command';
-import type { CommandBlacklistRule } from '../../gates/types';
+import type { CommandBlacklistRule } from '../../types/gate';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { gateCommandResult } from '../gate-command';
 

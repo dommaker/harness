@@ -104,7 +104,7 @@ export async function reviewStatus(
       if (pr.reviews && pr.reviews.length > 0) {
         log(io);
         log(io, chalk.gray('审查历史:'));
-        pr.reviews.forEach((r: any) => {
+        (pr.reviews as Array<{ state?: string; author?: { login?: string } }>).forEach((r) => {
           const statusColor = r.state === 'APPROVED' ? chalk.green :
                               r.state === 'CHANGES_REQUESTED' ? chalk.red : chalk.gray;
           log(io, statusColor(`  - ${r.author?.login || 'unknown'}: ${r.state}`));
@@ -115,8 +115,9 @@ export async function reviewStatus(
       log(io, chalk.gray('   使用 gh pr create 创建 PR'));
     }
     return { kind: 'ok' };
-  } catch (error: any) {
-    log(io, chalk.red(`❌ 获取审查状态失败: ${error.message}`));
-    return { kind: 'skip', reason: `获取审查状态失败: ${error.message}` };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(io, chalk.red(`❌ 获取审查状态失败: ${message}`));
+    return { kind: 'skip', reason: `获取审查状态失败: ${message}` };
   }
 }

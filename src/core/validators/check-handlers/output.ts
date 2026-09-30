@@ -10,7 +10,7 @@
 import { execAsync } from '../../../utils/exec';
 import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
-export function stringifyOutput(output: any): string {
+export function stringifyOutput(output: unknown): string {
   if (typeof output === 'string') {
     return output;
   }
@@ -36,8 +36,9 @@ async function resolveOutput(
     try {
       const { stdout } = await execAsync(command, { cwd: context.workdir });
       return { output: stdout };
-    } catch (error: any) {
-      return { output: '', commandError: error.message };
+    } catch (error) {
+      // 命令不存在/启动失败：错误文本即诊断信息，落 commandError 由调用族判失败
+      return { output: '', commandError: error instanceof Error ? error.message : String(error) };
     }
   }
   return { output: '' };
@@ -125,7 +126,7 @@ export async function checkJsonPath(check: CheckpointCheck, context: CheckpointC
   const jsonPath = check.config.jsonPath || '';
   const expected = check.config.expected;
 
-  let actual: any;
+  let actual: unknown;
   try {
     actual = getJsonValue(context.output, jsonPath);
   } catch (error) {
@@ -150,7 +151,7 @@ export async function checkJsonPath(check: CheckpointCheck, context: CheckpointC
   };
 }
 
-function getJsonValue(obj: any, jsonPath: string): any {
+function getJsonValue(obj: unknown, jsonPath: string): unknown {
   const parts = jsonPath.split('.');
   let current = obj;
 
@@ -158,7 +159,7 @@ function getJsonValue(obj: any, jsonPath: string): any {
     if (current === null || current === undefined) {
       return undefined;
     }
-    current = current[part];
+    current = (current as Record<string, unknown>)[part];
   }
 
   return current;

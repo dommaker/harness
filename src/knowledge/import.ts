@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { readPackageJson } from '../utils/package-json';
 import type { KnowledgeEntry, KnowledgeSubsystem, StorageLayer } from './types';
 import type { KnowledgeStore } from './store';
 
@@ -109,10 +110,11 @@ export class ColdStartImporter {
           result = await this.importManual();
           break;
         default:
+          // sourceType 静态收窄为 never（switch 已穷尽四源）；分支防的是运行时脏配置
           result = {
-            source: { type: sourceType as any },
+            source: { type: sourceType },
             entries: [],
-            errors: [{ source: { type: sourceType as any }, message: `未知源类型: ${sourceType}`, recoverable: false }],
+            errors: [{ source: { type: sourceType }, message: `未知源类型: ${sourceType}`, recoverable: false }],
           };
       }
 
@@ -138,10 +140,9 @@ export class ColdStartImporter {
     const source: ImportSource = { type: 'code', path: this.config.projectRoot };
 
     try {
-      // 扫描 package.json 获取技术栈
-      const pkgPath = path.join(this.config.projectRoot, 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      // 扫描 package.json 获取技术栈（缺失 → 无条目；损坏 → 抛出，落下方 errors）
+      const pkg = readPackageJson(this.config.projectRoot);
+      if (pkg) {
         entries.push(this.createEntry({
           title: `技术栈: ${pkg.name || 'unknown'}`,
           content: this.formatPackageInfo(pkg),

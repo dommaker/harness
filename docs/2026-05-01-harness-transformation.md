@@ -1,7 +1,9 @@
 # Harness 转型规划：从约束引擎到知识引擎
 
+> **⚠️ 本文已被取代（SUPERSEDED）**：本文描述的架构方向（三包合一、harness 内置知识引擎/Token 流水线/沙箱/Dashboard）大半已被 ADR-0031 否决或划归 studio/CLI。当前权威定位 = `docs/positioning.md` + ADR-0031/0032/0033/0034。本文仅作历史参考保留，勿作为当前决策依据。
+>
 > 创建日期：2026-05-01
-> 状态：规划中
+> 状态：已被取代（superseded）
 > 前置文档：agent-studio/docs/2026-05-01-agent-native-transformation.md
 
 ---

@@ -83,7 +83,7 @@ export async function contract(
 
           if (r.details?.breakingChanges) {
             lines.push('', chalk.red('破坏性变更:'));
-            (r.details.breakingChanges as any[]).forEach((change: any) => {
+            (r.details.breakingChanges as Array<{ type: string; path: string; description?: string }>).forEach((change) => {
               lines.push(chalk.red(`  - ${change.type}: ${change.path}`));
               if (change.description) {
                 lines.push(chalk.gray(`    ${change.description}`));
@@ -119,13 +119,27 @@ export async function validateSchema(
     const fullPath = path.join(projectPath, contractPath);
     const content = await fs.readFile(fullPath, 'utf-8');
 
-    let schema: any;
+    let parsed: unknown;
     try {
-      schema = yaml.load(content);
-    } catch (e: any) {
-      log(io, chalk.red(`❌ YAML 解析错误: ${e.message}`));
-      return { kind: 'fail', reason: `contract YAML parse error: ${e.message}` };
+      parsed = yaml.load(content);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      log(io, chalk.red(`❌ YAML 解析错误: ${message}`));
+      return { kind: 'fail', reason: `contract YAML parse error: ${message}` };
     }
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      log(io, chalk.red('❌ Schema 验证失败: 契约文件不是 YAML 对象'));
+      return { kind: 'fail', reason: 'contract schema invalid: not a YAML object' };
+    }
+    const schema = parsed as {
+      openapi?: string;
+      info?: { title?: string; version?: string };
+      paths?: Record<string, Record<string, unknown>>;
+    };
+    // 校验通过后消费的三处字段取本地常量（校验不收窄类型）
+    const info = schema.info;
+    const paths = schema.paths;
 
     // 基本验证
     const errors: string[] = [];
@@ -157,18 +171,19 @@ export async function validateSchema(
     log(io);
     log(io, chalk.gray('Schema 信息:'));
     log(io, chalk.gray(`  版本: ${schema.openapi}`));
-    log(io, chalk.gray(`  标题: ${schema.info.title}`));
-    log(io, chalk.gray(`  API 版本: ${schema.info.version}`));
+    log(io, chalk.gray(`  标题: ${info?.title}`));
+    log(io, chalk.gray(`  API 版本: ${info?.version}`));
 
-    if (schema.paths) {
-      const endpoints = Object.keys(schema.paths).flatMap(path =>
-        Object.keys(schema.paths[path]).map(method => `${method.toUpperCase()} ${path}`)
+    if (paths) {
+      const endpoints = Object.keys(paths).flatMap(path =>
+        Object.keys(paths[path]).map(method => `${method.toUpperCase()} ${path}`)
       );
       log(io, chalk.gray(`  端点数: ${endpoints.length}`));
     }
     return { kind: 'ok' };
-  } catch (error: any) {
-    log(io, chalk.red(`❌ 验证失败: ${error.message}`));
-    return { kind: 'fail', reason: `contract schema read error: ${error.message}` };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(io, chalk.red(`❌ 验证失败: ${message}`));
+    return { kind: 'fail', reason: `contract schema read error: ${message}` };
   }
 }

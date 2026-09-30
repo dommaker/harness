@@ -155,7 +155,7 @@ describe('PerformanceGate', () => {
       const result = await strictGate.check(baseContext);
 
       expect(result.details?.metrics).toBeDefined();
-      expect(result.details?.metrics.bundleSize).toBeDefined();
+      expect((result.details?.metrics as { bundleSize?: number }).bundleSize).toBeDefined();
     });
   });
 
@@ -219,7 +219,7 @@ describe('PerformanceGate', () => {
 
       const result = await strictGate.check(baseContext);
 
-      expect(result.details?.metrics.bundleSize).toBe(500); // 200KB + 300KB
+      expect((result.details?.metrics as { bundleSize?: number }).bundleSize).toBe(500); // 200KB + 300KB
     });
 
     it('should skip directories', async () => {
@@ -234,7 +234,7 @@ describe('PerformanceGate', () => {
 
       const result = await strictGate.check(baseContext);
 
-      expect(result.details?.metrics.bundleSize).toBe(100);
+      expect((result.details?.metrics as { bundleSize?: number }).bundleSize).toBe(100);
     });
   });
 

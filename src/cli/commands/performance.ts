@@ -6,7 +6,7 @@
 
 import chalk from 'chalk';
 import { PerformanceGate, type ExtendedPerformanceGateConfig } from '../../gates/performance';
-import type { PerformanceThresholds } from '../../gates/types';
+import type { PerformanceThresholds } from '../../types/gate';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
 
@@ -64,7 +64,7 @@ export async function performance(
         label: '性能门控',
         onPass: (r) => {
           if (!r.details?.metrics) return [];
-          const metrics = r.details.metrics as any;
+          const metrics = r.details.metrics as { coverage?: number; bundleSize?: number };
           const lines = ['', chalk.gray('性能指标:')];
 
           if (metrics.coverage !== undefined) {

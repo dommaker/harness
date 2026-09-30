@@ -64,7 +64,11 @@ export async function runPassesGate(
     log(io);
     log(io, chalk.gray('测试结果:'));
     log(io, chalk.gray(`  通过: ${result.passedTests}/${result.totalTests}`));
-    log(io, chalk.gray(`  失败: ${result.failedTests}/${result.totalTests}`));
+    log(io, chalk.gray(
+      result.failedTests === null
+        ? '  失败: 未取到计数（命令判负，但输出里没有失败计数行：进程被杀 / 无汇总 / 输出溢出这类，不代表「有几个用例红」）'
+        : `  失败: ${result.failedTests}/${result.totalTests}`
+    ));
     log(io, chalk.gray(`  耗时: ${result.duration}ms`));
 
     if (result.passed) {
@@ -75,6 +79,9 @@ export async function runPassesGate(
       log(io);
       log(io, chalk.red('❌ 测试门控未通过'));
       log(io, chalk.red('   task.passes = false'));
+      if (result.message && result.message !== '测试失败') {
+        log(io, chalk.gray(`   原因: ${result.message}`));
+      }
       
       if (result.failures && result.failures.length > 0) {
         log(io, chalk.red('\n失败的测试:'));
@@ -83,7 +90,12 @@ export async function runPassesGate(
         });
       }
 
-      return { kind: 'fail', reason: `passes-gate denied: ${result.failedTests}/${result.totalTests} 个测试失败` };
+      return {
+        kind: 'fail',
+        reason: result.failedTests === null
+          ? `passes-gate denied: 未取到失败计数（命令判负且输出无汇总行）${result.message ? `｜${result.message}` : ''}`
+          : `passes-gate denied: ${result.failedTests}/${result.totalTests} 个测试失败`,
+      };
     }
     return { kind: 'ok' };
   } catch (error) {

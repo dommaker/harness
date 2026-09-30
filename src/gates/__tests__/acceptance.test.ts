@@ -1,5 +1,9 @@
 /**
  * SpecAcceptanceGate 测试
+ *
+ * 旧格式 `acceptance_criteria` 兼容分支已删（gates 层现代化）：本文件只喂
+ * 新契约 `acceptance`。判定语义：checked:true → 满足；未勾选带 e2e_test →
+ * 跑测试按结论判定；未勾选无 e2e_test → 不满足（判负）。
  */
 
 import { SpecAcceptanceGate } from '../acceptance';
@@ -68,11 +72,8 @@ tasks: []
 tasks:
   - id: TASK-001
     description: Test task
-    acceptance_criteria:
-      - id: AC-001
-        description: Test criteria
-        type: manual
-        required: true
+    acceptance:
+      - description: Test criteria
         checked: true
 `);
 
@@ -101,37 +102,60 @@ tasks:
       expect(result.message).toContain('Task not found');
     });
 
-    it('should handle YAML parse error', async () => {
+    it('YAML 解析失败 → 抛出（fail-fast，不拼错误报告）', async () => {
       mockFs.readFile.mockResolvedValueOnce('invalid: yaml: content: [');
 
-      const result = await gate.check({
+      await expect(gate.check({
         projectPath: '/test/project',
-      });
+      })).rejects.toThrow();
+    });
 
-      expect(result.passed).toBe(false);
-      expect(result.message).toContain('Acceptance gate error');
+    it('tasks.yml 缺 tasks 数组 → 抛出指名路径的格式错误', async () => {
+      mockFs.readFile.mockResolvedValueOnce('foo: bar');
+
+      await expect(gate.check({
+        projectPath: '/test/project',
+      })).rejects.toThrow('tasks.yml 格式非法');
+    });
+
+    it('任务缺 id → 抛出格式错误', async () => {
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - description: no id
+`);
+
+      await expect(gate.check({
+        projectPath: '/test/project',
+      })).rejects.toThrow('tasks[0] 缺 id');
+    });
+
+    it('acceptance 条目缺 description → 抛出格式错误', async () => {
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - id: TASK-001
+    acceptance:
+      - checked: true
+`);
+
+      await expect(gate.check({
+        projectPath: '/test/project',
+      })).rejects.toThrow('acceptance[0] 缺 description');
     });
   });
 
   describe('checkAllTasks mode', () => {
     it('should check all tasks when checkAllTasks is true', async () => {
       const allGate = new SpecAcceptanceGate({ checkAllTasks: true });
-      
+
       mockFs.readFile.mockResolvedValueOnce(`
 tasks:
   - id: TASK-001
-    acceptance_criteria:
-      - id: AC-001
-        description: Test
-        type: manual
-        required: true
+    acceptance:
+      - description: Test
         checked: true
   - id: TASK-002
-    acceptance_criteria:
-      - id: AC-002
-        description: Test 2
-        type: manual
-        required: true
+    acceptance:
+      - description: Test 2
         checked: true
 `);
 
@@ -145,22 +169,16 @@ tasks:
 
     it('should report failed tasks', async () => {
       const allGate = new SpecAcceptanceGate({ checkAllTasks: true });
-      
+
       mockFs.readFile.mockResolvedValueOnce(`
 tasks:
   - id: TASK-001
-    acceptance_criteria:
-      - id: AC-001
-        description: Test
-        type: manual
-        required: true
+    acceptance:
+      - description: Test
         checked: true
   - id: TASK-002
-    acceptance_criteria:
-      - id: AC-002
-        description: Test 2
-        type: manual
-        required: true
+    acceptance:
+      - description: Test 2
         checked: false
 `);
 
@@ -194,19 +212,13 @@ tasks:
 tasks:
   - id: TASK-001
     status: done
-    acceptance_criteria:
-      - id: AC-001
-        description: Test
-        type: manual
-        required: true
+    acceptance:
+      - description: Test
         checked: true
   - id: TASK-002
     status: pending
-    acceptance_criteria:
-      - id: AC-002
-        description: Test 2
-        type: manual
-        required: true
+    acceptance:
+      - description: Test 2
         checked: false
 `);
 
@@ -223,11 +235,8 @@ tasks:
 tasks:
   - id: TASK-001
     completed: true
-    acceptance_criteria:
-      - id: AC-001
-        description: Test
-        type: manual
-        required: true
+    acceptance:
+      - description: Test
         checked: true
 `);
 
@@ -239,22 +248,16 @@ tasks:
     });
   });
 
-  describe('acceptance_criteria (legacy format)', () => {
-    it('should pass when all required criteria checked', async () => {
+  describe('acceptance（未勾选判定）', () => {
+    it('should pass when all acceptance checked', async () => {
       mockFs.readFile.mockResolvedValueOnce(`
 tasks:
   - id: TASK-001
-    acceptance_criteria:
-      - id: AC-001
-        description: Test criteria
-        type: manual
-        required: true
+    acceptance:
+      - description: Test feature
         checked: true
-      - id: AC-002
-        description: Optional criteria
-        type: manual
-        required: false
-        checked: false
+      - description: Another test
+        checked: true
 `);
 
       const result = await gate.check({
@@ -263,24 +266,17 @@ tasks:
       });
 
       expect(result.passed).toBe(true);
-      expect(result.details?.checkedCriteria).toBe(1);
+      expect(result.details?.totalCriteria).toBe(2);
     });
 
-    it('should fail when required criteria unchecked', async () => {
+    it('should fail when criteria unchecked (no e2e)', async () => {
       mockFs.readFile.mockResolvedValueOnce(`
 tasks:
   - id: TASK-001
-    acceptance_criteria:
-      - id: AC-001
-        description: Required criteria
-        type: manual
-        required: true
+    acceptance:
+      - description: Required criteria
         checked: false
-      - id: AC-002
-        description: Another required
-        type: manual
-        required: true
-        checked: false
+      - description: Another required
 `);
 
       const result = await gate.check({
@@ -306,28 +302,6 @@ tasks:
 
       expect(result.passed).toBe(true);
       expect(result.message).toContain('no acceptance criteria');
-    });
-  });
-
-  describe('acceptance (new format with E2E tests)', () => {
-    it('should pass when all acceptance checked', async () => {
-      mockFs.readFile.mockResolvedValueOnce(`
-tasks:
-  - id: TASK-001
-    acceptance:
-      - description: Test feature
-        checked: true
-      - description: Another test
-        checked: true
-`);
-
-      const result = await gate.check({
-        projectPath: '/test/project',
-        taskId: 'TASK-001',
-      });
-
-      expect(result.passed).toBe(true);
-      expect(result.details?.totalCriteria).toBe(2);
     });
 
     it('should run E2E test when specified', async () => {
@@ -373,7 +347,8 @@ tasks:
       });
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('E2E test failed');
+      expect(result.details?.e2eTestResults?.[0]?.passed).toBe(false);
+      expect(result.details?.uncheckedCriteria).toContain('Test feature');
     });
   });
 

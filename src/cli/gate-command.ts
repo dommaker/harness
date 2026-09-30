@@ -9,7 +9,7 @@
  */
 
 import chalk from 'chalk';
-import type { GateDecision, GateResult } from '../gates/types';
+import type { GateDecision, GateResult } from '../types/gate';
 import { log, type CommandIO, type CommandResult } from './command-contract';
 
 /**

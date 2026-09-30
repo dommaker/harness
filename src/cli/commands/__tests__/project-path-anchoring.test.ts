@@ -42,17 +42,14 @@ const PACKAGE_JSON = JSON.stringify({
   scripts: { test: 'node ./mark.js' },
 });
 
-/** acceptance_criteria 形状：checked 决定判定，两侧只差 checked 值 → 读错文件必然改变结论 */
+/** acceptance 形状：checked 决定判定，两侧只差 checked 值 → 读错文件必然改变结论 */
 function tasksYml(checked: boolean): string {
   return [
     'tasks:',
     '  - id: TASK-001',
     '    title: 锚定用例',
-    '    acceptance_criteria:',
-    '      - id: crit-1',
-    '        description: 需要人工确认的验收条件',
-    '        type: manual',
-    '        required: true',
+    '    acceptance:',
+    '      - description: 需要人工确认的验收条件',
     `        checked: ${checked}`,
     '',
   ].join('\n');

@@ -150,8 +150,6 @@ describe('真实包根清单同步闸门', () => {
         'dist/context/index.js',
         'dist/core/index.d.ts',
         'dist/core/index.js',
-        'dist/gates/index.d.ts',
-        'dist/gates/index.js',
         'dist/index.d.ts',
         'dist/index.js',
         'dist/presets/index.d.ts',

@@ -1,7 +1,7 @@
 /**
  * 审计规则 label 闭环测试（架构评审 A6，#109）
  *
- * label 正本在规则定义上（定义即注册，#134 后随规则表住在 audit-scoring.ts），
+ * label 正本在规则定义上（定义即注册，#134 后随规则表住；Phase 3 拆分后在 audit-rules.ts），
  * AUDIT_RULE_LABELS 派生自规则表。新增规则无 label → 编译期/本测试期即失败，
  * CLI 不再静默回落英文键名。
  */
@@ -10,8 +10,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { KnowledgeAudit } from '../audit';
-import { AUDIT_RULE_LABELS } from '../audit-scoring';
-import type { AuditRuleName } from '../audit-scoring';
+import { AUDIT_RULE_LABELS } from '../audit-rules';
+import type { AuditRuleName } from '../audit-rules';
 import { FileKnowledgeStore } from '../store';
 
 function makeTmpDir(): string {

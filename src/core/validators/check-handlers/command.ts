@@ -57,14 +57,16 @@ export async function checkCommandSuccess(check: CheckpointCheck, context: Check
       expected: 'exit code 0',
       error: tail ? `输出末段:\n${tail}` : `exit code ${code}`,
     };
-  } catch (error: any) {
+  } catch (error) {
+    // spawn 自身失败（如 shell 不可用）：文本即诊断，判失败回带
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       checkId: check.id,
       passed: false,
       message: `命令执行失败: ${command}`,
-      actual: error.message,
+      actual: detail,
       expected: 'exit code 0',
-      error: error.message,
+      error: detail,
     };
   }
 }
@@ -85,14 +87,15 @@ export async function checkCommandOutput(check: CheckpointCheck, context: Checkp
       actual,
       expected,
     };
-  } catch (error: any) {
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       checkId: check.id,
       passed: false,
       message: `命令执行失败: ${command}`,
-      actual: error.message,
+      actual: detail,
       expected,
-      error: error.message,
+      error: detail,
     };
   }
 }

@@ -4,7 +4,7 @@
  * knowledge 的 11 个子操作原先各自手写「json 投影 + 人读排版」两遍，同一个数据
  * 两处落地、字段名靠人对齐。本文件钉住收口后的四件事：
  *
- * 1. **源形状闸**：`knowledge.ts` 不再出现 chalk / store 构造 / JSON.stringify，
+ * 1. **源形状闸**：`knowledge/` 各子命令文件不再出现 chalk / store 构造 / JSON.stringify，
  *    `--json` 分支只余 audit 索引重建一处策略豁免（逐行冻结）；上色与分派的唯一落点在
  *    `knowledge-view.ts`（store 构造与 JSON.stringify 各恰好一处）。
  * 2. **json 形状冻结**：11/11 子操作的字段清单逐条对撞（新增/删字段须显式改清单）。
@@ -31,13 +31,17 @@ jest.mock('chalk', () => ({
 import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import type { KnowledgeEntry } from '../../../knowledge/types';
-import {
-  knowledgeList, knowledgeSearch, knowledgeImport, knowledgeDecay, knowledgeStats,
-  knowledgeSyncRag, knowledgeAudit, knowledgeSnapshot, knowledgeMigrate, knowledgeIndex, knowledgeHealth,
-  knowledgeListView, knowledgeSearchView, knowledgeImportView, knowledgeDecayView, knowledgeStatsView,
-  knowledgeSyncRagView, knowledgeAuditView, knowledgeSnapshotView, knowledgeMigrateView,
-  knowledgeIndexView, knowledgeHealthView,
-} from '../knowledge';
+import { knowledgeList, knowledgeListView } from '../knowledge/list';
+import { knowledgeSearch, knowledgeSearchView } from '../knowledge/search';
+import { knowledgeImport, knowledgeImportView } from '../knowledge/import';
+import { knowledgeDecay, knowledgeDecayView } from '../knowledge/decay';
+import { knowledgeStats, knowledgeStatsView } from '../knowledge/stats';
+import { knowledgeSyncRag, knowledgeSyncRagView } from '../knowledge/sync-rag';
+import { knowledgeAudit, knowledgeAuditView } from '../knowledge/audit';
+import { knowledgeSnapshot, knowledgeSnapshotView } from '../knowledge/snapshot';
+import { knowledgeMigrate, knowledgeMigrateView } from '../knowledge/migrate';
+import { knowledgeIndex, knowledgeIndexView } from '../knowledge/index';
+import { knowledgeHealth, knowledgeHealthView } from '../knowledge/health';
 import { emitKnowledgeView, toneForMaturity, type DisplayCell, type DisplayModel, type KnowledgeView } from '../knowledge-view';
 import type { MaturityLevel } from '../../../knowledge/types';
 
@@ -448,13 +452,18 @@ beforeEach(() => {
   io = captureIO();
 });
 
+// Phase 3 拆分后 knowledge/ 目录一子命令一文件：源形状闸扫整目录（排序后拼接，判据不变）
+const knowledgeSource = fs.readdirSync(path.join(SRC_DIR, 'knowledge'))
+  .filter(f => f.endsWith('.ts'))
+  .sort()
+  .flatMap(f => fs.readFileSync(path.join(SRC_DIR, 'knowledge', f), 'utf-8').split('\n'));
+
 describe('闸 1：源形状——投影分派与上色只有一处', () => {
-  const knowledgeSource = fs.readFileSync(path.join(SRC_DIR, 'knowledge.ts'), 'utf-8').split('\n');
   const viewSource = fs.readFileSync(path.join(SRC_DIR, 'knowledge-view.ts'), 'utf-8').split('\n');
   const code = (lines: string[]): string[] =>
     lines.map(l => l.trim()).filter(l => !l.startsWith('*') && !l.startsWith('//') && !l.startsWith('/*'));
 
-  it('knowledge.ts 不含 chalk / store 构造 / JSON.stringify', () => {
+  it('knowledge/ 各文件不含 chalk / store 构造 / JSON.stringify', () => {
     const lines = code(knowledgeSource);
     expect(lines.filter(l => l.includes("from 'chalk'"))).toEqual([]);
     expect(lines.filter(l => l.includes('chalk.'))).toEqual([]);
@@ -462,19 +471,20 @@ describe('闸 1：源形状——投影分派与上色只有一处', () => {
     expect(lines.filter(l => l.includes('JSON.stringify'))).toEqual([]);
   });
 
-  it('knowledge.ts 的退出码返回值只余冻结的豁免行（投影出口由 emit 单点给）', () => {
+  it('knowledge/ 的退出码返回值只余冻结的豁免行（投影出口由 emit 单点给）', () => {
+    // Phase 3 拆分后按文件字典序拼接：audit.ts 在 search.ts 前，清单顺序跟着文件序走
     expect(code(knowledgeSource).filter(l => l.includes('kind:'))).toEqual([
+      // #152：--threshold 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 静默关掉短内容判定）。
+      // 豁免理由——入参闸门而非投影出口，取值/排版仍只在 emit 一处。
+      "return { kind: 'usage-error', reason: `knowledge audit --threshold 非法阈值: \"${threshold.raw}\"` };",
       "return { kind: 'usage-error', reason: 'knowledge search 缺少关键词位置参数' };",
       // #154：search --limit 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 被 `|| 20`
       // 静默兜成缺省量）。豁免理由同上——入参闸门而非投影出口。
       "return { kind: 'usage-error', reason: `knowledge search --limit 非法限制: \"${limit.raw}\"` };",
-      // #152：--threshold 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 静默关掉短内容判定）。
-      // 豁免理由同 search 那条——入参闸门而非投影出口，取值/排版仍只在 emit 一处。
-      "return { kind: 'usage-error', reason: `knowledge audit --threshold 非法阈值: \"${threshold.raw}\"` };",
     ]);
   });
 
-  it('knowledge.ts 的 json 分支判断只余冻结的豁免行（逐行点名，行变形即红）', () => {
+  it('knowledge/ 的 json 分支判断只余冻结的豁免行（逐行点名，行变形即红）', () => {
     expect(code(knowledgeSource).filter(l => /^(else )?if\s*\(\s*!?options\.json\b/.test(l))).toEqual([
       'if (!options.json) {', // audit 的索引重建策略，理由见本目录 CONTEXT.md「knowledge view 收口模型」
     ]);
@@ -568,7 +578,7 @@ describe('闸 3：两投影一致性（同一 fixture）', () => {
   });
 
   it('派生量豁免无化石：双向对撞源码里的 derived 声明与登记表', () => {
-    const source = fs.readFileSync(path.join(SRC_DIR, 'knowledge.ts'), 'utf-8');
+    const source = knowledgeSource.join('\n');
     const declared = [...source.matchAll(/derived: '([a-zA-Z]+)'/g)].map(m => m[1]);
     expect(declared.length).toBeGreaterThan(0);
     expect([...new Set(declared)].sort()).toEqual(Object.keys(DERIVED_EXEMPTIONS).sort());
@@ -596,7 +606,7 @@ describe('闸 3：两投影一致性（同一 fixture）', () => {
 
 describe('stats 成熟度格的 tone 传递（harness#158，复审 M7 假闸补钉）', () => {
   // knowledge-tone-mapping.test.ts 钉住了 toneForMaturity 表与渲染链，但没钉「命令侧真的把
-  // tone 传进格」——把 knowledge.ts 成熟度格的 `tone:` 摘掉，全仓零红。此处看结构不看 ANSI，
+  // tone 传进格」——把 knowledge/stats.ts 成熟度格的 `tone:` 摘掉，全仓零红。此处看结构不看 ANSI，
   // 不违背本文件 identity-mock 的立场。
   it('按成熟度段每行首格必须携带 tone 且 = toneForMaturity(maturity)', async () => {
     const root = fixture();
@@ -767,7 +777,7 @@ describe('闸 4b：空知识库态逐行冻结', () => {
  * 同一子命令的第二空态（harness#151 补 #133 闸 4b 的判据）。
  *
  * `emptyRoot()` 是裸的 mkdtemp 目录，天然没有 `.harness/knowledge-docs/` 子目录，于是
- * `syncRagRows`（`knowledge.ts:394`）的两个空态分支里只有第一个 `!docsPresent` 进过基线；
+ * `syncRagRows`（`knowledge/sync-rag.ts`）的两个空态分支里只有第一个 `!docsPresent` 进过基线；
  * 第二个分支（目录在场、里面没有 `.md`）在测试里**走不到**——按 #133 自己立的判据，
  * 「fixture 走不到的分支不进基线，有基线就是假象」。json 面两分支恒同形
  * （`data = {directory, files}`），所以 `--json` 那条断言也钉不住人读第二行。

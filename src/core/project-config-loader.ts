@@ -19,6 +19,7 @@ import { PRESETS_BY_NAME, STANDARD_PRESET } from '../presets';
 import { filterEnabledEntries } from './effective-set';
 import { loadAppConstraints } from './app-constraints-loader';
 import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-env';
+import { attempt } from '../utils/attempt';
 
 /**
  * 默认配置
@@ -49,18 +50,18 @@ export type CapabilitiesMode = NonNullable<CapabilitiesConfig['mode']>;
 /**
  * 读取 governance 段（全仓唯一手写钻取点，工单 84）
  *
- * 配置缺失 / 解析失败 / 形状不符时返回 undefined，由调用方按未配置处理。
+ * 配置缺失 / 形状不符时返回 undefined，由调用方按未配置处理。
+ * 解析失败经 attempt 显式降级为 undefined（工单 84 triage 裁决口径：解析失败 = 约定未采用，
+ * 访问器不替调用方决定要不要炸；执法面要感知脏配置请用 loadRawProjectConfig 直读）。
  * 入参形状见 loadRawProjectConfig：传 RunEnv 即与本 run 其余消费方共用同一份 config.yml 读取。
  */
 export function getGovernanceConfig(target: RunTarget): GovernanceConfig | undefined {
-  try {
+  return attempt(() => {
     const raw = loadRawProjectConfig(target);
     const governance = raw?.governance;
     if (governance === null || typeof governance !== 'object') return undefined;
     return governance as GovernanceConfig;
-  } catch {
-    return undefined;
-  }
+  }, () => undefined);
 }
 
 /**

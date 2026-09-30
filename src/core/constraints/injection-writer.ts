@@ -36,13 +36,10 @@ export interface MarkerBlock {
   after: string;
 }
 
+/** 读文件内容；不存在返回 null（在调用方语义里是「无注入对象」），读失败抛出 */
 export function readIfExists(filePath: string): string | null {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return typeof content === 'string' ? content : null;
-  } catch {
-    return null;
-  }
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath, 'utf-8');
 }
 
 /** 定位完整标记对：两标记俱在且顺序正确 */

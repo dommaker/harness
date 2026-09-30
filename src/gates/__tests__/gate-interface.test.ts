@@ -134,11 +134,8 @@ describe('SpecAcceptanceGate 统一接口', () => {
         'tasks:',
         '  - id: TASK-001',
         '    status: done',
-        '    acceptance_criteria:',
-        '      - id: AC-001',
-        '        description: Test',
-        '        type: manual',
-        '        required: true',
+        '    acceptance:',
+        '      - description: Test',
         '        checked: false',
       ].join('\n')
     );

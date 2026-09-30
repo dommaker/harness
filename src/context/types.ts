@@ -37,7 +37,7 @@ export interface ContextSource {
   id: string;
   content: string;
   priority: number;  // P1-P6
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // ========================================
@@ -51,7 +51,7 @@ export interface SessionEvent {
   id: string;
   content: string;
   timestamp: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SessionHandle {

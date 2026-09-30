@@ -156,12 +156,12 @@ describe('SecurityGate', () => {
 
       const result = await gate.scan(baseContext);
 
-      expect(result.details?.vulnerabilities?.length).toBeLessThanOrEqual(10);
+      const listed = result.details?.vulnerabilities as unknown[] | undefined;
+      expect(listed?.length).toBeLessThanOrEqual(10);
     });
   });
 
-  describe('analyzeResult() - npm audit format', () => {
-    it('should parse audit.advisories format', async () => {
+  describe('analyzeResult() - npm audit format', () => {    it('should parse audit.advisories format', async () => {
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(null, {
           stdout: JSON.stringify({
@@ -233,8 +233,8 @@ describe('SecurityGate', () => {
     });
   });
 
-  describe('analyzeResult() - text fallback', () => {
-    it('should parse text output when JSON fails', async () => {
+  describe('analyzeResult() - 非 JSON 输出', () => {
+    it('文本输出不再有正则兜底 → 抛出，外层归一为 deny 报告（fail-fast）', async () => {
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(null, {
           stdout: 'found 2 critical, 3 high, 4 moderate, 5 low vulnerabilities',
@@ -243,20 +243,8 @@ describe('SecurityGate', () => {
 
       const result = await gate.scan(baseContext);
 
-      expect(result.details?.critical).toBe(2);
-      expect(result.details?.high).toBe(3);
-      expect(result.details?.moderate).toBe(4);
-      expect(result.details?.low).toBe(5);
-    });
-
-    it('should handle missing severity in text', async () => {
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(null, { stdout: 'no vulnerabilities found' });
-      });
-
-      const result = await gate.scan(baseContext);
-
-      expect(result.details?.total).toBe(0);
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('安全扫描失败');
     });
   });
 

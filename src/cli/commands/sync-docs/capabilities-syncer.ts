@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import type { CapabilitiesMode } from '../../../core/project-config-loader';
@@ -23,7 +24,9 @@ export async function parseCapabilitiesFiles(capabilitiesPath: string): Promise<
   const entries = readCapabilitiesEntries(capabilitiesPath, { includeDirs: true });
   const files: string[] = [];
   for (const entry of entries) {
-    const value = entry.endsWith('/') ? entry : entry.split('/').pop()!;
+    // split('/') 恒产出 ≥1 段，末段索引恒有值
+    const segments = entry.split('/');
+    const value = entry.endsWith('/') ? entry : segments[segments.length - 1];
     if (!files.includes(value)) files.push(value);
   }
   return files;
@@ -42,15 +45,14 @@ export async function updateCapabilitiesFile(
   result: SyncResult,
   mode: CapabilitiesMode = 'file',
 ): Promise<void> {
-  let content: string;
-  try {
-    content = await fs.readFile(capabilitiesPath, 'utf-8');
-  } catch {
-    // 文件不存在，创建新的（module 模式生成按目录聚合的模板）
-    content = generateCapabilitiesContent(currentModules, mode);
-    await fs.writeFile(capabilitiesPath, content, 'utf-8');
+  // 文件不存在 → 创建新的（module 模式生成按目录聚合的模板）；
+  // 存在但读失败 → 抛出（fail-fast，不把 IO 故障当「不存在」覆盖重建）
+  if (!existsSync(capabilitiesPath)) {
+    const fresh = generateCapabilitiesContent(currentModules, mode);
+    await fs.writeFile(capabilitiesPath, fresh, 'utf-8');
     return;
   }
+  let content = await fs.readFile(capabilitiesPath, 'utf-8');
 
   // 如果有表格行，更新表格
   if (existingFiles.length > 0) {
@@ -74,7 +76,10 @@ export async function updateCapabilitiesFile(
 
     // 添加新文件的行（在最后一个表格行之后）；module 模式跳过
     if (mode !== 'module' && result.added.length > 0) {
-      const getBasenameLocal = (f: string) => f.split('/').pop()!;
+      const getBasenameLocal = (f: string) => {
+        const segments = f.split('/');
+        return segments[segments.length - 1];
+      };
       const addedModules = currentModules.filter(m => result.added.includes(getBasenameLocal(m.file)));
       const tableEndRegex = /(^\|[^|]+\|[^|]+\|[^|]+\|\s*$)/gm;
       let lastTableRow = '';
@@ -273,7 +278,8 @@ function generateDirTable(modules: ModuleInfo[]): string {
   }
 
   const rows = dirs.map(d => {
-    const name = d.replace(/\/$/, '').split('/').pop()!;
+    const segments = d.replace(/\/$/, '').split('/');
+    const name = segments[segments.length - 1];
     return `| ${name} | ${d} | ${name} |`;
   }).join('\n');
 
@@ -316,7 +322,8 @@ export function compactCapabilitiesContent(content: string): string {
   const deleteLines = new Set<number>();
   for (const [dir, rows] of groups) {
     if (rows.length < 2) continue;
-    const name = dir.split('/').pop()!;
+    const segments = dir.split('/');
+    const name = segments[segments.length - 1];
     const desc = rows[0].desc || name;
     lines[rows[0].lineIndex] = `| ${name} | ${dir}/ | ${desc} |`;
     for (const row of rows.slice(1)) {

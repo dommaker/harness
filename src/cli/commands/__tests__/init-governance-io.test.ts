@@ -28,7 +28,12 @@ jest.mock('chalk', () => ({
   bold: jest.fn((s: string) => s),
 }));
 
-const INIT_SOURCE = fsSync.readFileSync(path.join(__dirname, '..', 'init.ts'), 'utf-8');
+// Phase 3 拆分后 init 是一个目录（index.ts 入口 + 各职责文件），源形状闸扫整目录
+const INIT_SOURCE = fsSync.readdirSync(path.join(__dirname, '..', 'init'))
+  .filter(f => f.endsWith('.ts'))
+  .sort()
+  .map(f => fsSync.readFileSync(path.join(__dirname, '..', 'init', f), 'utf-8'))
+  .join('\n');
 
 const INIT_OPTIONS: Partial<InitOptions> = { preset: 'standard', governance: 'standard' };
 
@@ -71,7 +76,7 @@ describe('init 治理链路的提示落在注入面（harness#149）', () => {
 });
 
 describe('writer 层 io 必传（源形状闸，防缺省兜底再回来）', () => {
-  it('init.ts 里 `io: CommandIO = processIO` 只剩 init() 一处（对外入口保留缺省）', () => {
+  it('init/ 里 `io: CommandIO = processIO` 只剩 init() 一处（对外入口保留缺省）', () => {
     const sites = INIT_SOURCE.split('\n').filter(line => line.includes('io: CommandIO = processIO'));
     expect(sites).toHaveLength(1);
     expect(sites[0]).toMatch(/^export async function init\(/);

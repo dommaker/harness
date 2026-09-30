@@ -35,8 +35,6 @@ export const EXTRA_CRITICAL_ARTIFACTS: readonly string[] = [
   // bin/harness.js 引导期 require 的命令/门禁定义表
   'dist/cli/commands/definitions.js',
   'dist/gates/definitions.js',
-  // getToolsDir/getRegistryPath 运行时数据目录（build 脚本 cp -r，tsc 不产出）
-  'dist/tools/definitions',
 ];
 
 const CRITICAL_SUFFIXES = ['.js', '.cjs', '.mjs', '.d.ts'];

@@ -7,7 +7,7 @@
  * 实现拆分：
  * - project-reader.ts       项目信息读取（package.json/config.yml/源码扫描）
  * - capabilities-syncer.ts  CAPABILITIES.md 文件表格格式的对比与维护（能力清单格式解析/计数走 core/constraints/capabilities-parser）
- * - context-syncer.ts       CONTEXT.md 模板生成/发现/过时判定 + 目录导出面采集（harness#142）
+ * - context-syncer.ts       CONTEXT.md 模板生成/发现/过时判定 + 目录导出面采集（harness#142）+ 构造点计数采集（harness#202）
  * - agents-syncer.ts        AGENTS.md 生成
  * - preserve-block.ts       PRESERVE 标记块提取与组合
  * - head-gate.ts            --gate 的 vs HEAD 漂移判定（harness#189）
@@ -27,6 +27,10 @@ import { COMMAND_DEFINITIONS } from '../definitions';
 import { GATE_DEFINITIONS } from '../../../gates/definitions';
 import { reconcileCapabilities } from '../../../core/constraints/capabilities-reconcile';
 import { reconcileContext } from '../../../core/constraints/context-reconcile';
+import {
+  parseConstructionSiteMarkers,
+  reconcileConstructionSites,
+} from '../../../core/constraints/construction-sites';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { getCapabilitiesMode } from '../../../core/project-config-loader';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
@@ -42,6 +46,8 @@ import {
   findExistingContextFiles,
   getLatestTsMtime,
   collectContextExportSurface,
+  createConstructionSiteCounter,
+  type ConstructionSiteCounter,
 } from './context-syncer';
 import { buildAgentsMd } from './agents-syncer';
 import { extractPreserveBlocks, composeAgentsMd } from './preserve-block';
@@ -234,6 +240,9 @@ export async function syncDocs(
   }
 
   // 4b. 自动发现已有的 CONTEXT.md：内容判定（漂移 = 判定面）+ mtime（仅本地提示）
+  // 构造点计数器懒建（harness#202）：全仓走一遍不便宜，只在某份文档真带
+  // construction-sites 标记时才采集，一次运行内按口径 memo 共用。
+  let constructionCounter: ConstructionSiteCounter | null = null;
   const existingContextFiles = await findExistingContextFiles(projectPath, srcDirs);
   for (const dir of existingContextFiles) {
     const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
@@ -248,11 +257,24 @@ export async function syncDocs(
         exportSurface: surface,
         barrelExports,
       });
-      if (verdict.ghosts.length > 0 || verdict.unlistedBarrelExports.length > 0) {
+      // 构造点计数标记（ADR-0039）：无标记的散文维持现状不判
+      const markers = parseConstructionSiteMarkers(contextMd);
+      const siteDrift = markers.length > 0
+        ? reconcileConstructionSites({
+            markers,
+            countFor: (constructionCounter ??= createConstructionSiteCounter(projectPath)),
+          }).drift
+        : [];
+      if (
+        verdict.ghosts.length > 0 ||
+        verdict.unlistedBarrelExports.length > 0 ||
+        siteDrift.length > 0
+      ) {
         result.contextContentDrift.push({
           dir,
           ghosts: verdict.ghosts,
           unlisted: verdict.unlistedBarrelExports,
+          ...(siteDrift.length > 0 ? { constructionSites: siteDrift } : {}),
         });
       }
 
@@ -307,9 +329,17 @@ export async function syncDocs(
   const hasContextIssues = result.contextMissing.length > 0 || result.contextContentDrift.length > 0;
   const hasIssues = hasTableIssues || hasCapIssues || hasContextIssues || hasAgentsIssues;
   const contextDriftReason = result.contextContentDrift
-    .map((d) =>
-      `${d.dir}/CONTEXT.md（幽灵符号: ${d.ghosts.join(', ') || '无'}；` +
-      `barrel 未登记: ${d.unlisted.join(', ') || '无'}）`)
+    .map((d) => {
+      const sites = (d.constructionSites ?? [])
+        .map((s) => `${s.className} 期望 ${s.expected} 实际 ${s.actual}`)
+        .join(', ');
+      return (
+        `${d.dir}/CONTEXT.md（幽灵符号: ${d.ghosts.join(', ') || '无'}；` +
+        `barrel 未登记: ${d.unlisted.join(', ') || '无'}` +
+        (sites ? `；构造点漂移: ${sites}` : '') +
+        '）'
+      );
+    })
     .join('、');
 
   // 5. JSON 输出模式：结构化输出供 LLM 消费
@@ -339,6 +369,7 @@ export async function syncDocs(
         file: `${d.dir}/CONTEXT.md`,
         ghosts: d.ghosts,
         unlisted: d.unlisted,
+        ...(d.constructionSites ? { constructionSites: d.constructionSites } : {}),
       })),
       resolution: [] as Array<Record<string, unknown>>,
     };
@@ -475,6 +506,11 @@ export async function syncDocs(
       }
       if (d.unlisted.length > 0) {
         log(io, chalk.gray(`      barrel 未登记（公开值符号未进「核心导出」节）: ${d.unlisted.join(', ')}`));
+      }
+      for (const s of d.constructionSites ?? []) {
+        log(io,
+          chalk.gray(`      构造点漂移（标记声明 ${s.className} = ${s.expected}，实况 ${s.actual} 处）`)
+        );
       }
     });
     log(io, chalk.gray('  散文不可机械生成：按实现改文档，或在票面记录「文档正确、代码待改」'));

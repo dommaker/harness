@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import {
   getEffectiveConstraints,
+  getMergedConstraintsConfig,
   lintEffectiveConfig,
 } from '../core/effective-constraints';
 import { createProjectFixture } from '../test-setup/project-fixture';
@@ -95,6 +96,21 @@ constraints:
       const lint = lintEffectiveConfig(dir);
 
       expect(lint.unknownIds).toEqual([]);
+    });
+  });
+
+  describe('根参数必传（harness#201，与 listRetiredConstraints 同族同形）', () => {
+    it('不传根在类型层即被拒绝——无 process.cwd() 缺省', () => {
+      // 永不执行：只钉签名形状，运行期行为无意义
+      const neverCalled = (): void => {
+        // @ts-expect-error 根参数必传（harness#201）
+        getEffectiveConstraints();
+        // @ts-expect-error 根参数必传（harness#201）
+        getMergedConstraintsConfig();
+        // @ts-expect-error 根参数必传（harness#201）
+        lintEffectiveConfig();
+      };
+      void neverCalled;
     });
   });
 });

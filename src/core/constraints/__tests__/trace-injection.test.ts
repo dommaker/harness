@@ -1,10 +1,12 @@
 /**
  * trace 记录器注入（工单 15 decycle 收尾 / harness#88）
  *
- * 原状态：checker 值导入 monitoring 的 getTraceCollector，并在首次记录时惰性接线
+ * 原状态：checker 值导入 monitoring 的全局单例收集器，并在首次记录时惰性接线
  * （ADR-0003），`setTraceRecorder` 退化成只有测试在用的假 seam。
  * 现在：记录器经**构造参数**注入；未注入 = no-op（core 零上行依赖，默认无副作用），
- * 真实收集器由组合根（CLI 命令 / bootstrap）接线。
+ * 真实收集器由组合根（CLI 命令 / bootstrap）接线。monitoring 侧的单例出口
+ * （getTraceCollector/configureTraceCollector）已随 #199 删除，「checker 不碰
+ * monitoring 值面」由本文件的源码扫描断言直接钉住。
  */
 
 import * as fs from 'fs';
@@ -12,16 +14,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { ConstraintChecker } from '../checker';
 import type { ExecutionTrace } from '../../../types/trace';
-
-jest.mock('../../../monitoring/traces', () => ({
-  getTraceCollector: jest.fn(() => ({ record: jest.fn() })),
-  TraceCollector: jest.fn(),
-  configureTraceCollector: jest.fn(),
-}));
-
-/** 替身收集器工厂（core 侧连测试也不值导入 monitoring，方向由 #88 规则锁） */
-const getTraceCollector = jest.requireMock('../../../monitoring/traces')
-  .getTraceCollector as jest.Mock;
 
 describe('trace 记录器构造注入（harness#88）', () => {
   let projectDir: string;
@@ -39,7 +31,6 @@ describe('trace 记录器构造注入（harness#88）', () => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-trace-injection-'));
     fs.mkdirSync(path.join(projectDir, '.harness', 'evidence'), { recursive: true });
     fs.writeFileSync(path.join(projectDir, '.harness', 'evidence', 'test.log'), 'ok');
-    getTraceCollector.mockClear();
   });
 
   afterAll(() => {
@@ -67,11 +58,19 @@ describe('trace 记录器构造注入（harness#88）', () => {
     expect((checker as any).setTraceRecorder).toBeUndefined();
   });
 
-  it('未注入记录器时不记录，也不反向取全局收集器（core 零上行依赖）', async () => {
+  it('未注入记录器时检查照常执行（no-op 默认，core 零上行依赖）', async () => {
     const unwired = new ConstraintChecker();
 
     await unwired.checkConstraints(context());
+  });
 
-    expect(getTraceCollector).not.toHaveBeenCalled();
+  it('checker 对 monitoring 零值导入（单例出口删除后不可能再反向取全局收集器，#199）', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'checker.ts'), 'utf-8');
+    const monitoringValueImports = source
+      .split('\n')
+      .filter(line => /^\s*import\s/.test(line) && !/^\s*import\s+type\b/.test(line))
+      .filter(line => line.includes('monitoring'));
+
+    expect(monitoringValueImports).toEqual([]);
   });
 });

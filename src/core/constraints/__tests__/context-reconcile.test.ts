@@ -143,22 +143,22 @@ describe('parseExportStatements — 源码导出面解析口径', () => {
 });
 
 describe('reconcileContext — 幽灵方向（文档→代码）', () => {
-  const doc = contextDoc(['- `TraceCollector` — 收集', '- `ContextTracker` — 快照'].join('\n'));
+  const doc = contextDoc(['- `TraceCollector` — 收集', '- `SessionManager` — 会话'].join('\n'));
 
   it('声明的符号在导出面中不存在 → 报幽灵并指名符号', () => {
     const v = reconcileContext({
       contextMdContent: doc,
       exportSurface: ['TraceCollector'],
     });
-    expect(v.declaredSymbols).toEqual(['TraceCollector', 'ContextTracker']);
-    expect(v.ghosts).toEqual(['ContextTracker']);
+    expect(v.declaredSymbols).toEqual(['TraceCollector', 'SessionManager']);
+    expect(v.ghosts).toEqual(['SessionManager']);
   });
 
   it('导出面含同名符号（含类型符号）→ 零幽灵', () => {
     expect(
       reconcileContext({
         contextMdContent: doc,
-        exportSurface: ['TraceCollector', 'ContextTracker'],
+        exportSurface: ['TraceCollector', 'SessionManager'],
       }).ghosts
     ).toEqual([]);
   });
@@ -179,17 +179,17 @@ describe('reconcileContext — 覆盖方向（代码→文档，barrel 值符号
   const doc = contextDoc(
     [
       '- `TraceCollector` — 执行追踪收集（`readReport(filter?)`）',
-      '- `TraceAnalyzer` — 统计分析，另有 `createAnalyzer` 工厂',
+      '- `TraceAnalyzer` — 统计分析，另有 `pruneTraceLogs` GC 入口',
     ].join('\n')
   );
 
   it('barrel 再导出的值符号未出现在「核心导出」节 → 未登记；inline 提及即算登记', () => {
     const v = reconcileContext({
       contextMdContent: doc,
-      exportSurface: ['TraceCollector', 'TraceAnalyzer', 'createAnalyzer', 'configureTraceCollector'],
-      barrelExports: ['TraceCollector', 'TraceAnalyzer', 'createAnalyzer', 'configureTraceCollector'],
+      exportSurface: ['TraceCollector', 'TraceAnalyzer', 'pruneTraceLogs', 'KnowledgeInjector'],
+      barrelExports: ['TraceCollector', 'TraceAnalyzer', 'pruneTraceLogs', 'KnowledgeInjector'],
     });
-    expect(v.unlistedBarrelExports).toEqual(['configureTraceCollector']);
+    expect(v.unlistedBarrelExports).toEqual(['KnowledgeInjector']);
   });
 
   it('无 barrel 的目录（barrelExports 不传/空）跳过覆盖方向', () => {
@@ -212,11 +212,11 @@ describe('reconcileContext — 覆盖方向（代码→文档，barrel 值符号
 
   it('节外正文（其它 ## 节）里的同名句子不救 barrel 未登记', () => {
     const v = reconcileContext({
-      contextMdContent: contextDoc('- `TraceCollector` — 收集', '## 约定\n- `configureTraceCollector` 只在组合根用\n'),
-      exportSurface: ['TraceCollector', 'configureTraceCollector'],
-      barrelExports: ['TraceCollector', 'configureTraceCollector'],
+      contextMdContent: contextDoc('- `TraceCollector` — 收集', '## 约定\n- `KnowledgeInjector` 只在组合根用\n'),
+      exportSurface: ['TraceCollector', 'KnowledgeInjector'],
+      barrelExports: ['TraceCollector', 'KnowledgeInjector'],
     });
-    expect(v.unlistedBarrelExports).toEqual(['configureTraceCollector']);
+    expect(v.unlistedBarrelExports).toEqual(['KnowledgeInjector']);
   });
 });
 
@@ -225,7 +225,7 @@ describe('reconcileContext — 两方向同输入对撞', () => {
     const doc = contextDoc('- `TraceCollector` — 收集\n');
     const v = reconcileContext({
       contextMdContent: doc,
-      exportSurface: ['TraceSink', 'configureTraceCollector'],
+      exportSurface: ['TraceSink', 'KnowledgeInjector'],
       barrelExports: ['TraceSink'],
     });
     expect(v.ghosts).toEqual(['TraceCollector']);
@@ -233,11 +233,11 @@ describe('reconcileContext — 两方向同输入对撞', () => {
   });
 
   it('两侧一致 → 干净（判定不制造存量噪音）', () => {
-    const doc = contextDoc('- `TraceCollector` — 收集\n- `configureTraceCollector` — 单例装配\n');
+    const doc = contextDoc('- `TraceCollector` — 收集\n- `KnowledgeInjector` — 知识注入\n');
     const v = reconcileContext({
       contextMdContent: doc,
-      exportSurface: ['TraceCollector', 'configureTraceCollector'],
-      barrelExports: ['TraceCollector', 'configureTraceCollector'],
+      exportSurface: ['TraceCollector', 'KnowledgeInjector'],
+      barrelExports: ['TraceCollector', 'KnowledgeInjector'],
     });
     expect(v.ghosts).toEqual([]);
     expect(v.unlistedBarrelExports).toEqual([]);

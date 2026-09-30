@@ -15,6 +15,7 @@ import type {
 } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeLifecycle } from './lifecycle';
+import { estimateTokens } from './token-estimate';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -123,19 +124,10 @@ export class KnowledgeQuery {
 
   /**
    * Estimate token count for a piece of text.
-   * Rule of thumb: 1 CJK char ≈ 2 tokens, 1 ASCII char ≈ 0.25 tokens.
+   * 委托仓内唯一尺子正本 `token-estimate.ts`（本类不再自带实现）；保留方法名与语义不变。
    */
   estimateTokens(text: string): number {
-    let tokens = 0;
-    for (const ch of text) {
-      // CJK Unified Ideographs + common CJK ranges
-      if (/[一-鿿㐀-䶿豈-﫿]/.test(ch)) {
-        tokens += 2;
-      } else {
-        tokens += 0.25;
-      }
-    }
-    return Math.ceil(tokens);
+    return estimateTokens(text);
   }
 
   /** Clear the query cache. */
@@ -166,14 +158,21 @@ export class KnowledgeQuery {
     requirementText?: string;
     phase?: string;
   }): { rules: KnowledgeEntry[]; references: KnowledgeEntry[]; context: KnowledgeEntry[] } {
-    const rules = this.queryByMode('rule');
+    // 一次全量 list + 内存分组（等价于按 mode 三次 list；条目 mode 单一，分组保序。
+    // signal 条目原三次 queryByMode 均不取，分组后同样不消费）
+    const grouped: Record<ConsumptionMode, KnowledgeEntry[]> = { rule: [], reference: [], context: [], signal: [] };
+    for (const entry of this.store.list({})) {
+      grouped[entry.consumptionMode ?? 'reference'].push(entry);
+    }
 
-    const allRefs = this.queryByMode('reference');
+    const rules = grouped.rule;
+
+    const allRefs = grouped.reference;
     const references = taskContext.requirementText
       ? this.filterByText(allRefs, taskContext.requirementText).slice(0, 3)
       : allRefs.slice(0, 3);
 
-    const allContext = this.queryByMode('context');
+    const allContext = grouped.context;
     const context = taskContext.phase
       ? allContext.filter(e => e.applicablePhases.includes(taskContext.phase!))
       : allContext;

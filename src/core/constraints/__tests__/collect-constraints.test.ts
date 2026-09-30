@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ConstraintChecker } from '../checker';
+import { collectConstraints as publicCollectConstraints } from '../../../index';
 import type { ConstraintContext, ConstraintResult } from '../../../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -93,5 +94,29 @@ describe('collectConstraints（收集模式，不抛）', () => {
     const result = await checker.collectConstraints(CLEAN);
     expect(result.passed).toBe(true);
     expect(result.errors.every((r: ConstraintResult) => r.satisfied)).toBe(true);
+  });
+});
+
+describe('包根公共出口 collectConstraints（harness#194，不抛出口上公共面）', () => {
+  it('从包根可导入且为函数', () => {
+    expect(typeof publicCollectConstraints).toBe('function');
+  });
+
+  it('error 级违规不抛：违规照进 errors、passed=false、全量跑完', async () => {
+    const result = await publicCollectConstraints({
+      ...VIOLATING,
+      extraTriggers: ['test_creation'],
+    });
+    expect(result.passed).toBe(false);
+    const ids = result.errors.map((r: ConstraintResult) => r.id);
+    expect(ids).toContain('no_completion_without_verification');
+    expect(ids).toContain('no_test_simplification');
+  });
+
+  it('options 签名与 checkConstraints 同形：onTrace 走 options 对象逐条回调', async () => {
+    const traced: ConstraintResult[] = [];
+    const result = await publicCollectConstraints(CLEAN, { onTrace: (r) => traced.push(r) });
+    expect(result.passed).toBe(true);
+    expect(traced.length).toBe(result.errors.length + result.warnings.length);
   });
 });

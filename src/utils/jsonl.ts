@@ -1,7 +1,7 @@
 /**
  * append-only JSONL 日志读写正本（harness#82，架构评审 2026-09-02 候选3）
  *
- * 全仓 append-only JSONL（traces.log / failures.log / context-tracker.log /
+ * 全仓 append-only JSONL（traces.log / failures.log /
  * references.jsonl / sessions/<id>/events.jsonl / 外部 transcript .jsonl）的
  * exists → read → split → parse → filter 读链与 ensureDir + append 写链
  * 收口于此，仓内不允许存在第二份副本。

@@ -9,7 +9,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, appendJsonl } from '../utils/jsonl';
-import { ContextTracker } from '../monitoring/context-tracker';
 import type {
   SessionEvent,
   SessionHandle,
@@ -19,11 +18,9 @@ import type {
 export class SessionManager {
   private basePath: string;
   private sessions: Map<string, SessionHandle> = new Map();
-  private tracker: ContextTracker;
 
   constructor(basePath?: string) {
     this.basePath = basePath || process.cwd();
-    this.tracker = new ContextTracker(this.basePath);
   }
 
   /**
@@ -191,13 +188,6 @@ export class SessionManager {
     }
 
     throw new Error(`Checkpoint ${checkpointId} 不存在`);
-  }
-
-  /**
-   * 获取 tracker
-   */
-  getTracker(): ContextTracker {
-    return this.tracker;
   }
 
   /**

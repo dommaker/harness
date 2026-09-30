@@ -22,7 +22,8 @@
  * 哪个符号。
  *
  * 清单来源不是手抄：五个入口的 `src` 解析结果与 tsc 产物（各自 exports 的 types 指向，如
- * `dist/core/index.d.ts`）逐项对撞，152/32/1/12/18 全部逐字一致，产物侧同时零 `export *`。
+ * `dist/core/index.d.ts`）逐项对撞，140/35/1/11/0 全部逐字一致，产物侧同时零 `export *`
+ * （`./gates` 自 #199 起为空面入口，见清单内注释）。
  * 改动入口清单文件时同步改本文件对应条目，diff 即 PR 评审材料；增删符号属公共面 breaking，
  * 须按 ADR-0003/0022 走发布级别裁决。
  */
@@ -37,8 +38,8 @@ const REPO_ROOT = path.join(__dirname, '../..');
  * ① `export { 值 } from '...'`；② `export type { 类型 } from '...'`；③ 内联值声明
  * `export function|const|let|var`（如 `src/gates/index.ts` 的 5 个 `create*Gate`）——纯值面，
  * 不属类型清单管辖。
- * 清单归类按**说明符自身**而非块形式：`export { runGates, type GateRunResult }` 里的
- * `GateRunResult` 按 TS 语义就是类型导出，必须进类型清单（本闸的职责是如实刻画公开面，不是管写法）。
+ * 清单归类按**说明符自身**而非块形式：`export { GATE_DEFINITIONS, type GateDefinition }` 里的
+ * `GateDefinition` 按 TS 语义就是类型导出，必须进类型清单（本闸的职责是如实刻画公开面，不是管写法）。
  * 其余行首 `export` 一律记为违禁而非跳过：`export *` / `export type *` 会让按名字扫描静默
  * 漏算；内联 `export interface|type|enum|class|declare` 更必须红——它绕过类型清单，而
  * `enum`/`class` 同时占值面与类型面，按单一分类必错一面。这正是 B1「公开面的定义比现实窄」
@@ -100,8 +101,6 @@ const ENTRY_SUBPATHS: string[] = Object.keys(EXPORTS_MAP);
 /** 每个已发布入口的类型面全量清单。增删任一项即公共面 breaking，见文件头。 */
 const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
   '.': [
-    'AcceptanceCriteria',
-    'AcceptanceGateContext',
     'AgentConfig',
     'AgentEvent',
     'AgentState',
@@ -112,13 +111,11 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'AuditOptions',
     'AuditReport',
     'AuditRuleName',
-    'BatchSpecValidationResult',
     'CSOIssue',
     'CSOValidationResult',
     'CapabilitiesConfig',
     'ChangelogConfig',
     'ChangelogVersionCheck',
-    'CheckCacheConfig',
     'CheckConfig',
     'CheckConstraintsOptions',
     'CheckDetail',
@@ -127,7 +124,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'CheckInputNeeds',
     'CheckOutcome',
     'CheckResult',
-    'CheckSamplingConfig',
     'CheckSkip',
     'CheckType',
     'CheckerVerdict',
@@ -136,9 +132,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'CheckpointContext',
     'CheckpointResult',
     'ClassificationResult',
-    'CodeStructure',
-    'CommandBlacklistRule',
-    'CommandGateConfig',
     'CommitFileClassification',
     'CommitInput',
     'CommitVerdict',
@@ -157,30 +150,28 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'ConstraintResult',
     'ConstraintTrigger',
     'ConstraintUsageStats',
+    'ConstraintsMeta',
     'ConstraintsUsageReport',
     'ConsumptionEvent',
     'ConsumptionMode',
-    'ContextAverages',
     'ContextDocsCheck',
     'ContextEvidenceFlag',
     'ContextFilesConfig',
     'ContextSource',
     'ContextSourceType',
-    'ContextUsageSnapshot',
-    'ContractGateConfig',
     'ContractPresenceContext',
     'ContractPresenceResult',
     'DecayConfig',
     'DecisionRecord',
-    'DeclarationInfo',
     'DiagnoseThresholds',
     'DirCountActual',
+    'DisableResult',
+    'DisableStatus',
     'DocDirCheck',
     'DocFreshnessCheck',
     'DocFreshnessConfig',
     'DocRegexCountCheck',
     'DocsSyncConfig',
-    'EffectiveConfigLint',
     'ErrorClassificationRule',
     'ErrorClassifierConfig',
     'EvidenceProviders',
@@ -190,17 +181,9 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'FailureRecord',
     'FailureRecorderConfig',
     'FallbackStrategy',
-    'Gate',
-    'GateContext',
-    'GateDecision',
-    'GateDecisionStatus',
-    'GateDefinition',
-    'GateResult',
-    'GateRunResult',
     'GovernanceConfig',
     'GrepCountActual',
     'HarnessBootstrap',
-    'ImportInfo',
     'IndexEntry',
     'IngestOptions',
     'InjectionConfig',
@@ -210,42 +193,41 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'KnowledgeReference',
     'KnowledgeStore',
     'KnowledgeSubsystem',
+    'LifecycleKnowledgeSink',
     'LintIssue',
     'LintIssueType',
     'MaturityChange',
     'MaturityLevel',
     'MergedConstraintsConfig',
     'NormalizedOutcome',
+    'PackProposalResult',
     'PassesGateCheckResult',
     'PassesGateConfig',
     'PassesGateViolation',
-    'PerformanceGateConfig',
-    'PerformanceThresholds',
     'PhaseFormatResult',
     'ProjectConfig',
+    'ProposalMaterial',
     'QueryBudget',
     'QueryFilter',
     'QueryResult',
+    'ReactivateExecuteOptions',
+    'ReactivateResult',
+    'ReactivateStatus',
     'ReferenceRecord',
     'RetireCandidate',
     'RetireCandidateKind',
+    'RetireExecuteOptions',
+    'RetireResult',
+    'RetireStatus',
+    'RetireTargetInfo',
     'RetiredConstraintEntry',
     'RetiredConstraintMeta',
-    'ReviewGateConfig',
-    'SchemaLoader',
-    'SecurityGateConfig',
     'SessionCheckpoint',
     'SessionEvent',
     'SessionEventType',
     'SessionHandle',
     'SessionMessage',
     'SourceRef',
-    'SpecAcceptanceGateConfig',
-    'SpecSchemaDefinition',
-    'SpecType',
-    'SpecValidationError',
-    'SpecValidationResult',
-    'SpecValidatorConfig',
     'StepMeta',
     'StorageLayer',
     'TaskTestResult',
@@ -261,11 +243,9 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'WorkflowMeta',
   ],
   './core': [
-    'BatchSpecValidationResult',
     'CSOIssue',
     'CSOValidationResult',
     'CapabilitiesMode',
-    'CheckCacheConfig',
     'CheckConfig',
     'CheckConstraintsOptions',
     'CheckDetail',
@@ -274,7 +254,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'CheckInputNeeds',
     'CheckOutcome',
     'CheckResult',
-    'CheckSamplingConfig',
     'CheckSkip',
     'CheckType',
     'Checkpoint',
@@ -293,16 +272,11 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'ConstraintTrigger',
     'ContextEvidenceFlag',
     'ContextFilesResolution',
-    'EffectiveConfigLint',
     'EvidenceProviders',
     'NormalizedOutcome',
     'PassesGateConfig',
     'RunEnv',
     'RunTarget',
-    'SpecSchemaDefinition',
-    'SpecType',
-    'SpecValidationResult',
-    'SpecValidatorConfig',
     'TaskTestResult',
   ],
   './presets': [
@@ -313,7 +287,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'CompactionLevel',
     'ContextSource',
     'ContextSourceType',
-    'ContextUsageSnapshot',
     'InjectionConfig',
     'InjectionResult',
     'SessionCheckpoint',
@@ -322,25 +295,9 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'SessionHandle',
     'SessionMessage',
   ],
-  './gates': [
-    'AcceptanceCriteria',
-    'AcceptanceGateContext',
-    'CommandBlacklistRule',
-    'CommandGateConfig',
-    'ContractGateConfig',
-    'Gate',
-    'GateContext',
-    'GateDecision',
-    'GateDecisionStatus',
-    'GateDefinition',
-    'GateResult',
-    'GateRunResult',
-    'PerformanceGateConfig',
-    'PerformanceThresholds',
-    'ReviewGateConfig',
-    'SecurityGateConfig',
-    'SpecAcceptanceGateConfig',
-  ],
+  // #199（ADR-0038）：./gates 面整体收回（双仓零编程消费者），入口本身保留、
+  // 以空清单显式冻结——复活任一类型导出即红
+  './gates': [],
 };
 
 describe('已发布类型面全量冻结（ADR-0022 追记 4）', () => {
@@ -367,8 +324,11 @@ describe('已发布类型面全量冻结（ADR-0022 追记 4）', () => {
       });
 
       it('类型清单与冻结集逐字一致（增删即 breaking，需发布级别裁决）', () => {
-        // 解析塌掉不得退化成空集合假绿
-        expect(surface.types.length).toBeGreaterThan(0);
+        // 解析塌掉不得退化成空集合假绿；唯一例外是 ./gates——#199（ADR-0038）面整体收回、
+        // 入口保留，以空清单显式冻结
+        if (PUBLISHED_ENTRY_TYPES[sub].length > 0) {
+          expect(surface.types.length).toBeGreaterThan(0);
+        }
         expect([...surface.types].sort()).toEqual([...PUBLISHED_ENTRY_TYPES[sub]].sort());
       });
     });

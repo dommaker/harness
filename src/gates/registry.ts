@@ -34,7 +34,7 @@ const IMPLEMENTATIONS: Gate[] = [
 
 assertGateRegistryClosed(GATE_DEFINITIONS, IMPLEMENTATIONS);
 
-// 默认 order 以定义表为准（config.yml gates.order 在生效集层覆盖，不改注册表单例）
+// 默认 order 以定义表为准（生效集层已删：config.yml 不再有 gates.order 覆盖口，ADR-0002「后续变更」）
 for (const def of GATE_DEFINITIONS) {
   IMPLEMENTATIONS.find(g => g.id === def.id)!.order = def.order;
 }

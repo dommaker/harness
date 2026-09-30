@@ -10,7 +10,8 @@
  * 退出码映射收敛在 bin 一处。
  */
 
-import { createCommandGate, DEFAULT_COMMAND_BLACKLIST, type CommandBlacklistRule } from '../../gates';
+import { createCommandGate, DEFAULT_COMMAND_BLACKLIST } from '../../gates/command';
+import type { CommandBlacklistRule } from '../../gates/types';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { gateCommandResult } from '../gate-command';
 

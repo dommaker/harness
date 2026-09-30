@@ -82,6 +82,13 @@ export async function validate(
       result.checks.forEach(check => {
         if (!check.passed) {
           log(io, chalk.red(`   - ${check.checkId}: ${check.message || check.error}`));
+          // error 与 message 不同即带了额外信息（退出码、输出末段），打出来。
+          // 此前只打 message，真因（如 stdout maxBuffer length exceeded）在输出里无处可寻。
+          if (check.error && check.error !== check.message) {
+            check.error.split('\n').forEach(line => {
+              log(io, chalk.gray(`       ${line}`));
+            });
+          }
         }
       });
       failedIds.push(checkpoint.id);

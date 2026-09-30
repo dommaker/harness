@@ -4,7 +4,7 @@
  * 验收口径：block/warn/audit 行为与下游消费方生成版脚本一致——
  * block 级 exit 2 阻断，warn/audit 放行，坏输入 fail-open。
  *
- * P1-7（ADR-0031，wayfinder 票08）：命中留痕走 traces 通道——整个套件 chdir 到
+ * P1-7（ADR-0031，票08）：命中留痕走 traces 通道——整个套件 chdir 到
  * tmp 目录运行（TraceCollector 缺省按 cwd 解析 projectPath），断言 JSONL 行；
  * 留痕失败不挡拦截主路径。
  */
@@ -233,14 +233,14 @@ describe('pretool-use-hook', () => {
 
     it('MCP 工具事件放行并留痕', () => {
       const stdin = JSON.stringify({
-        tool_name: 'mcp__local-rag__query_documents',
+        tool_name: 'mcp__example__query_documents',
         tool_input: { query: 'x' },
       });
       expect(runPreToolUseHook(stdin)).toBe(0);
 
       const traces = readTraces();
       expect(traces).toHaveLength(1);
-      expect(traces[0].constraintId).toBe('tool-event:mcp__local-rag__query_documents');
+      expect(traces[0].constraintId).toBe('tool-event:mcp__example__query_documents');
     });
 
     it('非 Bash 事件即使 tool_input 带危险 command 字段也不拦（判定面只认 Bash）', () => {

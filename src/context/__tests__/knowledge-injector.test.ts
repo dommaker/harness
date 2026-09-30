@@ -75,8 +75,9 @@ describe('KnowledgeInjector', () => {
 
     it('应该降级为摘要当完整条目超出预算', () => {
       saveEntry({ id: 'big-1', title: 'Big Entry', content: 'x'.repeat(5000) });
-      // 预算够查询返回条目，但不够注入完整内容
-      const result = injector.inject({ budget: 1500 });
+      // 单尺子口径（harness#197，query.estimateTokens 逐字符）：查询取回条目约 1253 token，
+      // 完整格式化注入约 1275 token；预算 1260 够查询返回、不够注入完整内容
+      const result = injector.inject({ budget: 1260 });
       expect(result.entriesIncluded).toBe(0);
       expect(result.entriesSummarized).toBe(1);
       expect(result.sources.some(s => s.id === 'knowledge-summary-big-1')).toBe(true);
@@ -167,6 +168,24 @@ describe('KnowledgeInjector', () => {
       expect(summary).toBeDefined();
       expect(summary!.content).toContain('[External Source — verify before acting]');
       expect(summary!.metadata).toMatchObject({ origin: 'external' });
+    });
+  });
+
+  describe('token 估算单尺子（harness#197）', () => {
+    it('完整注入路径 tokensUsed 等于 query.estimateTokens 对注入内容求和', () => {
+      saveEntry({ id: 'mix-1', title: '混合条目', content: '你好世界 hello world 混合内容 mixed content' });
+      const result = injector.inject({ budget: 8000 });
+      expect(result.sources).toHaveLength(1);
+      const expected = result.sources.reduce((sum, s) => sum + query.estimateTokens(s.content), 0);
+      expect(result.tokensUsed).toBe(expected);
+    });
+
+    it('摘要注入路径 tokensUsed 同样按 query.estimateTokens 计量', () => {
+      saveEntry({ id: 'mix-2', title: '排除条目', content: '你好世界 mixed 内容' });
+      const result = injector.inject({ budget: 8000, exclude: ['mix-2'] });
+      expect(result.entriesSummarized).toBe(1);
+      const expected = result.sources.reduce((sum, s) => sum + query.estimateTokens(s.content), 0);
+      expect(result.tokensUsed).toBe(expected);
     });
   });
 

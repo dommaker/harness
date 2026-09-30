@@ -58,7 +58,7 @@ describe('gateCommandResult — 决策到命令结果的唯一映射', () => {
     }
   });
 
-  it('ask 无实现者 → fail-closed 按拦下计（与 runGates 聚合同规则）', () => {
+  it('ask 无实现者 → fail-closed 按拦下计（契约见 src/gates/CONTEXT.md）', () => {
     expect(gateCommandResult('review', decide('review', true, 'need human', undefined, 'ask'))).toEqual({
       kind: 'fail',
       reason: 'review gate denied: need human',

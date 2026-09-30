@@ -3,8 +3,6 @@
  */
 
 import { SpecAcceptanceGate } from '../acceptance';
-// 工厂与公共面同一 seam：gates/index 是唯一出口（harness#101）
-import { createSpecAcceptanceGate } from '../index';
 import * as fs from 'fs/promises';
 import { exec } from 'child_process';
 
@@ -510,14 +508,14 @@ tasks:
   });
 });
 
-describe('createSpecAcceptanceGate', () => {
+describe('createSpecAcceptanceGate（内联工厂已随 #199 入口清空删除，等价构造直走类）', () => {
   it('should create gate instance', () => {
-    const gate = createSpecAcceptanceGate();
+    const gate = new SpecAcceptanceGate();
     expect(gate).toBeInstanceOf(SpecAcceptanceGate);
   });
 
   it('should pass config to gate', () => {
-    const gate = createSpecAcceptanceGate({
+    const gate = new SpecAcceptanceGate({
       e2eTestTimeout: 30000,
     });
     expect(gate).toBeDefined();

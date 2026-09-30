@@ -41,26 +41,6 @@ export interface ContextSource {
 }
 
 // ========================================
-// 上下文使用快照
-// ========================================
-
-export interface ContextUsageSnapshot {
-  timestamp: string;
-  totalTokens: number;
-  breakdown: {
-    systemPrompt: number;
-    messages: number;
-    toolOutputs: number;
-    knowledge: number;
-    other: number;
-  };
-  truncatedItems: Array<{ type: string; id: string; originalTokens: number; keptTokens: number }>;
-  offloadedItems: Array<{ type: string; id: string; target: 'disk' | 'summary' | 'dropped' }>;
-  compactionTriggered: boolean;
-  compactionLevel?: CompactionLevel;
-}
-
-// ========================================
 // Session Manager
 // ========================================
 

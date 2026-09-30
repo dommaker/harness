@@ -36,7 +36,7 @@ Presets (`src/presets/`) are pure data with severity-named keys (`errors`/`warni
 The layering `types → utils → core → 领域层 → cli` is machine-enforced (harness#88): `src/core/**` has **zero value imports** of `cli/`, `gates/`, `monitoring/` (type-only imports are allowed), checked by the error-level `@typescript-eslint/no-restricted-imports` rule in `eslint.config.mjs` and guarded by `src/__tests__/layering.test.ts`. When core needs data or a capability that lives above it, the caller injects it:
 
 - `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context. Its trace recorder is constructor-injected and defaults to no-op; `constraintChecker` / `getInstance()` are therefore the *unwired* instance (they never write traces).
-- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`). Composition roots wire it: CLI `check`, CLI `report`, and `bootstrapHarness` do `new ConstraintChecker(getTraceCollector())`.
+- `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`). Composition roots wire it: CLI `check`, CLI `report`, and `bootstrapHarness` do `new ConstraintChecker(new TraceCollector({ projectPath }))`.
 - `capabilities-parser` takes a caller-supplied `CapabilityDefinitionSource` (`sync-docs` assembles `COMMAND_DEFINITIONS` + `GATE_DEFINITIONS`) for capability-listing counts in CAPABILITIES.md.
 
 ### Key Subsystems
@@ -45,21 +45,20 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 |-----------|---------|
 | `src/core/` | Constraint engine, validators (checkpoint, CSO, passes-gate), session management, project config loading |
 | `src/gates/` | Quality gates: acceptance, command blacklist, contract (OpenAPI), performance, review, security |
-| `src/monitoring/` | Execution Trace collection/analysis, context usage tracking |
+| `src/monitoring/` | Execution Trace collection/analysis |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
-| `src/context/` | Session management, token budget, compaction, knowledge injection |
+| `src/context/` | Session management, compaction, knowledge injection |
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Harness runtime bootstrap only (`bootstrapHarness` / `bootstrapHarnessSync`): loads `.harness/config.yml`, wires checker + trace collector + session manager. The generic hook pipeline was removed by ADR-0027 (zero consumers in both repos) |
 | `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
-| `src/tools/` | Tool path management (paths.ts) + 113 yml capability definitions |
 | `src/cli/commands/` | 20 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, release, constraints, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
 
 ### Entry Points
 
-- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`checkBeforeExecution()`）
+- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`、`checkBeforeExecution()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
-- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management), `./gates` (gates only)
+- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management), `./gates`（#199 起为空面入口——gates 面整体收回、双仓零编程消费者，入口保留待 maintainer 裁决，ADR-0038）
 
 ### Design Principles
 
@@ -86,7 +85,7 @@ When making changes to this codebase, follow these rules:
 
 - Every new gate MUST have a corresponding CLI command in `src/cli/commands/` and a test file in `__tests__/`
 - New gates must implement the unified `Gate` interface from `src/gates/types.ts` (id/order/evaluate → 三态 `GateDecision`)，报告结构走 `GateResult`；同时必须在 `src/gates/definitions.ts` 补 GateDefinition（含 CLI 元数据）并在 `src/gates/registry.ts` 注册实现——注册表双向闭环，缺一构建期抛错；门禁 CLI 命令由定义表驱动生成（`bin/harness.js`），不再手写命令块
-- deny 单调是接口契约：`runGates` 中 deny 不可被下游改回 allow，决策浅冻结；ask 枚举预留、无实现 fail-closed = deny
+- deny 单调是接口契约（正本 `src/gates/CONTEXT.md`「决策契约」）：deny 一旦出现即不可被下游改回 allow，决策浅冻结；ask 枚举预留、无实现 fail-closed = deny
 - Constraint definitions in `src/core/constraints/definitions/` must include `trigger`, `enforcement`, and `description` fields
 - Coverage must not decrease — run `npm test -- --coverage` before committing
 - Each `src/` subdirectory's entry point is its `CONTEXT.md` (not README). CONTEXT.md documents responsibilities, exports, dependencies, and conventions.

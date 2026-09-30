@@ -18,6 +18,56 @@ import {
   type TraceFilter,
   type TraceCollectorConfig,
 } from '../types/trace';
+import type { RunTarget } from '../core/constraints/run-env';
+
+/**
+ * 清理某 trace 文件的轮转备份（traces-*.log）：删除超过 maxAgeDays 天的 `.log` 备份，
+ * 当前文件（traceFile 本体）与其他非 `.log` 文件不动。目录不存在 → 0。
+ *
+ * `TraceCollector.cleanupOldFiles` 与 `pruneTraceLogs` 共用的唯一实现（harness#198）。
+ */
+function pruneRotatedTraceFiles(traceFile: string, maxAgeDays: number): number {
+  const dir = path.dirname(traceFile);
+  if (!fs.existsSync(dir)) {
+    return 0;
+  }
+
+  const files = fs.readdirSync(dir);
+  const backupFiles = files.filter(f => f.endsWith('.log') && f !== path.basename(traceFile));
+
+  const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;
+  let deletedCount = 0;
+
+  for (const file of backupFiles) {
+    const filePath = path.join(dir, file);
+    const stats = fs.statSync(filePath);
+
+    if (stats.mtimeMs < cutoffTime) {
+      fs.unlinkSync(filePath);
+      deletedCount++;
+    }
+  }
+
+  return deletedCount;
+}
+
+/**
+ * traces 轮转备份清理的独立库入口（harness#198）
+ *
+ * `TraceCollector.cleanupOldFiles` 的薄包装：消费方不需要理解 traces 目录布局
+ * （不再手删 `.harness/logs/` 文件）。不构造 TraceCollector——traces 目录不存在
+ * 时 no-op 返回 0、不创建目录，零副作用。
+ *
+ * @param target 项目根路径，或本 run 的运行级观察面（与 `listRetiredConstraints` 同形）
+ * @returns 实际删除的备份文件数
+ */
+export function pruneTraceLogs(target: RunTarget, options: { maxAgeDays?: number } = {}): number {
+  const projectPath = typeof target === 'string' ? target : target.projectPath;
+  return pruneRotatedTraceFiles(
+    path.resolve(projectPath, DEFAULT_TRACE_FILE),
+    options.maxAgeDays ?? 30
+  );
+}
 
 /**
  * 默认配置
@@ -254,28 +304,7 @@ export class TraceCollector {
    * 删除超过 maxAge 天的备份文件
    */
   cleanupOldFiles(maxAgeDays: number = 30): number {
-    const dir = path.dirname(this.traceFile);
-    if (!fs.existsSync(dir)) {
-      return 0;
-    }
-
-    const files = fs.readdirSync(dir);
-    const backupFiles = files.filter(f => f.endsWith('.log') && f !== path.basename(this.traceFile));
-
-    const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;
-    let deletedCount = 0;
-
-    for (const file of backupFiles) {
-      const filePath = path.join(dir, file);
-      const stats = fs.statSync(filePath);
-
-      if (stats.mtimeMs < cutoffTime) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
-    }
-
-    return deletedCount;
+    return pruneRotatedTraceFiles(this.traceFile, maxAgeDays);
   }
 
   /**
@@ -308,33 +337,4 @@ export class TraceCollector {
       newestTrace: last?.timestamp,
     };
   }
-}
-
-/**
- * 全局单例（**cwd 锚定**的兼容面）
- *
- * harness#139 起本仓生产代码不再消费它：CLI check/report 与 bootstrap 四个组合根
- * 各自 `new TraceCollector({ projectPath })` 锚根构造（守卫见 project-path-convention
- * 闸 4）。保留是给跨仓调用方的既有形状——它依赖「调用方进程 cwd 恰好是项目」。
- * 传 `projectPath` 是它的锚根出口；不传则落点按 cwd 解析（行为逐字不变）。
- */
-let globalCollector: TraceCollector | null = null;
-
-/**
- * 获取全局收集器（cwd 锚定，兼容语义见上）
- */
-export function getTraceCollector(): TraceCollector {
-  if (!globalCollector) {
-    globalCollector = new TraceCollector();
-  }
-  return globalCollector;
-}
-
-/**
- * 配置全局收集器（cwd 锚定，兼容语义见 `getTraceCollector()`）
- *
- * 需要把 trace 落进指定项目的调用方直接构造实例：`new TraceCollector({ projectPath })`。
- */
-export function configureTraceCollector(config: Partial<TraceCollectorConfig>): void {
-  globalCollector = new TraceCollector(config);
 }

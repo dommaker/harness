@@ -6,11 +6,11 @@
  */
 
 import { executeCommand } from '../command';
-import { createCommandGate } from '../../../gates';
+import { createCommandGate } from '../../../gates/command';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import { decide, fakeGate } from './gate-decision';
 
-jest.mock('../../../gates', () => ({
+jest.mock('../../../gates/command', () => ({
   createCommandGate: jest.fn(),
   DEFAULT_COMMAND_BLACKLIST: [
     { id: 'rule-1', level: 'block', message: 'No rm -rf', category: 'destructive', pattern: 'rm -rf' },

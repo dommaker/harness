@@ -339,9 +339,11 @@ export function diagnoseRetireCandidates(
 
 /**
  * 构建 report 数据模型（只读；观察名单状态以快照入、以 nextWatchlist 出，不写盘）
+ *
+ * @param projectRoot 项目根路径（必传，无 cwd 缺省——harness#201）
  */
 export function buildConstraintsUsageReport(
-  projectRoot: string = process.cwd(),
+  projectRoot: string,
   thresholds: Partial<DiagnoseThresholds> = {},
   watch: DiagnoseWatchOptions = {}
 ): ConstraintsUsageReport {

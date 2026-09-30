@@ -36,24 +36,6 @@ export function timeRangeOf(timestamps: number[]): { start: number; end: number 
 }
 
 /**
- * 平均值
- */
-export function calcAverage(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
-
-/**
- * 百分位数（nearest-rank）
- */
-export function calcPercentile(values: number[], percentile: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.ceil((percentile / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, index)];
-}
-
-/**
  * 样本量不足时的趋势兜底阈值
  */
 export const MIN_TREND_SAMPLES = 10;

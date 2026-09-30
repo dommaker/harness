@@ -104,6 +104,55 @@ describe('validate command', () => {
       expect(result).toEqual({ kind: 'fail', reason: '1 个检查点未通过: test-1' });
     });
 
+    it('失败原因与 message 不同时一并打出来（真因不被 message 吞）', async () => {
+      const mockCheckpoints = [
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+      ];
+
+      mockFs.readFile.mockResolvedValue('checkpoints content');
+      mockYaml.load.mockReturnValue({ checkpoints: mockCheckpoints });
+
+      const mockValidator = {
+        validate: jest.fn().mockResolvedValue({
+          passed: false,
+          checks: [{
+            checkId: 'check-1',
+            passed: false,
+            message: '命令执行失败: npm test（退出码 1）',
+            error: '输出末段:\nFAIL  某用例\nTests  1 failed',
+          }],
+        }),
+      };
+      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+
+      await validate({}, io);
+
+      expect(io.outText()).toContain('命令执行失败: npm test（退出码 1）');
+      expect(io.outText()).toContain('Tests  1 failed');
+    });
+
+    it('error 与 message 同文时不重复打', async () => {
+      const mockCheckpoints = [
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+      ];
+
+      mockFs.readFile.mockResolvedValue('checkpoints content');
+      mockYaml.load.mockReturnValue({ checkpoints: mockCheckpoints });
+
+      const mockValidator = {
+        validate: jest.fn().mockResolvedValue({
+          passed: false,
+          checks: [{ checkId: 'check-1', passed: false, message: '同一个原因', error: '同一个原因' }],
+        }),
+      };
+      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+
+      await validate({}, io);
+
+      const printed = io.outText().split('\n').filter(line => line.includes('同一个原因'));
+      expect(printed).toHaveLength(1);
+    });
+
     it('应该在严格模式下退出', async () => {
       const mockCheckpoints = [
         { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },

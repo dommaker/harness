@@ -96,7 +96,7 @@ function getSeverityColor(severity: string): (text: string) => string {
   }
 }
 
-// ========== security secrets：全历史机密扫描（P1-8，ADR-0031，wayfinder 票08） ==========
+// ========== security secrets：全历史机密扫描（P1-8，ADR-0031，票08） ==========
 
 export interface SecretsOptions {
   /** 项目路径（= 待扫仓库根） */

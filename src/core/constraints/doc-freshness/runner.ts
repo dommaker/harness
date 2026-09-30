@@ -469,6 +469,9 @@ export class FreshnessRunner {
 
       const entries = readdirSync(searchDir, { withFileTypes: true });
 
+      // 正则提出循环：String.match 带 g flag 时不携带 lastIndex 状态（每次调用内部归零），复用安全
+      const matchRe = new RegExp(pattern, 'g');
+
       let count = 0;
       for (const entry of entries) {
         if (!entry.isFile()) continue;
@@ -476,7 +479,7 @@ export class FreshnessRunner {
 
         try {
           const content = readFileSync(join(searchDir, entry.name), 'utf-8');
-          const matches = content.match(new RegExp(pattern, 'g'));
+          const matches = content.match(matchRe);
           if (matches) {
             count += matches.length;
           }

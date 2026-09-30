@@ -33,4 +33,4 @@ npm run lint  # 代码检查
 ## 知识入口
 
 - `.harness/knowledge/`：项目知识库，用 `harness knowledge` 查询
-- 各源码目录的 `CONTEXT.md` 是权威模块文档（现有 13 个），改动代码时同步更新
+- 各源码目录的 `CONTEXT.md` 是权威模块文档（现有 12 个），改动代码时同步更新

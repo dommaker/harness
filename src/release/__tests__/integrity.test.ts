@@ -75,11 +75,10 @@ describe('deriveCriticalArtifacts', () => {
 });
 
 describe('EXTRA_CRITICAL_ARTIFACTS', () => {
-  it('覆盖 bin 引导定义表与 tools 运行时数据目录（随源码维护，删改须同评审）', () => {
+  it('覆盖 bin 引导定义表（随源码维护，删改须同评审）', () => {
     expect(EXTRA_CRITICAL_ARTIFACTS).toEqual([
       'dist/cli/commands/definitions.js',
       'dist/gates/definitions.js',
-      'dist/tools/definitions',
     ]);
   });
 });
@@ -119,7 +118,6 @@ describe('getCriticalArtifacts / verifyReleaseArtifacts（fixture 包根）', ()
       'dist/cli/commands/definitions.js',
       'dist/gates/definitions.js',
       'dist/index.js',
-      'dist/tools/definitions',
     ]);
   });
 
@@ -131,10 +129,10 @@ describe('getCriticalArtifacts / verifyReleaseArtifacts（fixture 包根）', ()
 
   it('缺文件 → ok:false 且 missing 指名', () => {
     const root = makeFixture(FIXTURE_MANIFEST, FIXTURE_ARTIFACTS);
-    fs.rmSync(path.join(root, 'dist', 'tools', 'definitions'), { recursive: true, force: true });
+    fs.rmSync(path.join(root, 'dist', 'gates', 'definitions.js'));
     const result = verifyReleaseArtifacts(root);
     expect(result.ok).toBe(false);
-    expect(result.missing).toEqual(['dist/tools/definitions']);
+    expect(result.missing).toEqual(['dist/gates/definitions.js']);
   });
 });
 

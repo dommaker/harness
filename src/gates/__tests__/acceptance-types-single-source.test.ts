@@ -2,15 +2,16 @@
  * AcceptanceGate 类型单一正本（harness#101，架构评审 A1）
  *
  * 钉住三条：
- * 1. 公共导出面（gates/types.ts）的 SpecAcceptanceGateConfig 并入 e2e 字段——
+ * 1. 类型面（gates/types.ts）的 SpecAcceptanceGateConfig 并入 e2e 字段——
  *    修前窄版会在类型层面拒绝 e2eTestCommand/e2eTestTimeout/projectPath（编译即红）。
- * 2. 测试与公共面走同一 seam：工厂从 gates/index 取，acceptance.ts 侧工厂已删。
- * 3. acceptance.ts 不再持有三类型/工厂的双份定义（源码扫描闸，防双正本回潮）。
+ * 2. acceptance.ts 不再持有三类型/工厂的双份定义（源码扫描闸，防双正本回潮）。
+ * （原「工厂与公共面同一 seam」一条随 #199 入口清空失效——内联工厂已删，
+ *   等价构造直走 `new SpecAcceptanceGate(...)`，配置形状不变）
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { SpecAcceptanceGate, createSpecAcceptanceGate } from '../index';
+import { SpecAcceptanceGate } from '../acceptance';
 import type {
   SpecAcceptanceGateConfig,
   AcceptanceGateContext,
@@ -49,8 +50,8 @@ describe('AcceptanceGate 类型单一正本（#101）', () => {
     expect(criteria.type).toBe('automated');
   });
 
-  it('gates/index 工厂接受并入后的宽版配置（与公共面同一 seam）', () => {
-    const gate = createSpecAcceptanceGate({
+  it('宽版配置（含 e2e 字段）可直接构造（与收回前公共面同一形状）', () => {
+    const gate = new SpecAcceptanceGate({
       e2eTestCommand: 'npx playwright test',
       e2eTestTimeout: 60000,
       projectPath: '/tmp/proj',

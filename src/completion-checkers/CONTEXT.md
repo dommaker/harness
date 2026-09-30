@@ -9,16 +9,16 @@
 - `verifyContractPresence(type, context, config)`（`contract-presence.ts`）——yml contracts 清单查表，无表项 = skip；类型→判定方法映射是代码不是配置（review → `context.reviewReport` 在场）；清单内无判定方法 = violation（配置与代码失配）
 - `CompletionCheckersConfig`（`types.ts`）——enabled 总开关 / checkers 各开关 / testGlobs / noncodeGlobs / contracts；协议格式不进配置
 - `classifyCommitFiles` / `resolveGlobs`（`classify.ts`）——文件分类，tdd-chain 与 phase-format 共享口径
-- `matchGlob` / `matchAnyGlob` / `DEFAULT_TEST_GLOBS` / `DEFAULT_NONCODE_GLOBS`（`glob-match.ts`）——轻量 glob 匹配（`**`/`*`/`?`）
+- `matchGlob` / `matchAnyGlob` / `DEFAULT_TEST_GLOBS` / `DEFAULT_NONCODE_GLOBS`（`glob-match.ts`）——轻量 glob 匹配（`**`/`*`/`?`）；glob→正则正本在 `utils/glob-match.ts`（core templated 共用）
 
 ## 依赖关系
-- 无内部依赖（纯函数模块，自包含）
+- 依赖 `src/utils/`（glob-match 正本）；其余自包含纯函数
 
 ## 约定
 - 与 ConstraintCheck 闭环注册表无关：直接 export，禁止注册进 checkers/index.ts
 - verdict 四态：pass / violation / waiver（豁免放行，commit 级）/ skip（不适用，不记台账）
 - 新增契约类型 = `CONTRACT_JUDGMENTS` 加一条映射 + 测试
-- 协议格式（Tested-By、Tests: none、phase 结构）写死为机制本体，不得配置化
+- 协议格式（Tested-By、Tests: none、phase 结构）写死为机制本体，不得配置化；协议语义权威文档 = `docs/commit-protocol.md`（harness 提交协议）
 
 ## 注意事项
 - commits 输入有序（base..HEAD 升序），位置判定比索引不比时间戳

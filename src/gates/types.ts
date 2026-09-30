@@ -91,7 +91,7 @@ export type GateDecisionStatus = 'deny' | 'abstain' | 'ask';
  * 门禁决策：统一 Gate 接口的返回值
  *
  * status 是三态决策；result 携带 GateResult 报告结构。
- * 决策对象由 decisionFromResult / runGates 浅冻结——不可变是
+ * 决策对象由 decisionFromResult 浅冻结——不可变是
  * deny 单调语义的接口契约。
  */
 export interface GateDecision {
@@ -110,7 +110,7 @@ export interface GateDecision {
 export interface Gate {
   /** 门禁 id（与 gates/definitions.ts 定义一致，注册表闭环校验） */
   readonly id: string;
-  /** 声明式顺序（config.yml `gates.order` 可覆盖），小者先执行 */
+  /** 声明式顺序（以 gates/definitions.ts 定义表为准，config.yml 无覆盖口——gates.order 生效集已删，ADR-0002「后续变更」），小者先执行 */
   order: number;
   /** 决策协议：返回三态 GateDecision */
   evaluate(ctx: GateContext): Promise<GateDecision> | GateDecision;
@@ -240,12 +240,20 @@ export interface AcceptanceCriteria {
 }
 
 /**
+ * 黑名单级别：
+ * - block: 禁止执行，直接拒绝
+ * - warn: 允许执行，但记录警告
+ * - audit: 允许执行，但记录审计日志
+ */
+export type BlacklistLevel = 'block' | 'warn' | 'audit';
+
+/**
  * 命令黑名单规则
  */
 export interface CommandBlacklistRule {
   id: string;
   pattern: RegExp;
-  level: 'block' | 'warn' | 'audit';
+  level: BlacklistLevel;
   message: string;
   category: string;
 }

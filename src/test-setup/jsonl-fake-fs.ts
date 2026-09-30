@@ -4,7 +4,7 @@
  * 背景：`utils/jsonl` 的 tail/head 是分块有界读（`openSync` + `fstatSync` + `readSync` +
  * `closeSync`，ADR-0023 决策 3）。把整个 `fs` 模块 mock 掉的测试原先只提供了全文读入口
  * `readFileSync`，于是走有界读的被测代码直接抛错，再被它自己的 `catch` 吞成「数据不存在」
- * 一类的假象（session-manager 报 `Checkpoint 不存在`、context-tracker 读出空快照都是这样）。
+ * 一类的假象（session-manager 报 `Checkpoint 不存在` 就是这样）。
  *
  * 口径一（同源）：内容经 `readFile(path)` 现取，直接把 `readFileSync` 那个 mock 包一层即可——
  * 测试改了它的返回值，两条读入口看到的就是同一个文件。

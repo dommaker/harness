@@ -33,7 +33,7 @@ export function gateCommandResult(gateId: string, decision: GateDecision): Comma
   if (decision.status === 'abstain') {
     return { kind: 'ok' };
   }
-  // ask 无实现者，按拦下计——与 runGates 的 fail-closed 聚合同一条规则
+  // ask 无实现者，按拦下计——fail-closed 契约见 src/gates/CONTEXT.md「约定」
   return { kind: 'fail', reason: `${gateId} gate denied: ${decision.result.message}` };
 }
 

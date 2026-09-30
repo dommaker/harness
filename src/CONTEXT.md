@@ -8,20 +8,27 @@
 - `core/index.ts`: 核心约束引擎
 - `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
 - `context/index.ts`: 上下文管理
-- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径；P1-7（ADR-0031，wayfinder 票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
+- `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径；P1-7（ADR-0031，票08）起命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；P1-5（同票）起非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）
 
 ## 目录
 | 目录 | 职责 |
 |------|------|
 | core/ | 约束引擎、检查点验证器、会话管理 |
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
-| monitoring/ | Execution Trace 收集/分析、上下文追踪 |
+| monitoring/ | Execution Trace 收集/分析 |
 | failure/ | 错误分类、失败记录 |
-| context/ | 会话管理、token 预算、压缩、知识注入 |
-| spec/ | （空目录）@spec 注释检查已删（ADR-0003）；spec 故事见 core/spec/validator + SpecAcceptanceGate |
-| cli/commands/ | 23 个 CLI 子命令 |
+| context/ | 会话管理、压缩、知识注入 |
+| cli/commands/ | 20 个顶层命令（COMMAND_DEFINITIONS 14 + GATE_DEFINITIONS 6）+ constraints 治理子命令 |
+| agents/ | Agent 生命周期状态机（7 状态） |
+| completion-checkers/ | 提交集收尾软观测三纯判定（tdd-chain / phase-format / contract-presence） |
+| hooks/ | harness 运行时 bootstrap 组合根（bootstrapHarness） |
+| knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Linter、Reference Tracker |
+| presets/ | 预设纯数据（strict/standard/relaxed） |
+| release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
+| sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md） |
+| types/ | 公共类型（checkpoint / constraint / cso / failure / passes-gate / project-config / spec） |
+| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-version / detect-source-roots / glob-match） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
-| tools/ | 工具定义 |
 
 ## 依赖关系
 - `src/core/` 被所有模块依赖（基础层）

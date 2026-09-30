@@ -88,9 +88,9 @@ export async function listAcceptanceCriteria(
   try {
     const content = await fs.readFile(tasksPath, 'utf-8');
     const yaml = await import('js-yaml');
-    const tasks = yaml.load(content) as any;
+    const tasks: unknown = yaml.load(content);
 
-    if (!tasks || typeof tasks !== 'object') {
+    if (typeof tasks !== 'object' || tasks === null) {
       log(io, chalk.yellow('⚠️  未找到任务定义'));
       return { kind: 'skip', reason: `未找到任务定义: ${tasksPath}` };
     }
@@ -98,10 +98,10 @@ export async function listAcceptanceCriteria(
     for (const [taskId, task] of Object.entries(tasks)) {
       if (typeof task === 'object' && task !== null) {
         log(io, chalk.cyan(`${taskId}:`));
-        const taskObj = task as any;
-        if (taskObj.acceptanceCriteria) {
-          taskObj.acceptanceCriteria.forEach((criteria: string, i: number) => {
-            log(io, chalk.gray(`  ${i + 1}. ${criteria}`));
+        const criteria = (task as { acceptanceCriteria?: unknown }).acceptanceCriteria;
+        if (Array.isArray(criteria)) {
+          criteria.forEach((c: unknown, i: number) => {
+            log(io, chalk.gray(`  ${i + 1}. ${String(c)}`));
           });
         } else {
           log(io, chalk.gray('  (无验收标准)'));
@@ -110,8 +110,9 @@ export async function listAcceptanceCriteria(
       }
     }
     return { kind: 'ok' };
-  } catch (error: any) {
-    log(io, chalk.red(`❌ 读取 tasks.yml 失败: ${error.message}`));
-    return { kind: 'skip', reason: `读取 tasks.yml 失败: ${error.message}` };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(io, chalk.red(`❌ 读取 tasks.yml 失败: ${message}`));
+    return { kind: 'skip', reason: `读取 tasks.yml 失败: ${message}` };
   }
 }

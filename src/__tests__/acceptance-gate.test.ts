@@ -1,5 +1,9 @@
 /**
  * SpecAcceptanceGate 测试
+ *
+ * 旧格式 `acceptance_criteria`（含 required 可选语义）与死配置
+ * `customAcceptanceCriteria` 已随 gates 层现代化删除：本文件只喂新契约
+ * `acceptance`——checked:true → 满足；未勾选 → 不满足（有 e2e_test 则按测试结论）。
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
@@ -68,8 +72,8 @@ describe('SpecAcceptanceGate', () => {
             id: 'TASK-001',
             name: 'Test Task',
             completed: true,
-            acceptance_criteria: [
-              { id: 'AC-001', description: 'Test', type: 'manual', required: true, checked: true },
+            acceptance: [
+              { description: 'Test', checked: true },
             ],
           },
         ],
@@ -90,9 +94,9 @@ describe('SpecAcceptanceGate', () => {
             id: 'TASK-001',
             name: 'Test Task',
             status: 'done',
-            acceptance_criteria: [
-              { id: 'AC-001', description: 'Required 1', type: 'manual', required: true, checked: false },
-              { id: 'AC-002', description: 'Required 2', type: 'manual', required: true, checked: false },
+            acceptance: [
+              { description: 'Required 1', checked: false },
+              { description: 'Required 2', checked: false },
             ],
           },
         ],
@@ -175,8 +179,8 @@ describe('SpecAcceptanceGate', () => {
     it('检查所有任务模式', async () => {
       fs.writeFileSync(tasksFile, yaml.dump({
         tasks: [
-          { id: 'TASK-001', acceptance_criteria: [{ id: 'AC-001', description: 'T1', type: 'manual', required: true, checked: true }] },
-          { id: 'TASK-002', acceptance_criteria: [{ id: 'AC-002', description: 'T2', type: 'manual', required: true, checked: true }] },
+          { id: 'TASK-001', acceptance: [{ description: 'T1', checked: true }] },
+          { id: 'TASK-002', acceptance: [{ description: 'T2', checked: true }] },
         ],
       }));
 
@@ -192,8 +196,8 @@ describe('SpecAcceptanceGate', () => {
     it('部分任务失败', async () => {
       fs.writeFileSync(tasksFile, yaml.dump({
         tasks: [
-          { id: 'TASK-001', acceptance_criteria: [{ id: 'AC-001', description: 'T1', type: 'manual', required: true, checked: true }] },
-          { id: 'TASK-002', acceptance_criteria: [{ id: 'AC-002', description: 'T2', type: 'manual', required: true, checked: false }] },
+          { id: 'TASK-001', acceptance: [{ description: 'T1', checked: true }] },
+          { id: 'TASK-002', acceptance: [{ description: 'T2', checked: false }] },
         ],
       }));
 
@@ -213,14 +217,14 @@ describe('SpecAcceptanceGate', () => {
         tasks: [
           {
             id: 'TASK-001',
-            acceptance_criteria: [
-              { id: 'AC-001', description: 'Test', type: 'manual', required: true, checked: false },
+            acceptance: [
+              { description: 'Test', checked: false },
             ],
           },
           {
             id: 'TASK-002',
-            acceptance_criteria: [
-              { id: 'AC-002', description: 'Test', type: 'manual', required: true, checked: true },
+            acceptance: [
+              { description: 'Test', checked: true },
             ],
           },
         ],
@@ -238,7 +242,7 @@ describe('SpecAcceptanceGate', () => {
 
     it('任务不存在应该失败', async () => {
       fs.writeFileSync(tasksFile, yaml.dump({
-        tasks: [{ id: 'TASK-001', completed: true, acceptance_criteria: [] }],
+        tasks: [{ id: 'TASK-001', completed: true, acceptance: [] }],
       }));
 
       const gate = new SpecAcceptanceGate({ tasksPath: tasksFile });
@@ -256,9 +260,9 @@ describe('SpecAcceptanceGate', () => {
     it('只检查已完成任务', async () => {
       fs.writeFileSync(tasksFile, yaml.dump({
         tasks: [
-          { id: 'TASK-001', status: 'todo', acceptance_criteria: [{ id: 'AC-001', description: 'T1', type: 'manual', required: true, checked: false }] },
-          { id: 'TASK-002', status: 'done', acceptance_criteria: [{ id: 'AC-002', description: 'T2', type: 'manual', required: true, checked: true }] },
-          { id: 'TASK-003', completed: true, acceptance_criteria: [{ id: 'AC-003', description: 'T3', type: 'manual', required: true, checked: true }] },
+          { id: 'TASK-001', status: 'todo', acceptance: [{ description: 'T1', checked: false }] },
+          { id: 'TASK-002', status: 'done', acceptance: [{ description: 'T2', checked: true }] },
+          { id: 'TASK-003', completed: true, acceptance: [{ description: 'T3', checked: true }] },
         ],
       }));
 
@@ -273,7 +277,7 @@ describe('SpecAcceptanceGate', () => {
     it('已完成任务未检查验收标准应该失败', async () => {
       fs.writeFileSync(tasksFile, yaml.dump({
         tasks: [
-          { id: 'TASK-001', status: 'done', acceptance_criteria: [{ id: 'AC-001', description: 'T1', type: 'manual', required: true, checked: false }] },
+          { id: 'TASK-001', status: 'done', acceptance: [{ description: 'T1', checked: false }] },
         ],
       }));
 
@@ -288,7 +292,7 @@ describe('SpecAcceptanceGate', () => {
     it('没有已完成任务应该通过', async () => {
       fs.writeFileSync(tasksFile, yaml.dump({
         tasks: [
-          { id: 'TASK-001', status: 'in-progress', acceptance_criteria: [{ id: 'AC-001', description: 'T1', type: 'manual', required: true, checked: false }] },
+          { id: 'TASK-001', status: 'in-progress', acceptance: [{ description: 'T1', checked: false }] },
         ],
       }));
 
@@ -322,38 +326,6 @@ describe('SpecAcceptanceGate', () => {
     it('应该支持自定义超时时间', () => {
       const gate = new SpecAcceptanceGate({ e2eTestTimeout: 60000 });
       expect(gate).toBeDefined();
-    });
-
-    it('应该支持自定义验收条件检查', () => {
-      const customCheck = async () => true;
-      const gate = new SpecAcceptanceGate({
-        customAcceptanceCriteria: { 'custom-type': customCheck },
-      });
-      expect(gate).toBeDefined();
-    });
-  });
-
-  describe('非必须验收标准', () => {
-    it('非必须标准未检查不应该失败', async () => {
-      fs.writeFileSync(tasksFile, yaml.dump({
-        tasks: [
-          {
-            id: 'TASK-001',
-            completed: true,
-            acceptance_criteria: [
-              { id: 'AC-001', description: 'Required', type: 'manual', required: true, checked: true },
-              { id: 'AC-002', description: 'Optional', type: 'manual', required: false, checked: false },
-            ],
-          },
-        ],
-      }));
-
-      const gate = new SpecAcceptanceGate({ tasksPath: tasksFile });
-      const result = await gate.check({
-        projectPath: tempDir,
-      });
-
-      expect(result.passed).toBe(true);
     });
   });
 

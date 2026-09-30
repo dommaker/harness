@@ -104,7 +104,7 @@ describe('CommandGate 匹配循环唯一化（#135）', () => {
         const result = await gate.check(command);
         const allowed = gate.isAllowed(command);
         const level = gate.getRiskLevel(command);
-        const blocked = (result.details?.blocked ?? []).length > 0;
+        const blocked = ((result.details?.blocked ?? []) as unknown[]).length > 0;
 
         expect(allowed).toBe(!blocked);
         expect(result.passed).toBe(!blocked);

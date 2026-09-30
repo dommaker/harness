@@ -10,7 +10,7 @@ import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, GateCon
 import { decisionFromResult } from './decision';
 
 /**
- * 黑名单级别（正本在 types.ts，与 CommandBlacklistRule.level 同一定义）
+ * 黑名单级别（正本在 src/types/gate.ts，与 CommandBlacklistRule.level 同一定义）
  */
 export type { BlacklistLevel } from './types';
 

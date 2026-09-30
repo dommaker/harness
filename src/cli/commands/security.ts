@@ -11,7 +11,7 @@ import * as path from 'path';
 import { SecurityGate } from '../../gates/security';
 import { execAsync } from '../../utils/exec';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
-import { reportGateDecision } from '../gate-command';
+import { reportGateDecision, reportGateError } from '../gate-command';
 
 export interface SecurityOptions {
   /** 项目路径 */
@@ -72,9 +72,7 @@ export async function security(
       decision
     );
   } catch (error) {
-    log(io);
-    log(io, chalk.red(`❌ 安全检查异常: ${error instanceof Error ? error.message : String(error)}`));
-    return { kind: 'fail', reason: `security scan error: ${error instanceof Error ? error.message : String(error)}` };
+    return reportGateError(io, 'security', '安全门控', error);
   }
 }
 
@@ -141,9 +139,12 @@ export async function secretsScan(
         `gitleaks git --report-format json --report-path "${reportPath}" "${repoRoot}"`,
         { cwd: repoRoot, maxBuffer: 10 * 1024 * 1024 },
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       // gitleaks 退出码：0 = 干净，1 = 发现泄露（报告已落盘）；127 = 二进制不存在
-      exitCode = typeof error?.code === 'number' ? error.code : -1;
+      const code = typeof error === 'object' && error !== null
+        ? (error as { code?: unknown }).code
+        : undefined;
+      exitCode = typeof code === 'number' ? code : -1;
     }
 
     if (exitCode === 127) {
@@ -215,8 +216,8 @@ export async function auditDetails(
       return { kind: 'ok' };
     }
 
-    const details = result.details as any;
-    if (details?.vulnerabilities?.length > 0) {
+    const details = result.details as { total?: number; vulnerabilities?: Array<{ name: string; severity: string; via: string }> } | undefined;
+    if (details?.vulnerabilities?.length) {
       log(io, chalk.yellow(`发现 ${details.total} 个漏洞:\n`));
       for (const v of details.vulnerabilities) {
         const severityColor = getSeverityColor(v.severity);
@@ -227,8 +228,6 @@ export async function auditDetails(
     }
     return { kind: 'ok' };
   } catch (error) {
-    log(io);
-    log(io, chalk.red(`❌ 安全审计异常: ${error instanceof Error ? error.message : String(error)}`));
-    return { kind: 'fail', reason: `security audit error: ${error instanceof Error ? error.message : String(error)}` };
+    return reportGateError(io, 'security', '安全审计', error);
   }
 }

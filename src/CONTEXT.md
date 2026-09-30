@@ -26,7 +26,7 @@
 | presets/ | 预设纯数据（strict/standard/relaxed） |
 | release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
 | sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md） |
-| types/ | 公共类型（checkpoint / constraint / cso / failure / passes-gate / project-config / spec） |
+| types/ | 公共类型（checkpoint / constraint / cso / failure / gate / passes-gate / project-config / spec） |
 | utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-version / detect-source-roots / glob-match） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
 

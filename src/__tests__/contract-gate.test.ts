@@ -168,7 +168,7 @@ paths:
 
       expect(result.passed).toBe(false);
       expect(result.message).toContain('破坏性变更');
-      expect(result.details?.breakingChanges?.length).toBe(1);
+      expect((result.details?.breakingChanges as unknown[])?.length).toBe(1);
     });
 
     it('允许破坏性变更时应该通过', async () => {

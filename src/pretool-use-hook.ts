@@ -25,7 +25,7 @@
  * fail-open 空转；拦截归 codex 沙箱，本 shim 对它们只记账。
  */
 import { CommandGate } from './gates/command';
-import type { CommandBlacklistRule } from './gates/types';
+import type { CommandBlacklistRule } from './types/gate';
 import { TraceCollector } from './monitoring/traces';
 
 /** hook 标识：下游消费方 hook 配置共用同一 marker 做幂等检测（值不可变，改动会破坏存量配置的幂等识别） */

@@ -8,8 +8,8 @@
  * 实测 v1.6.0 源 `src/index.ts:106` 与已发布 npm 产物 `dist/index.d.ts:38` 都在导出它。
  * 本闸让「在不在公开面上」变成跑一下就有答案的事实。
  *
- * **公开面 = `package.json` 的 exports 映射，不是只有包根。** 本包发布五个入口点
- * （`.` / `./core` / `./presets` / `./context` / `./gates`），`import type { X } from
+ * **公开面 = `package.json` 的 exports 映射，不是只有包根。** 本包发布四个入口点
+ * （`.` / `./core` / `./presets` / `./context`），`import type { X } from
  * '@dommaker/harness/core'` 与从包根导入同样是对外承诺。入口清单从 exports **派生**而非
  * 硬编码：新增子路径会立刻落进本闸（未登记冻结清单即红），免得重演「公开面的定义比现实窄」
  * 这个 B1 病因——`DynamicTask` 除包根外同时经 `./core` 可达，只冻包根会留同一个洞。
@@ -21,9 +21,10 @@
  * 0 tests），拿不到可执行的清单 diff；本闸在那种改动下必须仍然跑得动、报得出是哪个入口的
  * 哪个符号。
  *
- * 清单来源不是手抄：五个入口的 `src` 解析结果与 tsc 产物（各自 exports 的 types 指向，如
- * `dist/core/index.d.ts`）逐项对撞，140/35/1/11/0 全部逐字一致，产物侧同时零 `export *`
- * （`./gates` 自 #199 起为空面入口，见清单内注释）。
+ * 清单来源不是手抄：四个入口的 `src` 解析结果与 tsc 产物（各自 exports 的 types 指向，如
+ * `dist/core/index.d.ts`）逐项对撞，140/35/1/11 全部逐字一致，产物侧同时零 `export *`。
+ * （`./gates` 子路径入口已随 gates 层现代化整体摘除：#199 收回全部导出后入口只剩
+ * 空壳，package.json `exports` 不再登记。）
  * 改动入口清单文件时同步改本文件对应条目，diff 即 PR 评审材料；增删符号属公共面 breaking，
  * 须按 ADR-0003/0022 走发布级别裁决。
  */
@@ -36,8 +37,7 @@ const REPO_ROOT = path.join(__dirname, '../..');
 /**
  * 入口点合法的导出写法只有三种：
  * ① `export { 值 } from '...'`；② `export type { 类型 } from '...'`；③ 内联值声明
- * `export function|const|let|var`（如 `src/gates/index.ts` 的 5 个 `create*Gate`）——纯值面，
- * 不属类型清单管辖。
+ * `export function|const|let|var`——纯值面，不属类型清单管辖。
  * 清单归类按**说明符自身**而非块形式：`export { GATE_DEFINITIONS, type GateDefinition }` 里的
  * `GateDefinition` 按 TS 语义就是类型导出，必须进类型清单（本闸的职责是如实刻画公开面，不是管写法）。
  * 其余行首 `export` 一律记为违禁而非跳过：`export *` / `export type *` 会让按名字扫描静默
@@ -295,9 +295,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'SessionHandle',
     'SessionMessage',
   ],
-  // #199（ADR-0038）：./gates 面整体收回（双仓零编程消费者），入口本身保留、
-  // 以空清单显式冻结——复活任一类型导出即红
-  './gates': [],
 };
 
 describe('已发布类型面全量冻结（ADR-0022 追记 4）', () => {
@@ -324,11 +321,8 @@ describe('已发布类型面全量冻结（ADR-0022 追记 4）', () => {
       });
 
       it('类型清单与冻结集逐字一致（增删即 breaking，需发布级别裁决）', () => {
-        // 解析塌掉不得退化成空集合假绿；唯一例外是 ./gates——#199（ADR-0038）面整体收回、
-        // 入口保留，以空清单显式冻结
-        if (PUBLISHED_ENTRY_TYPES[sub].length > 0) {
-          expect(surface.types.length).toBeGreaterThan(0);
-        }
+        // 解析塌掉不得退化成空集合假绿
+        expect(surface.types.length).toBeGreaterThan(0);
         expect([...surface.types].sort()).toEqual([...PUBLISHED_ENTRY_TYPES[sub]].sort());
       });
     });

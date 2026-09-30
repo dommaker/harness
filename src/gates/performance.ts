@@ -11,7 +11,7 @@
  *
  * 改进：
  * - 添加超时机制
- * - 改进错误处理
+ * - 指标采集失败归入 warnings 展示（采集口径语义，见 collectCoverage）
  * - 返回详细的错误信息
  */
 
@@ -26,6 +26,23 @@ import { decisionFromResult } from './decision';
 const DEFAULT_TIMEOUTS = {
   coverage: 120000,  // 覆盖率测试：2分钟
 };
+
+/**
+ * 采集到的性能指标（采集失败的维度落在 *Error 字段，转 warnings 展示）
+ */
+interface PerformanceMetrics {
+  coverage?: number;
+  coverageError?: string;
+  bundleSize?: number;
+  bundleSizeError?: string;
+}
+
+/** exec/readFile 抛错对象上判定实际读取的字段 */
+function execErrorField(error: unknown, field: 'code' | 'killed'): unknown {
+  return typeof error === 'object' && error !== null
+    ? (error as Record<string, unknown>)[field]
+    : undefined;
+}
 
 /**
  * 性能门禁配置
@@ -107,7 +124,7 @@ export class PerformanceGate implements Gate {
           warnings,
         }
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       return fromError('performance', '性能检查失败', error, startTime);
     }
   }
@@ -118,13 +135,8 @@ export class PerformanceGate implements Gate {
   private async collectMetrics(
     projectPath: string,
     thresholds: PerformanceThresholds
-  ): Promise<{
-    coverage?: number;
-    coverageError?: string;
-    bundleSize?: number;
-    bundleSizeError?: string;
-  }> {
-    const metrics: any = {};
+  ): Promise<PerformanceMetrics> {
+    const metrics: PerformanceMetrics = {};
 
     // 收集覆盖率（带超时）
     if (thresholds.minCoverage) {
@@ -171,18 +183,22 @@ export class PerformanceGate implements Gate {
       // 读取覆盖率报告
       const coveragePath = path.join(projectPath, 'coverage', 'coverage-summary.json');
       const content = await fs.readFile(coveragePath, 'utf-8');
-      const coverage = JSON.parse(content);
+      const summary: unknown = JSON.parse(content);
+      const total = typeof summary === 'object' && summary !== null
+        ? (summary as { total?: { lines?: { pct?: unknown } } }).total
+        : undefined;
+      const pct = total?.lines?.pct;
 
-      return { coverage: coverage.total?.lines?.pct || 0 };
-    } catch (error: any) {
+      return { coverage: typeof pct === 'number' ? pct : 0 };
+    } catch (error: unknown) {
       // 区分超时和其他错误
-      if (error.killed) {
+      if (execErrorField(error, 'killed')) {
         return { error: `覆盖率测试超时 (${this.config.coverageTimeout}ms)` };
       }
-      if (error.code === 'ENOENT') {
+      if (execErrorField(error, 'code') === 'ENOENT') {
         return { error: '未找到覆盖率报告文件' };
       }
-      return { error: error.message || '覆盖率测试失败' };
+      return { error: error instanceof Error ? error.message : '覆盖率测试失败' };
     }
   }
 
@@ -207,18 +223,18 @@ export class PerformanceGate implements Gate {
       }
 
       return { bundleSize: Math.round(totalSize / 1024) };
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      if (execErrorField(error, 'code') === 'ENOENT') {
         return { error: '未找到 dist 目录' };
       }
-      return { error: error.message || '打包大小检查失败' };
+      return { error: error instanceof Error ? error.message : '打包大小检查失败' };
     }
   }
 
   /**
    * 格式化指标输出
    */
-  private formatMetrics(metrics: any): string {
+  private formatMetrics(metrics: PerformanceMetrics): string {
     const parts: string[] = [];
     if (metrics.coverage !== undefined) parts.push(`覆盖率=${metrics.coverage}%`);
     if (metrics.bundleSize !== undefined) parts.push(`打包=${metrics.bundleSize}KB`);

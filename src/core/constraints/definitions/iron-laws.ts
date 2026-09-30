@@ -70,21 +70,4 @@ export const ERROR_CONSTRAINTS: Record<string, Constraint> = {
 - 为了绕过异步问题而跳过断言
 - 降低测试覆盖率要求`,
   },
-
-  /**
-   * 文档新鲜度
-   * 原因：只警告不阻断会导致文档持续腐烂。
-   */
-  docs_freshness: {
-    id: 'docs_freshness',
-    kind: 'check',
-    channel: 'gate',
-    rule: 'CAPABILITIES.MD MUST BE IN SYNC WITH CODE',
-    message: 'CAPABILITIES.md 与源码不同步，运行 harness sync-docs 更新后重新提交',
-    severity: 'error',
-    trigger: ['file_modification', 'module_creation', 'module_modification'],
-    enforcement: 'docs-sync-check',
-    description: `CAPABILITIES.md 中列出的文件必须在 src/ 中实际存在。删除源文件时须从 CAPABILITIES.md 同步移除。运行 harness sync-docs 自动修复过期引用。
-注: CONTEXT.md 已删除。目录描述集中在 CLAUDE.md Key Subsystems 表中。新增文件全覆盖检查待 sync-docs 完善后启用。`,
-  },
 };

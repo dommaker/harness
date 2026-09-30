@@ -32,7 +32,7 @@ export type {
 } from './types';
 export type { KnowledgeStore } from './store';
 export { FileKnowledgeStore } from './store';
-export { KnowledgeQuery } from './query';
+export { KnowledgeQuery, EXTERNAL_SOURCE_MARKER } from './query';
 export { estimateTokens } from './token-estimate';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';

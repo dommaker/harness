@@ -91,4 +91,23 @@ PRESERVE 机制只保证「存在的段重新生成时保留」，不保证「�
 sync-docs 重新生成会静默丢弃治理契约。本检查在 harness check 时校验在场性，防静默丢失。
 未采用 harness 治理（无 .harness/config.yml）的项目跳过评估（skip）。`,
   },
+
+  /**
+   * 文档新鲜度
+   * ADR-0032 决策 3：能力兜底类约束（会退化），配 error 阻断级是级别错配——
+   * 降为 warning，进退化观察。原 iron-laws 组「只警告不阻断会导致文档持续腐烂」
+   * 一句无出处（未记录的翻案），随本次降级删除。
+   */
+  docs_freshness: {
+    id: 'docs_freshness',
+    kind: 'check',
+    channel: 'gate',
+    rule: 'CAPABILITIES.MD MUST BE IN SYNC WITH CODE',
+    message: 'CAPABILITIES.md 与源码不同步，运行 harness sync-docs 更新后重新提交',
+    severity: 'warning',
+    trigger: ['file_modification', 'module_creation', 'module_modification'],
+    enforcement: 'docs-sync-check',
+    description: `CAPABILITIES.md 中列出的文件必须在 src/ 中实际存在。删除源文件时须从 CAPABILITIES.md 同步移除。运行 harness sync-docs 自动修复过期引用。
+注: CONTEXT.md 已删除。目录描述集中在 CLAUDE.md Key Subsystems 表中。新增文件全覆盖检查待 sync-docs 完善后启用。`,
+  },
 };

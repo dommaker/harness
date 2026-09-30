@@ -1,8 +1,10 @@
 # @dommaker/workflows → @dommaker/harness 迁移计划
 
+> **⚠️ 本文已被取代（SUPERSEDED）**：本计划依据的 harness-transformation.md §10.8/§12.1 方向已被 ADR-0031 否决；本计划迁入 harness 的工具定义资产（`src/tools/definitions/` 整链）已按 ADR-0037 全链删除。本文仅作历史参考保留。
+>
 > 日期: 2026-05-02
-> 依据: harness-transformation.md §10.8 + §12.1
-> 状态: Phase A + B 已完成（2026-05-02）
+> 依据: harness-transformation.md §10.8 + §12.1（已被取代）
+> 状态: 已被取代（superseded）——Phase A + B 曾完成（2026-05-02），迁移产物后由 ADR-0037 整删
 
 ## 一、背景
 

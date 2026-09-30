@@ -17,7 +17,7 @@
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
 | monitoring/ | Execution Trace 收集/分析 |
 | failure/ | 错误分类、失败记录 |
-| context/ | 会话管理、压缩、知识注入 |
+| context/ | 会话管理 |
 | cli/commands/ | 20 个顶层命令（COMMAND_DEFINITIONS 14 + GATE_DEFINITIONS 6）+ constraints 治理子命令 |
 | agents/ | Agent 生命周期状态机（7 状态） |
 | completion-checkers/ | 提交集收尾软观测三纯判定（tdd-chain / phase-format / contract-presence） |

@@ -1,7 +1,7 @@
 /**
  * 上下文管理模块（ADR-0003：显式清单，禁 export *）
  *
- * 会话管理 + 知识注入
+ * 会话管理
  */
 
 // 类型
@@ -19,7 +19,3 @@ export type {
 
 // 会话管理
 export { SessionManager } from './session-manager';
-
-// 知识注入
-export { KnowledgeInjector } from './knowledge-injector';
-export type { InjectionConfig, InjectionResult } from './knowledge-injector';

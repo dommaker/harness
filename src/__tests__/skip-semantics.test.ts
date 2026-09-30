@@ -164,17 +164,18 @@ describe('skip 三态语义（ADR-0001）', () => {
     });
   });
 
-  describe('error 级约束的 skip / fail 语义', () => {
-    it('error 级 skip 不阻断 checkConstraints（docs_freshness 存在性探测承载）', async () => {
+  describe('约束的 skip / fail 语义', () => {
+    it('warning 级 skip 不阻断 checkConstraints（docs_freshness 存在性探测承载）', async () => {
       // 无任何 freshness 约定/目标的空目录：docs_freshness skip（harness#183 前由
-      // no_completion_without_verification 的 flag 未接线承载该语义）
+      // no_completion_without_verification 的 flag 未接线承载该语义；
+      // ADR-0032 起 docs_freshness 降 warning 级，skip 落 warnings 桶而非 errors 桶）
       const result = await checker.checkConstraints({
         operation: 'file_modification',
         projectPath: path.join(tempDir, 'empty'),
       });
 
       expect(result.passed).toBe(true);
-      const skippedIds = result.errors.filter(r => r.skipped).map(r => r.id);
+      const skippedIds = result.warnings.filter(r => r.skipped).map(r => r.id);
       expect(skippedIds).toEqual(
         expect.arrayContaining(['docs_freshness'])
       );

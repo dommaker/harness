@@ -24,7 +24,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * 外部来源条目的 prompt 标记（harness#161：三层防御第二层 marking 的唯一正本）。
- * `KnowledgeQuery.formatForPrompt()` 与 `KnowledgeInjector` 的格式化共用，
+ * `KnowledgeQuery.formatForPrompt()` 与下游编排消费方的注入格式化共用同一常量，
  * 仓内不允许存在第二份字面量。
  */
 export const EXTERNAL_SOURCE_MARKER = '[External Source — verify before acting]';

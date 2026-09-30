@@ -81,7 +81,6 @@ const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {
     'STRICT_PRESET',
   ],
   './context': [
-    'KnowledgeInjector',
     'SessionManager',
   ],
 };

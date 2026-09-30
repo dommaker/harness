@@ -87,7 +87,7 @@ harness 不做三件事：
                                      harness 不认识它）
 ```
 
-**频道注入和语义检索是两条独立通道**，不是串成一条链的两段。harness 里目前有个做注入编排的部件（KnowledgeInjector）长错了地方，长期挪去 studio；"知识该不该升级成约束/skill"的候选判定留在 harness（那是标准），提案落到 studio 审卡。
+**频道注入和语义检索是两条独立通道**，不是串成一条链的两段。做注入编排的部件（KnowledgeInjector）原本长错了地方，已按本定位从 harness 删除（编排由 studio 内联承接，外部来源标记标准 `EXTERNAL_SOURCE_MARKER` 留在 harness 包根供消费方对齐）；"知识该不该升级成约束/skill"的候选判定留在 harness（那是标准），提案落到 studio 审卡。
 
 ## 四、安全底线补齐清单
 

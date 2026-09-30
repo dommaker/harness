@@ -181,7 +181,8 @@ describe('retireConstraint 执行逻辑', () => {
 
   it('severity=error：isError 标记为 true（供交互模式二次确认）', () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    const result = retireConstraint(root, 'docs_freshness', { now: FIXED_NOW });
+    // error 级载体：no_test_simplification（docs_freshness 已随 ADR-0032 降 warning）
+    const result = retireConstraint(root, 'no_test_simplification', { now: FIXED_NOW });
     expect(result.status).toBe('retired');
     expect(result.isError).toBe(true);
   });
@@ -260,14 +261,15 @@ describe('constraintsRetire 非交互直达', () => {
 
   it('--yes 直达 error 级退役：打印额外警示并落盘', async () => {
     const root = createProjectFixture({ name: 'harness-retire-test' });
-    await constraintsRetire('docs_freshness', { projectPath: root, reason: '直接退役', yes: true }, io);
+    // error 级载体：no_test_simplification（docs_freshness 已随 ADR-0032 降 warning）
+    await constraintsRetire('no_test_simplification', { projectPath: root, reason: '直接退役', yes: true }, io);
 
     const output = io.outText();
     expect(output).toContain('error 级约束');
     expect(output).toContain('已退役');
 
     const config = readConfig(root);
-    expect(config.constraints.docs_freshness.enabled).toBe(false);
+    expect(config.constraints.no_test_simplification.enabled).toBe(false);
   });
 
   it('--yes 直达 warning 级退役：不打印 error 级警示并落盘', async () => {

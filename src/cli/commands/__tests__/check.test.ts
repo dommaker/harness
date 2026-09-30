@@ -347,7 +347,7 @@ describe('check command（真 git fixture）', () => {
       );
 
       const out = io.outText();
-      expect(out).toContain('✅ warning 级约束: 1/1 通过');
+      expect(out).toContain('✅ warning 级约束: 2/2 通过');
       expect(out).not.toContain('warning 级约束警告');
       expect(out).toContain('💡 提示: 1 条（不判违规，供参考）');
       expect(out).toContain('- capability_sync:');

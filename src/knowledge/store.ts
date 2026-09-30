@@ -287,12 +287,10 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   private readFile(filePath: string): KnowledgeEntry | undefined {
-    try {
-      const raw = fs.readFileSync(filePath, 'utf-8');
-      return this.parseFile(raw, filePath);
-    } catch {
-      return undefined;
-    }
+    // fail-fast：文件来自 listFiles 的目录扫描，读到一半失败（IO/权限）直接抛；
+    // 内容形状问题（frontmatter 损坏/缺失）由 parseFile 显式上报后返回 undefined
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return this.parseFile(raw, filePath);
   }
 
   private parseFile(raw: string, filePath: string): KnowledgeEntry | undefined {
@@ -432,11 +430,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
   getSnapshot(date: string): IndexEntry[] | undefined {
     const snapPath = path.join(this.baseDir, SNAPSHOTS_DIR, `index-${date}.json`);
     if (!fs.existsSync(snapPath)) return undefined;
-    try {
-      return JSON.parse(fs.readFileSync(snapPath, 'utf-8')) as IndexEntry[];
-    } catch {
-      return undefined;
-    }
+    // fail-fast：快照在场但损坏直接抛——吞成 undefined 会把损坏伪装成「没有快照」
+    return JSON.parse(fs.readFileSync(snapPath, 'utf-8')) as IndexEntry[];
   }
 
   /**
@@ -470,40 +465,30 @@ export class FileKnowledgeStore implements KnowledgeStore {
    */
   getConsumptionStats(): ConsumptionStats | undefined {
     const statsPath = path.join(this.baseDir, CONSUMPTION_STATS_FILE);
-    try {
-      const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8')) as { dailyEvents?: number };
-      return { dailyEvents: stats.dailyEvents ?? 0 };
-    } catch {
-      return undefined;
-    }
+    if (!fs.existsSync(statsPath)) return undefined;
+    // fail-fast：统计文件在场但损坏直接抛，不装成「无统计」
+    const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8')) as { dailyEvents?: number };
+    return { dailyEvents: stats.dailyEvents ?? 0 };
   }
 
   // ── Index I/O ────────────────────────────────────────────
 
   readIndex(): IndexEntry[] {
     const indexPath = path.join(this.baseDir, INDEX_FILE);
-    let stat: fs.Stats | undefined;
-    try {
-      stat = fs.statSync(indexPath);
-    } catch {
-      stat = undefined;
-    }
-    if (!stat) {
+    if (!fs.existsSync(indexPath)) {
       this.indexCache = undefined;
       return [];
     }
+    const stat = fs.statSync(indexPath);
     const cached = this.indexCache;
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
       return cached.entries;
     }
-    try {
-      const raw = fs.readFileSync(indexPath, 'utf-8');
-      const entries = JSON.parse(raw) as IndexEntry[];
-      this.indexCache = { mtimeMs: stat.mtimeMs, size: stat.size, entries };
-      return entries;
-    } catch {
-      return [];
-    }
+    // fail-fast：index 在场但损坏直接抛——吞成 [] 会让 store 误以为库是空的
+    const raw = fs.readFileSync(indexPath, 'utf-8');
+    const entries = JSON.parse(raw) as IndexEntry[];
+    this.indexCache = { mtimeMs: stat.mtimeMs, size: stat.size, entries };
+    return entries;
   }
 
   private writeIndex(entries: IndexEntry[]): void {

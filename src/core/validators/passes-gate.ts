@@ -10,6 +10,7 @@
 import { execAsync } from '../../utils/exec';
 import { judgeTestRun } from './test-output';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { EVIDENCE_DIR_REL } from '../../types/passes-gate';
 import type {
@@ -39,9 +40,10 @@ const DEFAULT_CONFIG: Required<PassesGateConfig> = {
  * 探不到返回 undefined，兜底策略归调用方（CLI 映射为 skip；PassesGate 内部 fail-closed）。
  */
 export async function detectTestCommand(projectPath: string): Promise<string | undefined> {
-  try {
-    const content = await fs.readFile(path.join(projectPath, 'package.json'), 'utf-8');
-    const pkg = JSON.parse(content);
+  // package.json 缺失 = 非 Node 项目（继续探测其余类型）；在场但 JSON 损坏 → 抛出（fail-fast）
+  const pkgPath = path.join(projectPath, 'package.json');
+  if (existsSync(pkgPath)) {
+    const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
 
     if (pkg.scripts?.['test:ci']) {
       return 'npm run test:ci';
@@ -55,23 +57,19 @@ export async function detectTestCommand(projectPath: string): Promise<string | u
     if (pkg.scripts?.['test:coverage']) {
       return 'npm run test:coverage';
     }
-  } catch {
-    // 没有 package.json，继续探测其他项目类型
   }
 
   // Python 项目：pyproject.toml 或 pytest.ini 任一命中
   for (const marker of ['pyproject.toml', 'pytest.ini']) {
-    try {
-      await fs.access(path.join(projectPath, marker));
+    if (existsSync(path.join(projectPath, marker))) {
       return 'pytest';
-    } catch {}
+    }
   }
 
   // Go 项目
-  try {
-    await fs.access(path.join(projectPath, 'go.mod'));
+  if (existsSync(path.join(projectPath, 'go.mod'))) {
     return 'go test ./...';
-  } catch {}
+  }
 
   return undefined;
 }
@@ -282,15 +280,10 @@ export class PassesGate {
    * 验证证据存在
    */
   private async verifyEvidence(evidencePath: string, workDir: string): Promise<boolean> {
-    try {
-      const fullPath = path.isAbsolute(evidencePath)
-        ? evidencePath
-        : path.join(workDir, evidencePath);
-      await fs.access(fullPath);
-      return true;
-    } catch {
-      return false;
-    }
+    const fullPath = path.isAbsolute(evidencePath)
+      ? evidencePath
+      : path.join(workDir, evidencePath);
+    return existsSync(fullPath);
   }
 
 }

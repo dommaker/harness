@@ -72,6 +72,7 @@ function runCommand(command: string, cwd: string, timeoutMs: number): Promise<Co
       try {
         if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
       } catch {
+        // 进程组 kill 失败（竞态：子进程已退，ESRCH）→ 退化单进程 kill，best-effort 收尾
         child.kill('SIGKILL');
       }
     }, timeoutMs);

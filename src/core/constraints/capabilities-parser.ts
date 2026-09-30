@@ -62,14 +62,12 @@ export function parseCapabilitiesEntries(content: string, options: CapabilitiesP
 }
 
 /**
- * 读取并解析 CAPABILITIES.md；文件缺失/不可读时返回 []
+ * 读取并解析 CAPABILITIES.md；文件缺失时返回 []（未采用该约定的项目占多数，不算异常）；
+ * 文件在场但读失败 → 抛出（fail-fast，不装成「无登记条目」）
  */
 export function readCapabilitiesEntries(capabilitiesPath: string, options: CapabilitiesParseOptions = {}): string[] {
-  try {
-    return parseCapabilitiesEntries(fs.readFileSync(capabilitiesPath, 'utf-8'), options);
-  } catch {
-    return [];
-  }
+  if (!fs.existsSync(capabilitiesPath)) return [];
+  return parseCapabilitiesEntries(fs.readFileSync(capabilitiesPath, 'utf-8'), options);
 }
 
 /**

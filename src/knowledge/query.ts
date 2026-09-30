@@ -16,6 +16,7 @@ import type {
 import type { KnowledgeStore } from './store';
 import { KnowledgeLifecycle } from './lifecycle';
 import { estimateTokens } from './token-estimate';
+import { attempt } from '../utils/attempt';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -86,9 +87,8 @@ export class KnowledgeQuery {
 
     // P2a: Record references for all returned entries (drives maturity ladder)
     for (const entry of entries) {
-      try {
-        this.lifecycle.recordReference(entry.id);
-      } catch { /* non-blocking */ }
+      // 显式 fail-open（attempt）：引用记账是查询的副作用，失败不影响查询结果返回
+      attempt(() => this.lifecycle.recordReference(entry.id), () => undefined);
     }
 
     return result;

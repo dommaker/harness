@@ -11,6 +11,7 @@ import type {
   AgentEvent,
   FallbackStrategy,
 } from './types';
+import { attempt } from '../utils/attempt';
 
 export type EventHandler = (event: AgentEvent) => void;
 
@@ -175,11 +176,8 @@ export class AgentLifecycle {
 
   private emit(event: AgentEvent): void {
     for (const handler of this.eventHandlers) {
-      try {
-        handler(event);
-      } catch {
-        // 事件处理器不应影响主流程
-      }
+      // 显式 fail-open（attempt）：事件处理器是外挂监听，崩了不应拖死主流程
+      attempt(() => handler(event), () => undefined);
     }
   }
 

@@ -14,6 +14,11 @@ jest.mock('fs/promises', () => ({
   access: jest.fn(),
 }));
 
+// Mock fs（detectTestCommand 的存在性探测走 existsSync）
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+}));
+
 // Mock execAsync
 jest.mock('../../../utils/exec', () => ({
   execAsync: jest.fn(),
@@ -35,6 +40,8 @@ jest.mock('chalk', () => ({
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockExistsSync = (require('fs') as { existsSync: jest.Mock }).existsSync;
 const MockPassesGate = PassesGate as jest.MockedClass<typeof PassesGate>;
 const mockExecAsync = execAsync as jest.MockedFunction<typeof execAsync>;
 
@@ -45,12 +52,14 @@ describe('passes-gate command', () => {
 
     io = captureIO();
     jest.clearAllMocks();
+    // 缺省：package.json 在场（多数用例喂 readFile 脚本表），其余探测标记不在场
+    mockExistsSync.mockImplementation((p: string) => String(p).endsWith('package.json'));
   });
 
   describe('runPassesGate', () => {
     it('应该跳过无测试命令的情况', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('no package.json'));
-      mockFs.access.mockRejectedValue(new Error('no file'));
+      // 任何项目标记都不在场（package.json / pyproject.toml / pytest.ini / go.mod）
+      mockExistsSync.mockReturnValue(false);
 
       await runPassesGate({}, io);
       expect(io.outText()).toContain('未检测到测试命令');
@@ -197,10 +206,8 @@ describe('passes-gate command', () => {
 
   describe('detectTestCommand', () => {
     it('应该检测 pytest 项目', async () => {
-      // package.json 不存在
-      mockFs.readFile.mockRejectedValue(new Error('no file'));
-      // pyproject.toml 存在（Python 标记任一命中即 pytest）
-      mockFs.access.mockResolvedValueOnce(undefined); // pyproject.toml
+      // package.json 不存在；pyproject.toml 存在（Python 标记任一命中即 pytest）
+      mockExistsSync.mockImplementation((p: string) => String(p).endsWith('pyproject.toml'));
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -212,13 +219,8 @@ describe('passes-gate command', () => {
     });
 
     it('应该检测 Go 项目', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('no file'));
-      // Reset access mock to avoid leaking from previous tests
-      mockFs.access.mockReset();
-      mockFs.access
-        .mockRejectedValueOnce(new Error('no file')) // pyproject.toml
-        .mockRejectedValueOnce(new Error('no file')) // pytest.ini
-        .mockResolvedValueOnce(undefined); // go.mod
+      // package.json / pyproject.toml / pytest.ini 均不在场，go.mod 在
+      mockExistsSync.mockImplementation((p: string) => String(p).endsWith('go.mod'));
 
       const mockRunTests = jest.fn().mockResolvedValue({
         passed: true, passedTests: 5, failedTests: 0, totalTests: 5, duration: 500, failures: [],
@@ -227,6 +229,13 @@ describe('passes-gate command', () => {
 
       await runPassesGate({}, io);
       expect(MockPassesGate).toHaveBeenCalledWith(expect.objectContaining({ testCommand: 'go test ./...' }));
+    });
+
+    it('package.json 在场但 JSON 损坏 → 抛出（fail-fast，不再吞成「无测试命令」）', async () => {
+      mockExistsSync.mockImplementation((p: string) => String(p).endsWith('package.json'));
+      mockFs.readFile.mockResolvedValue('NOT VALID JSON{{{');
+
+      await expect(runPassesGate({}, io)).rejects.toThrow(SyntaxError);
     });
 
     it('应该检测 test:ci 脚本', async () => {

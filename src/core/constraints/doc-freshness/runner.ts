@@ -115,37 +115,36 @@ export class FreshnessRunner {
     const changelogPath = join(ctx.projectPath, check.changelog || 'CHANGELOG.md');
     const pkgPath = join(ctx.projectPath, check.package_json || 'package.json');
 
-    try {
-      if (!existsSync(changelogPath)) {
-        return { type: 'changelog_version', label: 'CHANGELOG Version', pass: true };
-      }
-
-      const changelogContent = readFileSync(changelogPath, 'utf-8');
-      const versionMatch = changelogContent.match(/##\s*\[(\d+\.\d+\.\d+)\]/);
-      if (!versionMatch) {
-        return { type: 'changelog_version', label: 'CHANGELOG Version', pass: true };
-      }
-
-      const changelogVersion = versionMatch[1];
-
-      if (!existsSync(pkgPath)) {
-        return { type: 'changelog_version', label: 'CHANGELOG Version', pass: true };
-      }
-
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      const pkgVersion = pkg.version as string;
-
-      const pass = changelogVersion === pkgVersion;
-      return {
-        type: 'changelog_version',
-        label: 'CHANGELOG Version',
-        pass,
-        message: pass ? undefined : `CHANGELOG.md 版本 ${changelogVersion} !== package.json 版本 ${pkgVersion}`,
-        detail: { changelogVersion, pkgVersion },
-      };
-    } catch {
+    // fail-fast：缺文件/缺版本行是「无检查对象」按 pass 跳过（下方显式分支）；
+    // 读失败、package.json 损坏等真异常直接抛，由 checker 层按可见降级处理，
+    // 不再 catch 成静默 pass（吞错会把解析 bug 变成「永远通过」，harness#119）
+    if (!existsSync(changelogPath)) {
       return { type: 'changelog_version', label: 'CHANGELOG Version', pass: true };
     }
+
+    const changelogContent = readFileSync(changelogPath, 'utf-8');
+    const versionMatch = changelogContent.match(/##\s*\[(\d+\.\d+\.\d+)\]/);
+    if (!versionMatch) {
+      return { type: 'changelog_version', label: 'CHANGELOG Version', pass: true };
+    }
+
+    const changelogVersion = versionMatch[1];
+
+    if (!existsSync(pkgPath)) {
+      return { type: 'changelog_version', label: 'CHANGELOG Version', pass: true };
+    }
+
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    const pkgVersion = pkg.version as string;
+
+    const pass = changelogVersion === pkgVersion;
+    return {
+      type: 'changelog_version',
+      label: 'CHANGELOG Version',
+      pass,
+      message: pass ? undefined : `CHANGELOG.md 版本 ${changelogVersion} !== package.json 版本 ${pkgVersion}`,
+      detail: { changelogVersion, pkgVersion },
+    };
   }
 
   // ── context_docs ─────────────────────────────────────────────────
@@ -185,113 +184,103 @@ export class FreshnessRunner {
     check: DocDirCheck,
     ctx: RunContext
   ): FreshnessCheckResult {
-    try {
-      const docPath = join(ctx.projectPath, check.doc);
-      if (!existsSync(docPath)) {
-        return {
-          type: 'doc_dir_check',
-          label: `${check.doc} / ${check.section}`,
-          pass: true,
-          message: `${check.doc} 不存在，跳过检查`,
-        };
-      }
-
-      const content = readFileSync(docPath, 'utf-8');
-
-      // 提取目标章节（$ 不要求末尾有 \n，适配无 trailing newline 的内容）
-      const sectionRegex = new RegExp(
-        `## ${this.escapeRegExp(check.section)}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n---|$)`
-      );
-      const sectionMatch = content.match(sectionRegex);
-      if (!sectionMatch) {
-        return {
-          type: 'doc_dir_check',
-          label: `${check.doc} / ${check.section}`,
-          pass: true,
-          message: `未找到 "${check.section}" 章节`,
-        };
-      }
-
-      const section = sectionMatch[1];
-
-      // 提取目录
-      const dirPattern = check.dir_pattern || '`([^`]+)`';
-      const dirRegex = new RegExp(dirPattern, 'g');
-      const docDirs = new Set<string>();
-      let match;
-      while ((match = dirRegex.exec(section)) !== null) {
-        const dirPath = match[1].replace(/\/$/, '').trim();
-        // 只收集看起来像目录的路径（包含 / 或以特定前缀开头）
-        // 宽松匹配：任何非空字符串
-        if (dirPath.length > 0) {
-          docDirs.add(dirPath);
-        }
-      }
-
-      if (docDirs.size === 0) {
-        return {
-          type: 'doc_dir_check',
-          label: `${check.doc} / ${check.section}`,
-          pass: true,
-          message: `"${check.section}" 章节中未找到目录引用`,
-        };
-      }
-
-      const failures: string[] = [];
-
-      // 1. doc → fs: 文档中每个目录必须实际存在于磁盘
-      for (const dir of docDirs) {
-        if (!existsSync(join(ctx.projectPath, dir))) {
-          failures.push(`文档引用但不存在: ${dir}`);
-        }
-      }
-
-      // 2. fs → doc: 每个实际目录必须在文档中被覆盖
-      if (!check.skip_reverse_check) {
-        // 从文档目录中推断要扫描的根目录集
-        const rootDirs = this.inferRootDirs(docDirs, ctx);
-        const excludeSet = new Set(check.exclude || DEFAULT_SKIP_DIRS);
-
-        for (const rootDir of rootDirs) {
-          const absRoot = join(ctx.projectPath, rootDir);
-          if (!existsSync(absRoot)) continue;
-
-          try {
-            const entries = readdirSync(absRoot, { withFileTypes: true });
-            for (const entry of entries) {
-              if (!entry.isDirectory()) continue;
-              if (excludeSet.has(entry.name)) continue;
-              if (entry.name.startsWith('__') || entry.name.startsWith('.')) continue;
-
-              const actualDir = `${rootDir}/${entry.name}`;
-              // 直接匹配 or 任何文档条目是该目录的子目录
-              if (docDirs.has(actualDir)) continue;
-              const covered = [...docDirs].some(d => d.startsWith(actualDir + '/'));
-              if (!covered) {
-                failures.push(`存在但未在文档中覆盖: ${actualDir}`);
-              }
-            }
-          } catch {
-            // 扫描失败，跳过
-          }
-        }
-      }
-
-      const pass = failures.length === 0;
-      return {
-        type: 'doc_dir_check',
-        label: `${check.doc} / ${check.section}`,
-        pass,
-        message: pass ? undefined : failures.join('; '),
-        detail: { docDirs: [...docDirs], failures },
-      };
-    } catch {
+    // fail-fast：doc 缺失/章节缺失/无目录引用是「无检查对象」按显式分支跳过；
+    // 读失败、正则构造错误等真异常直接抛（原整体 catch 成静默 pass，harness#119 同族）
+    const docPath = join(ctx.projectPath, check.doc);
+    if (!existsSync(docPath)) {
       return {
         type: 'doc_dir_check',
         label: `${check.doc} / ${check.section}`,
         pass: true,
+        message: `${check.doc} 不存在，跳过检查`,
       };
     }
+
+    const content = readFileSync(docPath, 'utf-8');
+
+    // 提取目标章节（$ 不要求末尾有 \n，适配无 trailing newline 的内容）
+    const sectionRegex = new RegExp(
+    `## ${this.escapeRegExp(check.section)}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n---|$)`
+    );
+    const sectionMatch = content.match(sectionRegex);
+    if (!sectionMatch) {
+    return {
+      type: 'doc_dir_check',
+      label: `${check.doc} / ${check.section}`,
+      pass: true,
+      message: `未找到 "${check.section}" 章节`,
+    };
+    }
+
+    const section = sectionMatch[1];
+
+    // 提取目录
+    const dirPattern = check.dir_pattern || '`([^`]+)`';
+    const dirRegex = new RegExp(dirPattern, 'g');
+    const docDirs = new Set<string>();
+    let match;
+    while ((match = dirRegex.exec(section)) !== null) {
+    const dirPath = match[1].replace(/\/$/, '').trim();
+    // 只收集看起来像目录的路径（包含 / 或以特定前缀开头）
+    // 宽松匹配：任何非空字符串
+    if (dirPath.length > 0) {
+      docDirs.add(dirPath);
+    }
+    }
+
+    if (docDirs.size === 0) {
+    return {
+      type: 'doc_dir_check',
+      label: `${check.doc} / ${check.section}`,
+      pass: true,
+      message: `"${check.section}" 章节中未找到目录引用`,
+    };
+    }
+
+    const failures: string[] = [];
+
+    // 1. doc → fs: 文档中每个目录必须实际存在于磁盘
+    for (const dir of docDirs) {
+    if (!existsSync(join(ctx.projectPath, dir))) {
+      failures.push(`文档引用但不存在: ${dir}`);
+    }
+    }
+
+    // 2. fs → doc: 每个实际目录必须在文档中被覆盖
+    if (!check.skip_reverse_check) {
+    // 从文档目录中推断要扫描的根目录集
+    const rootDirs = this.inferRootDirs(docDirs, ctx);
+    const excludeSet = new Set(check.exclude || DEFAULT_SKIP_DIRS);
+
+    for (const rootDir of rootDirs) {
+      const absRoot = join(ctx.projectPath, rootDir);
+      if (!existsSync(absRoot)) continue;
+
+      const entries = readdirSync(absRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (excludeSet.has(entry.name)) continue;
+        if (entry.name.startsWith('__') || entry.name.startsWith('.')) continue;
+
+        const actualDir = `${rootDir}/${entry.name}`;
+        // 直接匹配 or 任何文档条目是该目录的子目录
+        if (docDirs.has(actualDir)) continue;
+        const covered = [...docDirs].some(d => d.startsWith(actualDir + '/'));
+        if (!covered) {
+          failures.push(`存在但未在文档中覆盖: ${actualDir}`);
+        }
+      }
+    }
+    }
+
+    const pass = failures.length === 0;
+    return {
+    type: 'doc_dir_check',
+    label: `${check.doc} / ${check.section}`,
+    pass,
+    message: pass ? undefined : failures.join('; '),
+    detail: { docDirs: [...docDirs], failures },
+    };
   }
 
   /**
@@ -302,28 +291,28 @@ export class FreshnessRunner {
     const roots = new Set<string>();
 
     for (const dir of docDirs) {
-      // 取第一个路径段之前的公共部分
-      const parts = dir.split('/');
-      // 收集可能的根（单段目录如 "src/xxx" → 根是 "src"）
-      if (parts.length >= 2) {
-        roots.add(parts.slice(0, parts.length - 1).join('/') || parts[0]);
-      }
+    // 取第一个路径段之前的公共部分
+    const parts = dir.split('/');
+    // 收集可能的根（单段目录如 "src/xxx" → 根是 "src"）
+    if (parts.length >= 2) {
+      roots.add(parts.slice(0, parts.length - 1).join('/') || parts[0]);
+    }
     }
 
     // 合并为最小公共根集
     // 简单策略：如果有 "src/a" 和 "src/b"，则根是 "src"
     const merged = new Set<string>();
     for (const root of roots) {
-      let isSubsumed = false;
-      for (const other of roots) {
-        if (root !== other && root.startsWith(other + '/')) {
-          isSubsumed = true;
-          break;
-        }
+    let isSubsumed = false;
+    for (const other of roots) {
+      if (root !== other && root.startsWith(other + '/')) {
+        isSubsumed = true;
+        break;
       }
-      if (!isSubsumed) {
-        merged.add(root);
-      }
+    }
+    if (!isSubsumed) {
+      merged.add(root);
+    }
     }
 
     if (merged.size > 0) return [...merged];
@@ -338,74 +327,67 @@ export class FreshnessRunner {
     check: DocRegexCountCheck,
     ctx: RunContext
   ): FreshnessCheckResult {
-    try {
-      const docPath = join(ctx.projectPath, check.doc);
-      if (!existsSync(docPath)) {
-        return {
-          type: 'doc_regex_count',
-          label: `${check.doc} / ${check.label}`,
-          pass: true,
-          message: `${check.doc} 不存在，跳过检查`,
-        };
-      }
-
-      const content = readFileSync(docPath, 'utf-8');
-
-      // 从文档中提取声明的计数
-      const countRegex = new RegExp(check.pattern);
-      const countMatch = content.match(countRegex);
-      if (!countMatch || countMatch[1] === undefined) {
-        return {
-          type: 'doc_regex_count',
-          label: `${check.doc} / ${check.label}`,
-          pass: true,
-          message: `未在 ${check.doc} 中找到匹配 "${check.label}" 的计数行`,
-        };
-      }
-
-      const docCount = parseInt(countMatch[1], 10);
-      if (isNaN(docCount)) {
-        return {
-          type: 'doc_regex_count',
-          label: `${check.doc} / ${check.label}`,
-          pass: true,
-          message: `计数解析失败: ${countMatch[1]}`,
-        };
-      }
-
-      // 获取实际计数
-      let actualCount: number;
-      if (check.actual.kind === 'dir_count') {
-        actualCount = this.countFromDir(check.actual.path, check.actual.extension || '.ts', check.actual.exclude || [], ctx.projectPath);
-      } else if (check.actual.kind === 'grep_count') {
-        actualCount = this.countFromGrep(ctx.projectPath, check.actual.glob, check.actual.pattern);
-      } else {
-        actualCount = check.actual.value;
-      }
-
-      if (actualCount < 0) {
-        return {
-          type: 'doc_regex_count',
-          label: `${check.doc} / ${check.label}`,
-          pass: true,
-        };
-      }
-
-      const pass = docCount === actualCount;
+    // fail-fast：doc 缺失/无计数行/计数解析失败按显式分支跳过；其余异常抛出（同 checkDocDir）
+    const docPath = join(ctx.projectPath, check.doc);
+    if (!existsSync(docPath)) {
       return {
         type: 'doc_regex_count',
         label: `${check.doc} / ${check.label}`,
-        pass,
-        message: pass ? undefined : `${check.label}: 文档 ${docCount} → 实际 ${actualCount}`,
-        detail: { docCount, actualCount },
+        pass: true,
+        message: `${check.doc} 不存在，跳过检查`,
       };
-    } catch {
+    }
+
+    const content = readFileSync(docPath, 'utf-8');
+
+    // 从文档中提取声明的计数
+    const countRegex = new RegExp(check.pattern);
+    const countMatch = content.match(countRegex);
+    if (!countMatch || countMatch[1] === undefined) {
+      return {
+        type: 'doc_regex_count',
+        label: `${check.doc} / ${check.label}`,
+        pass: true,
+        message: `未在 ${check.doc} 中找到匹配 "${check.label}" 的计数行`,
+      };
+    }
+
+    const docCount = parseInt(countMatch[1], 10);
+    if (isNaN(docCount)) {
+      return {
+        type: 'doc_regex_count',
+        label: `${check.doc} / ${check.label}`,
+        pass: true,
+        message: `计数解析失败: ${countMatch[1]}`,
+      };
+    }
+
+    // 获取实际计数
+    let actualCount: number;
+    if (check.actual.kind === 'dir_count') {
+      actualCount = this.countFromDir(check.actual.path, check.actual.extension || '.ts', check.actual.exclude || [], ctx.projectPath);
+    } else if (check.actual.kind === 'grep_count') {
+      actualCount = this.countFromGrep(ctx.projectPath, check.actual.glob, check.actual.pattern);
+    } else {
+      actualCount = check.actual.value;
+    }
+
+    if (actualCount < 0) {
       return {
         type: 'doc_regex_count',
         label: `${check.doc} / ${check.label}`,
         pass: true,
       };
     }
+
+    const pass = docCount === actualCount;
+    return {
+      type: 'doc_regex_count',
+      label: `${check.doc} / ${check.label}`,
+      pass,
+      message: pass ? undefined : `${check.label}: 文档 ${docCount} → 实际 ${actualCount}`,
+      detail: { docCount, actualCount },
+    };
   }
 
   /**
@@ -420,29 +402,26 @@ export class FreshnessRunner {
     const absDir = join(projectPath, dirPath);
     if (!existsSync(absDir)) return -1;
 
-    try {
-      const entries = readdirSync(absDir, { withFileTypes: true });
-      const excludeSet = new Set(exclude);
+    // existsSync 过了却读不出 = 真 IO 故障 → 抛出（fail-fast），不再吞成 -1 假 pass
+    const entries = readdirSync(absDir, { withFileTypes: true });
+    const excludeSet = new Set(exclude);
 
-      let count = 0;
-      for (const entry of entries) {
-        if (excludeSet.has(entry.name)) continue;
+    let count = 0;
+    for (const entry of entries) {
+      if (excludeSet.has(entry.name)) continue;
 
-        if (entry.isDirectory() && !entry.name.startsWith('__') && !entry.name.startsWith('.')) {
-          // 目录：计 1（.ts 过滤不适用于目录）
+      if (entry.isDirectory() && !entry.name.startsWith('__') && !entry.name.startsWith('.')) {
+        // 目录：计 1（.ts 过滤不适用于目录）
+        count++;
+      } else if (entry.isFile() && entry.name.endsWith(extension)) {
+        // 排除 .d.ts
+        if (!entry.name.endsWith('.d.ts')) {
           count++;
-        } else if (entry.isFile() && entry.name.endsWith(extension)) {
-          // 排除 .d.ts
-          if (!entry.name.endsWith('.d.ts')) {
-            count++;
-          }
         }
       }
-
-      return count;
-    } catch {
-      return -1;
     }
+
+    return count;
   }
 
   /**
@@ -453,45 +432,39 @@ export class FreshnessRunner {
     globPattern: string,
     pattern: string
   ): number {
-    try {
-      // globPattern 如 "src/gates/*.ts"
-      const absGlob = join(projectPath, globPattern);
+    // globPattern 如 "src/gates/*.ts"
+    const absGlob = join(projectPath, globPattern);
 
-      // 分离目录和文件名模式
-      const lastSlash = absGlob.lastIndexOf('/');
-      const searchDir = absGlob.substring(0, lastSlash);
-      const filePattern = absGlob.substring(lastSlash + 1);
+    // 分离目录和文件名模式
+    const lastSlash = absGlob.lastIndexOf('/');
+    const searchDir = absGlob.substring(0, lastSlash);
+    const filePattern = absGlob.substring(lastSlash + 1);
 
-      if (!existsSync(searchDir)) return -1;
+    if (!existsSync(searchDir)) return -1;
 
-      // 将 glob * 转换为简单的 endsWith 检查
-      const suffix = filePattern.replace(/\*/g, '');
+    // 将 glob * 转换为简单的 endsWith 检查
+    const suffix = filePattern.replace(/\*/g, '');
 
-      const entries = readdirSync(searchDir, { withFileTypes: true });
+    // fail-fast：目录在而读不出、文件扫描中途不可读、pattern 非法等真异常直接抛，
+    // 不再吞成 -1（-1 在调用方 = 静默 pass，会把计数 bug 变成「永远通过」）
+    const entries = readdirSync(searchDir, { withFileTypes: true });
 
-      // 正则提出循环：String.match 带 g flag 时不携带 lastIndex 状态（每次调用内部归零），复用安全
-      const matchRe = new RegExp(pattern, 'g');
+    // 正则提出循环：String.match 带 g flag 时不携带 lastIndex 状态（每次调用内部归零），复用安全
+    const matchRe = new RegExp(pattern, 'g');
 
-      let count = 0;
-      for (const entry of entries) {
-        if (!entry.isFile()) continue;
-        if (!entry.name.endsWith(suffix)) continue;
+    let count = 0;
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(suffix)) continue;
 
-        try {
-          const content = readFileSync(join(searchDir, entry.name), 'utf-8');
-          const matches = content.match(matchRe);
-          if (matches) {
-            count += matches.length;
-          }
-        } catch {
-          // skip
-        }
+      const content = readFileSync(join(searchDir, entry.name), 'utf-8');
+      const matches = content.match(matchRe);
+      if (matches) {
+        count += matches.length;
       }
-
-      return count;
-    } catch {
-      return -1;
     }
+
+    return count;
   }
 
   // ── helpers ──────────────────────────────────────────────────────

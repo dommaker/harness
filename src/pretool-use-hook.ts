@@ -17,7 +17,7 @@
  *
  * P1-7（ADR-0031，票08）：判定后对命中写审计 trace（只记账不加新拦截
  * 能力）——此前拦下/放行的危险命令只写 stderr 不落盘，traces.log 里只有约束检查
- * 在写。留痕失败经 try/catch 吞掉，fail-open 口径与 shim 主路径一致。
+ * 在写。留痕失败经 utils/attempt 显式降级，fail-open 口径与 shim 主路径一致。
  *
  * P1-5 harness 半边（ADR-0031，票08）：识别 tool_name 非 Bash 的事件
  * （Edit/Write/apply_patch/MCP 工具，下游消费方补全 codex hooks matcher 后会到达），
@@ -27,6 +27,7 @@
 import { CommandGate } from './gates/command';
 import type { CommandBlacklistRule } from './types/gate';
 import { TraceCollector } from './monitoring/traces';
+import { attempt } from './utils/attempt';
 
 /** hook 标识：下游消费方 hook 配置共用同一 marker 做幂等检测（值不可变，改动会破坏存量配置的幂等识别） */
 export const HOOK_MARKER = 'harness-command-gate';
@@ -53,27 +54,28 @@ export interface PreToolUseDecision {
  * 非 Bash 工具事件（Edit/Write/apply_patch/MCP）恒放行（P1-5：拦截归 codex 沙箱）。
  */
 export function decidePreToolUse(rawStdin: string): PreToolUseDecision {
-  let input: PreToolUseInput = {};
-  try {
-    input = JSON.parse(rawStdin || '{}') as PreToolUseInput;
-  } catch {
-    // 非 JSON stdin：放行
-  }
+  // 显式 fail-open（attempt）：stdin 非 JSON 时按空输入放行——provider 执法脚本
+  // 崩溃/误判不能误伤用户操作，宁可漏拦也不全体 Bash 秒断
+  const input = attempt(
+    () => JSON.parse(rawStdin || '{}') as PreToolUseInput,
+    (): PreToolUseInput => ({}),
+  );
   const toolName = input.tool_name || 'Bash';
   const toolInput = input.tool_input || {};
   if (toolName !== 'Bash') {
     return { allowed: true, command: '', hits: [], toolName, targetPath: toolInput.file_path };
   }
   const command = toolInput.command || '';
-  try {
-    const gate = new CommandGate();
-    // 与 isAllowed 同一谓词（match）：allowed = 无 block 级命中
-    const hits = gate.match(command);
-    return { allowed: !hits.some((r) => r.level === 'block'), command, hits, toolName };
-  } catch {
-    // CommandGate 加载/判定异常：fail-open
-    return { allowed: true, command, hits: [], toolName };
-  }
+  // 显式 fail-open（attempt）：CommandGate 加载/判定异常一律放行，理由同上
+  return attempt(
+    () => {
+      const gate = new CommandGate();
+      // 与 isAllowed 同一谓词（match）：allowed = 无 block 级命中
+      const hits = gate.match(command);
+      return { allowed: !hits.some((r) => r.level === 'block'), command, hits, toolName };
+    },
+    () => ({ allowed: true, command, hits: [], toolName }),
+  );
 }
 
 /** 黑名单级别 → trace severity 映射（词表不动 types/trace.ts） */
@@ -97,7 +99,10 @@ const SEVERITY_BY_LEVEL = {
  *   项目根（provider 在项目根起会话），可接受；写错地方也不拦主路径。
  */
 function recordHookTrace(decision: PreToolUseDecision): void {
-  try {
+  // 显式 fail-open（attempt）：留痕是记账副作用，失败不能影响拦截主路径
+  // （口径与 shim 主路径一致——hook 进程里任何异常都必须放行）
+  attempt(
+    () => {
     // P1-5：非 Bash 工具事件只留痕不拦截（拦截归 codex 沙箱）——constraintId
     // 按工具名分（tool-event:<tool>），工具集合有界、不会碎片化聚合；evidence
     // 记工具名 + 目标路径类字段（file_path），不记内容正文。
@@ -133,9 +138,9 @@ function recordHookTrace(decision: PreToolUseDecision): void {
         ...(firstToken ? [`cmd:${firstToken}`] : []),
       ],
     });
-  } catch {
-    // 留痕失败不影响拦截主路径（fail-open 口径与 shim 一致）
-  }
+    },
+    () => undefined,
+  );
 }
 
 /**

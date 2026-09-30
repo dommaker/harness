@@ -309,14 +309,13 @@ export function knowledgeStatsView(options: KnowledgeOptions, io: CommandIO) {
   }
 
   // 飞轮指标：计算唯一实现在 knowledge/flywheel-metrics，此处只做 fs 读取 + 展示层单位映射
+  // fail-fast：统计文件在场但损坏直接抛（existsSync 判缺失，不吞解析错误）
   let dailyConsumptionEvents = 0;
-  try {
-    const statsPath = path.join(store.getBaseDir(), '.consumption-stats.json');
-    if (fs.existsSync(statsPath)) {
-      const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
-      dailyConsumptionEvents = stats.dailyEvents || 0;
-    }
-  } catch { /* best-effort */ }
+  const statsPath = path.join(store.getBaseDir(), '.consumption-stats.json');
+  if (fs.existsSync(statsPath)) {
+    const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
+    dailyConsumptionEvents = stats.dailyEvents || 0;
+  }
 
   const metrics = evaluateFlywheel({ entries: active, dailyConsumptionEvents });
   const flywheel = {

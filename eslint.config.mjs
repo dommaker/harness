@@ -7,10 +7,16 @@
  * 规则集 = eslint:recommended + @typescript-eslint/recommended 的收敛版：
  * - 已启用并全绿（CI lint job 把关，见 .github/workflows/coverage-gate.yml）。
  * - 下方显式 off 的规则为存量规模大或有刻意用途，开启即全红；专项治理另开票：
- *   - no-explicit-any / no-non-null-assertion：存量 335 / 252 处，属风格化改型，一次性清洗风险高。
- *   - no-var-requires：仓内刻意使用 CJS 懒加载 require（测试隔离、避免循环依赖），转 import 有行为风险。
- *   - require-yield：src/llm/adapter.ts 的 async generator stub 故意抛错、无 yield 语义。
- * - no-empty：catch {} 吞异常是既有约定，保留（allowEmptyCatch）。
+ *   - no-explicit-any：存量 31 处（非测试口径；含测试 172 处）。本阶段（吞错治理）
+ *     先不开——any 清洗在 Phase 4 专项收口后再启用，避免与行为改动混票。
+ *   - no-non-null-assertion：存量 21 处（非测试口径；含测试 291 处），随 any 同批治理。
+ *   - no-var-requires：仓内刻意使用 CJS 懒加载 require（测试隔离、避免循环依赖，
+ *     存量 33 处），转 import 有行为风险。
+ * - require-yield：原豁免理由（src/llm/adapter.ts 的 async generator stub）随该文件
+ *   删除而消失，实测零违规，已撤豁免回归 recommended 默认。
+ * - no-empty（吞错治理收紧）：去掉 allowEmptyCatch——空 catch 直接报错。
+ *   显式降级走 utils/attempt（调用点注明理由），存在性探测用 existsSync，
+ *   不再允许 `catch {}` 静默吞。
  *
  * 第二段是分层方向规则（架构评审 2026-09-02 候选9 / harness#88）：此前
  * `types → utils → core → 领域层 → cli` 只写在 CLAUDE.md 里。规则只作用于
@@ -45,8 +51,7 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-var-requires': 'off',
-      'require-yield': 'off',
-      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-empty': 'error',
     },
   },
   {

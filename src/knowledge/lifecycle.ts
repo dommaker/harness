@@ -14,6 +14,7 @@ import type {
 } from './types';
 import { DEFAULT_DECAY_CONFIG } from './types';
 import type { KnowledgeStore } from './store';
+import { attempt } from '../utils/attempt';
 
 const MAX_REFERENCED_BY = 20;
 const MIN_CONTENT_FOR_PROVEN = 100;
@@ -92,9 +93,8 @@ export class KnowledgeLifecycle {
 
     // Fire consumption event callbacks
     for (const cb of this.onReferenceCallbacks) {
-      try {
-        cb({ entryId, contributor: contributor || 'unknown', timestamp: now, success });
-      } catch { /* non-blocking */ }
+      // 显式 fail-open（attempt）：消费回调是外挂监听，崩了不拖死引用记账主流程
+      attempt(() => cb({ entryId, contributor: contributor || 'unknown', timestamp: now, success }), () => undefined);
     }
 
     return updated;
@@ -226,14 +226,13 @@ export class KnowledgeLifecycle {
     // Emit event for downstream consumers
     const now = new Date().toISOString();
     for (const cb of this.onReferenceCallbacks) {
-      try {
-        cb({
-          entryId,
-          contributor: 'lifecycle',
-          timestamp: now,
-          context: 'skillCandidate:marked',
-        });
-      } catch { /* non-blocking */ }
+      // 显式 fail-open（attempt）：外挂监听回调失败不拖死标记主流程
+      attempt(() => cb({
+        entryId,
+        contributor: 'lifecycle',
+        timestamp: now,
+        context: 'skillCandidate:marked',
+      }), () => undefined);
     }
 
     return true;
@@ -277,14 +276,13 @@ export class KnowledgeLifecycle {
     // Emit event for downstream consumers
     const now = new Date().toISOString();
     for (const cb of this.onReferenceCallbacks) {
-      try {
-        cb({
-          entryId,
-          contributor: 'lifecycle',
-          timestamp: now,
-          context: 'constraintCandidate:marked',
-        });
-      } catch { /* non-blocking */ }
+      // 显式 fail-open（attempt）：外挂监听回调失败不拖死标记主流程
+      attempt(() => cb({
+        entryId,
+        contributor: 'lifecycle',
+        timestamp: now,
+        context: 'constraintCandidate:marked',
+      }), () => undefined);
     }
 
     return true;

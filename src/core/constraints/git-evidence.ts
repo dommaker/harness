@@ -108,6 +108,8 @@ export function createGitEvidence(
       try {
         result = { ok: true, stdout: run(command, projectPath) };
       } catch {
+        // 协议语义（非吞错）：git 命令失败 → 结构化 {ok:false}，消费方经
+        // stagedDiffAvailable / headDirs===null 各自判定降级方向，此处不抛不藏
         result = { ok: false, stdout: '' };
       }
       memo.set(command, result);

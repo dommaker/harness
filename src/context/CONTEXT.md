@@ -4,7 +4,7 @@
 上下文管理：会话管理、知识注入。
 
 ## 核心导出
-- `SessionManager` — 会话管理
+- `SessionManager` — 会话管理（fail-fast：事件/checkpoint 写失败、checkpoint JSON 损坏、会话目录 IO 故障一律抛出，不再静默吞；「磁盘无数据 → undefined」「checkpoint 查无 → 抛『不存在』」两个语义分支保留）
 - `KnowledgeInjector` — 知识注入引擎；`origin === 'external'` 条目注入时带 `[External Source — verify before acting]` 前缀（标记唯一正本是 `knowledge/query.ts` 的 `EXTERNAL_SOURCE_MARKER`，本目录不另存字面量），注入 source 的 metadata 带 `entryId`/`maturity`/`origin`（外部内容三层防御第二层，harness#161）
 
 ## 依赖关系

@@ -162,7 +162,8 @@ export async function syncDocs(
   let existingFiles: string[] = [];
   let capsContent = '';
   let capsIsCapabilityListing = false;
-  try {
+  // CAPABILITIES.md 不存在 → 将创建（空内容走新文档路径）；存在但读失败 → 抛出
+  if (existsSync(capabilitiesPath)) {
     capsContent = await fs.readFile(capabilitiesPath, 'utf-8');
     // mode=listing 是清单格式的显式声明，与嗅探结果等价
     if (capsMode === 'listing' || isCapabilityListingFormat(capsContent)) {
@@ -170,8 +171,6 @@ export async function syncDocs(
     } else {
       existingFiles = await parseCapabilitiesFiles(capabilitiesPath);
     }
-  } catch {
-    // CAPABILITIES.md 不存在，将创建
   }
 
   // 2. 扫描源码模块（从 governance config 读取目录列表，默认 src/）
@@ -180,14 +179,15 @@ export async function syncDocs(
   const currentModules: ModuleInfo[] = [];
   if (!capsIsCapabilityListing) {
     for (const srcDir of srcDirs) {
-      try {
-        const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);
-        currentModules.push(...modules);
-      } catch {
+      // 目录缺失 = 未配置该源码根（可见跳过）；目录在而扫描失败 = 真故障，抛出
+      if (!existsSync(path.join(projectPath, srcDir))) {
         if (!isJson) {
           log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
         }
+        continue;
       }
+      const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);
+      currentModules.push(...modules);
     }
   }
 
@@ -232,9 +232,7 @@ export async function syncDocs(
   const contextDirs = await getRequiredContextDirs(projectPath);
   for (const dir of contextDirs) {
     const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
-    try {
-      await fs.access(contextPath);
-    } catch {
+    if (!existsSync(contextPath)) {
       result.contextMissing.push(dir);
     }
   }
@@ -246,47 +244,45 @@ export async function syncDocs(
   const existingContextFiles = await findExistingContextFiles(projectPath, srcDirs);
   for (const dir of existingContextFiles) {
     const contextPath = path.join(projectPath, dir, 'CONTEXT.md');
-    try {
-      const contextMd = await fs.readFile(contextPath, 'utf-8');
-      const { surface, barrelExports } = await collectContextExportSurface(
-        path.join(projectPath, dir),
-        projectPath
-      );
-      const verdict = reconcileContext({
-        contextMdContent: contextMd,
-        exportSurface: surface,
-        barrelExports,
+    // fail-fast：dir 来自 findExistingContextFiles 的实况扫描，读/判定失败是真故障，
+    // 抛出不跳过——静默跳过会让漂移判定漏报
+    const contextMd = await fs.readFile(contextPath, 'utf-8');
+    const { surface, barrelExports } = await collectContextExportSurface(
+      path.join(projectPath, dir),
+      projectPath
+    );
+    const verdict = reconcileContext({
+      contextMdContent: contextMd,
+      exportSurface: surface,
+      barrelExports,
+    });
+    // 构造点计数标记（ADR-0039）：无标记的散文维持现状不判
+    const markers = parseConstructionSiteMarkers(contextMd);
+    const siteDrift = markers.length > 0
+      ? reconcileConstructionSites({
+          markers,
+          countFor: (constructionCounter ??= createConstructionSiteCounter(projectPath)),
+        }).drift
+      : [];
+    if (
+      verdict.ghosts.length > 0 ||
+      verdict.unlistedBarrelExports.length > 0 ||
+      siteDrift.length > 0
+    ) {
+      result.contextContentDrift.push({
+        dir,
+        ghosts: verdict.ghosts,
+        unlisted: verdict.unlistedBarrelExports,
+        ...(siteDrift.length > 0 ? { constructionSites: siteDrift } : {}),
       });
-      // 构造点计数标记（ADR-0039）：无标记的散文维持现状不判
-      const markers = parseConstructionSiteMarkers(contextMd);
-      const siteDrift = markers.length > 0
-        ? reconcileConstructionSites({
-            markers,
-            countFor: (constructionCounter ??= createConstructionSiteCounter(projectPath)),
-          }).drift
-        : [];
-      if (
-        verdict.ghosts.length > 0 ||
-        verdict.unlistedBarrelExports.length > 0 ||
-        siteDrift.length > 0
-      ) {
-        result.contextContentDrift.push({
-          dir,
-          ghosts: verdict.ghosts,
-          unlisted: verdict.unlistedBarrelExports,
-          ...(siteDrift.length > 0 ? { constructionSites: siteDrift } : {}),
-        });
-      }
+    }
 
-      if (!isCi) {
-        const contextStat = await fs.stat(contextPath);
-        const latestTsMtime = await getLatestTsMtime(path.join(projectPath, dir));
-        if (latestTsMtime && latestTsMtime > contextStat.mtimeMs) {
-          result.contextStale.push(dir);
-        }
+    if (!isCi) {
+      const contextStat = await fs.stat(contextPath);
+      const latestTsMtime = await getLatestTsMtime(path.join(projectPath, dir));
+      if (latestTsMtime && latestTsMtime > contextStat.mtimeMs) {
+        result.contextStale.push(dir);
       }
-    } catch {
-      // 目录不存在或无法访问，跳过
     }
   }
 
@@ -299,13 +295,12 @@ export async function syncDocs(
   let agentsMdMalformedPreserve: string[] = [];
   if (options.agents) {
     const generated = await buildAgentsMd(projectPath, srcDirs);
-    let existing: string | null = null;
-    try {
-      existing = await fs.readFile(path.join(projectPath, 'AGENTS.md'), 'utf-8');
-      agentsMdExists = true;
-    } catch {
-      // 缺失视为漂移
-    }
+    // 缺失视为漂移；存在但读失败 → 抛出（fail-fast）
+    const agentsMdPath = path.join(projectPath, 'AGENTS.md');
+    const existing = existsSync(agentsMdPath)
+      ? await fs.readFile(agentsMdPath, 'utf-8')
+      : null;
+    agentsMdExists = existing !== null;
     const { blocks, malformed } = existing !== null
       ? extractPreserveBlocks(existing)
       : { blocks: [] as string[], malformed: [] as string[] };

@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
 import type { CapabilitiesMode } from '../../../core/project-config-loader';
@@ -42,15 +43,14 @@ export async function updateCapabilitiesFile(
   result: SyncResult,
   mode: CapabilitiesMode = 'file',
 ): Promise<void> {
-  let content: string;
-  try {
-    content = await fs.readFile(capabilitiesPath, 'utf-8');
-  } catch {
-    // 文件不存在，创建新的（module 模式生成按目录聚合的模板）
-    content = generateCapabilitiesContent(currentModules, mode);
-    await fs.writeFile(capabilitiesPath, content, 'utf-8');
+  // 文件不存在 → 创建新的（module 模式生成按目录聚合的模板）；
+  // 存在但读失败 → 抛出（fail-fast，不把 IO 故障当「不存在」覆盖重建）
+  if (!existsSync(capabilitiesPath)) {
+    const fresh = generateCapabilitiesContent(currentModules, mode);
+    await fs.writeFile(capabilitiesPath, fresh, 'utf-8');
     return;
   }
+  let content = await fs.readFile(capabilitiesPath, 'utf-8');
 
   // 如果有表格行，更新表格
   if (existingFiles.length > 0) {

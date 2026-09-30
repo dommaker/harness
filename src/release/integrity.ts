@@ -70,12 +70,12 @@ export function deriveCriticalArtifacts(manifest: PackagePublishManifest): strin
 }
 
 function isHarnessPackageRoot(dir: string): boolean {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
-    return pkg?.name === HARNESS_PACKAGE_NAME;
-  } catch {
-    return false;
-  }
+  // 探测语义：该目录没有 package.json → false（向上继续找）；
+  // 有但 JSON 损坏 → 抛出（fail-fast，不把损坏清单当「不是包根」跳过）
+  const pkgPath = path.join(dir, 'package.json');
+  if (!fs.existsSync(pkgPath)) return false;
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  return pkg?.name === HARNESS_PACKAGE_NAME;
 }
 
 /**

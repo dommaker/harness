@@ -6,10 +6,12 @@
 
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { getHarnessPackageVersion } from '../../utils/package-version';
+import { attempt } from '../../utils/attempt';
 import { loadRawProjectConfig } from '../../core/project-config-loader';
 import type { CiConfig, CiPlatform, GovernanceConfig } from '../../types/project-config';
 import { replaceStandaloneRange } from '../../core/constraints/injection-writer';
@@ -104,16 +106,12 @@ function resolveCiPlatform(
 /**
  * 读 config.yml 已持久化的 `ci.platform`（解析链第二级）
  *
- * 缺失 / 解析失败 / 形状不符一律按未配置处理（与 `getGovernanceConfig` 同一口径：
- * 脏配置不替调用方做决定）。
+ * 缺失 / 形状不符一律按未配置处理；config.yml 解析失败经 attempt 显式降级为未配置——
+ * init 是用户首次上手入口，存量脏配置不该炸掉初始化（解析失败会真实抛到用户眼前的
+ * 场景是 check/sync-docs 等执法面，那里不兜）。
  */
 function readConfiguredCiPlatform(projectPath: string): CiPlatform | 'none' | undefined {
-  let raw: Record<string, unknown> | undefined;
-  try {
-    raw = loadRawProjectConfig(projectPath);
-  } catch {
-    return undefined;
-  }
+  const raw = attempt(() => loadRawProjectConfig(projectPath), () => undefined);
   const ci = raw?.ci;
   if (ci === null || typeof ci !== 'object') return undefined;
   const platform = (ci as CiConfig).platform;
@@ -401,16 +399,12 @@ async function setupCiWiring(
  * 查找已存在的 CI 工作流文件
  */
 async function findCiWorkflows(workflowsDir: string): Promise<string[]> {
-  try {
-    await fs.access(workflowsDir);
-    const files = await fs.readdir(workflowsDir);
-    // 过滤出可能是 CI 配置的文件
-    return files.filter(f => 
-      f.endsWith('.yml') || f.endsWith('.yaml')
-    );
-  } catch {
-    return [];
-  }
+  if (!existsSync(workflowsDir)) return [];
+  const files = await fs.readdir(workflowsDir);
+  // 过滤出可能是 CI 配置的文件
+  return files.filter(f =>
+    f.endsWith('.yml') || f.endsWith('.yaml')
+  );
 }
 
 /**
@@ -431,13 +425,9 @@ const LEGACY_OUTPUT_STYLE_FINGERPRINT = 'Terse like caveman';
  */
 export async function setupClaudeMdOutputStyle(projectPath: string, io: CommandIO): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-  let content: string;
-  try {
-    content = await fs.readFile(claudeMdPath, 'utf-8');
-  } catch {
-    // CLAUDE.md 不存在——无人持有该文件，跳过 Output Style 段
-    return;
-  }
+  // CLAUDE.md 不存在——无人持有该文件，跳过 Output Style 段
+  if (!existsSync(claudeMdPath)) return;
+  const content = await fs.readFile(claudeMdPath, 'utf-8');
 
   const section = renderOutputStyleSection();
   const write = replaceStandaloneRange(content, OUTPUT_STYLE_START, OUTPUT_STYLE_END, section);
@@ -548,13 +538,10 @@ const GOVERNANCE_COMMAND_PATTERN = /\bharness\s+(?:check\b|passes-gate\b|sync-do
 
 async function findGovernanceCoverage(workflowsDir: string): Promise<string | undefined> {
   for (const file of await findCiWorkflows(workflowsDir)) {
-    try {
-      const content = await fs.readFile(path.join(workflowsDir, file), 'utf-8');
-      if (GOVERNANCE_COMMAND_PATTERN.test(content)) {
-        return file;
-      }
-    } catch {
-      // 读取失败，忽略该文件
+    // fail-fast：workflow 文件是刚 readdir 出来的，读失败 = 真 IO 故障，抛出不忽略
+    const content = await fs.readFile(path.join(workflowsDir, file), 'utf-8');
+    if (GOVERNANCE_COMMAND_PATTERN.test(content)) {
+      return file;
     }
   }
   return undefined;

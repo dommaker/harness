@@ -145,12 +145,8 @@ async function getTopLevelDirEntries(
   projectPath: string,
   srcDirs: string[]
 ): Promise<Array<{ dir: string; role: string }>> {
-  let dirents: import('fs').Dirent[];
-  try {
-    dirents = await fs.readdir(projectPath, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+  // fail-fast：项目根都 readdir 不出来是环境事故，抛出不装空
+  const dirents = await fs.readdir(projectPath, { withFileTypes: true });
 
   const entries: Array<{ dir: string; role: string }> = [];
   for (const d of dirents) {
@@ -185,43 +181,36 @@ async function describeTopLevelDir(projectPath: string, dir: string, srcDirs: st
   return '—';
 }
 
-/** 列出 monorepo 工作区成员（含 package.json 的子目录名，排序） */
+/** 列出 monorepo 工作区成员（含 package.json 的子目录名，排序；dir 不存在 → 空） */
 async function listWorkspaceMembers(dir: string): Promise<string[]> {
-  try {
-    const dirents = await fs.readdir(dir, { withFileTypes: true });
-    const members: string[] = [];
-    for (const d of dirents) {
-      if (!d.isDirectory() || d.name.startsWith('.')) continue;
-      if (existsSync(path.join(dir, d.name, 'package.json'))) {
-        members.push(d.name);
-      }
+  if (!existsSync(dir)) return [];
+  const dirents = await fs.readdir(dir, { withFileTypes: true });
+  const members: string[] = [];
+  for (const d of dirents) {
+    if (!d.isDirectory() || d.name.startsWith('.')) continue;
+    if (existsSync(path.join(dir, d.name, 'package.json'))) {
+      members.push(d.name);
     }
-    return members.sort();
-  } catch {
-    return [];
   }
+  return members.sort();
 }
 
 /** 收集治理信息：.harness/config.yml 与 CLAUDE.md 治理块 */
 async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
   const info: GovernanceInfo = { hasConfig: false, hasClaudeGovernance: false };
 
-  try {
-    const config = loadRawProjectConfig(projectPath);
-    info.hasConfig = config !== undefined;
-    if (config && typeof config.preset === 'string') {
-      info.preset = config.preset;
-    }
-  } catch {
-    // 配置不存在
+  // loadRawProjectConfig：文件缺失 → undefined；YAML 损坏 → 抛出（fail-fast，不装未配置）
+  const config = loadRawProjectConfig(projectPath);
+  info.hasConfig = config !== undefined;
+  if (config && typeof config.preset === 'string') {
+    info.preset = config.preset;
   }
 
-  try {
-    const claude = await fs.readFile(path.join(projectPath, 'CLAUDE.md'), 'utf-8');
+  const claudePath = path.join(projectPath, 'CLAUDE.md');
+  if (existsSync(claudePath)) {
+    const claude = await fs.readFile(claudePath, 'utf-8');
     // 契约在场判定收口 injection-writer.hasGovernanceContract（#83，与 presence 同谓词）
     info.hasClaudeGovernance = hasGovernanceContract(claude);
-  } catch {
-    // CLAUDE.md 不存在
   }
 
   return info;
@@ -229,11 +218,8 @@ async function getGovernanceInfo(projectPath: string): Promise<GovernanceInfo> {
 
 /** 判断 .harness/knowledge 目录是否存在（只判存在性，不统计条数——条数易变，见 buildAgentsMd 注释） */
 async function hasKnowledgeDir(projectPath: string): Promise<boolean> {
-  try {
-    return (await fs.stat(path.join(projectPath, '.harness', 'knowledge'))).isDirectory();
-  } catch {
-    return false;
-  }
+  const dir = path.join(projectPath, '.harness', 'knowledge');
+  return existsSync(dir) && (await fs.stat(dir)).isDirectory();
 }
 
 /** 模块上下文正本候选路径（相对项目根） */
@@ -249,12 +235,9 @@ const CONTEXT_DOC_PATHS: string[][] = [
  */
 async function findCanonicalContextDoc(projectPath: string): Promise<string | null> {
   for (const segments of CONTEXT_DOC_PATHS) {
-    try {
-      if ((await fs.stat(path.join(projectPath, ...segments))).isFile()) {
-        return segments.join('/');
-      }
-    } catch {
-      // 该候选不存在，看下一个
+    const candidate = path.join(projectPath, ...segments);
+    if (existsSync(candidate) && (await fs.stat(candidate)).isFile()) {
+      return segments.join('/');
     }
   }
   return null;
@@ -265,12 +248,8 @@ async function countContextDocs(projectPath: string, srcDirs: string[]): Promise
   const found = new Set<string>();
 
   async function scan(dir: string): Promise<void> {
-    let entries: import('fs').Dirent[];
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
+    // fail-fast：目录不可读直接抛——CONTEXT.md 计数缺一块而无声，比报错更难查
+    const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (DEFAULT_SKIP_DIRS.includes(entry.name)) continue;
@@ -284,6 +263,8 @@ async function countContextDocs(projectPath: string, srcDirs: string[]): Promise
 
   for (const root of srcDirs) {
     const rootPath = path.join(projectPath, root);
+    // 源码根不在场无可统计（缺失判定归 sync-docs 主流程），跳过
+    if (!existsSync(rootPath)) continue;
     if (existsSync(path.join(rootPath, 'CONTEXT.md'))) {
       found.add(rootPath);
     }

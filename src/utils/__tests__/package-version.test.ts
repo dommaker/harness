@@ -37,15 +37,29 @@ describe('getHarnessPackageVersion', () => {
     }
   });
 
-  it('package.json 读取失败（缺失/损坏）时返回 unknown', () => {
+  it('package.json 缺失时返回 unknown', () => {
     jest.isolateModules(() => {
       jest.doMock('fs', () => ({
         ...jest.requireActual('fs'),
-        readFileSync: () => { throw new Error('ENOENT'); },
+        existsSync: () => false,
       }));
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fresh = require('../package-version') as typeof import('../package-version');
       expect(fresh.getHarnessPackageVersion()).toBe('unknown');
+      jest.dontMock('fs');
+    });
+  });
+
+  it('package.json 在场但读取失败（损坏/IO 故障）时抛出（fail-fast，不装 unknown）', () => {
+    jest.isolateModules(() => {
+      jest.doMock('fs', () => ({
+        ...jest.requireActual('fs'),
+        existsSync: () => true,
+        readFileSync: () => { throw new Error('ENOENT'); },
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fresh = require('../package-version') as typeof import('../package-version');
+      expect(() => fresh.getHarnessPackageVersion()).toThrow('ENOENT');
       jest.dontMock('fs');
     });
   });

@@ -93,8 +93,8 @@ export async function status(options: StatusOptions, io: CommandIO = processIO):
       anomalies.forEach((a: TraceAnomaly) => {
         log(io, chalk.yellow(`  ${a.constraintId}`));
         log(io, chalk.gray(`    类型: ${a.type}`));
-        log(io, chalk.gray(`    当前值: ${a.data?.currentRate ?? (a as any).current ?? 'N/A'}`));
-        log(io, chalk.gray(`    阈值: ${a.data?.threshold ?? (a as any).threshold ?? 'N/A'}`));
+        log(io, chalk.gray(`    当前值: ${a.data.currentRate}`));
+        log(io, chalk.gray(`    阈值: ${a.data.threshold}`));
         log(io);
       });
 

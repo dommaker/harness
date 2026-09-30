@@ -92,14 +92,11 @@ export function detectTrigger(
  * 检测是否有失败的测试记录（取运行级观察面的最近 20 条）
  */
 async function detectFailingTest(env: RunEnv): Promise<boolean> {
-  try {
-    // 坏行策略与计数去向见 run-env 的读点（ADR-0023 合并两处独立 tail 读为一份窗口）
-    return env
-      .traceTail(TRACE_TAIL_WINDOW)
-      .records.some(trace => trace.result === 'fail');
-  } catch {
-    return false;
-  }
+  // 坏行策略与计数去向见 run-env 的读点（ADR-0023 合并两处独立 tail 读为一份窗口）；
+  // fail-fast：traceTail 对缺文件返回空窗口，走到抛错只剩真 IO 故障，不吞
+  return env
+    .traceTail(TRACE_TAIL_WINDOW)
+    .records.some(trace => trace.result === 'fail');
 }
 
 /**
@@ -110,15 +107,10 @@ export function detectRootCauseInvestigation(projectPath: string): boolean {
   // 检查 ROOT_CAUSE.md
   if (fs.existsSync(path.join(projectPath, 'ROOT_CAUSE.md'))) return true;
 
-  // 检查 .harness/diagnoses/ 目录
+  // 检查 .harness/diagnoses/ 目录（existsSync 过了却读不出 = 真 IO 故障，fail-fast 抛出）
   const diagnosesDir = path.join(projectPath, '.harness', 'diagnoses');
   if (fs.existsSync(diagnosesDir)) {
-    try {
-      const files = fs.readdirSync(diagnosesDir);
-      if (files.length > 0) return true;
-    } catch {
-      // ignore
-    }
+    if (fs.readdirSync(diagnosesDir).length > 0) return true;
   }
 
   return false;
@@ -132,13 +124,9 @@ export function detectRequirement(projectPath: string): boolean {
   // Check for CLAUDE.md with HARNESS_CONSTRAINTS section
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
   if (fs.existsSync(claudeMdPath)) {
-    try {
-      const content = fs.readFileSync(claudeMdPath, 'utf-8');
-      if (content.includes('HARNESS_CONSTRAINTS')) {
-        return true;
-      }
-    } catch {
-      // ignore
+    const content = fs.readFileSync(claudeMdPath, 'utf-8');
+    if (content.includes('HARNESS_CONSTRAINTS')) {
+      return true;
     }
   }
 
@@ -158,12 +146,7 @@ export function detectRequirement(projectPath: string): boolean {
 export function detectReuseCheck(projectPath: string): boolean {
   const reuseDir = path.join(projectPath, '.harness', 'reuse');
   if (fs.existsSync(reuseDir)) {
-    try {
-      const files = fs.readdirSync(reuseDir);
-      if (files.length > 0) return true;
-    } catch {
-      // ignore
-    }
+    if (fs.readdirSync(reuseDir).length > 0) return true;
   }
 
   return false;

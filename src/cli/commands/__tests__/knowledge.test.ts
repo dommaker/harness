@@ -102,6 +102,7 @@ describe('getKnowledgeDir', () => {
     homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(tmpHome);
     storeCtorSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([]),
+      getBaseDir: jest.fn().mockReturnValue(tmpHome),
     }));
   });
 

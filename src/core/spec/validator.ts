@@ -74,38 +74,36 @@ export class SpecValidator {
 
     const absolutePath = path.resolve(schemaPath);
 
-    try {
-      // 尝试加载 TypeScript/JavaScript 模块
-      const indexPath = path.join(absolutePath, 'index.ts');
-      const indexPathJs = path.join(absolutePath, 'index.js');
+    // 无自定义 Schema 是正常情况（三个候选都不在场 → null）；
+    // 候选在场但加载/解析失败 → 抛出（fail-fast：坏 Schema 不装成「没有 Schema」）
+    const indexPath = path.join(absolutePath, 'index.ts');
+    const indexPathJs = path.join(absolutePath, 'index.js');
 
-      let schemaModule: any;
+    let schemaModule: any;
 
-      if (await this.fileExists(indexPath)) {
-        // 动态导入 TypeScript 模块（需要 tsx 或编译后的 .js）
-        schemaModule = await this.dynamicImport(indexPath);
-      } else if (await this.fileExists(indexPathJs)) {
-        schemaModule = await this.dynamicImport(indexPathJs);
-      } else {
-        // 尝试直接加载指定文件
-        schemaModule = await this.dynamicImport(absolutePath);
-      }
-
-      if (schemaModule && schemaModule.validate) {
-        const schema: SpecSchemaDefinition = {
-          name: schemaModule.name || 'custom',
-          version: schemaModule.version,
-          validate: schemaModule.validate,
-        };
-        this.schemaCache.set(schemaPath, schema);
-        return schema;
-      }
-
-      return null;
-    } catch (error) {
-      // Schema 加载失败是正常的（项目可能没有自定义 Schema）
+    if (await this.fileExists(indexPath)) {
+      // 动态导入 TypeScript 模块（需要 tsx 或编译后的 .js）
+      schemaModule = await this.dynamicImport(indexPath);
+    } else if (await this.fileExists(indexPathJs)) {
+      schemaModule = await this.dynamicImport(indexPathJs);
+    } else if (await this.fileExists(absolutePath)) {
+      // 尝试直接加载指定文件
+      schemaModule = await this.dynamicImport(absolutePath);
+    } else {
       return null;
     }
+
+    if (schemaModule && schemaModule.validate) {
+      const schema: SpecSchemaDefinition = {
+        name: schemaModule.name || 'custom',
+        version: schemaModule.version,
+        validate: schemaModule.validate,
+      };
+      this.schemaCache.set(schemaPath, schema);
+      return schema;
+    }
+
+    return null;
   }
 
   /**
@@ -337,23 +335,21 @@ export class SpecValidator {
   }
 
   /**
-   * 动态导入模块
+   * 动态导入模块（fail-fast：导入失败抛出；唯一回退 = .ts 导入失败试编译后的同名 .js）
    */
   private async dynamicImport(modulePath: string): Promise<any> {
     try {
       // 尝试直接导入
       return await import(modulePath);
-    } catch {
+    } catch (err) {
       // 如果是 TypeScript 文件，尝试加载编译后的 JS
       if (modulePath.endsWith('.ts')) {
         const jsPath = modulePath.replace(/\.ts$/, '.js');
-        try {
-          return await import(jsPath);
-        } catch {
-          return null;
+        if (await this.fileExists(jsPath)) {
+          return import(jsPath);
         }
       }
-      return null;
+      throw err;
     }
   }
 }

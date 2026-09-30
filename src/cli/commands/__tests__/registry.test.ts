@@ -310,9 +310,10 @@ smoke('bin/harness.js 端到端（dist 存在时）', () => {
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout)).toHaveProperty('total');
     expect(r.implModules).toEqual([
-      // #133 起 knowledge 的投影面随命令模块一并懒加载（探针按字典序列出加载项）
+      // #133 起 knowledge 的投影面随命令模块一并懒加载（探针按字典序列出加载项）；
+      // Phase 3 拆分后子命令实现是 knowledge/ 目录下的一文件一子命令
       expect.stringContaining('/dist/cli/commands/knowledge-view.js'),
-      expect.stringContaining('/dist/cli/commands/knowledge.js'),
+      expect.stringContaining('/dist/cli/commands/knowledge/list.js'),
     ]);
   });
 

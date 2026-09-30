@@ -1,8 +1,9 @@
 /**
  * 知识库质量审计引擎
  *
- * 纯代码检测，零 token 成本。打分判定（D1–D7 规则表、维度分、健康分）是纯模块
- * `audit-scoring.ts`，本文件只做存储侧装配：取条目、取环境数据、落地修复动作。
+ * 纯代码检测，零 token 成本。打分判定是纯模块组 `audit-rules.ts`（规则表）+
+ * `audit-scoring.ts`（评分）+ `audit-dimensions.ts`（维度分），本文件只做存储侧装配：
+ * 取条目、取环境数据、落地修复动作。
  *
  * 两种模式：
  * - validate(entry): 单条入库检查（ingest gate），不读盘
@@ -11,15 +12,12 @@
 
 import type { KnowledgeStore } from './store';
 import type { KnowledgeEntry, StoreUpdate } from './types';
-import {
-  MAX_SOURCE_REFS,
-  SURVIVAL_SNAPSHOT_DAYS,
-  calculateHealthScore,
-  computeDimensions,
-  scanEntries,
-  summarizeIssues,
-} from './audit-scoring';
-import type { AuditEnv, AuditIssue, AuditOptions, AuditReport } from './audit-scoring';
+import { MAX_SOURCE_REFS } from './audit-rules';
+import type { AuditIssue } from './audit-rules';
+import { calculateHealthScore, scanEntries, summarizeIssues } from './audit-scoring';
+import type { AuditOptions } from './audit-scoring';
+import { SURVIVAL_SNAPSHOT_DAYS, computeDimensions } from './audit-dimensions';
+import type { AuditEnv, AuditReport } from './audit-dimensions';
 
 /** 数值槽清单（harness#163）：显式传入的脏值（NaN/±Infinity/负数）构造期抛 TypeError，不放行到打分层静默关判定 */
 const NUMERIC_OPTION_SLOTS = ['shortContentThreshold', 'staleDays', 'promotionBlockDays'] as const;

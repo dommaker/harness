@@ -17,8 +17,9 @@ import chalk from 'chalk';
 import * as os from 'os';
 import * as path from 'path';
 import { FileKnowledgeStore } from '../../knowledge/store';
-import { AUDIT_RULE_LABELS } from '../../knowledge/audit-scoring';
-import type { AuditIssue, AuditReport, AuditRuleName } from '../../knowledge/audit-scoring';
+import { AUDIT_RULE_LABELS } from '../../knowledge/audit-rules';
+import type { AuditIssue, AuditRuleName } from '../../knowledge/audit-rules';
+import type { AuditReport } from '../../knowledge/audit-dimensions';
 import type { MaturityLevel } from '../../knowledge/types';
 import { log, type CommandIO, type CommandResult } from '../command-contract';
 

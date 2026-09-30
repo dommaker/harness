@@ -2,7 +2,7 @@
  * knowledge audit --threshold 的装配面测试（harness#152）
  *
  * 证的是「数值旗帜从 commander 到判定」这一程，不是投影：
- * ① 声明与运行时一致——`--threshold <n>` 恒给字符串，`knowledge.ts` 不得再靠 `as any` 躲编译期；
+ * ① 声明与运行时一致——`--threshold <n>` 恒给字符串，`knowledge/` 各文件不得再靠 `as any` 躲编译期；
  * ② 脏输入 fail-loud——非零判定 + stderr 提示，不出报告、不写盘（原先 NaN 静默关掉短内容规则）；
  * ③ 缺省与显式 '50' 逐字同果、显式 '0' 不被当「未传」兜掉。
  * 用真 KnowledgeAudit：要证的是阈值落进判定，而非参数传到（那是 mock 入参断言的假绿）。
@@ -26,9 +26,13 @@ jest.mock('chalk', () => ({
 import { captureIO, lastJsonOutput, type CapturingIO } from '../../command-contract';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import type { KnowledgeEntry } from '../../../knowledge/types';
-import { knowledgeAudit } from '../knowledge';
+import { knowledgeAudit } from '../knowledge/audit';
 
-const SRC_FILE = path.join(__dirname, '..', 'knowledge.ts');
+// Phase 3 拆分后扫整个 knowledge/ 子命令目录（排序保证违例清单稳定）
+const SRC_FILES = fs.readdirSync(path.join(__dirname, '..', 'knowledge'))
+  .filter(f => f.endsWith('.ts'))
+  .sort()
+  .map(f => path.join(__dirname, '..', 'knowledge', f));
 const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number): string => new Date(Date.now() - n * DAY).toISOString();
 
@@ -136,11 +140,13 @@ describe('knowledge audit --threshold：脏输入 fail-loud（不再 NaN 穿透�
 });
 
 describe('knowledge audit --threshold：声明与运行时一致', () => {
-  it('knowledge.ts 零 as any（断言不得替编译器记住旗帜的实际形状）', () => {
-    const offenders = fs.readFileSync(SRC_FILE, 'utf-8')
-      .split('\n')
-      .map((line, i) => ({ line: i + 1, text: line }))
-      .filter(({ text }) => text.includes('as any'));
+  it('knowledge/ 零 as any（断言不得替编译器记住旗帜的实际形状）', () => {
+    const offenders = SRC_FILES.flatMap(file =>
+      fs.readFileSync(file, 'utf-8')
+        .split('\n')
+        .map((line, i) => ({ file, line: i + 1, text: line }))
+        .filter(({ text }) => text.includes('as any'))
+    );
     expect(offenders).toEqual([]);
   });
 });

@@ -42,4 +42,6 @@ export { KnowledgeLinter } from './lint';
 export { ColdStartImporter } from './import';
 export { KnowledgeHealthScorer } from './doctor';
 export { KnowledgeAudit } from './audit';
-export type { AuditRuleName, AuditAction, AuditIssue, AuditReport, AuditOptions } from './audit-scoring';
+export type { AuditRuleName, AuditAction, AuditIssue } from './audit-rules';
+export type { AuditOptions } from './audit-scoring';
+export type { AuditReport } from './audit-dimensions';

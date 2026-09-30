@@ -30,7 +30,7 @@ jest.mock('chalk', () => ({
 import { captureIO, lastJsonOutput } from '../../command-contract';
 import { COMMAND_DEFINITIONS } from '../definitions';
 import { GATE_DEFINITIONS } from '../../../gates/definitions';
-import { knowledgeSearchCommand } from '../knowledge';
+import { knowledgeSearchCommand } from '../knowledge/search';
 import { failureList } from '../failure';
 import { coverageCheck } from '../passes-gate';
 import { FileKnowledgeStore } from '../../../knowledge/store';

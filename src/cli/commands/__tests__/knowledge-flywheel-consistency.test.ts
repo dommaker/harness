@@ -17,7 +17,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import { KnowledgeAudit } from '../../../knowledge/audit';
-import { knowledgeHealth, knowledgeStats } from '../knowledge';
+import { knowledgeHealth } from '../knowledge/health';
+import { knowledgeStats } from '../knowledge/stats';
 import type { KnowledgeEntry } from '../../../knowledge/types';
 
 function makeEntry(id: string, maturity: KnowledgeEntry['maturity'], referencedBy: string[]): KnowledgeEntry {

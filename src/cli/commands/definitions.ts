@@ -248,22 +248,23 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '--json', description: 'JSON 格式输出', defaultValue: false },
     ],
     subcommands: {
-      // 纯投影条目：commander options 与处理器参数同名，原样传入（编组归命令模块）
-      list: { impl: { module: 'knowledge', export: 'knowledgeList' }, aliases: ['ls'] },
+      // 纯投影条目：commander options 与处理器参数同名，原样传入（编组归命令模块）。
+      // knowledge/ 目录一子命令一文件（Phase 3 拆分，原 knowledge.ts 单文件 820 行）
+      list: { impl: { module: 'knowledge/list', export: 'knowledgeList' }, aliases: ['ls'] },
       search: {
-        impl: { module: 'knowledge', export: 'knowledgeSearchCommand' },
+        impl: { module: 'knowledge/search', export: 'knowledgeSearchCommand' },
         aliases: ['s'],
         withPositionals: true,
       },
-      import: { impl: { module: 'knowledge', export: 'knowledgeImport' }, aliases: ['i'] },
-      decay: { impl: { module: 'knowledge', export: 'knowledgeDecay' }, aliases: ['d'] },
-      stats: { impl: { module: 'knowledge', export: 'knowledgeStats' }, aliases: ['st'] },
-      'sync-rag': { impl: { module: 'knowledge', export: 'knowledgeSyncRag' } },
-      audit: { impl: { module: 'knowledge', export: 'knowledgeAudit' }, aliases: ['a'] },
-      snapshot: { impl: { module: 'knowledge', export: 'knowledgeSnapshot' } },
-      migrate: { impl: { module: 'knowledge', export: 'knowledgeMigrate' } },
-      index: { impl: { module: 'knowledge', export: 'knowledgeIndex' }, aliases: ['idx'] },
-      health: { impl: { module: 'knowledge', export: 'knowledgeHealth' }, aliases: ['h'] },
+      import: { impl: { module: 'knowledge/import', export: 'knowledgeImport' }, aliases: ['i'] },
+      decay: { impl: { module: 'knowledge/decay', export: 'knowledgeDecay' }, aliases: ['d'] },
+      stats: { impl: { module: 'knowledge/stats', export: 'knowledgeStats' }, aliases: ['st'] },
+      'sync-rag': { impl: { module: 'knowledge/sync-rag', export: 'knowledgeSyncRag' } },
+      audit: { impl: { module: 'knowledge/audit', export: 'knowledgeAudit' }, aliases: ['a'] },
+      snapshot: { impl: { module: 'knowledge/snapshot', export: 'knowledgeSnapshot' } },
+      migrate: { impl: { module: 'knowledge/migrate', export: 'knowledgeMigrate' } },
+      index: { impl: { module: 'knowledge/index', export: 'knowledgeIndex' }, aliases: ['idx'] },
+      health: { impl: { module: 'knowledge/health', export: 'knowledgeHealth' }, aliases: ['h'] },
     },
   },
   {

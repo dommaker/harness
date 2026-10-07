@@ -32,7 +32,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { getCapabilitiesMode } from '../../project-config-loader';
+import { getCapabilitiesMode } from '../governance-accessors';
 import {
   collectPopulationFiles,
   isCoveredByEntries,

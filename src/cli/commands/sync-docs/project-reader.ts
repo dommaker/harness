@@ -5,7 +5,8 @@
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { loadRawProjectConfig, resolveContextFiles } from '../../../core/project-config-loader';
+import { loadRawProjectConfig } from '../../../core/project-config-loader';
+import { resolveContextFiles } from '../../../core/constraints/governance-accessors';
 import type { ConstructionSiteDrift } from '../../../core/constraints/construction-sites';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
 import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';

@@ -15,7 +15,7 @@
  *   纯函数解析器（harness#154 口径条目指名的数值旗帜唯一解析器）。
  */
 
-import type { CommandDefinition } from '../cli/commands/definitions';
+import type { CommandDefinition } from '../types/command-definition';
 import { requireNumericFlag } from '../utils/numeric-flag';
 
 /**

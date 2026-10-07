@@ -1,7 +1,7 @@
 /**
  * resolveContextFiles 三态访问器测试（工单 84）
  *
- * 测试面 = project-config-loader 上的 governance.context_files 访问器：
+ * 测试面 = constraints/governance-accessors 上的 governance.context_files 访问器：
  * 未配置 / enabled 但无目标 / enabled 且非空 三态可分辨；访问器的 config.yml
  * 读取由运行级观察面供给（ADR-0023 决策 2：同一枚 RunEnv 内不触发第二次解析，
  * 进程级缓存已撤销）。临时目录由 src/test-setup/mkdtemp-cleanup.ts 统一回收。
@@ -10,7 +10,8 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
-import { resolveContextFiles, loadRawProjectConfig } from '../core/project-config-loader';
+import { loadRawProjectConfig } from '../core/project-config-loader';
+import { resolveContextFiles } from '../core/constraints/governance-accessors';
 import { createRunEnv } from '../core/constraints/run-env';
 import { createProjectFixture, writeProjectConfig } from '../test-setup/project-fixture';
 

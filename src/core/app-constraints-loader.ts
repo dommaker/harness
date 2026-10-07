@@ -24,9 +24,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { Constraint, ConstraintChannel, ConstraintSeverity, ConstraintTrigger } from '../types/constraint';
 import { CONSTRAINTS } from './constraints/definitions';
-// 模板注册表直引 templates-registry 而非 checkers 桶：checkers/index.ts 经内置
-// checker 回头依赖 project-config-loader，从本模块引桶会成值级循环
-import { TEMPLATES } from './constraints/checkers/templates-registry';
+import { TEMPLATES } from './constraints/checkers';
 import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-env';
 
 /** 应用层约束定义文件在项目根下的相对路径 */

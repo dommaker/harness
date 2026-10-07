@@ -25,7 +25,7 @@ import {
   reconcileConstructionSites,
 } from '../../../core/constraints/construction-sites';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
-import { getCapabilitiesMode } from '../../../core/project-config-loader';
+import { getCapabilitiesMode } from '../../../core/constraints/governance-accessors';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
 import type { ModuleInfo, SyncResult } from './project-reader';
 import {

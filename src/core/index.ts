@@ -63,15 +63,15 @@ export type {
   TaskTestResult,
 } from './validators';
 
-// 项目配置加载器（governance 段读取一律经访问器，禁止消费方手写钻取）
+// 项目配置加载器 + governance 访问器族（governance 段读取一律经访问器，禁止消费方手写钻取；
+// 访问器族住 constraints/governance-accessors，见该文件头注释）
+export { ProjectConfigLoader, loadRawProjectConfig } from './project-config-loader';
 export {
-  ProjectConfigLoader,
-  loadRawProjectConfig,
   getGovernanceConfig,
   resolveContextFiles,
   getCapabilitiesMode,
-} from './project-config-loader';
-export type { CapabilitiesMode, ContextFilesResolution } from './project-config-loader';
+} from './constraints/governance-accessors';
+export type { CapabilitiesMode, ContextFilesResolution } from './constraints/governance-accessors';
 // 运行级观察面（ADR-0023 决策 1/2）：上面两组访问器与 ProjectConfigLoader 的入参形状
 export type { RunEnv, RunTarget } from './constraints/run-env';
 

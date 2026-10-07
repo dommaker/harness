@@ -9,7 +9,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
-import type { CapabilitiesMode } from '../../../core/project-config-loader';
+import type { CapabilitiesMode } from '../../../core/constraints/governance-accessors';
 import type { ModuleInfo, SyncResult } from './project-reader';
 
 /**

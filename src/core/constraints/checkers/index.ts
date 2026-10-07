@@ -24,7 +24,8 @@ import { contextDocSync } from './context-doc-sync';
 import { docsFreshness } from './docs-freshness';
 import { noHardcodedCredentials } from './no-hardcoded-credentials';
 import { governancePresence } from './governance-presence';
-import { TEMPLATES } from './templates-registry';
+import { regexScan, fileExists, execScript } from './templated';
+import type { TemplatedCheckerFactory } from './types';
 
 const CHECKS: ConstraintCheck[] = [
   // severity='error'
@@ -44,9 +45,24 @@ const registry = new Map<string, ConstraintCheck>(CHECKS.map(c => [c.id, c]));
 // 模板注册表（ADR-0033，应用层约束用）
 // ========================================
 
-// TEMPLATES 住在 ./templates-registry（独立模块防值级循环，见该文件头注释）；
-// 此处 re-export 供编排层与测试单口取数
-export { TEMPLATES } from './templates-registry';
+/**
+ * 模板注册表（模板 id → 工厂）；测试可注册替身模板，用后须注销。
+ *
+ * 闭环语义：模板 id 未注册即不可用——加载期由 app-constraints-loader 校验，
+ * 运行期由本模块 getConstraintCheck 抛错兜底。
+ *
+ * 首批模板：regex-scan（正则扫描）/ file-exists（文件存在性），块 3 子项 2；
+ * exec（外部命令执行协议，harness#181，ADR-0035 决策 3 exec 档）。
+ *
+ * 历史：曾独立成 ./templates-registry 防 loader↔checker 值级循环；governance 访问器族
+ * 下移 constraints/governance-accessors 后内置 checker 不再回头依赖 project-config-loader，
+ * 环已解开，注册表并回本桶（ADR-0040 Phase 3）。
+ */
+export const TEMPLATES = new Map<string, TemplatedCheckerFactory>([
+  ['regex-scan', regexScan],
+  ['file-exists', fileExists],
+  ['exec', execScript],
+]);
 
 // ========================================
 // 注册表闭环校验（加载期）

@@ -11,7 +11,7 @@ import { createRunEnv, type RunEnv } from '../run-env';
 /**
  * 检查环境：一次 run 内共享的观察面与证据提供者（ADR-0023 决策 1）
  *
- * = `RunEnv`（项目上行数据的读取：config.yml / trace 尾部 / 源根，run 内至多一次）
+ * = `RunEnv`（项目上行数据的读取：config.yml / 源根，run 内至多一次）
  *   + `context` + git/扫描证据。前者不含 context，故只能派生不能合并成一个对象。
  *
  * - stagedDiff/stagedDiffNames：run 内 git 命令至多一次（工单 18 / #87）
@@ -60,9 +60,8 @@ export type CheckEvidenceInput = 'stagedDiff' | 'stagedDiffNames';
  * 构造 CheckEnv：生产侧唯一构造点
  *
  * - providers 传入 = 证据接线，checker 正常评估
- * - 'none' = 显式不接证据：证据函数返回空；evidence flag 未接线的
- *   checker 按契约返回 'skip'（见 contextEvidenceFlag），直接读空
- *   证据的 checker 在自然输入下判定
+ * - 'none' = 显式不接证据：证据函数返回空，声明了 git 证据需求的
+ *   checker 由编排层按 needs 契约降级 skip
  * - runEnv = 本 run 的运行级观察面（ADR-0023）：传入即与 context-builder 及
  *   其余 checker 共用同一份上行数据读取；不传则自造一枚，只服务本次调用
  *
@@ -177,23 +176,11 @@ export function normalizeCheckOutcome(outcome: CheckOutcome): NormalizedOutcome 
  *
  * checker 声明自己吃什么输入；编排层在 evaluate 前比对环境实际供给，
  * 缺输入即统一显式降级（带原因的 skipped），代替各 checker 自行静默退化
- * （如对空 diff 假 pass、对 undefined flag 无声 skip）。
+ * （如对空 diff 假 pass）。
  */
 export interface CheckInputNeeds {
   /** git 证据输入：env.evidenceAvailable 报不可得 → 降级 skip */
   evidence?: CheckEvidenceInput[];
-  /** 上下文证据标志：值为 undefined（未接线）→ 降级 skip */
-  contextFlags?: ContextEvidenceFlag[];
-}
-
-/** ConstraintContext 中取值为 boolean | undefined 的证据标志名 */
-export type ContextEvidenceFlag = {
-  [K in keyof ConstraintContext]-?: ConstraintContext[K] extends boolean | undefined ? K : never;
-}[keyof ConstraintContext];
-
-/** 证据标志未接线的 skip 原因文案（findMissingInputs 与 contextEvidenceFlag 兜底共用） */
-function flagNotWiredReason(flag: string): string {
-  return `证据标志 ${flag} 未接线`;
 }
 
 /**
@@ -214,17 +201,13 @@ export function findMissingInputs(check: ConstraintCheck, env: CheckEnv): string
       );
     }
   }
-  for (const flag of check.needs?.contextFlags ?? []) {
-    if (env.context[flag] === undefined) missing.push(flagNotWiredReason(flag));
-  }
   return missing;
 }
 
 /**
  * 输入契约降级（harness#182）：缺输入 → 带原因的 CheckSkip；齐备 → null
  *
- * 编排层（checker.ts）与 checker-as-guard 接线点（gates/checker-gate.ts）的
- * 唯一降级口，两处不得各写一遍比对 + 组装。
+ * 编排层（checker.ts）的唯一降级口。
  */
 export function degradeForMissingInputs(check: ConstraintCheck, env: CheckEnv): CheckSkip | null {
   const missing = findMissingInputs(check, env);
@@ -256,37 +239,4 @@ export interface TemplatedCheckerFactory {
   validateParams(params: Record<string, unknown>): string[];
   /** 按约束 id + 已校验参数实例化 checker */
   create(id: string, params: Record<string, unknown>): ConstraintCheck;
-}
-
-/**
- * 构造纯上下文标志检查（无 I/O 的轻量约束）
- */
-export function contextFlag(
-  id: string,
-  predicate: (context: ConstraintContext) => boolean
-): ConstraintCheck {
-  return { id, evaluate: (env) => predicate(env.context) };
-}
-
-/**
- * 构造证据标志检查（ADR-0001：flag 未接线 = skip 而非 fail；harness#182 起 skip 带原因）
- *
- * - flag === undefined：调用方未接线该证据 → 编排层按 needs 契约降级 skip；
- *   直接 evaluate（绕过编排层）时此处兜底，同样报带原因的 skip
- * - flag === false：显式无证据 → fail
- * - flag === true：有证据 → pass
- */
-export function contextEvidenceFlag(
-  id: string,
-  flag: ContextEvidenceFlag
-): ConstraintCheck {
-  return {
-    id,
-    needs: { contextFlags: [flag] },
-    evaluate: (env) => {
-      const value = env.context[flag];
-      if (value === undefined) return { skip: true, reason: flagNotWiredReason(flag) };
-      return value;
-    },
-  };
 }

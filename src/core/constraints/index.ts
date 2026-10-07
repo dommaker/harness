@@ -15,7 +15,6 @@ export {
   ConstraintChecker,
   checkConstraint,
   checkConstraints,
-  checkBeforeExecution,
   constraintChecker,
 } from './checker';
 export type { CheckConstraintsOptions, TraceRecorder } from './checker';
@@ -25,8 +24,6 @@ export {
   buildCheckEnv,
   normalizeCheckOutcome,
   formatEvidence,
-  contextFlag,
-  contextEvidenceFlag,
 } from './checkers';
 export type {
   ConstraintCheck,
@@ -38,7 +35,6 @@ export type {
   EvidenceProviders,
   CheckInputNeeds,
   CheckEvidenceInput,
-  ContextEvidenceFlag,
 } from './checkers';
 
 // 类型导出

@@ -402,39 +402,6 @@ export class CommandGate implements Gate {
   getRiskLevel(command: string): 'high' | 'medium' | 'low' {
     return this.judge(command).riskLevel;
   }
-
-  /**
-   * 获取黑名单规则
-   */
-  getBlacklist(): CommandBlacklistRule[] {
-    return [...this.blacklist];
-  }
-
-  /**
-   * 添加自定义规则
-   */
-  addRule(rule: CommandBlacklistRule): void {
-    this.blacklist.push(rule);
-  }
-
-  /**
-   * 移除规则
-   */
-  removeRule(id: string): boolean {
-    const index = this.blacklist.findIndex(r => r.id === id);
-    if (index >= 0) {
-      this.blacklist.splice(index, 1);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): Required<CommandGateConfig> {
-    return { ...this.config };
-  }
 }
 
 // ========== 便捷函数 ==========

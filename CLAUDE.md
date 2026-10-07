@@ -51,12 +51,12 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 | `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/hooks/` | Harness runtime bootstrap only (`bootstrapHarness` / `bootstrapHarnessSync`): loads `.harness/config.yml`, wires checker + trace collector + session manager. The generic hook pipeline was removed by ADR-0027 (zero consumers in both repos) |
-| `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
+| `src/agents/` | Agent lifecycle state machine (idle → running → completed / failed) |
 | `src/cli/commands/` | 20 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, release, constraints, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
 
 ### Entry Points
 
-- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`、`checkBeforeExecution()`）
+- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
 - **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management)。`./gates` 入口已删除（ADR-0038 收回面，重构班次连壳出清，ADR-0040）
 

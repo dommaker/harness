@@ -213,27 +213,9 @@ export interface ConstraintContext {
   // ========================================
   // 前置条件检查
   // ========================================
-  
-  /** 是否有根本原因调查 */
-  hasRootCauseInvestigation?: boolean;
 
   /** 是否已通过诊断→修复闸门（设计方案已确认） */
   hasPlanApproval?: boolean;
-
-  /** 是否有测试 */
-  hasTest?: boolean;
-  
-  /** 是否有失败的测试 */
-  hasFailingTest?: boolean;
-  
-  /** 是否已进行复用检查 */
-  hasReuseCheck?: boolean;
-  
-  /** 是否只处理单个任务（证据标志，当前无内置 checker 消费，供自定义约束用） */
-  hasSingleTask?: boolean;
-  
-  /** 是否有需求文档（证据标志，当前无内置 checker 消费，供自定义约束用） */
-  hasRequirement?: boolean;
 
   /** worktree 路径（用于 worktree 相关检查） */
   worktreePath?: string;

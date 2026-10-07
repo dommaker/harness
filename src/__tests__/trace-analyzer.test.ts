@@ -44,7 +44,7 @@ describe('TraceAnalyzer', () => {
         { constraintId: 'test2', severity: 'warning', timestamp: 3000, result: 'pass' },
       ];
 
-      const summaries = analyzer.summarize(traces);
+      const summaries = summarizeTraces(traces);
 
       expect(summaries.length).toBe(2);
     });
@@ -56,7 +56,7 @@ describe('TraceAnalyzer', () => {
         { constraintId: 'test', severity: 'error', timestamp: 3000, result: 'fail' },
       ];
 
-      const summaries = analyzer.summarize(traces);
+      const summaries = summarizeTraces(traces);
       const summary = summaries.find(s => s.constraintId === 'test');
 
       expect(summary?.passRate).toBeCloseTo(2/3);
@@ -68,14 +68,14 @@ describe('TraceAnalyzer', () => {
         { constraintId: 'test', severity: 'error', timestamp: 2000, result: 'fail' },
       ];
 
-      const summaries = analyzer.summarize(traces);
+      const summaries = summarizeTraces(traces);
       const summary = summaries.find(s => s.constraintId === 'test');
 
       expect(summary?.failRate).toBeCloseTo(1);
     });
 
     it('空 traces 应该返回空数组', () => {
-      const summaries = analyzer.summarize([]);
+      const summaries = summarizeTraces([]);
       expect(summaries).toEqual([]);
     });
   });
@@ -89,7 +89,7 @@ describe('TraceAnalyzer', () => {
         { constraintId: 'test', severity: 'warning', timestamp: 4000, result: 'pass' },
       ];
 
-      const summaries = analyzer.summarize(traces);
+      const summaries = summarizeTraces(traces);
       const anomalies = analyzer.detectAnomalies(summaries);
 
       expect(anomalies.length).toBeGreaterThan(0);
@@ -101,7 +101,7 @@ describe('TraceAnalyzer', () => {
         { constraintId: 'test', severity: 'error', timestamp: 2000, result: 'pass' },
       ];
 
-      const summaries = analyzer.summarize(traces);
+      const summaries = summarizeTraces(traces);
       const anomalies = analyzer.detectAnomalies(summaries);
 
       expect(anomalies.length).toBe(0);
@@ -117,7 +117,7 @@ describe('TraceAnalyzer', () => {
       ];
 
       // 通过 summarize 间接验证分组
-      const summaries = analyzer.summarize(traces);
+      const summaries = summarizeTraces(traces);
       expect(summaries.length).toBe(2);
     });
   });

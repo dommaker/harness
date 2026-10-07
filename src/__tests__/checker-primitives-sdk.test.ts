@@ -2,9 +2,9 @@
  * 检查器原语 SDK 公共面（harness#181 第二半）
  *
  * 导出纪律 = 只导出存量：CheckOutcome / buildCheckEnv / normalizeCheckOutcome +
- * 现有 checker 真实在用的辅助件（formatEvidence / contextFlag / contextEvidenceFlag
- * 与接缝类型）。本套件从包根 import 原语组装一个「事实 ↔ 期望」式业务 checker，
- * 验证导出真实可用；三处 barrel 清单与三道冻结钉见 public-exports /
+ * 现有 checker 真实在用的辅助件（formatEvidence 与接缝类型）。本套件从包根
+ * import 原语组装一个「事实 ↔ 期望」式业务 checker，验证导出真实可用；
+ * 三处 barrel 清单与三道冻结钉见 public-exports /
  * public-value-surface / public-type-surface。
  */
 
@@ -13,8 +13,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   buildCheckEnv,
-  contextEvidenceFlag,
-  contextFlag,
   formatEvidence,
   normalizeCheckOutcome,
   type CheckOutcome,
@@ -22,7 +20,6 @@ import {
 } from '../index';
 import {
   buildCheckEnv as buildCheckEnvFromCore,
-  contextFlag as contextFlagFromCore,
   normalizeCheckOutcome as normalizeFromCore,
 } from '../core';
 import { createProjectFixture } from '../test-setup/project-fixture';
@@ -30,7 +27,6 @@ import { createProjectFixture } from '../test-setup/project-fixture';
 describe('检查器原语 SDK（harness#181）', () => {
   it('包根与 ./core 子路径同源导出', () => {
     expect(buildCheckEnvFromCore).toBe(buildCheckEnv);
-    expect(contextFlagFromCore).toBe(contextFlag);
     expect(normalizeFromCore).toBe(normalizeCheckOutcome);
   });
 
@@ -55,16 +51,5 @@ describe('检查器原语 SDK（harness#181）', () => {
     expect(outcome.satisfied).toBe(false);
     expect(outcome.evidence.join('\n')).toContain('docs/b.md');
     expect(outcome.evidence.join('\n')).not.toContain('docs/a.md');
-  });
-
-  it('谓词件 contextFlag / contextEvidenceFlag 经公共面照常工作', async () => {
-    const env = buildCheckEnv({ operation: 'commit', projectPath: '/nonexistent' }, 'none');
-    const flagCheck = contextFlag('app_flag', (ctx) => ctx.operation === 'commit');
-    expect(normalizeCheckOutcome(await flagCheck.evaluate(env)).satisfied).toBe(true);
-
-    const evidenceCheck = contextEvidenceFlag('app_evidence', 'hasFailingTest');
-    const skipped = normalizeCheckOutcome(await evidenceCheck.evaluate(env));
-    expect(skipped.skipped).toBe(true);
-    expect(skipped.skipReason).toContain('hasFailingTest');
   });
 });

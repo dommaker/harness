@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { readPackageJson } from '../utils/package-json';
 import type { KnowledgeEntry, KnowledgeSubsystem, StorageLayer } from './types';
 import type { KnowledgeStore } from './store';
@@ -45,7 +46,6 @@ export interface ImportState {
   startedAt: string;
   lastUpdated: string;
   completedSources: string[];
-  pendingSources: string[];
   totalImported: number;
   totalErrors: number;
 }
@@ -98,16 +98,16 @@ export class ColdStartImporter {
 
       switch (sourceType) {
         case 'code':
-          result = await this.importFromCode();
+          result = this.importFromCode();
           break;
         case 'git':
-          result = await this.importFromGit();
+          result = this.importFromGit();
           break;
         case 'docs':
-          result = await this.importFromDocs();
+          result = this.importFromDocs();
           break;
         case 'manual':
-          result = await this.importManual();
+          result = this.importManual();
           break;
         default:
           // sourceType 静态收窄为 never（switch 已穷尽四源）；分支防的是运行时脏配置
@@ -134,7 +134,7 @@ export class ColdStartImporter {
   /**
    * 从代码仓库扫描提取知识
    */
-  private async importFromCode(): Promise<ImportResult> {
+  private importFromCode(): ImportResult {
     const entries: KnowledgeEntry[] = [];
     const errors: ImportError[] = [];
     const source: ImportSource = { type: 'code', path: this.config.projectRoot };
@@ -192,13 +192,12 @@ export class ColdStartImporter {
   /**
    * 从 Git 历史分析提取知识
    */
-  private async importFromGit(): Promise<ImportResult> {
+  private importFromGit(): ImportResult {
     const entries: KnowledgeEntry[] = [];
     const errors: ImportError[] = [];
     const source: ImportSource = { type: 'git', path: this.config.projectRoot };
 
     try {
-      const { execSync } = require('child_process');
       const cwd = this.config.projectRoot;
 
       // 查找 fix/hotfix 相关提交
@@ -248,7 +247,7 @@ export class ColdStartImporter {
   /**
    * 从文档导入
    */
-  private async importFromDocs(): Promise<ImportResult> {
+  private importFromDocs(): ImportResult {
     const entries: KnowledgeEntry[] = [];
     const errors: ImportError[] = [];
     const source: ImportSource = { type: 'docs' };
@@ -318,7 +317,7 @@ export class ColdStartImporter {
   /**
    * 口述录入
    */
-  private async importManual(): Promise<ImportResult> {
+  private importManual(): ImportResult {
     const entries: KnowledgeEntry[] = [];
     const errors: ImportError[] = [];
     const source: ImportSource = { type: 'manual' };
@@ -457,7 +456,6 @@ export class ColdStartImporter {
       startedAt: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
       completedSources: [],
-      pendingSources: [...this.config.sources],
       totalImported: 0,
       totalErrors: 0,
     };
@@ -488,7 +486,6 @@ export class ColdStartImporter {
       startedAt: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
       completedSources: [],
-      pendingSources: [...this.config.sources],
       totalImported: 0,
       totalErrors: 0,
     };

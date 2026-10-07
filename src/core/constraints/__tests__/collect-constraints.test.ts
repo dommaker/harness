@@ -36,18 +36,12 @@ beforeAll(() => {
   VIOLATING = {
     operation: 'code_implementation',
     projectPath: violatingDir,
-    hasTest: false,
-    hasRequirement: true,
-    hasSingleTask: true,
     taskDescription: 'single focused change',
   };
   CLEAN = {
     operation: 'code_implementation',
     projectPath: cleanDir,
     changedFiles: [],
-    hasTest: true,
-    hasRequirement: true,
-    hasSingleTask: true,
     taskDescription: 'single focused change',
   };
 });

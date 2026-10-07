@@ -207,26 +207,6 @@ export class TraceCollector {
   }
 
   /**
-   * 读取最近 N 小时的 traces
-   *
-   * 经 `read()` 的兼容包装，丢计数；要带计数用 `readReport({ timeRange })`
-   * 或 `TraceAnalyzer.analyzeRecentReport()`。
-   */
-  readRecent(hours: number): ExecutionTrace[] {
-    const start = Date.now() - hours * 3600 * 1000;
-    return this.read({ timeRange: { start, end: Date.now() } });
-  }
-
-  /**
-   * 读取特定约束的 traces
-   *
-   * 同 `readRecent()`：兼容包装，计数走 `readReport({ constraintId })`。
-   */
-  readByConstraint(constraintId: string): ExecutionTrace[] {
-    return this.read({ constraintId });
-  }
-
-  /**
    * 应用过滤条件
    */
   private applyFilter(traces: ExecutionTrace[], filter: TraceFilter): ExecutionTrace[] {

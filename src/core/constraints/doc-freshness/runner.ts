@@ -47,11 +47,6 @@ interface RunContext {
    * 共用一次探测；不传（sync-docs 等一次性调用方）则本模块自探一次。
    */
   sourceRoots?: () => string[];
-  /** 外部提供的约束计数（用于内置 harner harness 的 doc_regex_count） */
-  constraintCounts?: {
-    ironLaws?: number;
-    guidelines?: number;
-  };
 }
 
 /**
@@ -67,7 +62,6 @@ export class FreshnessRunner {
     ctx?: {
       requiredDirs?: string[];
       sourceRoots?: () => string[];
-      constraintCounts?: { ironLaws?: number; guidelines?: number };
     }
   ): FreshnessCheckResult[] {
     if (config.enabled === false) return [];
@@ -77,7 +71,6 @@ export class FreshnessRunner {
       projectPath,
       requiredDirs: ctx?.requiredDirs,
       sourceRoots: ctx?.sourceRoots,
-      constraintCounts: ctx?.constraintCounts,
     };
 
     return config.checks.map(check => this.runSingle(check, context));

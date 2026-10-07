@@ -32,18 +32,17 @@ describe('PerformanceGate', () => {
   });
 
   describe('constructor', () => {
-    it('should use default config', () => {
-      const defaultGate = new PerformanceGate();
-      const config = defaultGate.getConfig();
-      expect(config.thresholds).toEqual({});
+    it('should use default config', async () => {
+      // 缺省 thresholds={}：无阈值时检查直接通过
+      const result = await gate.check(baseContext);
+      expect(result.passed).toBe(true);
     });
 
     it('should accept custom config', () => {
       const customGate = new PerformanceGate({
         coverageTimeout: 60000,
       });
-      const config = customGate.getConfig();
-      expect(config.coverageTimeout).toBe(60000);
+      expect(customGate).toBeDefined();
     });
   });
 
@@ -235,51 +234,6 @@ describe('PerformanceGate', () => {
       const result = await strictGate.check(baseContext);
 
       expect((result.details?.metrics as { bundleSize?: number }).bundleSize).toBe(100);
-    });
-  });
-
-  describe('setThresholds()', () => {
-    it('should update thresholds', () => {
-      gate.setThresholds({
-        minCoverage: 90,
-        maxBundleSize: 500,
-      });
-
-      const config = gate.getConfig();
-      expect(config.thresholds.minCoverage).toBe(90);
-      expect(config.thresholds.maxBundleSize).toBe(500);
-    });
-
-    it('should merge with existing thresholds', () => {
-      const customGate = new PerformanceGate({
-        thresholds: { minCoverage: 50 },
-      });
-
-      customGate.setThresholds({ maxBundleSize: 1000 });
-
-      const config = customGate.getConfig();
-      expect(config.thresholds.minCoverage).toBe(50);
-      expect(config.thresholds.maxBundleSize).toBe(1000);
-    });
-  });
-
-  describe('setTimeouts()', () => {
-    it('should update timeouts', () => {
-      gate.setTimeouts({
-        coverage: 30000,
-      });
-
-      const config = gate.getConfig();
-      expect(config.coverageTimeout).toBe(30000);
-    });
-  });
-
-  describe('getConfig()', () => {
-    it('should return copy of config', () => {
-      const config1 = gate.getConfig();
-      const config2 = gate.getConfig();
-      expect(config1).toEqual(config2);
-      expect(config1).not.toBe(config2);
     });
   });
 

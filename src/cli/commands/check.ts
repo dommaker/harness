@@ -113,8 +113,8 @@ export async function check(
 
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
     // #87：一次 run 一份 git 证据——context-builder 与 checker 层共用同一实例
-    // ADR-0023：一次 run 一份运行级观察面——配置、源根探测、trace 证据探测全部共用同一份读取
-    const context = await buildConstraintContext({
+    // ADR-0023：一次 run 一份运行级观察面——配置、源根探测全部共用同一份读取
+    const context = buildConstraintContext({
       projectPath: options.projectPath,
       staged: options.staged,
       trigger: options.trigger,

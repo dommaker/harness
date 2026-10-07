@@ -43,14 +43,10 @@ export interface SpecValidationResult {
  * Spec 验证配置
  */
 export interface SpecValidatorConfig {
-  /** 是否启用 */
-  enabled: boolean;
   /** Schema 路径（项目定义） */
   schemaPath: string;
   /** 要验证的文件模式 */
   files: string[];
-  /** 验证失败的级别 */
-  failureLevel: 'error' | 'warning';
 }
 
 /**

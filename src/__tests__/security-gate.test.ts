@@ -54,24 +54,6 @@ describe('SecurityGate', () => {
     });
   });
 
-  describe('severityThreshold', () => {
-    it.skip('high 阈值应该检查 critical + high', async () => {
-      const result = await gate.scan({
-        projectPath: tempDir,
-      });
-      
-      // 无漏洞时应该通过
-      expect(result.passed).toBe(true);
-    });
-
-    it('应该能设置严重程度阈值', () => {
-      gate.setSeverityThreshold('critical');
-      
-      const config = gate.getConfig();
-      expect(config.severityThreshold).toBe('critical');
-    });
-  });
-
   describe('analyzeResult', () => {
     it.skip('应该解析 npm audit JSON 或返回 passed', async () => {
       const result = await gate.scan({

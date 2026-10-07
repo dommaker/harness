@@ -23,15 +23,11 @@ export type {
 // 分类器
 export {
   ErrorClassifier,
-  createErrorClassifier,
-  classifyError,
-  getFailureLevel,
   type ErrorClassifierConfig,
 } from './classifier';
 
 // 记录器
 export {
   FailureRecorder,
-  createFailureRecorder,
   type FailureRecorderConfig,
 } from './recorder';

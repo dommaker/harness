@@ -29,7 +29,7 @@ import { log, logError, processIO, type CommandIO, type CommandResult } from '..
 
 export interface ReleaseOptions {
   bumpType?: 'patch' | 'minor' | 'major';
-  dryRun?: string;
+  dryRun?: boolean;
 }
 
 async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout: string; stderr: string }> {
@@ -54,7 +54,7 @@ function gateFail(gate: string, detail: string): CommandResult {
 export async function release(options: ReleaseOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const pkgPath = process.cwd();
   const bumpType = options.bumpType || 'patch';
-  const dryRun = options.dryRun === 'true';
+  const dryRun = options.dryRun ?? false;
 
   // ── 1. Verify package ──
   const pkgJson = readPackageJson(pkgPath);

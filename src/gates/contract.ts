@@ -215,18 +215,4 @@ export class ContractGate implements Gate {
 
     return endpoints;
   }
-
-  /**
-   * 设置契约路径
-   */
-  setContractPath(path: string): void {
-    this.config.contractPath = path;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): Required<ContractGateConfig> {
-    return { ...this.config };
-  }
 }

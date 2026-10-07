@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { TraceCollector } from '../monitoring/traces';
-import { TraceAnalyzer } from '../monitoring/trace-analyzer';
+import { summarizeTraces } from '../monitoring/trace-analyzer';
 
 describe('TraceCollector', () => {
   let tempDir: string;
@@ -101,7 +101,7 @@ describe('TraceCollector', () => {
     }
 
     // 读取最近 5 分钟
-    const traces = collector.readRecent(5 / 60); // 5 分钟 = 5/60 小时
+    const traces = collector.read({ timeRange: { start: Date.now() - 5 * 60 * 1000, end: Date.now() } });
     expect(traces.length).toBeLessThanOrEqual(6); // 最多 6 个（包括当前）
   });
 
@@ -189,7 +189,6 @@ describe('TraceCollector', () => {
 describe('TraceAnalyzer', () => {
   let tempDir: string;
   let collector: TraceCollector;
-  let analyzer: TraceAnalyzer;
 
   beforeEach(() => {
     tempDir = path.join(os.tmpdir(), `harness-traces-${Date.now()}`);
@@ -197,9 +196,6 @@ describe('TraceAnalyzer', () => {
     collector = new TraceCollector({
       traceFile: path.join(tempDir, 'execution.log'),
       enabled: true,
-    });
-    analyzer = new TraceAnalyzer(collector, {
-      summaryFile: path.join(tempDir, 'summary.json'),
     });
   });
 
@@ -230,7 +226,7 @@ describe('TraceAnalyzer', () => {
     }
 
     const traces = collector.read();
-    const summaries = analyzer.summarize(traces);
+    const summaries = summarizeTraces(traces);
 
     expect(summaries.length).toBe(2);
 
@@ -269,7 +265,7 @@ describe('TraceAnalyzer', () => {
     }
 
     const traces = collector.read();
-    const summaries = analyzer.summarize(traces);
+    const summaries = summarizeTraces(traces);
 
     // 检查趋势
     const summary = summaries.find(s => s.constraintId === 'rising_fail_constraint');
@@ -289,38 +285,10 @@ describe('TraceAnalyzer', () => {
       });
     }
 
-    const traces = collector.readByConstraint('stable_constraint');
-    const summaries = analyzer.summarize(traces);
+    const traces = collector.read({ constraintId: 'stable_constraint' });
+    const summaries = summarizeTraces(traces);
 
     expect(summaries[0].recentTrend).toBe('stable');
   });
 
-  test('should save and load summary', () => {
-    for (let i = 0; i < 5; i++) {
-      collector.recordPass('test_constraint', 'warning');
-    }
-
-    const summaries = analyzer.analyzeRecent(1);
-    analyzer.saveSummary(summaries);
-
-    const loaded = analyzer.loadSummary();
-    expect(loaded).toBeDefined();
-    expect(loaded!.length).toBe(1);
-    expect(loaded![0].constraintId).toBe('test_constraint');
-  });
-
-  test('should generate report', () => {
-    for (let i = 0; i < 5; i++) {
-      collector.recordPass('constraint_a', 'warning');
-      collector.recordFail('constraint_b', 'error');
-    }
-
-    const summaries = analyzer.analyzeRecent(1);
-    const anomalies = analyzer.detectAnomalies(summaries);
-    const report = analyzer.generateReport(summaries, anomalies);
-
-    expect(report).toContain('# Harness Trace Report');
-    expect(report).toContain('constraint_a');
-    expect(report).toContain('constraint_b');
-  });
 });

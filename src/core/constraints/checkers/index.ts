@@ -111,8 +111,6 @@ export {
   findMissingInputs,
   degradeForMissingInputs,
   formatEvidence,
-  contextFlag,
-  contextEvidenceFlag,
 } from './types';
 export type {
   ConstraintCheck,
@@ -123,7 +121,6 @@ export type {
   CheckSkip,
   CheckInputNeeds,
   CheckEvidenceInput,
-  ContextEvidenceFlag,
   NormalizedOutcome,
   EvidenceProviders,
 } from './types';

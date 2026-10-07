@@ -22,8 +22,6 @@ export interface StatusOptions {
   detail?: boolean;
   /** 只显示异常 */
   anomalies?: boolean;
-  /** 时间范围（小时） */
-  hours?: number;
   /**
    * 状态文件接缝（非 CLI flag；ADR-0026）
    *

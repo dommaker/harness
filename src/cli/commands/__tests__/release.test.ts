@@ -216,7 +216,7 @@ describe('release command', () => {
     ['minor', '0.19.0'],
     ['major', '1.0.0'],
   ] as const)('dry-run %s：ok 且提示目标版本 %s（不触 npm version）', async (bumpType, expected) => {
-    const result = await release({ bumpType, dryRun: 'true' }, io);
+    const result = await release({ bumpType, dryRun: true }, io);
 
     expect(result).toEqual({ kind: 'ok' });
     expect(io.outText()).toContain(`Dry-run complete. Would publish: @dommaker/harness@${expected}`);

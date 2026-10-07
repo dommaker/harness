@@ -199,8 +199,6 @@ describe('Constraint Checker', () => {
       operation: 'code_implementation',
       projectPath,
       changedFiles: [],
-      hasRequirement: true,
-      hasSingleTask: true,
     };
 
     const result = await constraintChecker.checkConstraints(context);

@@ -170,18 +170,4 @@ export class ReviewGate implements Gate {
       return fromError('review', 'Git 检查失败', error, startTime);
     }
   }
-
-  /**
-   * 设置最小审批人数
-   */
-  setMinReviewers(count: number): void {
-    this.config.minReviewers = count;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): Required<ReviewGateConfig> {
-    return { ...this.config };
-  }
 }

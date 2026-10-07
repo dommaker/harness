@@ -2,7 +2,7 @@
  * SpecValidator 测试
  */
 
-import { SpecValidator, validateSpec, validateAllSpecs } from '../validator';
+import { SpecValidator, validateAllSpecs } from '../validator';
 import type { GitCommandRunner } from '../../constraints/git-evidence';
 import * as fs from 'fs/promises';
 
@@ -35,14 +35,14 @@ describe('SpecValidator', () => {
 
     it('should accept custom config', () => {
       (SpecValidator as any).instance = undefined;
-      const v = SpecValidator.getInstance({ enabled: false });
+      const v = SpecValidator.getInstance({ schemaPath: './custom/schemas' });
       expect(v).toBeDefined();
     });
   });
 
   describe('setConfig()', () => {
     it('should update config', () => {
-      validator.setConfig({ enabled: false });
+      validator.setConfig({ schemaPath: './other/schemas' });
       expect(validator).toBeDefined();
     });
   });
@@ -422,26 +422,6 @@ describe('SpecValidator', () => {
   });
 
   describe('convenience functions', () => {
-    it('validateSpec should work without schemaPath', async () => {
-      mockFs.access.mockImplementation((p: any) =>
-      String(p).includes('schemas')
-        ? Promise.reject(new Error('no schema'))
-        : Promise.resolve(undefined)
-    );
-      mockFs.readFile.mockResolvedValue('content');
-
-      const result = await validateSpec('specs/test.yml');
-      expect(result).toBeDefined();
-      expect(result.file).toBe('specs/test.yml');
-    });
-
-    it('validateSpec should work with schemaPath', async () => {
-      mockFs.access.mockRejectedValue(new Error('Not found'));
-
-      const result = await validateSpec('specs/test.yml', '/non/existent/schema');
-      expect(result).toBeDefined();
-    });
-
     it('validateAllSpecs should return batch result', async () => {
       mockFs.access.mockRejectedValue(new Error('Not found'));
 

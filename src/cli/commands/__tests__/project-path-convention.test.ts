@@ -119,10 +119,9 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
     lines: [
       'const projectPath = context.projectPath || process.cwd();',
       'const projectPath = context.projectPath || process.cwd();',
-      'const projectPath = context.projectPath || process.cwd();',
     ],
     reason:
-      'check 三个 run 入口（checkPrecondition / runAllConstraints / beforeExecution）各取一次根兜底，' +
+      'check 两个 run 入口（checkPrecondition / runAllConstraints）各取一次根兜底，' +
       'git 证据与运行级观察面都从该变量派生、不再内联取 cwd（ADR-0023 步骤 3）',
   },
   'src/core/constraints/checkers/types.ts': {
@@ -145,10 +144,6 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
   'src/core/spec/validator.ts': {
     lines: ['const cwd = projectPath || process.cwd();'],
     reason: 'validateAll 的可选 projectPath 兜底（其相对 schemaPath 默认值见闸 3 豁免）',
-  },
-  'src/gates/checker-gate.ts': {
-    lines: ['const projectPath = ctx.projectPath || process.cwd();'],
-    reason: 'GateContext.projectPath 缺省兜底（门禁适配器的根入口）',
   },
   'src/hooks/bootstrap.ts': {
     lines: [
@@ -176,8 +171,8 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
  * - 臂 2 新增常量引用形 `xxxFile: SOME_CONSTANT`（值不在本行，是相对片段正本的另一半）
  *
  * 只扫**使用点**，不冻结常量定义本体（`export const DEFAULT_TRACE_FILE = '.harness/…'` 是正本，
- * 锚定责任在消费点）。扩形后下游层新增命中恰好 2 处（本票病灶 traces.ts + trace-analyzer.ts 的
- * summaryFile），连同既有的 validator 豁免共 3 条，零假阳性——见下方豁免表。
+ * 锚定责任在消费点）。扩形后下游层新增命中恰好 1 处（本票病灶 traces.ts），连同既有的
+ * validator 豁免共 2 条，零假阳性——见下方豁免表。
  */
 const RELATIVE_PATH_DEFAULT =
   /\b\w+(?:Path|File|Log)\s*(?::\s*[^=,)]+?)?[:=]\s*['"`](?!\/)|\b\w+(?:Path|File|Log)\s*[:=]\s*[A-Z][A-Z0-9_]+\b/;
@@ -192,10 +187,6 @@ const RELATIVE_PATH_DEFAULT_EXEMPTIONS: Record<string, string> = {
     '给了 projectPath → path.resolve(projectPath, traceFile)，没给 → 保持 cwd 解析（跨仓消费者的兼容面）。' +
     '本行是「相对片段」的声明处，不是「按 cwd 打开」的执行处；锚定行为由 monitoring/__tests__/' +
     'trace-file-anchoring.test.ts 与 cli/commands/__tests__/project-path-anchoring.test.ts 站点 3 钉。',
-  'src/monitoring/trace-analyzer.ts':
-    'summaryFile: ".harness/logs/traces-summary.json" 同型病灶（#139 实测的第二处命中）。不在本票修：' +
-    'harness 侧无生产写点（`status` 自 ADR-0020 起直调纯函数，不构造 analyzer），修它等于给无人消费的面' +
-    '新增根参数。与 trace 的 failure/summary 三件套同型病灶一并由下游消费方迁移票带走（#139 Out of scope）。',
 };
 
 describe('projectPath 传递约定（harness#95）', () => {

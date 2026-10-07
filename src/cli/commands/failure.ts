@@ -51,7 +51,7 @@ export async function failureList(
   }
   const recorder = getRecorder(options.projectPath);
 
-  let records = await recorder.getHistory();
+  let records = recorder.getHistory();
 
   if (options.type) {
     records = records.filter(r => r.type === options.type);
@@ -91,7 +91,7 @@ export async function failureList(
  */
 export async function failureStats(options: FailureOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
-  const stats = await recorder.getStats();
+  const stats = recorder.getStats();
 
   if (options.json) {
     log(io, JSON.stringify(stats, null, 2));
@@ -124,9 +124,9 @@ export async function failureStats(options: FailureOptions, io: CommandIO = proc
  */
 export async function failureClear(options: FailureOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
-  const stats = await recorder.getStats();
+  const stats = recorder.getStats();
 
-  await recorder.clear();
+  recorder.clear();
 
   if (options.json) {
     log(io, JSON.stringify({ cleared: stats.total }));

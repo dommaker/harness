@@ -98,19 +98,6 @@ describe('CommandGate', () => {
       }
     });
 
-    it('should support runtime rules via addRule（配置位 customBlacklist 已删，见 ADR-0024）', async () => {
-      const gate = new CommandGate();
-      gate.addRule({
-        id: 'custom-block',
-        pattern: /\bmy-custom-dangerous-command\b/i,
-        level: 'block',
-        message: 'Custom dangerous command',
-        category: 'custom',
-      });
-      const result = await gate.check('my-custom-dangerous-command --run');
-      expect(result.passed).toBe(false);
-    });
-
     it('should respect ignoreCategories', async () => {
       const gate = new CommandGate({ ignoreCategories: ['database'] });
       const result = await gate.check('DROP DATABASE test;');

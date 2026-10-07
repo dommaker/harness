@@ -74,12 +74,6 @@ export interface ExecutionResult {
 
 // ── Query ───────────────────────────────────────────────────
 
-export interface KnowledgeReference {
-  id: string;
-  title: string;
-  usedIn: string;
-}
-
 export interface QueryBudget {
   phase: string;
   maxTokens: number;
@@ -153,23 +147,6 @@ export const DEFAULT_DECAY_CONFIG: DecayConfig = {
   draftDecayMonths: 3,
   autoPromoteSources: [],
 };
-
-// ── Decision ────────────────────────────────────────────────
-
-export interface DecisionRecord {
-  topic: string;
-  category: 'architecture' | 'tooling' | 'process' | 'design';
-  context: string;
-  decision: string;
-  alternatives: string[];
-  rationale: string;
-  consequences: string;
-  participants: string[];
-  sourceType: string;
-  sourceId?: string;
-  revisable: boolean;
-  revisitCondition?: string;
-}
 
 // ── Reference ───────────────────────────────────────────────
 

@@ -25,8 +25,6 @@ import {
   groupByKey,
   timeRangeOf,
   splitByTime,
-  writeSummaryJson,
-  readSummaryJson,
   MIN_TREND_SAMPLES,
 } from './analyzer-base';
 
@@ -34,8 +32,6 @@ import {
  * 默认配置
  */
 const DEFAULT_CONFIG = {
-  summaryFile: '.harness/logs/traces-summary.json',
-  periodMs: 3600 * 1000, // 1 小时
   thresholds: {
     failRate: 0.5,        // 失败率 > 50% 视为异常
   },
@@ -197,7 +193,7 @@ export function detectTraceAnomalies(
  * 使用方式：
  * ```typescript
  * const analyzer = new TraceAnalyzer(collector);
- * const summaries = analyzer.summarize(traces);
+ * const { summaries, skippedLines } = analyzer.analyzeRecentReport(24);
  * const anomalies = analyzer.detectAnomalies(summaries);
  * ```
  */
@@ -208,18 +204,6 @@ export class TraceAnalyzer {
   constructor(collector: TraceCollector, config?: Partial<TraceAnalyzerConfig>) {
     this.collector = collector;
     this.config = { ...DEFAULT_CONFIG, ...config };
-  }
-
-  /**
-   * 生成统计汇总
- *
-   * 纯计算，零 Token 成本
-   *
-   * ADR-0020：判定本体在模块级 `summarizeTraces()`，此处只是类壳转发
-   * （跨仓消费方经类消费的面逐字不动）。
-   */
-  summarize(traces: ExecutionTrace[]): TraceSummary[] {
-    return summarizeTraces(traces);
   }
 
   /**
@@ -235,26 +219,7 @@ export class TraceAnalyzer {
       timeRange: { start, end: Date.now() },
     });
 
-    return { summaries: this.summarize(traces), skippedLines };
-  }
-
-  /**
-   * 分析最近 N 小时的 traces
-   *
-   * 兼容签名（#82 裁决 4 冻结）：丢坏行计数，要计数用 `analyzeRecentReport()`。
-   */
-  analyzeRecent(hours: number): TraceSummary[] {
-    return this.analyzeRecentReport(hours).summaries;
-  }
-
-  /**
-   * 分析特定约束
-   *
-   * 兼容签名同上：坏行计数由 `collector.readReport({ constraintId })` 承载。
-   */
-  analyzeConstraint(constraintId: string): TraceSummary[] {
-    const traces = this.collector.readByConstraint(constraintId);
-    return this.summarize(traces);
+    return { summaries: summarizeTraces(traces), skippedLines };
   }
 
   /**
@@ -267,129 +232,5 @@ export class TraceAnalyzer {
    */
   detectAnomalies(summaries: TraceSummary[]): TraceAnomaly[] {
     return detectTraceAnomalies(summaries, this.config);
-  }
-
-  /**
-   * 对比上一周期
- *
-   * 计算各指标的环比变化
-   */
-  compareWithPrevious(
-    current: TraceSummary[],
-    previous: TraceSummary[]
-  ): TraceSummary[] {
-    const previousMap = new Map(
-      previous.map(s => [s.constraintId, s])
-    );
-
-    return current.map(summary => {
-      const prev = previousMap.get(summary.constraintId);
-
-      if (prev) {
-        summary.changeFromLastPeriod = {
-          passRateDelta: summary.passRate - prev.passRate,
-          failRateDelta: summary.failRate - prev.failRate,
-        };
-      }
-
-      return summary;
-    });
-  }
-
-  /**
-   * 保存汇总结果
-   */
-  saveSummary(summaries: TraceSummary[]): void {
-    writeSummaryJson(this.config.summaryFile ?? DEFAULT_CONFIG.summaryFile, summaries);
-  }
-
-  /**
-   * 加载上次汇总结果
-   */
-  loadSummary(): TraceSummary[] | null {
-    return readSummaryJson<TraceSummary[]>(this.config.summaryFile ?? DEFAULT_CONFIG.summaryFile);
-  }
-
-  /**
-   * 运行每小时汇总
- *
-   * 自动执行，零 Token 成本
-   */
-  runHourlySummary(): TraceSummary[] {
-    // 分析最近 1 小时
-    const current = this.analyzeRecent(1);
-
-    // 加载上次汇总，对比趋势
-    const previous = this.loadSummary();
-    if (previous) {
-      this.compareWithPrevious(current, previous);
-    }
-
-    // 保存当前汇总
-    this.saveSummary(current);
-
-    return current;
-  }
-
-  /**
-   * 运行每日异常检测
- *
-   * 返回异常列表，用于触发 Agent 诊断
-   */
-  runDailyAnomalyCheck(): TraceAnomaly[] {
-    // 分析最近 24 小时
-    const summaries = this.analyzeRecent(24);
-
-    // 检测异常
-    const anomalies = this.detectAnomalies(summaries);
-
-    return anomalies;
-  }
-
-  /**
-   * 生成报告（文本格式）
-   */
-  generateReport(summaries: TraceSummary[], anomalies: TraceAnomaly[]): string {
-    const lines: string[] = [];
-
-    lines.push('# Harness Trace Report');
-    lines.push(`Generated: ${new Date().toISOString()}`);
-    lines.push('');
-
-    // 汇总部分
-    lines.push('## Constraint Summaries');
-    lines.push('');
-
-    for (const summary of summaries) {
-      const severityEmoji = {
-        error: '🔴',
-        warning: '🟡',
-        info: '🔵',
-      }[summary.severity];
-
-      lines.push(`${severityEmoji} **${summary.constraintId}**`);
-      lines.push(`  - Checks: ${summary.totalChecks}`);
-      lines.push(`  - Pass: ${Math.round(summary.passRate * 100)}%`);
-      lines.push(`  - Fail: ${Math.round(summary.failRate * 100)}%`);
-      lines.push(`  - Trend: ${summary.recentTrend}`);
-      lines.push('');
-    }
-
-    // 异常部分
-    if (anomalies.length > 0) {
-      lines.push('## Anomalies Detected');
-      lines.push('');
-
-      for (const anomaly of anomalies) {
-        lines.push(`⚠️ **${anomaly.type}**: ${anomaly.constraintId}`);
-        lines.push(`  - ${anomaly.message}`);
-        lines.push(`  - Suggested: ${anomaly.suggestedAction}`);
-        lines.push('');
-      }
-    } else {
-      lines.push('## No Anomalies Detected ✅');
-    }
-
-    return lines.join('\n');
   }
 }

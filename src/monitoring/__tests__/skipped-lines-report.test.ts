@@ -5,8 +5,7 @@
  * 这一层被 `read()` 的兼容签名吞掉：跨仓消费端点拿到部分结果却零提示。
  * 本套件钉住收口后的形状——
  * - 新报告入口 `readReport()` / `analyzeRecentReport()` 把计数带到消费面
- * - 旧入口 `read()` / `readRecent()` / `readByConstraint()` / `getStats()` /
- *   `analyzeRecent()` / `analyzeConstraint()` 的签名与返回类型逐条不变（编译期断言）
+ * - 旧入口 `read()` / `getStats()` 的签名与返回类型逐条不变（编译期断言）
  * - 跨层对账：module 计数 == collector 报告入口计数 == analyzer 报告入口计数
  * - 时间窗只过滤合法行（坏行无 timestamp 可归窗），计数始终是文件级口径
  */
@@ -83,13 +82,12 @@ describe('TraceCollector.readReport / TraceAnalyzer.analyzeRecentReport（harnes
       expect(filtered.skippedLines).toBe(expectedSkipped);
     });
 
-    it('旧入口逐条不变：read()/readRecent()/readByConstraint() 仍只返回合法记录', () => {
+    it('旧入口逐条不变：read() 仍只返回合法记录', () => {
       const root = fixtureWith(lines, 'skiplines-compat');
       const collector = collectorFor(root);
 
       expect(collector.read().map(t => t.constraintId)).toEqual(['alpha', 'beta', 'alpha']);
-      expect(collector.readByConstraint('alpha')).toHaveLength(2);
-      expect(collector.readRecent(ALL_HOURS)).toHaveLength(3);
+      expect(collector.read({ constraintId: 'alpha' })).toHaveLength(2);
     });
 
     it('getStats().totalLines 保持原始行数口径（合法 + 坏行），与改动前一致', () => {
@@ -139,8 +137,6 @@ describe('TraceCollector.readReport / TraceAnalyzer.analyzeRecentReport（harnes
 
       // 旧入口：返回类型逐条不变
       const traces: ExecutionTrace[] = collector.read();
-      const recent: ExecutionTrace[] = collector.readRecent(ALL_HOURS);
-      const byConstraint: ExecutionTrace[] = collector.readByConstraint('alpha');
       const stats: {
         fileExists: boolean;
         fileSize: number;
@@ -148,14 +144,8 @@ describe('TraceCollector.readReport / TraceAnalyzer.analyzeRecentReport（harnes
         oldestTrace?: number;
         newestTrace?: number;
       } = collector.getStats();
-      const summaries: TraceSummary[] = analyzer.analyzeRecent(ALL_HOURS);
-      const constraintSummaries: TraceSummary[] = analyzer.analyzeConstraint('alpha');
       expect(traces).toHaveLength(1);
-      expect(recent).toHaveLength(1);
-      expect(byConstraint).toHaveLength(1);
       expect(stats.totalLines).toBe(2);
-      expect(summaries).toHaveLength(1);
-      expect(constraintSummaries).toHaveLength(1);
 
       // 新入口：就地返回形状（不另立第二份计数概念，也不经包根导出的类型）
       const collectorReport: { traces: ExecutionTrace[]; skippedLines: number } = collector.readReport();
@@ -169,10 +159,7 @@ describe('TraceCollector.readReport / TraceAnalyzer.analyzeRecentReport（harnes
       // 运行期返回的仍是数组
       // @ts-expect-error read() 仍返回 ExecutionTrace[]，不含坏行数
       const readNoCount: { skippedLines: number } = collector.read();
-      // @ts-expect-error analyzeRecent() 仍返回 TraceSummary[]，不含坏行数
-      const analyzeNoCount: { skippedLines: number } = analyzer.analyzeRecent(ALL_HOURS);
       expect(Array.isArray(readNoCount)).toBe(true);
-      expect(Array.isArray(analyzeNoCount)).toBe(true);
     });
   });
 });

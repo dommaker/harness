@@ -36,7 +36,6 @@ describe('SpecValidator', () => {
   describe('setConfig', () => {
     it('应该更新配置', () => {
       validator.setConfig({
-        enabled: true,
         files: ['*.md'],
       });
 

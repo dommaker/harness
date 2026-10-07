@@ -282,16 +282,6 @@ export class PassesGate {
     return evidenceFile;
   }
 
-  /**
-   * 验证证据存在
-   */
-  private async verifyEvidence(evidencePath: string, workDir: string): Promise<boolean> {
-    const fullPath = path.isAbsolute(evidencePath)
-      ? evidencePath
-      : path.join(workDir, evidencePath);
-    return existsSync(fullPath);
-  }
-
 }
 
 /**

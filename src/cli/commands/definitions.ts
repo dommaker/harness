@@ -122,7 +122,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     options: [
       { flags: '-f, --file <path>', description: '检查点文件路径' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
-      { flags: '--strict', description: '严格模式（任何失败都退出）', defaultValue: false },
     ],
     action: { module: 'validate', export: 'validate' },
   },
@@ -174,7 +173,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-p, --project-path <path>', description: '项目路径' },
       { flags: '-d, --detail', description: '显示详细信息', defaultValue: false },
       { flags: '-a, --anomalies', description: '只显示异常', defaultValue: false },
-      { flags: '--hours <n>', description: '分析最近 N 小时', defaultValue: '24' },
     ],
     action: { module: 'status', export: 'status' },
     mapActionArgs: (_pos, options) => [
@@ -182,7 +180,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         projectPath: options.projectPath,
         detail: options.detail,
         anomalies: options.anomalies,
-        hours: parseInt(String(options.hours), 10),
       },
     ],
   },
@@ -232,7 +229,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     command: 'knowledge',
     argument: '[subcommand] [arg]',
     alias: 'kb',
-    description: '知识库管理（list/search/import/decay/stats/audit）',
+    description: '知识库管理（list/search/import/decay/stats/audit/snapshot/index/health）',
     options: [
       { flags: '-p, --project-path <path>', description: '项目路径' },
       { flags: '--type <types>', description: '按类型过滤（逗号分隔）' },
@@ -259,10 +256,8 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       import: { impl: { module: 'knowledge/import', export: 'knowledgeImport' }, aliases: ['i'] },
       decay: { impl: { module: 'knowledge/decay', export: 'knowledgeDecay' }, aliases: ['d'] },
       stats: { impl: { module: 'knowledge/stats', export: 'knowledgeStats' }, aliases: ['st'] },
-      'sync-rag': { impl: { module: 'knowledge/sync-rag', export: 'knowledgeSyncRag' } },
       audit: { impl: { module: 'knowledge/audit', export: 'knowledgeAudit' }, aliases: ['a'] },
       snapshot: { impl: { module: 'knowledge/snapshot', export: 'knowledgeSnapshot' } },
-      migrate: { impl: { module: 'knowledge/migrate', export: 'knowledgeMigrate' } },
       index: { impl: { module: 'knowledge/index', export: 'knowledgeIndex' }, aliases: ['idx'] },
       health: { impl: { module: 'knowledge/health', export: 'knowledgeHealth' }, aliases: ['h'] },
     },
@@ -302,7 +297,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。纯 CLI 实现，不依赖外部 API。',
     options: [
       { flags: '--bump <type>', description: '版本递增类型', defaultValue: 'patch' },
-      { flags: '--dry-run <bool>', description: '仅模拟执行', defaultValue: 'false' },
+      { flags: '--dry-run', description: '仅模拟执行', defaultValue: false },
     ],
     action: { module: 'release', export: 'release' },
     mapActionArgs: (_pos, options) => [{ bumpType: options.bump, dryRun: options.dryRun }],

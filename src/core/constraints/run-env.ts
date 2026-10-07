@@ -1,7 +1,7 @@
 /**
  * 运行级观察面（ADR-0023 决策 1）
  *
- * 一次 `harness check` 一份、跑完即弃：把「本项目有哪些源码根」「最近的 trace 记录」
+ * 一次 `harness check` 一份、跑完即弃：把「本项目有哪些源码根」
  * 「`.harness/config.yml` 写了什么」这类上行数据的读取收在此处，
  * 同一次运行内每个文件至多读一次。
  *
@@ -18,8 +18,6 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { reconcileCapabilities, type CapabilityVerdict } from './capabilities-reconcile';
-import { readJsonlWindow, type JsonlWindow, type JsonlReadResult } from '../../utils/jsonl';
-import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 
 /** config.yml 在项目根下的相对路径（读取口径唯一落点） */
 const CONFIG_FILE_REL = path.join('.harness', 'config.yml');
@@ -27,19 +25,9 @@ const CONFIG_FILE_REL = path.join('.harness', 'config.yml');
 /** 能力表在项目根下的落点（checker 侧存在性探测与本读面共用此常量） */
 export const CAPABILITIES_FILE_REL = 'CAPABILITIES.md';
 
-/**
- * 尾部窗口上限 = 本 run 内最大的尾部消费方（有无失败记录看 20 条，见 context-builder）
- *
- * harness#183 起验证证据不再读 trace（语义循环拆除，改读 .harness/evidence），
- * trace 尾部只剩 hasFailingTest 一个消费方。
- */
-const TRACE_TAIL_WINDOW = 20;
-
 export interface RunEnv {
   /** 项目根（生产代码的每个 IO 点都用它，不再各自取 cwd——harness#95） */
   readonly projectPath: string;
-  /** 最近 limit 条 trace 记录（≤ TRACE_TAIL_WINDOW；一次运行内至多读文件一次） */
-  traceTail(limit: number): JsonlReadResult<ExecutionTrace>;
   /** 源码根相对路径列表（一次运行内至多探测一次） */
   sourceRoots(): string[];
   /**
@@ -84,8 +72,6 @@ export interface ProjectCapabilities {
  * 懒建：没有消费方就不碰文件（`harness check` 在干净树与脏树上读的并不一样多）。
  */
 export function createRunEnv(projectPath: string): RunEnv {
-  const traceFile = path.join(projectPath, DEFAULT_TRACE_FILE);
-  let window: JsonlWindow<ExecutionTrace> | null = null;
   let sourceRoots: string[] | null = null;
   let configLoaded = false;
   let configRaw: Record<string, unknown> | undefined;
@@ -94,15 +80,6 @@ export function createRunEnv(projectPath: string): RunEnv {
 
   return {
     projectPath,
-    traceTail(limit: number) {
-      if (!window) {
-        // 计数去向：豁免（harness#100）——本观察面只供给「最近有无 fail」一个布尔证据
-        // 消费方，不读 skippedLines；坏行占尾部槽位只会让证据变少（方向保守），
-        // 告知需要改判定形状，属行为变更不在本票
-        window = readJsonlWindow<ExecutionTrace>(traceFile, 'skip', TRACE_TAIL_WINDOW);
-      }
-      return window.take(limit);
-    },
     sourceRoots: roots,
     rawConfig() {
       if (!configLoaded) {
@@ -172,5 +149,3 @@ export function resolveRunEnv(target?: RunTarget): RunEnv {
   if (typeof target === 'object' && target !== null) return target;
   return createRunEnv(target || process.cwd());
 }
-
-export { TRACE_TAIL_WINDOW };

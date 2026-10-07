@@ -1,13 +1,13 @@
 /**
  * knowledge 投影收口闸（harness#133，架构评审候选4）
  *
- * knowledge 的 11 个子操作原先各自手写「json 投影 + 人读排版」两遍，同一个数据
+ * knowledge 的 9 个子操作原先各自手写「json 投影 + 人读排版」两遍，同一个数据
  * 两处落地、字段名靠人对齐。本文件钉住收口后的四件事：
  *
  * 1. **源形状闸**：`knowledge/` 各子命令文件不再出现 chalk / store 构造 / JSON.stringify，
  *    `--json` 分支只余 audit 索引重建一处策略豁免（逐行冻结）；上色与分派的唯一落点在
  *    `knowledge-view.ts`（store 构造与 JSON.stringify 各恰好一处）。
- * 2. **json 形状冻结**：11/11 子操作的字段清单逐条对撞（新增/删字段须显式改清单）。
+ * 2. **json 形状冻结**：9/9 子操作的字段清单逐条对撞（新增/删字段须显式改清单）。
  * 3. **两投影一致性**：同一 fixture 下，display model 里声明的 `field` 锚点必须能在
  *    json 面解析到；json 面没有的派生量必须走 `derived` 并在此登记豁免理由（无化石条目）。
  * 4. **人读视图逐行冻结**：改造前的整屏输出逐行留档，防止收口顺带改文案。
@@ -36,10 +36,8 @@ import { knowledgeSearch, knowledgeSearchView } from '../knowledge/search';
 import { knowledgeImport, knowledgeImportView } from '../knowledge/import';
 import { knowledgeDecay, knowledgeDecayView } from '../knowledge/decay';
 import { knowledgeStats, knowledgeStatsView } from '../knowledge/stats';
-import { knowledgeSyncRag, knowledgeSyncRagView } from '../knowledge/sync-rag';
 import { knowledgeAudit, knowledgeAuditView } from '../knowledge/audit';
 import { knowledgeSnapshot, knowledgeSnapshotView } from '../knowledge/snapshot';
-import { knowledgeMigrate, knowledgeMigrateView } from '../knowledge/migrate';
 import { knowledgeIndex, knowledgeIndexView } from '../knowledge/index';
 import { knowledgeHealth, knowledgeHealthView } from '../knowledge/health';
 import { emitKnowledgeView, toneForMaturity, type DisplayCell, type DisplayModel, type KnowledgeView } from '../knowledge-view';
@@ -50,7 +48,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number): string => new Date(Date.now() - n * DAY).toISOString();
 
 // ========================================
-// fixture：3 条知识 + 消费统计 + 2 个 RAG 文档 + README（导入源）
+// fixture：3 条知识 + 消费统计 + README（导入源）
 // ========================================
 
 function makeEntry(id: string, overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
@@ -85,10 +83,6 @@ function fixture(): string {
   store.save(makeEntry('K-002', { maturity: 'verified' }));
   store.save(makeEntry('K-003', { maturity: 'draft', lastReferenced: '', referencedBy: [], created: daysAgo(200) }));
   fs.writeFileSync(path.join(baseDir, '.consumption-stats.json'), JSON.stringify({ date: '2026-09-02', dailyEvents: 2, searchHits: 1 }));
-  const docsDir = path.join(root, '.harness', 'knowledge-docs');
-  fs.mkdirSync(docsDir, { recursive: true });
-  fs.writeFileSync(path.join(docsDir, 'a.md'), '# a\n');
-  fs.writeFileSync(path.join(docsDir, 'b.md'), '# b\n');
   fs.writeFileSync(path.join(root, 'README.md'), '# readme\n\n导入用的说明文档，内容足够长以生成一条知识条目记录。\n');
   return root;
 }
@@ -101,10 +95,10 @@ function normalize(root: string, text: string): string {
     .replace(/\d{4}-\d{2}-\d{2}/g, '<DATE>');
 }
 
-/** 11 个子命令的驱动面：builder（拿两投影）+ command（拿真实 stdout） */
+/** 9 个子命令的驱动面：builder（拿两投影）+ command（拿真实 stdout） */
 type SubName =
-  | 'list' | 'search' | 'import' | 'decay' | 'stats' | 'sync-rag'
-  | 'audit' | 'snapshot' | 'migrate' | 'index' | 'health';
+  | 'list' | 'search' | 'import' | 'decay' | 'stats'
+  | 'audit' | 'snapshot' | 'index' | 'health';
 
 interface SubDriver {
   name: SubName;
@@ -139,11 +133,6 @@ const SUBS: SubDriver[] = [
     run: (r, out, json) => knowledgeStats({ projectPath: r, json }, out),
   },
   {
-    name: 'sync-rag',
-    build: r => knowledgeSyncRagView({ projectPath: r }),
-    run: (r, out, json) => knowledgeSyncRag({ projectPath: r, json }, out),
-  },
-  {
     name: 'audit',
     build: (r, out) => knowledgeAuditView({ projectPath: r }, out),
     run: (r, out, json) => knowledgeAudit({ projectPath: r, json }, out),
@@ -152,11 +141,6 @@ const SUBS: SubDriver[] = [
     name: 'snapshot',
     build: (r, out) => knowledgeSnapshotView({ projectPath: r }, out),
     run: (r, out, json) => knowledgeSnapshot({ projectPath: r, json }, out),
-  },
-  {
-    name: 'migrate',
-    build: (r, out) => knowledgeMigrateView({ projectPath: r }, out),
-    run: (r, out, json) => knowledgeMigrate({ projectPath: r, json }, out),
   },
   {
     name: 'index',
@@ -246,7 +230,7 @@ const ENTRY_KEYS = [
 ];
 
 /**
- * json 字段清单冻结（验收 1）：11/11 子操作，逐条点名。
+ * json 字段清单冻结（验收 1）：9/9 子操作，逐条点名。
  * 路径 '' = 顶层；'entries.0' = 数组首元素的键。比较按排序后的集合。
  */
 const JSON_FIELD_FREEZE: Record<SubName, Array<{ path: string; keys: string[] }>> = {
@@ -270,9 +254,6 @@ const JSON_FIELD_FREEZE: Record<SubName, Array<{ path: string; keys: string[] }>
     { path: '', keys: ['total', 'byType', 'byMaturity', 'byLayer', 'flywheel'] },
     { path: 'flywheel', keys: ['refCoverage', 'avgRefs', 'consumptionHitRate'] },
   ],
-  'sync-rag': [
-    { path: '', keys: ['directory', 'files'] },
-  ],
   audit: [
     { path: '', keys: ['timestamp', 'totalEntries', 'issues', 'summary', 'dimensions', 'autoFixed', 'healthScore'] },
     { path: 'issues.0', keys: ['rule', 'entryId', 'title', 'severity', 'action', 'detail'] },
@@ -286,9 +267,6 @@ const JSON_FIELD_FREEZE: Record<SubName, Array<{ path: string; keys: string[] }>
   ],
   snapshot: [
     { path: '', keys: ['snapshotPath'] },
-  ],
-  migrate: [
-    { path: '', keys: ['total', 'migrated', 'skipped', 'errors'] },
   ],
   index: [
     { path: '', keys: ['path', 'entries', 'size', 'previousSize'] },
@@ -362,14 +340,6 @@ const HUMAN_BASELINE: Record<SubName, string[]> = {
     '    平均引用: 0.7',
     '    消费命中率: 67%',
   ],
-  'sync-rag': [
-    '📄 RAG sync candidates: 2 files in <TMP>/.harness/knowledge-docs',
-    '',
-    '  a.md',
-    '  b.md',
-    '',
-    'Ingest each file into your own knowledge-base backend to sync to RAG',
-  ],
   audit: [
     '🔍 知识库质量审计...',
     '',
@@ -407,15 +377,6 @@ const HUMAN_BASELINE: Record<SubName, string[]> = {
   ],
   snapshot: [
     '✅ 快照已保存: <TMP>/.harness/knowledge/.snapshots/index-<DATE>.json',
-  ],
-  migrate: [
-    '🔄 迁移知识条目（添加 consumptionMode/origin 字段）',
-    '',
-    '  总计: 3 条',
-    '  已迁移: 0 条',
-    '  已跳过: 3 条',
-    '',
-    '✅ 所有条目已是最新，无需迁移',
   ],
   index: [
     '📇 索引已重建',
@@ -506,7 +467,7 @@ describe('闸 1：源形状——投影分派与上色只有一处', () => {
   });
 });
 
-describe('闸 2：11/11 子操作 --json 字段清单冻结', () => {
+describe('闸 2：9/9 子操作 --json 字段清单冻结', () => {
   for (const sub of SUBS) {
     it(`${sub.name} 的 json 字段清单 = 冻结清单`, async () => {
       const root = fixture();
@@ -523,7 +484,7 @@ describe('闸 2：11/11 子操作 --json 字段清单冻结', () => {
     });
   }
 
-  it('冻结清单本身覆盖 11 个子命令（漏登记即红）', () => {
+  it('冻结清单本身覆盖 9 个子命令（漏登记即红）', () => {
     expect(Object.keys(JSON_FIELD_FREEZE).sort()).toEqual(SUBS.map(s => s.name).sort());
   });
 });
@@ -671,7 +632,6 @@ const EMPTY_HUMAN_BASELINE: Record<SubName, string[]> = {
     '    平均引用: 0',
     '    消费命中率: 0%',
   ],
-  'sync-rag': ['No .harness/knowledge-docs/ directory'],
   audit: [
     '🔍 知识库质量审计...',
     '',
@@ -690,15 +650,6 @@ const EMPTY_HUMAN_BASELINE: Record<SubName, string[]> = {
     '  📇 索引已重建',
   ],
   snapshot: ['✅ 快照已保存: <TMP>/.harness/knowledge/.snapshots/index-<DATE>.json'],
-  migrate: [
-    '🔄 迁移知识条目（添加 consumptionMode/origin 字段）',
-    '',
-    '  总计: 0 条',
-    '  已迁移: 0 条',
-    '  已跳过: 0 条',
-    '',
-    '✅ 所有条目已是最新，无需迁移',
-  ],
   index: [
     '📇 索引已重建',
     '  路径: <TMP>/.harness/knowledge/_index.md',
@@ -753,97 +704,6 @@ describe('闸 4b：空知识库态逐行冻结', () => {
       expect(lastJsonOutput(emptyIo)).toEqual({ changes: [] });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  /**
-   * 本票唯一的行为偏离（#133 收尾须知）：sync-rag 的两个空态原先把人类文案
-   * 直接打到 stdout——`--json` 下吐出的不是 JSON。收口到单点分派后，空态由
-   * display model 承担，json 面恒为 `{directory, files}`。零程序化消费者（决策
-   * 记录见本目录 CONTEXT.md），故按缺陷修正处理。
-   */
-  it('sync-rag 空态在 --json 下产出 JSON 而非人类文案（对改造前行为的有意修正）', async () => {
-    const root = emptyRoot();
-    try {
-      await knowledgeSyncRag({ projectPath: root, json: true }, io);
-      expect(lastJsonOutput(io)).toEqual({ directory: `${root}/.harness/knowledge-docs`, files: [] });
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  });
-});
-
-/**
- * 同一子命令的第二空态（harness#151 补 #133 闸 4b 的判据）。
- *
- * `emptyRoot()` 是裸的 mkdtemp 目录，天然没有 `.harness/knowledge-docs/` 子目录，于是
- * `syncRagRows`（`knowledge/sync-rag.ts`）的两个空态分支里只有第一个 `!docsPresent` 进过基线；
- * 第二个分支（目录在场、里面没有 `.md`）在测试里**走不到**——按 #133 自己立的判据，
- * 「fixture 走不到的分支不进基线，有基线就是假象」。json 面两分支恒同形
- * （`data = {directory, files}`），所以 `--json` 那条断言也钉不住人读第二行。
- *
- * 数据结构：既有 `EMPTY_HUMAN_BASELINE: Record<SubName, string[]>` 一个子命令只装得下
- * 一种形状，故另立一张平行表按 case 登记，不动既有用例。每个 case 自带建形函数——
- * 多空态不共用一个根。
- */
-interface EmptyShapeCase {
-  sub: SubName;
-  /** 分支说明，进用例标题 */
-  branch: string;
-  /** 该分支的建形方式（与 emptyRoot() 的区别就是要建的那个形） */
-  makeRoot(): string;
-  baseline: string[];
-  /** 该形状下 --json 的形状（两投影一致性在此分支的第二形） */
-  json: (root: string) => unknown;
-}
-
-/** `knowledge-docs/` 在场但目录里没有 `.md` → syncRagRows 第二分支 */
-function emptyDocsRoot(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-kview-emptydocs-'));
-  fs.mkdirSync(path.join(root, '.harness', 'knowledge-docs'), { recursive: true });
-  return root;
-}
-
-const EXTRA_EMPTY_HUMAN_CASES: EmptyShapeCase[] = [
-  {
-    sub: 'sync-rag',
-    branch: 'knowledge-docs/ 在场但目录里没有 .md',
-    makeRoot: emptyDocsRoot,
-    baseline: ['No knowledge docs found'],
-    json: root => ({ directory: `${root}/.harness/knowledge-docs`, files: [] }),
-  },
-];
-
-describe('闸 4c：同一子命令的第二空态逐行冻结（#151 补 #133 判据）', () => {
-  for (const testCase of EXTRA_EMPTY_HUMAN_CASES) {
-    const driver = SUBS.find(s => s.name === testCase.sub);
-    if (!driver) throw new Error(`case 登记的子命令不在驱动面里: ${testCase.sub}`);
-
-    it(`${testCase.sub} 的「${testCase.branch}」人读输出逐行不变`, async () => {
-      const root = testCase.makeRoot();
-      const humanIo = captureIO();
-      try {
-        await driver.run(root, humanIo, false);
-        expect(humanIo.outLines().map(l => normalize(root, l))).toEqual(testCase.baseline);
-      } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-      }
-    });
-
-    it(`${testCase.sub} 的「${testCase.branch}」在 --json 下仍是两分支同形的那份 data`, async () => {
-      const root = testCase.makeRoot();
-      try {
-        await driver.run(root, io, true);
-        expect(lastJsonOutput(io)).toEqual(testCase.json(root));
-      } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-      }
-    });
-  }
-
-  it('第二形登记的子命令确有独立基线（不借 闸 4b 的第一形蒙过去）', () => {
-    for (const testCase of EXTRA_EMPTY_HUMAN_CASES) {
-      expect(EMPTY_HUMAN_BASELINE[testCase.sub]).not.toEqual(testCase.baseline);
     }
   });
 });

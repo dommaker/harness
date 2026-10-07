@@ -127,7 +127,6 @@ export {
   checkConstraint,
   checkConstraints,
   collectConstraints,
-  checkBeforeExecution,
 } from './core/constraints/checker';
 export type { CheckConstraintsOptions } from './core/constraints/checker';
 
@@ -140,8 +139,6 @@ export {
   buildCheckEnv,
   normalizeCheckOutcome,
   formatEvidence,
-  contextFlag,
-  contextEvidenceFlag,
 } from './core/constraints/checkers';
 export type {
   ConstraintCheck,
@@ -153,7 +150,6 @@ export type {
   EvidenceProviders,
   CheckInputNeeds,
   CheckEvidenceInput,
-  ContextEvidenceFlag,
 } from './core/constraints/checkers';
 
 // ========================================
@@ -218,11 +214,7 @@ export {
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
   ErrorClassifier,
-  createErrorClassifier,
-  classifyError,
-  getFailureLevel,
   FailureRecorder,
-  createFailureRecorder,
 } from './failure';
 export type {
   FailureRecord,
@@ -258,7 +250,6 @@ export {
   KnowledgeQuery,
   KnowledgeLifecycle,
   KnowledgeIngest,
-  sanitizeExternalContent,
   ReferenceTracker,
   KnowledgeLinter,
   ColdStartImporter,
@@ -279,12 +270,10 @@ export type {
   KnowledgeStore,
   KnowledgeSubsystem,
   KnowledgeOrigin,
-  KnowledgeReference,
   MaturityLevel,
   MaturityChange,
   DecayConfig,
   SourceRef,
-  DecisionRecord,
   QueryFilter,
   QueryBudget,
   QueryResult,
@@ -362,11 +351,8 @@ export {
 } from './agents';
 export type {
   AgentConfig,
-  AgentEvent,
   AgentState,
   AgentStatus,
-  EventHandler,
-  FallbackStrategy,
 } from './agents';
 
 // ========================================

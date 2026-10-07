@@ -6,8 +6,5 @@ export type {
   AgentStatus,
   AgentConfig,
   AgentState,
-  AgentEvent,
-  FallbackStrategy,
 } from './types';
 export { AgentLifecycle } from './lifecycle';
-export type { EventHandler } from './lifecycle';

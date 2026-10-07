@@ -61,23 +61,6 @@ describe('ReviewGate', () => {
     });
   });
 
-  describe('配置', () => {
-    it('应该能设置最小审批人数', () => {
-      gate.setMinReviewers(2);
-      
-      const config = gate.getConfig();
-      expect(config.minReviewers).toBe(2);
-    });
-
-    it('应该能获取配置', () => {
-      const config = gate.getConfig();
-      
-      expect(config).toBeDefined();
-      expect(config.minReviewers).toBeDefined();
-      expect(config.requireApproval).toBeDefined();
-    });
-  });
-
   describe('checkLocalGit', () => {
     it('应该检查 git 状态', async () => {
       const result = await gate.check({

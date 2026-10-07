@@ -1,11 +1,10 @@
 /**
  * 知识树 walker 排除口径单点化（harness#134，架构评审候选 4）
  *
- * 判据不是「各文件有没有抄同一份常量」，而是**同一份知识树在四个入口下得到同一份条目人口**：
- * store 顶层扫描、migration 顶层扫描、index-generator 递归扫描此前各有各的排除口径，
+ * 判据不是「各文件有没有抄同一份常量」，而是**同一份知识树在三个入口下得到同一份条目人口**：
+ * store 顶层扫描、index-generator 递归扫描此前各有各的排除口径，
  * 后果是 `harness knowledge index` 落在 baseDir 的 `_index.md`（生成物、无 frontmatter）
- * 被 `harness knowledge migrate` 判成「no frontmatter found」计入 errors——同一份树，
- * `store.list()` 报 1 条、`migrateKnowledgeEntries` 报 total 2 / errors 1。
+ * 会冒充条目——同一份树，`store.list()` 与索引行必须报同一份集合。
  */
 
 import * as fs from 'fs';
@@ -14,7 +13,6 @@ import * as path from 'path';
 import { isEntryFile, isInfraDir, INDEX_MD_FILE, SNAPSHOTS_DIR } from '../tree-walker';
 import { FileKnowledgeStore } from '../store';
 import { KnowledgeIndexGenerator } from '../index-generator';
-import { migrateKnowledgeEntries } from '../migration';
 import type { KnowledgeEntry } from '../types';
 
 function makeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
@@ -57,12 +55,12 @@ describe('tree-walker 谓词', () => {
   });
 });
 
-describe('四个 walker 的条目人口一致（同一份树）', () => {
+describe('三个 walker 的条目人口一致（同一份树）', () => {
   let dir: string;
 
   /**
    * 平铺知识库：2 个真条目 + 全部基建产物（_index.md / .snapshots / .archive / resolutions）
-   * 只放平铺层，因为 store 与 migration 本就是顶层扫描器、index-generator 会下钻业务子目录——
+   * 只放平铺层，因为 store 本就是顶层扫描器、index-generator 会下钻业务子目录——
    * 本票统一的是**排除口径**，不是递归深度。
    */
   function buildTree(): void {
@@ -101,12 +99,6 @@ describe('四个 walker 的条目人口一致（同一份树）', () => {
     expect(store.readEntriesFromDisk().map(e => e.id).sort()).toEqual(['TREE-001', 'TREE-002']);
     store.rebuildIndex();
     expect(store.readIndex().map(e => e.id).sort()).toEqual(['TREE-001', 'TREE-002']);
-  });
-
-  it('migration：生成物既不计入 total 也不计入 errors（修假阳性）', () => {
-    const result = migrateKnowledgeEntries(dir);
-    expect(result.total).toBe(2);
-    expect(result.errors).toEqual([]);
   });
 
   it('index-generator：基建目录与 _index.md 一律不出现在索引行里', () => {

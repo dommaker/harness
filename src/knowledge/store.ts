@@ -24,14 +24,6 @@ const DEFAULT_DIR = '.harness/knowledge';
 const INDEX_FILE = 'index.json';
 const CONSUMPTION_STATS_FILE = '.consumption-stats.json';
 
-interface StoreConfig {
-  baseDir: string;
-}
-
-const DEFAULT_CONFIG: StoreConfig = {
-  baseDir: DEFAULT_DIR,
-};
-
 /**
  * KnowledgeStore interface — abstract contract for knowledge storage.
  */
@@ -81,8 +73,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
    */
   private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;
 
-  constructor(config?: Partial<StoreConfig>) {
-    this.baseDir = config?.baseDir || DEFAULT_CONFIG.baseDir;
+  constructor(config?: { baseDir?: string }) {
+    this.baseDir = config?.baseDir || DEFAULT_DIR;
     this.ensureDirectory();
   }
 

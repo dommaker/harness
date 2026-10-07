@@ -13,7 +13,6 @@ import type {
   CheckpointResult,
   CheckResult,
   CheckpointContext,
-  CheckType,
 } from '../../types/checkpoint';
 import {
   checkFileExists,
@@ -36,25 +35,6 @@ import { checkHttpStatus, checkHttpBody } from './check-handlers/http';
 export class CheckpointValidator {
   private static instance: CheckpointValidator;
 
-  /**
-   * 支持的检查类型列表
-   */
-  private static readonly SUPPORTED_CHECK_TYPES: CheckType[] = [
-    'file_exists',
-    'file_not_empty',
-    'file_contains',
-    'file_not_contains',
-    'command_success',
-    'command_output',
-    'output_contains',
-    'output_not_contains',
-    'output_matches',
-    'json_path',
-    'http_status',
-    'http_body',
-    'custom',
-  ];
-
   private constructor() {}
 
   static getInstance(): CheckpointValidator {
@@ -62,13 +42,6 @@ export class CheckpointValidator {
       CheckpointValidator.instance = new CheckpointValidator();
     }
     return CheckpointValidator.instance;
-  }
-
-  /**
-   * 获取支持的检查类型
-   */
-  getSupportedCheckTypes(): CheckType[] {
-    return [...CheckpointValidator.SUPPORTED_CHECK_TYPES];
   }
 
   /**

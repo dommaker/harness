@@ -14,14 +14,11 @@ export {
   ConstraintChecker,
   checkConstraint,
   checkConstraints,
-  checkBeforeExecution,
   constraintChecker,
   ConstraintViolationError,
   buildCheckEnv,
   normalizeCheckOutcome,
   formatEvidence,
-  contextFlag,
-  contextEvidenceFlag,
 } from './constraints';
 export type {
   CheckConstraintsOptions,
@@ -43,7 +40,6 @@ export type {
   EvidenceProviders,
   CheckInputNeeds,
   CheckEvidenceInput,
-  ContextEvidenceFlag,
 } from './constraints';
 
 // 验证器（检查点 / PassesGate / CSO）

@@ -10,11 +10,9 @@ import { tmpdir } from 'os';
 
 describe('CheckpointValidator', () => {
   let tempDir: string;
-  let validator: CheckpointValidator;
 
   beforeAll(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'temp-test-checkpoint-'));
-    validator = CheckpointValidator.getInstance();
     // 创建测试文件
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');
     writeFileSync(join(tempDir, 'empty.txt'), '');
@@ -27,18 +25,6 @@ describe('CheckpointValidator', () => {
     } catch {
       // ignore
     }
-  });
-
-  describe('getSupportedCheckTypes', () => {
-    it('应该返回支持的检查类型', () => {
-      const types = validator.getSupportedCheckTypes();
-      
-      expect(types.length).toBe(13);
-      expect(types).toContain('file_exists');
-      expect(types).toContain('file_contains');
-      expect(types).toContain('command_success');
-      expect(types).toContain('json_path');
-    });
   });
 
   describe('file_exists', () => {

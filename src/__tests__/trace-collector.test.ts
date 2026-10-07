@@ -171,49 +171,6 @@ describe('TraceCollector', () => {
     });
   });
 
-  describe('readRecent', () => {
-    it('应该返回最近 N 小时的 traces', () => {
-      const now = Date.now();
-      collector.record({
-        constraintId: 'old',
-        severity: 'error',
-        timestamp: now - 25 * 60 * 60 * 1000,  // 25 小时前
-        result: 'pass',
-      });
-      collector.record({
-        constraintId: 'recent',
-        severity: 'error',
-        timestamp: now - 1 * 60 * 60 * 1000,  // 1 小时前
-        result: 'pass',
-      });
-
-      const traces = collector.readRecent(24);
-      expect(traces.length).toBe(1);
-      expect(traces[0].constraintId).toBe('recent');
-    });
-  });
-
-  describe('readByConstraint', () => {
-    it('应该按约束 ID 过滤', () => {
-      collector.record({
-        constraintId: 'no_bypass',
-        severity: 'error',
-        timestamp: 1000,
-        result: 'pass',
-      });
-      collector.record({
-        constraintId: 'other_constraint',
-        severity: 'warning',
-        timestamp: 2000,
-        result: 'pass',
-      });
-
-      const traces = collector.readByConstraint('no_bypass');
-      expect(traces.length).toBe(1);
-      expect(traces[0].constraintId).toBe('no_bypass');
-    });
-  });
-
   describe('getStats', () => {
     it('应该返回统计信息', () => {
       collector.record({

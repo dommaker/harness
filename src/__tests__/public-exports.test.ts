@@ -57,18 +57,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'bootstrapHarnessSync',
   'buildCheckEnv',
   'buildConstraintsUsageReport',
-  'checkBeforeExecution',
   'checkConstraint',
   'checkConstraints',
   'classifyCommitFiles',
-  'classifyError',
   'collectConstraints',
   'collectProposalMaterial',
   'collectUsageByConstraint',
-  'contextEvidenceFlag',
-  'contextFlag',
-  'createErrorClassifier',
-  'createFailureRecorder',
   'createPassesGate',
   'diagnoseRetireCandidates',
   'disableConstraint',
@@ -80,7 +74,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'getConstraintsMeta',
   'getCriticalArtifacts',
   'getEffectiveConstraints',
-  'getFailureLevel',
   'listRetiredConstraints',
   'matchAnyGlob',
   'matchGlob',
@@ -95,7 +88,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'renderProposalMarkdown',
   'resolveGlobs',
   'retireConstraint',
-  'sanitizeExternalContent',
   'verifyContractPresence',
   'verifyPhaseFormat',
   'verifyReleaseArtifacts',
@@ -356,7 +348,7 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
 
   it('#199 保留面仍可经包根导入（防止删多：下游仓真实消费的三类 + spec 面相邻活类型）', () => {
     const liveCollector: import('../index').TraceCollectorConfig = {};
-    const liveAnalyzer: import('../index').TraceAnalyzerConfig = { summaryFile: 'x', periodMs: 1 };
+    const liveAnalyzer: import('../index').TraceAnalyzerConfig = { thresholds: { failRate: 0.5 } };
     const liveTrace: import('../index').ExecutionTrace = {
       constraintId: 'c',
       severity: 'error',
@@ -364,7 +356,7 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
       result: 'pass',
     };
     expect(liveCollector).toEqual({});
-    expect(liveAnalyzer.periodMs).toBe(1);
+    expect(liveAnalyzer.thresholds?.failRate).toBe(0.5);
     expect(liveTrace.result).toBe('pass');
   });
 

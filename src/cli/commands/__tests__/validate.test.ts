@@ -153,11 +153,11 @@ describe('validate command', () => {
       expect(printed).toHaveLength(1);
     });
 
-    it('应该在严格模式下退出', async () => {
+    it('检查点失败一律 fail（门控语义）', async () => {
       const mockCheckpoints = [
         { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
       ];
-      
+
       mockFs.readFile.mockResolvedValue('checkpoints content');
       mockYaml.load.mockReturnValue({ checkpoints: mockCheckpoints });
 
@@ -169,9 +169,9 @@ describe('validate command', () => {
       };
       (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
 
-      const result = await validate({ strict: true }, io);
+      const result = await validate({}, io);
 
-      // 工单 23 语义：--strict 与否都是 fail；退出码映射在 bin
+      // 工单 23 语义：检查点失败即 fail；退出码映射在 bin
       expect(result).toEqual({ kind: 'fail', reason: '1 个检查点未通过: test-1' });
     });
   });

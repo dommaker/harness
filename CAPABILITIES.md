@@ -29,10 +29,10 @@ buildConstraintsUsageReport：check 约束统计表（total/pass/fail/skip、fai
 TraceCollector, TraceAnalyzer
 
 ## Knowledge Infrastructure
-KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest (incl. external content sanitization), KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), SDDIndexGenerator (scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md), migrateKnowledgeEntries (AS-021 migration, 内部实现，CLI `knowledge migrate` 直引)
+KnowledgeStore, KnowledgeLinter, KnowledgeLifecycle (per-mode: rule/reference/context/signal), KnowledgeIngest, KnowledgeQuery (queryByMode, consume), KnowledgeAudit (6-dimension quality audit), KnowledgeIndexGenerator (single-file grep index, 76-96% output reduction), SDDIndexGenerator (scans docs/sdd/*/requirement.md, generates docs/sdd/_index.md)
 
 ## Agent Infrastructure
-AgentLifecycle (init→running→paused→completed→failed)
+AgentLifecycle (idle→running→completed/failed)
 
 ## Governance
 GovernanceExecutor (doc-code-config drift detection, detect-only)

@@ -14,7 +14,6 @@ export type {
   KnowledgeEntry,
   SourceRef,
   ExecutionResult,
-  KnowledgeReference,
   QueryBudget,
   QueryResult,
   QueryFilter,
@@ -23,7 +22,6 @@ export type {
   IngestOptions,
   MaturityChange,
   DecayConfig,
-  DecisionRecord,
   ReferenceRecord,
   IndexEntry,
   SnapshotSurvival,
@@ -36,7 +34,7 @@ export { KnowledgeQuery, EXTERNAL_SOURCE_MARKER } from './query';
 export { estimateTokens } from './token-estimate';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';
-export { KnowledgeIngest, sanitizeExternalContent } from './ingest';
+export { KnowledgeIngest } from './ingest';
 export { ReferenceTracker } from './reference-tracker';
 export { KnowledgeLinter } from './lint';
 export { ColdStartImporter } from './import';

@@ -18,8 +18,6 @@ export interface ValidateOptions {
   file?: string;
   /** 项目路径 */
   projectPath?: string;
-  /** 是否严格模式 */
-  strict?: boolean;
 }
 
 /**

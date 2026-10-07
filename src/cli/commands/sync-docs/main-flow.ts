@@ -51,8 +51,6 @@ export interface SyncDocsOptions {
   projectPath?: string;
   /** 只检查，不写入（CI 模式） */
   check?: boolean;
-  /** 是否生成 CHANGELOG 条目 */
-  changelog?: boolean;
   /** 输出 JSON 格式（供 LLM 消费） */
   json?: boolean;
   /** 同步 AGENTS.md（agent 导读）；PRESERVE 标记段在重新生成时原样保留 */

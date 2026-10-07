@@ -26,10 +26,8 @@ import type {
  * 默认配置
  */
 const DEFAULT_CONFIG: SpecValidatorConfig = {
-  enabled: true,
   schemaPath: './specs/schemas',
   files: ['ARCHITECTURE.md', 'specs/**/*.yml', 'specs/**/*.yaml'],
-  failureLevel: 'error',
 };
 
 /**
@@ -371,18 +369,6 @@ export class SpecValidator {
 /**
  * 便捷函数
  */
-export async function validateSpec(
-  filePath: string,
-  schemaPath?: string
-): Promise<SpecValidationResult> {
-  const validator = SpecValidator.getInstance();
-  if (schemaPath) {
-    const loadedSchema = await validator.loadSchema(schemaPath);
-    return validator.validateFile(filePath, loadedSchema ?? undefined);
-  }
-  return validator.validateFile(filePath);
-}
-
 export async function validateAllSpecs(
   projectPath?: string,
   staged?: boolean

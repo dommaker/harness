@@ -89,9 +89,12 @@ describe('SecurityGate 缺省扫描命令（#138 断链）', () => {
       expect(result.details?.scanCommand).toBe(DETECTED);
     });
 
-    it('构造器不再出现 scanCommand 的空串缺省', () => {
-      expect(new SecurityGate().getConfig().scanCommand).toBeUndefined();
-      expect(new SecurityGate({ scanCommand: '' }).getConfig().scanCommand).toBeUndefined();
+    it('构造器不再出现 scanCommand 的空串缺省', async () => {
+      // 空串归一为「未提供」：与无配置门禁走同一探测路径（行为钉，替代原 getConfig 形状钉）
+      const result = await new SecurityGate().scan({ projectPath });
+
+      expect(issued()).toEqual([DETECTED]);
+      expect(result.details?.scanCommand).toBe(DETECTED);
     });
   });
 });

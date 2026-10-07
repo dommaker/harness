@@ -1,5 +1,5 @@
 /**
- * checker.ts 补充测试（engine 流程面：findApplicable/beforeExecution/快捷函数/缓存契约）
+ * checker.ts 补充测试（engine 流程面：findApplicable/快捷函数/缓存契约）
  *
  * 单个检查器的判定测试不放这里——在 checkers/__tests__/ 旁测，测 evaluate(env) interface
  * （ADR-0009 / 架构评审候选4；全部 10 个已注册 checker 旁测就位）。
@@ -11,10 +11,8 @@ import {
   ConstraintChecker,
   checkConstraint,
   checkConstraints,
-  checkBeforeExecution,
 } from '../core/constraints/checker';
 import { buildCheckEnv } from '../core/constraints/checkers';
-import { contextEvidenceFlag } from '../core/constraints/checkers/types';
 import type { ConstraintContext } from '../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -93,56 +91,11 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
   });
 
-  describe('checkBeforeExecution', () => {
-    it('通过检查不应该抛出异常', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        projectPath: projectWithEvidence(),
-        changedFiles: [],
-        hasTest: true,
-        hasRequirement: true,
-        taskDescription: 'Test task — single focused change',
-        hasSingleTask: true,
-      };
-
-      // 不应该抛出异常
-      await expect(checkBeforeExecution(context)).resolves.not.toThrow();
-    });
-
-    it('违规应该抛出 ConstraintViolationError', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        projectPath: projectWithoutEvidence(),
-        hasTest: false,
-      };
-
-      await expect(checkBeforeExecution(context)).rejects.toThrow();
-    });
-
-    it('customConfig 应替换内置集（空配置不检查内置 error 级约束）', async () => {
-      const context: ConstraintContext = {
-        operation: 'code_implementation',
-        projectPath: projectWithoutEvidence(),
-        hasTest: false,
-      };
-
-      // 内置 error 级约束下违规抛错
-      await expect(checkBeforeExecution(context)).rejects.toThrow();
-
-      // 空 customConfig 替换内置集 → 不抛
-      await expect(
-        checkBeforeExecution(context, { constraints: {}, disabled: [] })
-      ).resolves.not.toThrow();
-    });
-  });
-
   describe('checkConstraints 完整流程', () => {
     it('应该返回完整的检查结果', async () => {
       const context: ConstraintContext = {
         operation: 'commit',
         projectPath: tempDir,
-        hasTest: true,
-        hasReuseCheck: true,
       };
 
       const result = await checkConstraints(context);
@@ -255,7 +208,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
         projectPath: projectWithoutEvidence(),
-        hasTest: false,
       };
 
       await expect(checkConstraints(context)).rejects.toThrow();
@@ -291,10 +243,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const applicable = checker.findApplicableConstraints(context, customConfig);
       expect(applicable.errors).toHaveLength(0);
       expect(applicable.warnings).toHaveLength(0);
-    });
-
-    it('beforeExecution 跳过非 gate 条目', async () => {
-      await expect(checkBeforeExecution(context, customConfig)).resolves.not.toThrow();
     });
 
     it('非 gate 条目漏到 check() 单条入口 → 抛错（编排层过滤缺失不静默）', async () => {
@@ -338,16 +286,6 @@ describe('buildCheckEnv - 证据接线契约', () => {
     expect(await env.stagedDiff()).toBe('diff-content');
     expect(await env.stagedDiffNames()).toBe('a.ts\nb.ts');
     expect(env.srcScan('src')).toEqual(['src/x.ts']);
-  });
-
-  it("'none' env 下 evidence flag 未接线的 checker 返回带原因的 skip（harness#182）", async () => {
-    // 「没接证据 → skip」由注释固化为可执行契约；原因进结果面
-    const check = contextEvidenceFlag('test-flag', 'hasFailingTest');
-    const env = buildCheckEnv(context, 'none');
-    expect(await check.evaluate(env)).toEqual({
-      skip: true,
-      reason: '证据标志 hasFailingTest 未接线',
-    });
   });
 
   it("'none' 变体：证据输入一律报不可得（输入契约的降级依据）", () => {

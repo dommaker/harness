@@ -24,22 +24,35 @@ describe('SecurityGate', () => {
   });
 
   describe('constructor', () => {
-    it('should use default config', () => {
-      const defaultGate = new SecurityGate();
-      const config = defaultGate.getConfig();
-      expect(config.severityThreshold).toBe('high');
-      expect(config.ignoreWarnings).toBe(false);
-      expect(config.ignoreDevDependencies).toBe(false);
+    it('should use default config', async () => {
+      // 缺省 severityThreshold='high'：moderate 漏洞默认放行
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        callback(
+          { stdout: JSON.stringify({ vulnerabilities: { pkg: { severity: 'moderate' } } }) },
+          null
+        );
+      });
+
+      const result = await gate.scan(baseContext);
+      expect(result.passed).toBe(true);
     });
 
-    it('should accept custom config', () => {
+    it('should accept custom config', async () => {
       const customGate = new SecurityGate({
         severityThreshold: 'critical',
         ignoreWarnings: true,
       });
-      const config = customGate.getConfig();
-      expect(config.severityThreshold).toBe('critical');
-      expect(config.ignoreWarnings).toBe(true);
+
+      // critical 阈值下 high 漏洞放行
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        callback(
+          { stdout: JSON.stringify({ vulnerabilities: { pkg: { severity: 'high' } } }) },
+          null
+        );
+      });
+
+      const result = await customGate.scan(baseContext);
+      expect(result.passed).toBe(true);
     });
   });
 
@@ -245,38 +258,6 @@ describe('SecurityGate', () => {
 
       expect(result.passed).toBe(false);
       expect(result.message).toContain('安全扫描失败');
-    });
-  });
-
-  describe('setSeverityThreshold()', () => {
-    it('should update threshold', () => {
-      gate.setSeverityThreshold('moderate');
-      const config = gate.getConfig();
-      expect(config.severityThreshold).toBe('moderate');
-    });
-
-    it('should affect scan result', async () => {
-      gate.setSeverityThreshold('moderate');
-
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(
-          { stdout: JSON.stringify({ vulnerabilities: { pkg: { severity: 'moderate' } } }) },
-          null
-        );
-      });
-
-      const result = await gate.scan(baseContext);
-
-      expect(result.passed).toBe(false);
-    });
-  });
-
-  describe('getConfig()', () => {
-    it('should return copy of config', () => {
-      const config1 = gate.getConfig();
-      const config2 = gate.getConfig();
-      expect(config1).toEqual(config2);
-      expect(config1).not.toBe(config2); // Different objects
     });
   });
 

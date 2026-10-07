@@ -200,10 +200,11 @@ describe('no_completion_without_verification（harness#183 证据源重构）', 
     expect(result.satisfied).toBe(true);
   });
 
-  it('flag 退役：不再声明 contextFlags 输入契约（证据判定在 checker 体内）', () => {
+  it('flag 退役：不声明任何上下文证据标志输入契约（证据判定在 checker 体内）', () => {
     const check = getConstraintCheck('no_completion_without_verification');
     expect(check).toBeDefined();
-    expect(check!.needs?.contextFlags ?? []).not.toContain('hasVerificationEvidence');
+    // contextFlags 契约面已整体删除；checker 只声明 git 证据需求
+    expect(check!.needs?.evidence ?? []).toEqual([]);
   });
 
   it('端到端：PassesGate 真跑验证命令 → 证据落盘 → checker pass', async () => {

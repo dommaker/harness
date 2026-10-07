@@ -234,18 +234,4 @@ export class SecurityGate implements Gate {
         return analysis.total === 0;
     }
   }
-
-  /**
-   * 设置严重程度阈值
-   */
-  setSeverityThreshold(threshold: 'low' | 'moderate' | 'high' | 'critical'): void {
-    this.config.severityThreshold = threshold;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): SecurityGateConfig {
-    return { ...this.config };
-  }
 }

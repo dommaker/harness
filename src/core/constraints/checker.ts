@@ -330,35 +330,6 @@ export class ConstraintChecker {
     return result;
   }
 
-  /**
-   * 执行前检查（仅检查 severity='error' 的约束）
-   *
-   * @param context 约束上下文
-   * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
-   * @param evidence 可选，本次检查共用的 git 证据 adapter（#87，同 checkConstraints）
-   * @throws ConstraintViolationError 如果有 error 级违规
-   */
-  async beforeExecution(
-    context: ConstraintContext,
-    customConfig?: MergedConstraintsConfig | null,
-    evidence?: GitEvidence
-  ): Promise<void> {
-    const projectPath = context.projectPath || process.cwd();
-    const run = evidence ?? createGitEvidence(projectPath);
-    // 独立 run 入口（ADR-0023）：本函数内所有 checker 共用一枚观察面
-    const env = createRunEnv(projectPath);
-    const constraints = this.getConstraints(customConfig);
-    const operations = [context.operation, ...(context.extraTriggers ?? [])];
-
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error' && isGateConstraint(c))) {
-      if (!matchesTrigger(constraint, operations)) continue;
-
-      const result = await this.check(constraint, context, run, env);
-      if (!result.satisfied) {
-        throw new ConstraintViolationError(result);
-      }
-    }
-  }
 }
 
 // ========================================
@@ -439,19 +410,6 @@ export async function collectConstraints(
     for (const r of result.warnings) options.onTrace(r);
   }
   return result;
-}
-
-/**
- * 快捷函数：执行前检查
- *
- * @param context 约束上下文
- * @param customConfig 可选，per-request 自定义配置
- */
-export async function checkBeforeExecution(
-  context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
-): Promise<void> {
-  return ConstraintChecker.getInstance().beforeExecution(context, customConfig);
 }
 
 // 导出单例（未接线记录器：只评估约束，不写 trace；写 trace 由组合根自行 new）

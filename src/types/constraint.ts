@@ -20,11 +20,6 @@
 export type ConstraintId = string;
 
 /**
- * 约束类别（ADR-0029 收窄为单值）：check = 可执行检查
- */
-export type ConstraintKind = 'check';
-
-/**
  * 约束严重性（显式字段，取代三层 level 命名）
  */
 export type ConstraintSeverity = 'error' | 'warning' | 'info';
@@ -63,12 +58,6 @@ export type ConstraintSource = 'builtin' | 'app';
 export interface Constraint {
   /** 约束 ID */
   id: ConstraintId;
-
-  /**
-   * 约束类别（ADR-0029）：恒为 'check'；
-   * 纯文本提示（kind='prompt'）已随文本注入层一并关停
-   */
-  kind: ConstraintKind;
 
   /**
    * 约束通道（ADR-0035）：缺省 'gate'

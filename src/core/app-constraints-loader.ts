@@ -127,7 +127,6 @@ function toConstraint(raw: unknown, index: number, rel: string): Constraint {
 
   return {
     id,
-    kind: 'check',
     channel: channel as ConstraintChannel,
     rule,
     message: asString(entry.message) ?? rule,

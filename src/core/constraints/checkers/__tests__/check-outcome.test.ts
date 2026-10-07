@@ -22,7 +22,6 @@ import type { MergedConstraintsConfig } from '../../../../types/project-config';
 
 const CAPABILITY_SYNC: Constraint = {
   id: 'capability_sync',
-  kind: 'check',
   severity: 'warning',
   rule: 'CODE CHANGES MUST UPDATE CAPABILITIES.MD',
   message: '核心模块变更必须同步功能清单',

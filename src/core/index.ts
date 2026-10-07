@@ -23,7 +23,6 @@ export {
 export type {
   CheckConstraintsOptions,
   ConstraintId,
-  ConstraintKind,
   ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,

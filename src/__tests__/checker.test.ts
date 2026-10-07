@@ -50,12 +50,12 @@ describe('ConstraintChecker', () => {
       };
 
       const resultWithEvidence = await checker.check(
-        { id: 'no_completion_without_verification', kind: 'check', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'no_completion_without_verification', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithEvidence
       );
 
       const resultWithoutEvidence = await checker.check(
-        { id: 'no_completion_without_verification', kind: 'check', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'no_completion_without_verification', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutEvidence
       );
 
@@ -80,7 +80,7 @@ describe('ConstraintChecker', () => {
       fs.writeFileSync(capabilitiesPath, '# Capabilities\n');
 
       const result = await checker.check(
-        { id: 'capability_sync', kind: 'check', severity: 'warning', rule: 'CAPABILITY SYNC', message: 'test', trigger: 'commit', enforcement: 'test' },
+        { id: 'capability_sync', severity: 'warning', rule: 'CAPABILITY SYNC', message: 'test', trigger: 'commit', enforcement: 'test' },
         context
       );
 

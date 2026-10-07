@@ -64,7 +64,6 @@ jest.mock('chalk', () => ({
 
 function fakeConstraint(id: string, severity: 'error' | 'warning') {
   return {
-    kind: 'check' as const,
     id,
     rule: 'test',
     message: `msg-${id}`,

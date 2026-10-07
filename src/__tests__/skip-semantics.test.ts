@@ -31,7 +31,7 @@ function makeConstraint(
   severity: 'error' | 'warning',
   trigger: string = 'commit'
 ): Constraint {
-  return { id, kind: 'check', severity, rule: 'TEST', message: 'test', trigger, enforcement: 'test' };
+  return { id, severity, rule: 'TEST', message: 'test', trigger, enforcement: 'test' };
 }
 
 describe('skip 三态语义（ADR-0001）', () => {

@@ -22,7 +22,6 @@ import type { ExecutionTrace } from '../../../../types/trace';
 
 const NO_TEST_SIMPLIFICATION: Constraint = {
   id: 'no_test_simplification',
-  kind: 'check',
   severity: 'error',
   rule: 'DO NOT DELETE TESTS',
   message: '禁止简化测试绕过困难',

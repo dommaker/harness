@@ -1,44 +1,9 @@
 /**
  * 上下文管理类型定义
  *
- * Token 预算 + 会话压缩 + 会话管理 + 知识注入
+ * 会话管理（压缩词汇类型 Compaction 系 / ContextSource / SessionMessage 与注入编排
+ * 同为零消费面，已随 ADR-0040 Phase 4 连本体删除）
  */
-
-// ========================================
-// 会话压缩
-// ========================================
-
-export type CompactionLevel = 'eviction' | 'summary' | 'checkpoint';
-
-export interface CompactionConfig {
-  triggerRatio: number;            // 默认 0.8
-  level: CompactionLevel;
-  preserveToolCallPairs: boolean;  // 默认 true
-  structuredSummary: boolean;      // 默认 true
-  maxSummaryTokens: number;        // 默认 2000
-  fallbackStrategy: 'truncate-middle' | 'head-drop' | 'retry-with-clamp';
-}
-
-export interface SessionMessage {
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  toolCallId?: string;
-  timestamp: string;
-}
-
-// ========================================
-// 上下文来源
-// ========================================
-
-export type ContextSourceType = 'session_event' | 'tool_output' | 'knowledge' | 'user_message' | 'system_prompt' | 'tool_definition';
-
-export interface ContextSource {
-  type: ContextSourceType;
-  id: string;
-  content: string;
-  priority: number;  // P1-P6
-  metadata?: Record<string, unknown>;
-}
 
 // ========================================
 // Session Manager

@@ -68,7 +68,7 @@ export const TEMPLATES = new Map<string, TemplatedCheckerFactory>([
 // 注册表闭环校验（加载期）
 // ========================================
 
-const checkConstraints = getAllConstraints().filter(c => c.kind === 'check' && isGateConstraint(c));
+const checkConstraints = getAllConstraints().filter(isGateConstraint);
 
 for (const c of checkConstraints) {
   if (!registry.has(c.id)) {

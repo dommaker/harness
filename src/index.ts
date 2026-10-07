@@ -28,7 +28,6 @@ export {
 export type {
   Constraint,
   ConstraintId,
-  ConstraintKind,
   ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
@@ -231,15 +230,10 @@ export {
   SessionManager,
 } from './context';
 export type {
-  CompactionConfig,
-  CompactionLevel,
-  ContextSource,
-  ContextSourceType,
   SessionCheckpoint,
   SessionEvent,
   SessionEventType,
   SessionHandle,
-  SessionMessage,
 } from './context';
 
 // ========================================

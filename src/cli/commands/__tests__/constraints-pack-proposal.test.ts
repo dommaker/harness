@@ -92,7 +92,6 @@ describe('constraintsPackProposal', () => {
     const root = '/home/someone/my-app';
     const constraint: Constraint = {
       id: 'app_x',
-      kind: 'check',
       rule: '不得引用 /home/someone/my-app/secrets 下的文件',
       message: 'm',
       severity: 'warning',

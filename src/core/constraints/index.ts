@@ -40,7 +40,6 @@ export type {
 // 类型导出
 export type {
   ConstraintId,
-  ConstraintKind,
   ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,

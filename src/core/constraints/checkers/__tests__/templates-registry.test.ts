@@ -29,7 +29,6 @@ const fakeFactory: TemplatedCheckerFactory = {
 function appConstraint(overrides: Partial<Constraint> = {}): Constraint {
   return {
     id: 'app_fake',
-    kind: 'check',
     rule: 'r',
     message: 'm',
     severity: 'warning',
@@ -55,7 +54,6 @@ describe('getConstraintCheck 两层分发', () => {
   it('内置约束对象按 id 查找（source 缺省 = builtin）', () => {
     const builtin: Constraint = {
       id: 'capability_sync',
-      kind: 'check',
       rule: 'r',
       message: 'm',
       severity: 'warning',

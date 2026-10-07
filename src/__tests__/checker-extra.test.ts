@@ -127,7 +127,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
         constraints: {
           no_completion_without_verification: {
             id: 'no_completion_without_verification',
-            kind: 'check' as const,
             severity: 'error' as const,
             rule: 'TEST',
             message: 'test',
@@ -159,7 +158,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
       const result = await checker.check(
         {
           id: 'no_completion_without_verification',
-          kind: 'check',
           severity: 'error',
           rule: 'TEST',
           message: 'test',
@@ -213,7 +211,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
   describe('channel 通道分发过滤（ADR-0035）', () => {
     const disciplineEntry = {
       id: 'app_discipline_rule',
-      kind: 'check' as const,
       channel: 'discipline' as const,
       severity: 'error' as const,
       rule: 'DISCIPLINE RECORD',
@@ -248,7 +245,6 @@ describe('ConstraintChecker - 补充覆盖', () => {
     it('channel: gate 且无 checker 的条目依旧当场抛错（闭环不松绑）', async () => {
       const gateNoChecker = {
         id: 'no_such_builtin_constraint',
-        kind: 'check' as const,
         channel: 'gate' as const,
         severity: 'error' as const,
         rule: 'GATE WITHOUT CHECKER',

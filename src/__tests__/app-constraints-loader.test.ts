@@ -6,7 +6,7 @@
  *   id 与内置冲突 / 未知模板 / validateParams 失败 / trigger 形状 / channel 枚举）
  * - channel 通道（ADR-0035）：缺省 gate；非 gate（discipline/workflow）允许无 checker，
  *   填写了仍按模板校验；gate 无 checker 依旧抛错（闭环不松绑）
- * - 实例化缺省（source='app'、kind='check'、channel='gate'、trigger 缺省全操作集、message 回落 rule）
+ * - 实例化缺省（source='app'、channel='gate'、trigger 缺省全操作集、message 回落 rule）
  * - memo 口径与 RunEnv.rawConfig 同形（同一观察面至多读一次；路径入参每次读当下内容）
  * - 合并链（mergeConstraints / getEffectiveConstraints）：应用层并入 +
  *   config.yml enabled:false / retired 墓碑对应用层 id 同口径生效 + 不进 unknownIds
@@ -68,7 +68,7 @@ describe('loadAppConstraints 校验分支', () => {
     expect(loadAppConstraints(fixture())).toEqual([]);
   });
 
-  it('合法条目 → Constraint（source=app，kind=check，channel 缺省 gate，缺省 trigger=全操作集，message 回落 rule）', () => {
+  it('合法条目 → Constraint（source=app，channel 缺省 gate，缺省 trigger=全操作集，message 回落 rule）', () => {
     registerFake();
     const constraints = loadAppConstraints(fixture(VALID));
 
@@ -76,7 +76,6 @@ describe('loadAppConstraints 校验分支', () => {
     const c = constraints[0];
     expect(c).toMatchObject({
       id: 'app_no_internal_url',
-      kind: 'check',
       channel: 'gate',
       rule: 'Web code must not contain internal URLs',
       severity: 'warning',

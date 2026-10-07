@@ -37,7 +37,7 @@ export type { ConsumptionEvent } from './lifecycle';
 export { KnowledgeIngest } from './ingest';
 export { ReferenceTracker } from './reference-tracker';
 export { KnowledgeLinter } from './lint';
-export { ColdStartImporter } from './import';
+export { ColdStartImporter } from './cold-start';
 export { KnowledgeHealthScorer } from './doctor';
 export { KnowledgeAudit } from './audit';
 export type { AuditRuleName, AuditAction, AuditIssue } from './audit-rules';

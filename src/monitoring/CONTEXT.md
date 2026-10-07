@@ -10,7 +10,7 @@
 
 ## 依赖关系
 - 依赖 `src/types/trace` ExecutionTrace 类型、`src/utils/`（jsonl 等）；对 `src/context/` 零依赖
-- 消费者：`src/cli/commands/{check,report}` 与 `src/hooks/bootstrap`——组合根**锚根构造**收集器 `new TraceCollector({ projectPath })` 并注入 `ConstraintChecker` 构造参数（harness#88 接线，#139 收根）；`status` 按 projectPath 直读读链正本后**直调模块级纯函数**，不构造 collector/类壳（ADR-0020：collector 构造函数的 mkdir 副作用就此退出该路径）
+- 消费者：`src/cli/commands/{check,report}` 与 `src/bootstrap/bootstrap`——组合根**锚根构造**收集器 `new TraceCollector({ projectPath })` 并注入 `ConstraintChecker` 构造参数（harness#88 接线，#139 收根）；`status` 按 projectPath 直读读链正本后**直调模块级纯函数**，不构造 collector/类壳（ADR-0020：collector 构造函数的 mkdir 副作用就此退出该路径）
 - core 不再依赖本模块（方向由 eslint no-restricted-imports 锁死，`src/__tests__/layering.test.ts` 守卫）
 
 ## 约定

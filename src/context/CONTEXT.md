@@ -8,7 +8,7 @@
 
 ## 依赖关系
 - 依赖 `src/utils/`（jsonl）
-- 仓内消费方：`src/index.ts` 的公共导出 re-export（`./context` 子路径面）+ `src/hooks/bootstrap.ts` 直引并构造 `SessionManager`（hook 单例生命周期）
+- 仓内消费方：`src/index.ts` 的公共导出 re-export（`./context` 子路径面）+ `src/bootstrap/bootstrap.ts` 直引并构造 `SessionManager`
 
 ## 约定
 - 知识注入不属本目录：`KnowledgeInjector`（含 `InjectionConfig`/`InjectionResult`）是消费编排，按 repositioning 定位裁决归下游编排消费方（唯一消费方），harness 侧已删除；外部来源标记标准正本保留在 `knowledge/query.ts` 的 `EXTERNAL_SOURCE_MARKER`（包根公开导出，供消费方格式化时对齐）

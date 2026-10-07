@@ -17,7 +17,7 @@
 - 所有模式支持 `decayAt` 硬过期
 
 ## 核心导出
-- `KnowledgeStore`（类型面）/ `FileKnowledgeStore`（`store.ts`，barrel 与包根交出的**值**符号——store 的文件系统实现，构造收 `{ baseDir }`；仓内构造点一处：`cli/commands/knowledge-view.ts` 的 `openKnowledgeStore()`（knowledge 各子命令的统一取数口；退役沉淀与 ADR-0032 复活写口也经同一解析点注入，不另起构造，harness#177）
+- `KnowledgeStore`（类型面）/ `FileKnowledgeStore`（`store.ts`，barrel 与包根交出的**值**符号——store 的文件系统实现，构造收 `{ baseDir }`；仓内构造点一处：`cli/commands/knowledge/store-access.ts` 的 `openKnowledgeStore()`（knowledge 各子命令的统一取数口；退役沉淀与 ADR-0032 复活写口也经同一解析点注入，不另起构造，harness#177）
 <!-- sync-docs:construction-sites FileKnowledgeStore = 1 -->）— 知识条目 CRUD + 结构化存储；`saveAll()` 全量批量写入（循环内只更新内存索引、结束一次 writeIndex，harness#107）、`applyAll()` 按 id 部分更新的批量出口（`update(id, partial)` 的批量形，语义含未知 id 逐条跳过与空批零读写，harness#134）、`getConsumptionStats()` 读 `.consumption-stats.json` 的当日消费计数（打分核心唯一的消费统计取数口，harness#134）。**写入闸（E1 复盘修正 M1）**：save/saveAll/applyAll 落盘前校验 maturity/layer 枚举（update 经 save 继承），未声明值拒写抛错不静默降级；值域正本 = `types.ts` 的 `MATURITY_LEVELS`/`STORAGE_LAYERS` 常量（不进 barrel）。批量路径先整批预校验再落盘（任一脏值全批拒写）；applyAll 批内同 id 多条按序累积合并语义不变
 - `KnowledgeQuery` — 语义搜索 + 类型/标签过滤 + `queryByMode()` + `consume(taskContext)`；`query()` 是 budget 截断管线（仅用于 prompt 注入），`search()` 是全语料文本搜索（先匹配→排序→limit，交互搜索专用，勿用 query() 代替）；`estimateTokens()` 委托 `token-estimate.ts` 正本（harness#197 合一、本票把尺子提出为可直调函数），方法名与语义不变
 - `EXTERNAL_SOURCE_MARKER`（`query.ts`，barrel 与包根交出）— 外部来源条目的 prompt 标记标准唯一正本（harness#161 三层防御第二层）：`KnowledgeQuery.formatForPrompt()` 与下游编排消费方的注入格式化共用同一常量，仓内不允许第二份字面量
@@ -41,7 +41,7 @@
 
 ## 约定
 - 知识条目文件的 frontmatter 语法只由 `src/utils/frontmatter` 定义（harness#89）：缺头/空 meta = `absent`（合法输入，按非条目静默处理、不上报——harness#161 对齐 #89 裁决 2）；未闭合/YAML 非法 = `malformed`（必须显式上报后按消费方语义恢复——store 与 index-generator 打一行 stderr 后跳过或走 best-effort），禁止静默丢条目；canonical 字段序是 `store.toFrontmatter` 的私有策略，`join` 只管包裹格式
-- **知识树的排除口径只有一个正本 `tree-walker`**（harness#134）：`_index.md`（索引生成物）、`.snapshots`、`.archive` / `archived`、`resolutions` 是树基建、不是条目人口。store 的顶层扫描、index-generator 的递归扫描两处都走它；新增 walker 禁止另立排除清单。统一的是**排除口径**不是遍历深度（store 顶层、index-generator 递归）。例外须原地记名理由：`import.ts` 的 docs 扫描吃的是**项目文档树**，本口径在它那里没有对应物
+- **知识树的排除口径只有一个正本 `tree-walker`**（harness#134）：`_index.md`（索引生成物）、`.snapshots`、`.archive` / `archived`、`resolutions` 是树基建、不是条目人口。store 的顶层扫描、index-generator 的递归扫描两处都走它；新增 walker 禁止另立排除清单。统一的是**排除口径**不是遍历深度（store 顶层、index-generator 递归）。例外须原地记名理由：`cold-start.ts` 的 docs 扫描吃的是**项目文档树**，本口径在它那里没有对应物
 - **循环内禁止逐条 `store.update()`**（harness#134）：`update()` 的形状是 get→save、`save()` 每次全量重写 index.json，N 条修复 = N 次全量重写。批量形是 `applyAll(id → partial)`；一次 `audit --fix`、一轮 `runDecayCycle()`、一次 `updateReferencedBy()` 各只重写一次索引，计数闸见 `audit-write-count.test.ts` 与 `lifecycle.test.ts` / `reference-tracker.test.ts` 的 stringify 计数项
 - **写入闸不管读**（E1 复盘修正 M1）：枚举校验只在 save/saveAll/applyAll/update 落盘前执行，读取（parseFile）不校验——盘上脏条目可读可列，但任一写入路径触及即抛错（含「只改其他字段」的部分更新），先修脏值再写；绕过本 store 直写文件的外部写入方不受闸约束
 - **审计判定脱离文件系统可测**（harness#134）：规则表与 D1–D7 打分住 `audit-rules.ts` / `audit-scoring.ts` / `audit-dimensions.ts` 三块的纯模块组（Phase 3 拆分），零 fs（源形状闸钉在 `audit-scoring.test.ts`，扫整组）；引擎 `audit.ts` 只做 store 装配，环境数据经 `store.getConsumptionStats()` / `getSurvivalRate()` 取好喂入

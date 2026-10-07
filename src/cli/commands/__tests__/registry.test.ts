@@ -314,6 +314,8 @@ smoke('bin/harness.js 端到端（dist 存在时）', () => {
       // Phase 3 拆分后子命令实现是 knowledge/ 目录下的一文件一子命令
       expect.stringContaining('/dist/cli/commands/knowledge-view.js'),
       expect.stringContaining('/dist/cli/commands/knowledge/list.js'),
+      // store 构造单点（store-access）随 knowledge-view 的 re-export 一并懒加载（ADR-0040 Phase 3 拆出）
+      expect.stringContaining('/dist/cli/commands/knowledge/store-access.js'),
     ]);
   });
 

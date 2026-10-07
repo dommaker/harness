@@ -30,11 +30,11 @@
 - 对 `cli/`、`gates/`、`monitoring/` **零值导入**（type-only 允许）：方向由 eslint.config.mjs 的 `@typescript-eslint/no-restricted-imports`（error 级）锁死，守卫测试见 `src/__tests__/layering.test.ts`（harness#88；harness#137 起该守卫已参数化成「每个顶层单元声明允许的下行集合」，core 的这条边只是其中一个条目）
 
 ## 约定
-- 约束定义在 `constraints/definitions/{iron-laws,guidelines}.ts`（按 severity 分组），不在运行时代码中定义
+- 约束定义在 `constraints/definitions/{errors,warnings}.ts`（按 severity 分组），不在运行时代码中定义
 - channel 三值通道（ADR-0035）：gate（缺省，硬门禁）必须带真实 checker（注册表闭环收窄后的口径，引用未注册 checker 构建报错）；workflow/discipline 无 checker，不进入检查分发（编排层过滤唯一口径 = `isGateConstraint`），harness 不渲染不注入
 - severity='error' 违规必须 throw ConstraintViolationError
 - 上行数据一律注入，不在 core 内 require 上层（harness#88）：trace 记录器经 `ConstraintChecker` 构造参数注入（缺省 no-op，`getInstance()`/`constraintChecker` 即未接线的默认实例，只评估不写 trace），真实收集器由组合根接线（CLI check/report、`bootstrapHarness`）；CAPABILITIES.md 能力清单计数经 `capabilities-parser` 的 `CapabilityDefinitionSource` 由 cli 侧注入定义表；`constraint-lifecycle` 的知识沉淀写口同形——`options.openKnowledgeStore` 工厂注入（缺省不写沉淀），CLI retire/reactivate 命令接线
-- git **取证**（读判定证据）在 check 链路内只能经 `constraints/git-evidence.ts` 的 adapter 取（#87，适用范围按 ADR-0021 收窄为「check 链路唯一」，不再声称全仓唯一）：`context-builder` / `checker` / `CheckEnv` / `validators` 这条判定链内不得出现 `execSync`/`execAsync`/`execFileAsync` 跑 git；`spec/validator` 的 staged 文件列表与 `changedFileNames(staged:true)` 同型，已收口（就地 `createGitEvidence(cwd)`，测试注入 runner）；一次 run 一份实例、沿调用链显式传递（CLI check → buildConstraintContext → checkConstraints），memo 既不做成模块级全局也不做成单例字段。**链外站点记名豁免**（语义异质：不要 memo、不要 once 语义、失败处理各异，硬并入会造出宽 interface）——`cli/commands/release.ts`（发布流程编排，非判定证据）、`gates/review.ts` 与 `cli/commands/review.ts`（PR 审查流，gh/日志语义）、`knowledge/import.ts`（导入启发式，失败记 ImportError 降级）。豁免清单外新增 git 站点先回答「在不在判定链内」；`validators/passes-gate.ts` 的 `git diff --name-only` 站点已随 ADR-0022 删 `checkTestFileChanges` 消失，判定链内当下无站外 git 调用点
+- git **取证**（读判定证据）在 check 链路内只能经 `constraints/git-evidence.ts` 的 adapter 取（#87，适用范围按 ADR-0021 收窄为「check 链路唯一」，不再声称全仓唯一）：`context-builder` / `checker` / `CheckEnv` / `validators` 这条判定链内不得出现 `execSync`/`execAsync`/`execFileAsync` 跑 git；`spec/validator` 的 staged 文件列表与 `changedFileNames(staged:true)` 同型，已收口（就地 `createGitEvidence(cwd)`，测试注入 runner）；一次 run 一份实例、沿调用链显式传递（CLI check → buildConstraintContext → checkConstraints），memo 既不做成模块级全局也不做成单例字段。**链外站点记名豁免**（语义异质：不要 memo、不要 once 语义、失败处理各异，硬并入会造出宽 interface）——`cli/commands/release.ts`（发布流程编排，非判定证据）、`gates/review.ts` 与 `cli/commands/review.ts`（PR 审查流，gh/日志语义）、`knowledge/cold-start.ts`（导入启发式，失败记 ImportError 降级）。豁免清单外新增 git 站点先回答「在不在判定链内」；`validators/passes-gate.ts` 的 `git diff --name-only` 站点已随 ADR-0022 删 `checkTestFileChanges` 消失，判定链内当下无站外 git 调用点
 
 ## 注意事项
 - 零 Token 成本：所有分析纯文件操作，无 LLM 调用

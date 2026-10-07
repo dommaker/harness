@@ -6,7 +6,7 @@
  * 统一在 knowledge-view.ts（harness#133，架构评审候选4）。
  */
 
-import { ColdStartImporter } from '../../../knowledge/import';
+import { ColdStartImporter } from '../../../knowledge/cold-start';
 import { processIO, type CommandIO, type CommandResult } from '../../command-contract';
 import {
   announce,

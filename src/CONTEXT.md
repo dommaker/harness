@@ -21,7 +21,7 @@
 | cli/commands/ | 20 个顶层命令（COMMAND_DEFINITIONS 14 + GATE_DEFINITIONS 6）+ constraints 治理子命令 |
 | agents/ | Agent 生命周期状态机（7 状态） |
 | completion-checkers/ | 提交集收尾软观测三纯判定（tdd-chain / phase-format / contract-presence） |
-| hooks/ | harness 运行时 bootstrap 组合根（bootstrapHarness） |
+| bootstrap/ | harness 运行时 bootstrap 组合根（bootstrapHarness；原 hooks/，ADR-0040 Phase 3 正名） |
 | knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Linter、Reference Tracker |
 | presets/ | 预设纯数据（strict/standard/relaxed） |
 | release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
@@ -41,7 +41,7 @@
 
 | 术语 | 定义 |
 |------|------|
-| 插件 | harness 扩展点统称 = checker / 门禁(Gate) / 命令(CLI)；非运行时插件容器——harness 是文件驱动 CLI、无常驻进程。hook 一族已退出扩展点统称（ADR-0027/#170 删 hooks 管线面，`src/hooks/` 只剩 bootstrap 组合根） |
+| 插件 | harness 扩展点统称 = checker / 门禁(Gate) / 命令(CLI)；非运行时插件容器——harness 是文件驱动 CLI、无常驻进程。hook 一族已退出扩展点统称（ADR-0027/#170 删 hooks 管线面，组合根目录后正名 `src/bootstrap/`） |
 | Gate（门禁） | 统一守卫接口 `Gate{id, order, evaluate(ctx)}` → `GateDecision`；统一的是决策协议（id/order/三态），执行细节私有 |
 | GateDecision | 三态决策 `deny \| abstain \| ask`；deny 单调（下游不可改回 allow）、ask 枚举预留 fail-closed = deny |
 | GateResult | 报告结构（gate/passed/message/details/timestamp/duration），保留为报告层，不作决策 |
@@ -59,6 +59,6 @@
 ## 注意事项
 - 公共包，禁止硬编码业务路径
 - 错误处理口径（吞错治理 Phase 2）：默认 fail-fast——异常要么抛出，要么经 `utils/attempt` 显式降级并在调用点注明理由；存在性探测用 `existsSync` 而非 try/catch；`catch {}` 空吞由 eslint `no-empty`（无 allowEmptyCatch）直接拦
-- 约束定义在 `core/constraints/definitions/{iron-laws,guidelines}.ts`（按 severity 分组），不应在运行时代码中定义
+- 约束定义在 `core/constraints/definitions/{errors,warnings}.ts`（按 severity 分组），不应在运行时代码中定义
 - `bin/` 只有 CLI 入口发布到 npm
 - `__tests__` 的文件系统夹具根一律经 `fs.mkdtempSync` 取每轮唯一目录（缺省父目录 = tmpdir；被测语义本身是 cwd 相对解析的，才显式 opt-out 留在 cwd），固定名会在并发/被 kill 的运行之间互删或被复用成脏夹具；闸 = `__tests__/test-fixture-hygiene.test.ts`（harness#145）

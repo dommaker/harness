@@ -23,8 +23,7 @@ import {
   type ReactivateExecuteOptions,
   type ReactivateResult,
 } from '../../core/constraint-lifecycle';
-import { openKnowledgeStore } from './knowledge-view';
-import { logCommitHint } from './constraints-retire';
+import { logCommitHint, wireKnowledgeSink } from './constraints-retire';
 
 export type {
   ReactivateExecuteOptions,
@@ -50,19 +49,14 @@ export interface ReactivateCliOptions extends ReactivateExecuteOptions {
 
 /**
  * CLI 侧 wired 包装：core reactivateConstraint + 知识沉淀写口接线
- * （openKnowledgeStore 同一解析点，与 retire 写口同根，harness#177）。
+ * （接线共形 = constraints-retire 的 wireKnowledgeSink）。
  */
 export function reactivateConstraint(
   projectRoot: string,
   id: string,
   options: ReactivateCliOptions = {}
 ): ReactivateResult {
-  const { io, ...coreOptions } = options;
-  return coreReactivateConstraint(projectRoot, id, {
-    ...coreOptions,
-    openKnowledgeStore:
-      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, io ?? processIO)),
-  });
+  return coreReactivateConstraint(projectRoot, id, wireKnowledgeSink(options));
 }
 
 /**

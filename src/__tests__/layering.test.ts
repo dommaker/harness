@@ -75,7 +75,7 @@ const DOWNSTREAM: Record<string, string[]> = {
   context: ['knowledge', 'monitoring', 'types', 'utils'],
   // bootstrapHarness 是本包组合根（装配 checker / SessionManager / TraceCollector），
   // monitoring 对它是下行而非债
-  hooks: ['context', 'core', 'monitoring', 'types', 'utils'],
+  bootstrap: ['context', 'core', 'monitoring', 'types', 'utils'],
 
   // ── 测试夹具：被各目录的测试依赖，故排在它们之下 ──
   'test-setup': ['types', 'utils'],
@@ -84,7 +84,7 @@ const DOWNSTREAM: Record<string, string[]> = {
   cli: [ANY], // CLI 是唯一的上层，per-command 懒加载各命令实现
   'index.ts': [ANY], // 包根 barrel（ADR-0003 显式清单）
   // 钩子入口：PreToolUse 决策取 CommandGate；P1-7（ADR-0031）命中留痕经
-  // TraceCollector 写 traces——与 hooks 组合根 → monitoring 同方向，是下行不是债
+  // TraceCollector 写 traces——与 bootstrap 组合根 → monitoring 同方向，是下行不是债
   'pretool-use-hook.ts': ['gates', 'monitoring', 'types', 'utils'],
   __tests__: [ANY], // 根测试面：跨目录取生产码是本职
 };
@@ -280,7 +280,7 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
       ['types/probe.ts', `import type { RunEnv } from '../core/constraints/run-env';`],
       ['knowledge/probe.ts', `import { DEFAULT_DECAY_CONFIG } from './types';`],
       ['context/probe.ts', `import { KnowledgeQuery } from '../knowledge/query';`],
-      ['hooks/probe.ts', `import { TraceCollector } from '../monitoring/traces';`],
+      ['bootstrap/probe.ts', `import { TraceCollector } from '../monitoring/traces';`],
       ['core/probe.ts', `import { PRESETS_BY_NAME } from '../presets';`],
       ['failure/__tests__/probe.test.ts', `import { failureList } from '../../cli/commands/failure';`],
       ['core/constraints/__tests__/probe.test.ts', `import { checkConstraints } from '../../index';`],

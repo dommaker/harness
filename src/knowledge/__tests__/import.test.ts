@@ -2,7 +2,7 @@
  * ColdStartImporter 测试
  */
 
-import { ColdStartImporter } from '../import';
+import { ColdStartImporter } from '../cold-start';
 import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import * as fs from 'fs';
 import * as path from 'path';

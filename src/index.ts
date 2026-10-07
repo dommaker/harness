@@ -338,10 +338,10 @@ export type { ArtifactIntegrityResult } from './release';
 export {
   bootstrapHarness,
   bootstrapHarnessSync,
-} from './hooks';
+} from './bootstrap';
 export type {
   HarnessBootstrap,
-} from './hooks';
+} from './bootstrap';
 
 // ========================================
 // Agent 生命周期

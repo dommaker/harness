@@ -145,7 +145,7 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
     lines: ['const cwd = projectPath || process.cwd();'],
     reason: 'validateAll 的可选 projectPath 兜底（其相对 schemaPath 默认值见闸 3 豁免）',
   },
-  'src/hooks/bootstrap.ts': {
+  'src/bootstrap/bootstrap.ts': {
     lines: [
       'const resolvedPath = projectPath || process.cwd();',
       'const resolvedPath = projectPath || process.cwd();',

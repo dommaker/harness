@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { FailureRecorder } from '../failure/recorder';
-import { ErrorType, FailureLevel } from '../types/failure';
+import { ErrorType, FailureLevel } from '../failure/error-types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from '@jest/globals';
 import { ErrorClassifier } from '../failure/classifier';
-import { ErrorType, FailureLevel } from '../types/failure';
+import { ErrorType, FailureLevel } from '../failure/error-types';
 
 describe('ErrorClassifier', () => {
   const classifier = new ErrorClassifier();

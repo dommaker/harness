@@ -424,11 +424,14 @@ describe('闸 1：源形状——投影分派与上色只有一处', () => {
   const code = (lines: string[]): string[] =>
     lines.map(l => l.trim()).filter(l => !l.startsWith('*') && !l.startsWith('//') && !l.startsWith('/*'));
 
-  it('knowledge/ 各文件不含 chalk / store 构造 / JSON.stringify', () => {
+  it('knowledge/ 各文件不含 chalk / JSON.stringify；store 构造只有 store-access 一处', () => {
     const lines = code(knowledgeSource);
     expect(lines.filter(l => l.includes("from 'chalk'"))).toEqual([]);
     expect(lines.filter(l => l.includes('chalk.'))).toEqual([]);
-    expect(lines.filter(l => /new (File)?KnowledgeStore\(/.test(l))).toEqual([]);
+    // store 构造单点 = store-access.ts（ADR-0040 Phase 3 自 knowledge-view 拆出）
+    expect(lines.filter(l => /new (File)?KnowledgeStore\(/.test(l))).toEqual([
+      'return new FileKnowledgeStore({ baseDir: resolveKnowledgeBaseDir(options, io) });',
+    ]);
     expect(lines.filter(l => l.includes('JSON.stringify'))).toEqual([]);
   });
 
@@ -451,11 +454,14 @@ describe('闸 1：源形状——投影分派与上色只有一处', () => {
     ]);
   });
 
-  it('knowledge-view.ts 是 store 构造与 json 投影的唯一落点', () => {
+  it('knowledge-view.ts 是 json 投影与上色的唯一落点；store 构造唯一落点 = store-access.ts', () => {
     const lines = code(viewSource);
-    expect(lines.filter(l => /new FileKnowledgeStore\(/.test(l))).toHaveLength(1);
     expect(lines.filter(l => l.includes('JSON.stringify'))).toHaveLength(1);
     expect(lines.filter(l => l.includes('import chalk'))).toHaveLength(1);
+    const storeAccess = code(
+      fs.readFileSync(path.join(SRC_DIR, 'knowledge', 'store-access.ts'), 'utf-8').split('\n')
+    );
+    expect(storeAccess.filter(l => /new FileKnowledgeStore\(/.test(l))).toHaveLength(1);
   });
 
   it('view 模块的 chalk 调用只准出现在角色→样式的单张表里', () => {

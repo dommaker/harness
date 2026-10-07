@@ -2,7 +2,7 @@
  * package.json 读取正本（重构 Phase 5 收口）
  *
  * 「读一份 dir/package.json」此前散在 7 处四种写法（release/integrity 包根探测与
- * 发布面推导、knowledge/import 技术栈扫描、sync-docs project-reader、passes-gate
+ * 发布面推导、knowledge/cold-start 技术栈扫描、sync-docs project-reader、passes-gate
  * 测试命令探测、spec-baseline 依赖面、release 命令、utils/package-version 自身
  * 版本），read → parse 链各写一遍。语义在此一处定义：
  *

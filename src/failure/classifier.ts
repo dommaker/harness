@@ -5,8 +5,6 @@
  */
 
 import type {
-  ErrorType,
-  FailureLevel,
   ErrorClassificationRule,
   ClassificationResult,
 } from '../types/failure';
@@ -15,7 +13,8 @@ import {
   FailureLevel as FailureLevelEnum,
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
-} from '../types/failure';
+} from './error-types';
+import type { ErrorType, FailureLevel } from './error-types';
 
 /**
  * 错误分类器配置

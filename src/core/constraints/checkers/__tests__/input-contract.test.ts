@@ -51,14 +51,6 @@ describe('findMissingInputs — needs 与环境供给比对', () => {
     expect(missing).toEqual(['staged diff 不可得（git 取证失败或未接线）']);
   });
 
-  it('手写 env 未提供 evidenceAvailable → 按全部可得（旧形状兼容）', () => {
-    const env = buildCheckEnv(CONTEXT, {
-      stagedDiff: async () => '',
-      stagedDiffNames: async () => '',
-      srcScan: () => [],
-    });
-    expect(findMissingInputs(noTestSimplification, env)).toEqual([]);
-  });
 });
 
 describe('normalizeCheckOutcome — CheckSkip 归一', () => {

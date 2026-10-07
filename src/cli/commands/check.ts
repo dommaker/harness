@@ -19,7 +19,7 @@ import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
 import { TraceCollector } from '../../monitoring/traces';
 import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
-import type { ConstraintResult, ConstraintTrigger } from '../../types/constraint';
+import { ConstraintViolationError, type ConstraintResult, type ConstraintTrigger } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { fileStateIO, type StateIO } from '../state-io';
 
@@ -210,9 +210,15 @@ export async function check(
     }
     return { kind: 'ok' };
   } catch (error) {
-    log(io);
-    log(io, chalk.red(`❌ 约束检查异常: ${error instanceof Error ? error.message : String(error)}`));
-    return { kind: 'fail', reason: `check error: ${error instanceof Error ? error.message : String(error)}` };
+    // ConstraintViolationError = checkConstraints(block 模式) 的正常违规出口（业务错误），
+    // 译成 fail 结果；其余异常（bug / IO 故障）不是判定结果，直抛——
+    // CommandResult 判别联合是「判定」的契约，不是「程序崩溃」的收容所
+    if (error instanceof ConstraintViolationError) {
+      log(io);
+      log(io, chalk.red(`❌ 约束检查异常: ${error.message}`));
+      return { kind: 'fail', reason: `check error: ${error.message}` };
+    }
+    throw error;
   }
 }
 

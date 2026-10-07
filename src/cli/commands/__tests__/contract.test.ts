@@ -6,11 +6,17 @@ import { contract, validateSchema } from '../contract';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import { decide, fakeGate, throwingGate } from './gate-decision';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import { ContractGate } from '../../../gates/contract';
 
 jest.mock('fs/promises', () => ({
   readFile: jest.fn(),
   access: jest.fn(),
+}));
+
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
 }));
 
 jest.mock('../../../gates/contract', () => ({
@@ -32,6 +38,7 @@ jest.mock('chalk', () => ({
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
+const mockExistsSync = existsSync as jest.Mock;
 const MockGate = ContractGate as jest.MockedClass<typeof ContractGate>;
 const yaml = require('js-yaml');
 
@@ -46,7 +53,7 @@ describe('contract command', () => {
 
   describe('contract', () => {
     it('should print success when check passes', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockExistsSync.mockReturnValue(true);
       MockGate.mockImplementation(() =>
         fakeGate(decide('contract', true, 'ok', { endpoints: 10, breakingChanges: false })) as any
       );
@@ -60,7 +67,7 @@ describe('contract command', () => {
     });
 
     it('should exit 1 when file does not exist', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+      mockExistsSync.mockReturnValue(false);
 
       const result = await contract({}, io);
 
@@ -69,7 +76,7 @@ describe('contract command', () => {
     });
 
     it('should print failure and exit 1 when check fails', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockExistsSync.mockReturnValue(true);
       MockGate.mockImplementation(() =>
         fakeGate(
           decide('contract', false, 'validation errors', {
@@ -88,7 +95,7 @@ describe('contract command', () => {
     });
 
     it('should handle thrown errors and exit 1', async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockExistsSync.mockReturnValue(true);
       MockGate.mockImplementation(() => throwingGate(new Error('gate error')) as any);
 
       const result = await contract({}, io);

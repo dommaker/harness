@@ -127,22 +127,36 @@ describe('review command', () => {
       expect(io.outText()).toContain('APPROVED');
     });
 
-    it('should handle no PR found', async () => {
+    it('should handle no PR found（gh 说没有 PR = 合法状态，提示并 ok）', async () => {
       mockExec
         .mockResolvedValueOnce({ stdout: 'feature-branch\n', stderr: '' })
-        .mockRejectedValueOnce(new Error('no PR'));
+        .mockRejectedValueOnce(new Error('Command failed: gh pr view\nno pull requests found for branch'));
 
-      await reviewStatus({}, io);
+      const result = await reviewStatus({}, io);
 
       expect(io.outText()).toContain('未找到关联的 PR');
+      expect(result.kind).toBe('ok');
     });
 
-    it('should handle git errors', async () => {
+    it('gh 调用失败（未安装/超时/认证） → fail，不报成「未找到 PR」', async () => {
+      mockExec
+        .mockResolvedValueOnce({ stdout: 'feature-branch\n', stderr: '' })
+        .mockRejectedValueOnce(new Error('Command failed: gh pr view\ngh: command not found'));
+
+      const result = await reviewStatus({}, io);
+
+      expect(io.outText()).not.toContain('未找到关联的 PR');
+      expect(io.outText()).toContain('获取审查状态失败');
+      expect(result.kind).toBe('fail');
+    });
+
+    it('should handle git errors（非 git 仓 = 合法 skip）', async () => {
       mockExec.mockRejectedValue(new Error('not a git repository'));
 
-      await reviewStatus({}, io);
+      const result = await reviewStatus({}, io);
 
-      expect(io.outText()).toContain('获取审查状态失败');
+      expect(io.outText()).toContain('不是 Git 仓库');
+      expect(result.kind).toBe('skip');
     });
   });
 });

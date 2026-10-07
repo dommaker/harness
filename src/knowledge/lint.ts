@@ -36,9 +36,14 @@ export class KnowledgeLinter {
 
   /**
    * 执行完整 Lint 检查
+   *
+   * 人口枚举走 readEntriesFromDisk（盘驱动）而非 list()（索引驱动）：list() 对
+   * 「索引在册但文件缺失」的漂移 fail-fast 抛出，而本工具正是漂移的诊断/修复入口
+   * （checkIndexConsistency 直读 readIndex+get 判漂移，autoFix → rebuildIndex），
+   * 不能在漂移现场先崩。
    */
   run(autoFix: boolean = false): LintReport {
-    const entries = this.store.list({ excludeArchived: false });
+    const entries = this.store.readEntriesFromDisk();
     const issues: LintIssue[] = [];
 
     // 各项检查

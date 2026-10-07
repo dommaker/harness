@@ -162,7 +162,7 @@ export class KnowledgeQuery {
     // signal 条目原三次 queryByMode 均不取，分组后同样不消费）
     const grouped: Record<ConsumptionMode, KnowledgeEntry[]> = { rule: [], reference: [], context: [], signal: [] };
     for (const entry of this.store.list({})) {
-      grouped[entry.consumptionMode ?? 'reference'].push(entry);
+      grouped[entry.consumptionMode].push(entry);
     }
 
     const rules = grouped.rule;

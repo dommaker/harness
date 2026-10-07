@@ -75,9 +75,10 @@ describe('spec command', () => {
         };
         mockValidator.validateFile.mockResolvedValue(mockResult);
 
-        await specValidate({ file: 'test.yml' }, io);
+        const result = await specValidate({ file: 'test.yml' }, io);
         expect(io.outText()).toContain('验证失败');
         expect(io.outText()).toContain('错误');
+        expect(result).toEqual({ kind: 'fail', reason: 'Spec 文件验证失败: test.yml' });
       });
 
       it('应该显示警告', async () => {
@@ -169,7 +170,7 @@ describe('spec command', () => {
         expect(result).toEqual({ kind: 'fail', reason: '1 个 Spec 文件验证失败' });
       });
 
-      it('--staged 有失败：ok（历史退出码面 0，冻结不变）', async () => {
+      it('--staged 有失败：fail（与非 staged 同口径，staged 不再是免 fail 通道）', async () => {
         const mockResult: BatchSpecValidationResult = {
           total: 2,
           passed: 1,
@@ -180,7 +181,7 @@ describe('spec command', () => {
         mockValidateAllSpecs.mockResolvedValue(mockResult);
 
         const result = await specValidate({ staged: true }, io);
-        expect(result).toEqual({ kind: 'ok' });
+        expect(result).toEqual({ kind: 'fail', reason: '1 个 Spec 文件验证失败' });
       });
     });
 

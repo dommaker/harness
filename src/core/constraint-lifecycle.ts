@@ -27,7 +27,6 @@ import { getEffectiveConstraints } from './effective-constraints';
 import type { RunTarget } from './constraints/run-env';
 import type { Constraint } from '../types/constraint';
 import type { KnowledgeEntry } from '../knowledge/types';
-import type { CommandIO } from '../types/command-io';
 import { setYamlEntry, removeYamlEntry } from '../utils/yaml-edit';
 import { collectUsageByConstraint, readProjectTraces } from './constraints/usage-report';
 
@@ -46,11 +45,6 @@ export interface RetireExecuteOptions {
   reason?: string;
   /** 注入当前时间（测试用） */
   now?: Date;
-  /**
-   * 历史签名保留（harness#198 搬家前是知识库路径解析的透参，解析早已不消费它）；
-   * 知识写口改由 `openKnowledgeStore` 注入，本字段在 core 内不被读取
-   */
-  io?: CommandIO;
   /**
    * 知识沉淀写口工厂（harness#88 注入纪律）。注入 = 退休时写 `constraint-retired-<id>`
    * 沉淀（consumptionMode: 'signal'）；缺省 = 只落 config.yml 墓碑，不写沉淀
@@ -314,8 +308,6 @@ export interface ReactivateExecuteOptions {
   reason?: string;
   /** 注入当前时间（测试用） */
   now?: Date;
-  /** 历史签名保留（同 RetireExecuteOptions.io；core 内不被读取） */
-  io?: CommandIO;
   /** 知识沉淀写口工厂（同 RetireExecuteOptions.openKnowledgeStore；缺省不写复活沉淀） */
   openKnowledgeStore?: () => LifecycleKnowledgeSink;
 }

@@ -25,6 +25,11 @@ export interface PrerequisiteResult {
   prerequisite: string;
   /** 是否满足 */
   satisfied: boolean;
+  /**
+   * true = 识别不出前置条件类型，无法自动判定（satisfied 恒 false）：
+   * 单独成类露出，退出码按未满足处理——不再默认 satisfied: true 假绿
+   */
+  undetermined?: boolean;
   /** 证据 */
   evidence: string;
 }
@@ -86,7 +91,7 @@ export function extractBaselineSection(content: string): string[] {
 // 命令级共享索引
 // ============================================
 
-/** package.json 依赖面的一次解析结果（失败态同样入库，不重试） */
+/** package.json 依赖面的一次解析结果（缺失态同样入库，不重试；损坏在上游 readPackageJson 已抛） */
 type DependencySnapshot = { ok: true; deps: Record<string, string> } | { ok: false };
 
 /**
@@ -184,15 +189,11 @@ export function createBaselineIndex(
     },
     dependencies() {
       if (!dependencySnapshot) {
-        try {
-          const pkgJson = readPackageJson(projectPath);
-          dependencySnapshot = pkgJson
-            ? { ok: true, deps: { ...pkgJson.dependencies, ...pkgJson.devDependencies } }
-            : { ok: false };
-        } catch {
-          // #146：读取失败态（含损坏清单）同样入库，不逐条重试
-          dependencySnapshot = { ok: false };
-        }
+        // 缺失 = 合法空（ok:false）；损坏 = readPackageJson 抛出（fail-fast，不入库不重试）
+        const pkgJson = readPackageJson(projectPath);
+        dependencySnapshot = pkgJson
+          ? { ok: true, deps: { ...pkgJson.dependencies, ...pkgJson.devDependencies } }
+          : { ok: false };
       }
       return dependencySnapshot;
     },
@@ -345,10 +346,10 @@ function checkDependency(
   const found: string[] = [];
   const missing: string[] = [];
 
-  // 一次运行只读解析一遍 package.json（失败态同样入库）
+  // 一次运行只读解析一遍 package.json（缺失态同样入库；损坏在上游已抛）
   const snapshot = index.dependencies();
   if (!snapshot.ok) {
-    return { exists: false, evidence: '无法读取 package.json' };
+    return { exists: false, evidence: 'package.json 不存在' };
   }
   const deps = snapshot.deps;
 
@@ -408,11 +409,12 @@ function verifyPrerequisite(
     return { prerequisite: prereq, satisfied: exists, evidence };
   }
 
-  // 默认：无法自动验证
+  // 默认：识别不出前置条件类型——无法判定（单独成类，按未满足处理，不假绿放过）
   return {
     prerequisite: prereq,
-    satisfied: true,
-    evidence: '无法自动验证（需人工确认）',
+    satisfied: false,
+    undetermined: true,
+    evidence: '无法自动判定（需人工确认）',
   };
 }
 
@@ -427,17 +429,23 @@ function formatTable(results: PrerequisiteResult[]): string {
   lines.push(chalk.blue(`前置条件检查 (${results.length} 条)\n`));
 
   const satisfied = results.filter(r => r.satisfied).length;
-  const failed = results.filter(r => !r.satisfied);
+  const undetermined = results.filter(r => r.undetermined);
+  const failed = results.filter(r => !r.satisfied && !r.undetermined);
 
   lines.push(chalk.bold(`  满足: ${satisfied}/${results.length}`));
   if (failed.length > 0) {
-    lines.push(chalk.red(`  未满足: ${failed.length}\n`));
-  } else {
-    lines.push(chalk.green('  全部满足\n'));
+    lines.push(chalk.red(`  未满足: ${failed.length}`));
   }
+  if (undetermined.length > 0) {
+    lines.push(chalk.yellow(`  无法判定: ${undetermined.length}（按未满足处理）`));
+  }
+  if (failed.length === 0 && undetermined.length === 0) {
+    lines.push(chalk.green('  全部满足'));
+  }
+  lines.push('');
 
   for (const r of results) {
-    const icon = r.satisfied ? chalk.green('✓') : chalk.red('✗');
+    const icon = r.satisfied ? chalk.green('✓') : r.undetermined ? chalk.yellow('?') : chalk.red('✗');
     lines.push(`  ${icon} ${r.prerequisite}`);
     if (!r.satisfied) {
       lines.push(`    ${chalk.yellow(r.evidence)}`);
@@ -494,12 +502,14 @@ export async function specBaselineCheck(
     log(io, formatTable(results));
   }
 
-  // 有未满足的前置条件时非零退出
+  // 有未满足或无法判定的前置条件时非零退出（无法判定不假绿放过）
   const failed = results.filter(r => !r.satisfied);
   if (failed.length > 0) {
+    const undeterminedCount = results.filter(r => r.undetermined).length;
+    const suffix = undeterminedCount > 0 ? `（含 ${undeterminedCount} 条无法判定）` : '';
     return {
       kind: 'fail',
-      reason: `${failed.length} 条前置条件未满足: ${failed.map(f => f.prerequisite).join('; ')}`,
+      reason: `${failed.length} 条前置条件未满足${suffix}: ${failed.map(f => f.prerequisite).join('; ')}`,
     };
   }
   return { kind: 'ok' };

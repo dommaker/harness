@@ -110,14 +110,25 @@ export async function reviewStatus(
           log(io, statusColor(`  - ${r.author?.login || 'unknown'}: ${r.state}`));
         });
       }
-    } catch {
-      log(io, chalk.yellow('\n⚠️  未找到关联的 PR'));
-      log(io, chalk.gray('   使用 gh pr create 创建 PR'));
+    } catch (error) {
+      // 「gh 说没有 PR」= 合法状态（提示即可）；gh 未安装/超时/认证失败/输出损坏 = 调用失败，上抛走 fail
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('no pull requests found')) {
+        log(io, chalk.yellow('\n⚠️  未找到关联的 PR'));
+        log(io, chalk.gray('   使用 gh pr create 创建 PR'));
+        return { kind: 'ok' };
+      }
+      throw error;
     }
     return { kind: 'ok' };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    // 只兜合法情形：不在 git 仓内 = 无审查状态可查（skip）；其余（gh 失败等）= fail
+    if (message.includes('not a git repository')) {
+      log(io, chalk.yellow('⚠️  当前目录不是 Git 仓库，无法获取审查状态'));
+      return { kind: 'skip', reason: '获取审查状态跳过: 不是 Git 仓库' };
+    }
     log(io, chalk.red(`❌ 获取审查状态失败: ${message}`));
-    return { kind: 'skip', reason: `获取审查状态失败: ${message}` };
+    return { kind: 'fail', reason: `获取审查状态失败: ${message}` };
   }
 }

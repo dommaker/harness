@@ -52,13 +52,32 @@ describe('validate command', () => {
   });
 
   describe('validate', () => {
-    it('应该跳过无检查点的情况', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('file not found'));
-      
+    it('应该跳过无检查点的情况（ENOENT = 合法空）', async () => {
+      const enoent = new Error('file not found') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      mockFs.readFile.mockRejectedValue(enoent);
+
       const result = await validate({}, io);
 
       expect(io.outText()).toContain('没有定义检查点');
       expect(result).toEqual({ kind: 'skip', reason: expect.stringContaining('没有定义检查点') });
+    });
+
+    it('检查点文件 YAML 损坏 → 抛出（fail-fast：损坏 ≠ 缺失，不装「未找到」放行）', async () => {
+      mockFs.readFile.mockResolvedValue('checkpoints: [broken');
+      mockYaml.load.mockImplementation(() => {
+        throw new Error('YAMLException: unexpected end of stream');
+      });
+
+      await expect(validate({}, io)).rejects.toThrow('YAMLException');
+    });
+
+    it('检查点文件读取失败（非 ENOENT，如权限） → 抛出', async () => {
+      const eacces = new Error('permission denied') as NodeJS.ErrnoException;
+      eacces.code = 'EACCES';
+      mockFs.readFile.mockRejectedValue(eacces);
+
+      await expect(validate({}, io)).rejects.toThrow('permission denied');
     });
 
     it('应该通过所有检查点', async () => {

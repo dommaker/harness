@@ -70,6 +70,15 @@ export interface ConstraintsRetireOptions {
 }
 
 /**
+ * CLI 侧 wired 包装的 options：core 执行 options + 知识沉淀写口的输出 IO
+ * （io 只被写口接线消费，不是 core 的签名——core RetireExecuteOptions 无此字段）
+ */
+export interface RetireCliOptions extends RetireExecuteOptions {
+  /** 知识沉淀写口的输出 IO（缺省 processIO） */
+  io?: CommandIO;
+}
+
+/**
  * CLI 侧 wired 包装：core retireConstraint + 知识沉淀写口接线
  * （openKnowledgeStore 同一解析点：KNOWLEDGE_BASE_DIR / 用户 home 缺省目录，harness#177）。
  * 库消费方请直接用包根导出的 retireConstraint，按需注入 openKnowledgeStore。
@@ -77,12 +86,13 @@ export interface ConstraintsRetireOptions {
 export function retireConstraint(
   projectRoot: string,
   id: string,
-  options: RetireExecuteOptions = {}
+  options: RetireCliOptions = {}
 ): RetireResult {
+  const { io, ...coreOptions } = options;
   return coreRetireConstraint(projectRoot, id, {
-    ...options,
+    ...coreOptions,
     openKnowledgeStore:
-      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, options.io ?? processIO)),
+      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, io ?? processIO)),
   });
 }
 

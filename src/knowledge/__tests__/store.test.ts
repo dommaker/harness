@@ -308,16 +308,14 @@ describe('KnowledgeStore', () => {
       expect(() => store.list()).toThrow(SyntaxError);
     });
 
-    it('should fallback to indexToEntry when file is missing', () => {
+    it('索引在册但条目文件缺失 → 抛出（索引漂移暴露，不捏造空心条目；修复 = rebuildIndex）', () => {
       store.save(makeEntry());
       // Delete the .md file but leave index entry
       const mdFiles = fs.readdirSync(tempDir).filter(f => f.endsWith('.md'));
       for (const f of mdFiles) {
         fs.unlinkSync(path.join(tempDir, f));
       }
-      const list = store.list();
-      expect(list).toHaveLength(1);
-      expect(list[0].content).toBe(''); // indexToEntry returns empty content
+      expect(() => store.list()).toThrow('索引漂移');
     });
 
     it('should handle unreadable file gracefully', () => {

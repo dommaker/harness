@@ -352,13 +352,10 @@ export async function checkConstraint(
   const constraint = constraints[constraintId];
 
   if (!constraint) {
-    return {
-      id: constraintId,
-      severity: 'warning',
-      satisfied: false,
-      message: `未知的约束: ${constraintId}`,
-      checkedAt: new Date(),
-    };
+    // 注册表闭环同款口径（ADR-0035）：未知 id 是调用方 bug，抛错而非回假结果
+    throw new Error(
+      `[harness] 未知的约束: ${constraintId}（未在内置约束集与 customConfig 中注册）。`
+    );
   }
 
   return checker.check(constraint, context);

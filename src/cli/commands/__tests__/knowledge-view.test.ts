@@ -308,7 +308,7 @@ const HUMAN_BASELINE: Record<SubName, string[]> = {
   import: [
     '📥 开始导入知识 (源: docs, bogus)...',
     '  ✅ docs: 1 条',
-    '  ❌ bogus: 未知源类型: bogus',
+    '  ❌ bogus: bogus 导入失败: 未知源类型: bogus',
     '',
     '✅ 导入完成: 1 条，1 个错误',
   ],
@@ -614,7 +614,7 @@ describe('闸 4：人读视图逐行冻结（改造前基线）', () => {
 const EMPTY_HUMAN_BASELINE: Record<SubName, string[]> = {
   list: ['知识库为空'],
   search: ['未找到匹配 "autolink" 的知识条目'],
-  import: ['📥 开始导入知识 (源: docs, bogus)...', '  ❌ bogus: 未知源类型: bogus', '', '✅ 导入完成: 0 条，1 个错误'],
+  import: ['📥 开始导入知识 (源: docs, bogus)...', '  ❌ bogus: bogus 导入失败: 未知源类型: bogus', '', '✅ 导入完成: 0 条，1 个错误'],
   decay: ['🔄 运行衰减周期...', '✅ 没有需要衰减的知识条目'],
   stats: [
     '📊 知识库统计',

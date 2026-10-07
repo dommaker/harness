@@ -107,14 +107,12 @@ describe('ConstraintChecker', () => {
       expect(result.satisfied).toBe(true);
     });
 
-    it('should return false for unknown constraint', async () => {
+    it('should throw for unknown constraint（注册表闭环口径：未注册即抛，不回假结果）', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
       };
 
-      const result = await checkConstraint('unknown_constraint', context);
-      expect(result.satisfied).toBe(false);
-      expect(result.message).toContain('未知的约束');
+      await expect(checkConstraint('unknown_constraint', context)).rejects.toThrow('未知的约束');
     });
   });
 });

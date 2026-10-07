@@ -22,6 +22,7 @@ function evaluate(diff: string | (() => Promise<string>)) {
       stagedDiff,
       stagedDiffNames: async () => '',
       srcScan: () => [],
+      available: () => true,
     })
   );
 }

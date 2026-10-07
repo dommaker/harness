@@ -138,10 +138,8 @@ describe('ConstraintChecker - 补充覆盖', () => {
         disabled: [] as string[],
       };
 
-      // 不带 customConfig：未生效的 id 不可见
-      const missing = await checkConstraint('test_only', context);
-      expect(missing.satisfied).toBe(false);
-      expect(missing.message).toContain('未知的约束');
+      // 不带 customConfig：未生效的 id 不可见（注册表闭环口径：未注册即抛）
+      await expect(checkConstraint('test_only', context)).rejects.toThrow('未知的约束');
 
       // 带 customConfig：命中配置内约束
       const hit = await checkConstraint('no_completion_without_verification', context, customConfig);
@@ -176,16 +174,14 @@ describe('ConstraintChecker - 补充覆盖', () => {
   });
 
   describe('checkConstraint 快捷函数', () => {
-    it('未知约束应该返回不满足', async () => {
+    it('未知约束直接抛错（注册表闭环口径：未注册即抛，不回假结果）', async () => {
       const { checkConstraint } = await import('../core/constraints/checker');
 
       const context: ConstraintContext = {
         operation: 'commit',
       };
 
-      const result = await checkConstraint('nonexistent_constraint', context);
-      expect(result.satisfied).toBe(false);
-      expect(result.message).toContain('未知');
+      await expect(checkConstraint('nonexistent_constraint', context)).rejects.toThrow('未知的约束');
     });
 
     it('已知约束应该正常检查', async () => {
@@ -281,6 +277,7 @@ describe('buildCheckEnv - 证据接线契约', () => {
       stagedDiff: async () => 'diff-content',
       stagedDiffNames: async () => 'a.ts\nb.ts',
       srcScan: (root: string) => [`${root}/x.ts`],
+      available: () => true,
     };
     const env = buildCheckEnv(context, providers);
     expect(await env.stagedDiff()).toBe('diff-content');
@@ -290,20 +287,21 @@ describe('buildCheckEnv - 证据接线契约', () => {
 
   it("'none' 变体：证据输入一律报不可得（输入契约的降级依据）", () => {
     const env = buildCheckEnv(context, 'none');
-    expect(env.evidenceAvailable!('stagedDiff')).toBe(false);
-    expect(env.evidenceAvailable!('stagedDiffNames')).toBe(false);
+    expect(env.evidenceAvailable('stagedDiff')).toBe(false);
+    expect(env.evidenceAvailable('stagedDiffNames')).toBe(false);
   });
 
-  it('providers 变体：缺省报全部可得；自定义 available 原样生效', () => {
+  it('providers 变体：available 原样透传为 evidenceAvailable', () => {
     const providers = {
       stagedDiff: async () => '',
       stagedDiffNames: async () => '',
       srcScan: () => [] as string[],
+      available: () => true,
     };
     const env = buildCheckEnv(context, providers);
-    expect(env.evidenceAvailable!('stagedDiff')).toBe(true);
+    expect(env.evidenceAvailable('stagedDiff')).toBe(true);
 
     const degraded = buildCheckEnv(context, { ...providers, available: () => false });
-    expect(degraded.evidenceAvailable!('stagedDiffNames')).toBe(false);
+    expect(degraded.evidenceAvailable('stagedDiffNames')).toBe(false);
   });
 });

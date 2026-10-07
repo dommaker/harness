@@ -58,6 +58,7 @@ function evalDocsFreshness(dir: string) {
       stagedDiff: async () => '',
       stagedDiffNames: async () => '',
       srcScan: (root: string) => collectSourceFiles(dir, [root]),
+      available: () => true,
     })
   );
 }

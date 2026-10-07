@@ -30,10 +30,9 @@ export interface CheckEnv extends RunEnv {
    * 证据输入是否可得（harness#182 输入契约）
    *
    * 编排层按 ConstraintCheck.needs 比对，不可得即显式降级 skip，不再让 checker
-   * 对空证据做出「假合规」判定。buildCheckEnv 恒填充；手写 env 省略 = 全部可得
-   * （旧形状兼容，编排层按 available 处理）。
+   * 对空证据做出「假合规」判定。必传：buildCheckEnv 恒填充，手写 env 一律显式给。
    */
-  evidenceAvailable?(input: CheckEvidenceInput): boolean;
+  evidenceAvailable(input: CheckEvidenceInput): boolean;
 }
 
 /**
@@ -49,8 +48,8 @@ export interface EvidenceProviders {
   stagedDiffNames(): Promise<string>;
   /** 源码根相对路径文件列表 */
   srcScan(root: string): string[];
-  /** 证据输入是否可得（harness#182）；省略 = 全部可得 */
-  available?(input: CheckEvidenceInput): boolean;
+  /** 证据输入是否可得（harness#182） */
+  available(input: CheckEvidenceInput): boolean;
 }
 
 /** git 证据输入种类（harness#182 输入契约的比对单元） */
@@ -85,7 +84,7 @@ export function buildCheckEnv(
     };
   }
   const { available, ...providers } = evidence;
-  return { ...run, context, ...providers, evidenceAvailable: available ?? (() => true) };
+  return { ...run, context, ...providers, evidenceAvailable: available };
 }
 
 /**
@@ -186,14 +185,12 @@ export interface CheckInputNeeds {
 /**
  * 输入契约比对：返回缺项描述（空数组 = 输入齐备，可进入评估）
  *
- * 每条缺项自描述（直接进 skip reason）；手写 env 未提供 evidenceAvailable
- * 时按「全部可得」处理（旧形状兼容）。
+ * 每条缺项自描述（直接进 skip reason）。
  */
 export function findMissingInputs(check: ConstraintCheck, env: CheckEnv): string[] {
   const missing: string[] = [];
   for (const input of check.needs?.evidence ?? []) {
-    const available = env.evidenceAvailable?.(input) ?? true;
-    if (!available) {
+    if (!env.evidenceAvailable(input)) {
       missing.push(
         input === 'stagedDiff'
           ? 'staged diff 不可得（git 取证失败或未接线）'

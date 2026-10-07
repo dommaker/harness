@@ -200,7 +200,7 @@ describe('capabilities — 能力表一次解析多消费（ADR-0023 决策 4）
     const scan = collectSourceFiles(dir, env.sourceRoots());
     const checkEnv = buildCheckEnv(
       { operation: 'module_modification', projectPath: dir },
-      { stagedDiff: async () => '', stagedDiffNames: async () => '', srcScan: () => scan },
+      { stagedDiff: async () => '', stagedDiffNames: async () => '', srcScan: () => scan, available: () => true },
       env
     );
     return {

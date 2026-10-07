@@ -9,7 +9,7 @@
  * - 支持动态加载项目的 Schema
  *
  * 判定经返回值外溢（架构评审候选7）：批量验证的失败计数译成 fail（含失败数），
- * 无 Spec 文件译成 skip；单文件验证维持历史退出码面（无效仍为 0）。
+ * 无 Spec 文件译成 skip；单文件验证无效即 fail（与批量同口径）。
  */
 
 import chalk from 'chalk';
@@ -58,7 +58,9 @@ export async function specValidate(
     log(io, chalk.gray(`验证文件: ${absoluteFilePath}`));
     result = await validator.validateFile(absoluteFilePath);
     printSingleResult(result, io, options.verbose);
-    return { kind: 'ok' };
+    return result.valid
+      ? { kind: 'ok' }
+      : { kind: 'fail', reason: `Spec 文件验证失败: ${options.file}` };
   }
 
   // 批量验证
@@ -71,8 +73,8 @@ export async function specValidate(
   // 打印结果
   printBatchResult(result, io, options.verbose);
 
-  // 根据失败级别决定退出码
-  if (!options.staged && result.failed > 0) {
+  // 根据失败级别决定退出码（staged 同口径：验证失败即 fail）
+  if (result.failed > 0) {
     return { kind: 'fail', reason: `${result.failed} 个 Spec 文件验证失败` };
   }
   if (result.total === 0) {

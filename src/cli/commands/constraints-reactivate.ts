@@ -40,18 +40,28 @@ export interface ConstraintsReactivateOptions {
 }
 
 /**
+ * CLI 侧 wired 包装的 options：core 执行 options + 知识沉淀写口的输出 IO
+ * （io 只被写口接线消费，不是 core 的签名——core ReactivateExecuteOptions 无此字段）
+ */
+export interface ReactivateCliOptions extends ReactivateExecuteOptions {
+  /** 知识沉淀写口的输出 IO（缺省 processIO） */
+  io?: CommandIO;
+}
+
+/**
  * CLI 侧 wired 包装：core reactivateConstraint + 知识沉淀写口接线
  * （openKnowledgeStore 同一解析点，与 retire 写口同根，harness#177）。
  */
 export function reactivateConstraint(
   projectRoot: string,
   id: string,
-  options: ReactivateExecuteOptions = {}
+  options: ReactivateCliOptions = {}
 ): ReactivateResult {
+  const { io, ...coreOptions } = options;
   return coreReactivateConstraint(projectRoot, id, {
-    ...options,
+    ...coreOptions,
     openKnowledgeStore:
-      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, options.io ?? processIO)),
+      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, io ?? processIO)),
   });
 }
 

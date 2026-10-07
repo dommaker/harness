@@ -277,9 +277,9 @@ describe('一次 spec-baseline-check 的读取计数闸（#146）', () => {
 
     await specBaselineCheck(path.join(dir, 'spec.md'), { json: true, projectPath: dir }, io);
 
-    // 判定照旧：读不到就是「无法读取 package.json」，每条前置各报一次
+    // 判定照旧：缺失就是「package.json 不存在」，每条前置各报一次（损坏则直接抛，不落 evidence）
     const results = JSON.parse(io.outText()) as Array<{ satisfied: boolean; evidence: string }>;
-    const failures = results.filter((r) => r.evidence === '无法读取 package.json');
+    const failures = results.filter((r) => r.evidence === 'package.json 不存在');
     expect(failures).toHaveLength(2);
     expect(failures.every((r) => !r.satisfied)).toBe(true);
 

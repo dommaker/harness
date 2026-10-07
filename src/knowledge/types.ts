@@ -125,15 +125,12 @@ export interface DecayConfig {
   provenDecayMonths: number;
   verifiedDecayMonths: number;
   draftDecayMonths: number;
-  /** Sources whose entries skip draft→verified promotion (start at verified) */
-  autoPromoteSources: string[];
 }
 
 export const DEFAULT_DECAY_CONFIG: DecayConfig = {
   provenDecayMonths: 12,
   verifiedDecayMonths: 6,
   draftDecayMonths: 3,
-  autoPromoteSources: [],
 };
 
 // ── Index ───────────────────────────────────────────────────

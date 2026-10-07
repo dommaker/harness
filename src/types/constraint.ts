@@ -76,8 +76,8 @@ export interface Constraint {
   /** 约束严重性：error = 违规即阻断；warning = 违规告警不阻断；info = 仅记录 */
   severity: ConstraintSeverity;
   
-  /** 触发条件（支持多个 trigger） */
-  trigger: ConstraintTrigger | ConstraintTrigger[];
+  /** 触发条件（支持多个 trigger）；未声明 = 恒评估（无触发域限制，ADR-0040 Phase 4） */
+  trigger?: ConstraintTrigger | ConstraintTrigger[];
   
   /** 强制执行的技能/步骤 */
   enforcement: string;

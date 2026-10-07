@@ -27,7 +27,7 @@ import type { RunTarget } from './constraints/run-env';
 import type { Constraint } from '../types/constraint';
 import type { KnowledgeEntry } from '../knowledge/types';
 import { setYamlEntry, removeYamlEntry } from '../utils/yaml-edit';
-import { collectUsageByConstraint, readProjectTraces } from './constraints/usage-report';
+import { collectUsageByConstraint, readProjectTracesReport } from './constraints/usage-report';
 
 /**
  * 知识沉淀写口（注入 seam）：`FileKnowledgeStore` 结构化满足。
@@ -258,10 +258,10 @@ export function retireConstraint(
   }
 
   // 历史统计（来自 traces.log）
-  // 计数去向：兼容包装 readProjectTraces() 丢计数（harness#100）——落盘的 retire stats 只计
+  // 计数去向：坏行计数随 readProjectTracesReport 可得，但落盘的 retire stats 只计
   // 合法记录，把坏行数写进 RetireResult.stats 属形状变更不在本票；本函数按契约「纯执行无交互」
   // 不打印，告知由两条命令入口各自负责（runRetireInteractive 顶部 / constraintsRetire 的 --yes 分支）
-  const usage = collectUsageByConstraint(readProjectTraces(projectRoot)).get(id);
+  const usage = collectUsageByConstraint(readProjectTracesReport(projectRoot).traces).get(id);
   const evaluated = usage ? usage.total - usage.skip : 0;
   const stats = {
     total: usage?.total ?? 0,

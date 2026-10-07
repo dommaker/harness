@@ -211,6 +211,13 @@ export async function auditDetails(
 
     const result = await gate.scan({ projectPath });
 
+    // deny 且无漏洞清单 = 扫描本身失败（fromError 报告）：如实 fail，不能假绿
+    // （旧实现对该形状直回 ok，把「没扫成」显示成「没问题」）
+    if (!result.passed && !result.details?.total) {
+      log(io, chalk.red(`❌ ${result.message}`));
+      return { kind: 'fail', reason: result.message };
+    }
+
     if (result.passed && !result.details?.total) {
       log(io, chalk.green('✅ 未发现安全漏洞'));
       return { kind: 'ok' };

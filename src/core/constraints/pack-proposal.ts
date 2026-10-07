@@ -22,7 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { findConstraintDefinition } from './find-constraint';
-import { collectUsageByConstraint, readProjectTraces } from './usage-report';
+import { collectUsageByConstraint, readProjectTracesReport } from './usage-report';
 import type { Constraint } from '../../types/constraint';
 
 /** 提案材料的输入（查找结果 + 使用统计聚合） */
@@ -121,7 +121,7 @@ export function collectProposalMaterial(projectRoot: string, id: string): Propos
   const constraint = findConstraintDefinition(id, projectRoot);
   if (!constraint) return undefined;
 
-  const usage = collectUsageByConstraint(readProjectTraces(projectRoot)).get(id);
+  const usage = collectUsageByConstraint(readProjectTracesReport(projectRoot).traces).get(id);
   return {
     constraint,
     stats: {

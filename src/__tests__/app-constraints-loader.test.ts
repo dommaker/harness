@@ -6,7 +6,7 @@
  *   id 与内置冲突 / 未知模板 / validateParams 失败 / trigger 形状 / channel 枚举）
  * - channel 通道（ADR-0035）：缺省 gate；非 gate（discipline/workflow）允许无 checker，
  *   填写了仍按模板校验；gate 无 checker 依旧抛错（闭环不松绑）
- * - 实例化缺省（source='app'、channel='gate'、trigger 缺省全操作集、message 回落 rule）
+ * - 实例化缺省（source='app'、channel='gate'、trigger 缺省恒评估、message 回落 rule）
  * - memo 口径与 RunEnv.rawConfig 同形（同一观察面至多读一次；路径入参每次读当下内容）
  * - 合并链（mergeConstraints / getEffectiveConstraints）：应用层并入 +
  *   config.yml enabled:false / retired 墓碑对应用层 id 同口径生效 + 不进 unknownIds
@@ -68,7 +68,7 @@ describe('loadAppConstraints 校验分支', () => {
     expect(loadAppConstraints(fixture())).toEqual([]);
   });
 
-  it('合法条目 → Constraint（source=app，channel 缺省 gate，缺省 trigger=全操作集，message 回落 rule）', () => {
+  it('合法条目 → Constraint（source=app，channel 缺省 gate，缺省 trigger=恒评估，message 回落 rule）', () => {
     registerFake();
     const constraints = loadAppConstraints(fixture(VALID));
 
@@ -84,10 +84,9 @@ describe('loadAppConstraints 校验分支', () => {
       checker: 'fake-template',
       params: { must: true },
     });
-    // 缺省 trigger = 每次 check 都评估
-    expect(Array.isArray(c.trigger)).toBe(true);
-    expect(c.trigger).toContain('commit');
-    expect(c.trigger).toContain('file_modification');
+    // 缺省 trigger = 恒评估（未声明即 undefined，由 matchesTrigger 表达「每次 check 都评估」，
+    // 不再是硬编码操作清单——trigger 是开放 string，清单会悄悄漂移，ADR-0040 Phase 4）
+    expect(c.trigger).toBeUndefined();
   });
 
   it('坏 YAML → 抛错（配置坏不能静默放行）', () => {

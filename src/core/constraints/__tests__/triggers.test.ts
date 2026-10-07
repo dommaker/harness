@@ -56,8 +56,9 @@ describe('matchesTrigger', () => {
     expect(matchesTrigger({ trigger: 'a' }, ['x', 'a'])).toBe(true);
   });
 
-  it('trigger 为 undefined 时不匹配任何操作', () => {
-    expect(matchesTrigger({ trigger: undefined }, ['a'])).toBe(false);
+  it('trigger 未声明（undefined）= 恒匹配（无触发域限制，ADR-0040 Phase 4）', () => {
+    expect(matchesTrigger({ trigger: undefined }, ['a'])).toBe(true);
+    expect(matchesTrigger({ trigger: undefined }, [])).toBe(true);
   });
 
   it('trigger 为空数组时不匹配任何操作', () => {

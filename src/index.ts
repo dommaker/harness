@@ -106,7 +106,6 @@ export {
   buildConstraintsUsageReport,
   diagnoseRetireCandidates,
   collectUsageByConstraint,
-  readProjectTraces,
   readProjectTracesReport,
   CANDIDATE_KIND_LABEL,
   DEFAULT_DIAGNOSE_THRESHOLDS,

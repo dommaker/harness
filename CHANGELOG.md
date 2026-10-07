@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - refactor(public-api)!: 验证器单例壳出清 + SpecValidator 归位 cli spec 域（公共面 breaking，ADR-0040 Phase 4）。`CheckpointValidator.getInstance()` / `CSOValidator.getInstance()` 删除（无状态类不需要单例，构造器转公开直建）。**迁移：`X.getInstance()` → `new X()`；studio `cso.routes.ts` 现写法 `CSOValidator?.getInstance?.()` 是可选链——getInstance 消失后表达式静默得 undefined、落「not available」假绿分支，升级时必须改为 `new CSOValidator()`，不能依赖可选链兜底**。SpecValidator 自 `core/spec/validator` 移至 `cli/commands/spec/validator`（唯一消费方 = spec CLI 命令；判定纯函数 baseline-check 按 ADR-0020 格局留 `core/spec/`），`getInstance()`/`setConfig()` 全局可变状态与便捷包装 `validateAllSpecs` 同删（该面 #199 已收回包公共导出，受影响的是 deep import 消费方：改 `new SpecValidator(config)` 后调 `validateAll`）；YAML 校验的 `await import('js-yaml')` 动态导入改静态。**行为修复（#95 同型病灶）**：`validateAll(projectPath)` 的 Schema 与 Spec 文件同锚 projectPath，不再按进程 cwd 找；CLI 组合根恒传按项目根锚定的绝对 schemaPath
 
+- refactor(public-api)!: 杂项公共面出清（公共面 breaking，ADR-0040 Phase 4）：① `readProjectTraces()` 兼容包装删除（丢坏行计数的旧签名）——迁移：`readProjectTraces(root)` → `readProjectTracesReport(root).traces`（studio `evolution/signals.ts` 一处调用按此改）；仓内两调用方（constraint-lifecycle / pack-proposal）已直迁。② `KnowledgeLifecycle.shouldAutoPromote()` 与 `DecayConfig.autoPromoteSources` 字段删除——查证为「配置传入但永不生效」的死面：harness 内部零调用，studio 生产代码只在 `knowledge-singletons.ts` 传 `autoPromoteSources: [...]` 配置、无任何 `shouldAutoPromote` 调用（仅测试 mock）；迁移：studio 删除该配置传参与相关 mock 即可，行为不变（配置从未生效）。③ `KnowledgeQuery` 构造的 `lifecycle?` 注入参数**保留不删**（Phase 1 复核：studio 生产代码 `knowledge-singletons.ts` 真实传参 `new KnowledgeQuery(sharedStore, sharedLifecycle)`）
+- refactor(constraints)!: 应用层约束 trigger 缺省改恒评估（行为变化，ADR-0040 Phase 4）——原 `DEFAULT_TRIGGERS` 硬编码 10 个操作字面量（trigger 已是开放 string，清单会悄悄漂移）删除；`Constraint.trigger` 转可选，未声明 = 恒评估（语义正本 `matchesTrigger`：undefined 恒匹配，显式空数组仍不匹配任何操作）。行为变化：`.harness/constraints.yml` 里未声明 trigger 的应用层约束，从「仅在 10 个硬编码操作上评估」变为「每次 check 都评估」——覆盖面只增不减，与「模板多为扫描/存在性形态、不猜触发域」的原设计意图一致；显式声明 trigger 的条目行为不变
+- fix(cli)!: `security audit` 扫描失败不再假绿（行为变化，ADR-0040 Phase 4）——deny 报告无 vulnerabilities 字段时（扫描本身失败，fromError 报告）原实现直回 `{kind:'ok'}`，把「没扫成」显示成「没问题」；现如实 fail 并打印失败消息。发现漏洞的报告路径（details 命令列出清单）行为不变
+- refactor(cli): sync-docs capabilities-syncer 残留的 getBasename 内联函数清成 `path.basename` 直调（零行为变化）
+
 ## [2.0.0] - 2026-09-30
 
 ### Changes

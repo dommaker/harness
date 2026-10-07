@@ -76,8 +76,7 @@ export async function updateCapabilitiesFile(
 
     // 添加新文件的行（在最后一个表格行之后）；module 模式跳过
     if (mode !== 'module' && result.added.length > 0) {
-      const getBasenameLocal = (f: string) => path.basename(f);
-      const addedModules = currentModules.filter(m => result.added.includes(getBasenameLocal(m.file)));
+      const addedModules = currentModules.filter(m => result.added.includes(path.basename(m.file)));
       const tableEndRegex = /(^\|[^|]+\|[^|]+\|[^|]+\|\s*$)/gm;
       let lastTableRow = '';
       let match;

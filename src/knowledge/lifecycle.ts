@@ -319,14 +319,6 @@ export class KnowledgeLifecycle {
   }
 
   /**
-   * Check if a source should auto-promote to verified on ingest.
-   * Used by KnowledgeBus to decide initial maturity level.
-   */
-  shouldAutoPromote(source: string): boolean {
-    return this.config.autoPromoteSources.some(s => source.includes(s));
-  }
-
-  /**
    * Get execution success rate for an entry.
    * Returns { rate, total } or undefined if no execution data.
    */

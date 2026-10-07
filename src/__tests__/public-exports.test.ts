@@ -80,7 +80,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'proposalMaterialPath',
   'pruneTraceLogs',
   'reactivateConstraint',
-  'readProjectTraces',
   'readProjectTracesReport',
   'renderProposalMarkdown',
   'resolveGlobs',

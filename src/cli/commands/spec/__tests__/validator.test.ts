@@ -2,8 +2,8 @@
  * SpecValidator 测试
  */
 
-import { SpecValidator, validateAllSpecs } from '../validator';
-import type { GitCommandRunner } from '../../constraints/git-evidence';
+import { SpecValidator } from '../validator';
+import type { GitCommandRunner } from '../../../../core/constraints/git-evidence';
 import * as fs from 'fs/promises';
 
 // Mock fs
@@ -21,29 +21,13 @@ describe('SpecValidator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset singleton
-    (SpecValidator as any).instance = undefined;
-    validator = SpecValidator.getInstance();
+    validator = new SpecValidator();
   });
 
-  describe('getInstance()', () => {
-    it('should return singleton instance', () => {
-      const v1 = SpecValidator.getInstance();
-      const v2 = SpecValidator.getInstance();
-      expect(v1).toBe(v2);
-    });
-
+  describe('constructor', () => {
     it('should accept custom config', () => {
-      (SpecValidator as any).instance = undefined;
-      const v = SpecValidator.getInstance({ schemaPath: './custom/schemas' });
+      const v = new SpecValidator({ schemaPath: './custom/schemas' });
       expect(v).toBeDefined();
-    });
-  });
-
-  describe('setConfig()', () => {
-    it('should update config', () => {
-      validator.setConfig({ schemaPath: './other/schemas' });
-      expect(validator).toBeDefined();
     });
   });
 
@@ -258,12 +242,6 @@ describe('SpecValidator', () => {
       expect(schema1).toBeNull();
       expect(schema2).toBeNull();
     });
-
-    it('should clear cache on setConfig', () => {
-      validator.setConfig({ schemaPath: './new/path' });
-      // Cache should be cleared
-      expect(validator).toBeDefined();
-    });
   });
 
   describe('detectSpecType() edge cases', () => {
@@ -421,15 +399,19 @@ describe('SpecValidator', () => {
     });
   });
 
-  describe('convenience functions', () => {
-    it('validateAllSpecs should return batch result', async () => {
+  describe('schemaPath 锚定（#95 同型病灶修复）', () => {
+    it('validateAll 的 schema 与 spec 文件同锚 projectPath（相对 schemaPath 按项目根解析）', async () => {
+      const seen: string[] = [];
+      const v = new SpecValidator({ schemaPath: './my-schemas' });
+      jest.spyOn(v, 'loadSchema').mockImplementation(async (p: string) => {
+        seen.push(p);
+        return null;
+      });
       mockFs.access.mockRejectedValue(new Error('Not found'));
 
-      const result = await validateAllSpecs('/test/project');
-      expect(result).toBeDefined();
-      expect(typeof result.total).toBe('number');
-      expect(typeof result.passed).toBe('number');
-      expect(typeof result.failed).toBe('number');
+      await v.validateAll('/test/project');
+
+      expect(seen).toEqual(['/test/project/my-schemas']);
     });
   });
 });

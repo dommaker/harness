@@ -18,9 +18,7 @@ jest.mock('fs/promises', () => ({
 
 // Mock CheckpointValidator
 jest.mock('../../../core/validators/checkpoint', () => ({
-  CheckpointValidator: {
-    getInstance: jest.fn(),
-  },
+  CheckpointValidator: jest.fn(),
 }));
 
 // Mock yaml
@@ -91,7 +89,7 @@ describe('validate command', () => {
       const mockValidator = {
         validate: jest.fn().mockResolvedValue({ passed: true, checks: [] }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       const result = await validate({}, io);
 
@@ -113,7 +111,7 @@ describe('validate command', () => {
           checks: [{ checkId: 'check-1', passed: false, message: 'failed' }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       // 工单 23：检查点失败一律 exit 1（门控语义）
 
@@ -142,7 +140,7 @@ describe('validate command', () => {
           }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       await validate({}, io);
 
@@ -164,7 +162,7 @@ describe('validate command', () => {
           checks: [{ checkId: 'check-1', passed: false, message: '同一个原因', error: '同一个原因' }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       await validate({}, io);
 
@@ -186,7 +184,7 @@ describe('validate command', () => {
           checks: [{ checkId: 'check-1', passed: false, message: 'failed' }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       const result = await validate({}, io);
 

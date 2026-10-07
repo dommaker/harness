@@ -72,7 +72,7 @@ export async function validate(
   };
 
   // 执行验证
-  const validator = CheckpointValidator.getInstance();
+  const validator = new CheckpointValidator();
   const results = [];
   const failedIds: string[] = [];
 

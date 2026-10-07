@@ -23,11 +23,9 @@ export interface CSOIssue {
 }
 
 /**
- * CSO 验证器
+ * CSO 验证器（无状态，构造器直建——单例壳已随 ADR-0040 Phase 4 删除）
  */
 export class CSOValidator {
-  private static instance: CSOValidator;
-
   // 工作流总结关键词（不应出现在 description 中）
   private static WORKFLOW_KEYWORDS = [
     'step 1', 'step 2', 'phase', 'first', 'then', 'after',
@@ -38,15 +36,6 @@ export class CSOValidator {
   private static TRIGGER_KEYWORDS = [
     'use when', 'use for', '用于', '当', '适用于', '触发',
   ];
-
-  private constructor() {}
-
-  static getInstance(): CSOValidator {
-    if (!CSOValidator.instance) {
-      CSOValidator.instance = new CSOValidator();
-    }
-    return CSOValidator.instance;
-  }
 
   /**
    * 验证 Workflow 的 description

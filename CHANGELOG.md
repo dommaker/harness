@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - refactor(public-api)!: `Constraint.kind` 出清（公共面 breaking，ADR-0040 Phase 4）——ADR-0029 已把 kind 收窄为 `'check'` 单值，字段只剩仪式性：`ConstraintKind` 类型与 `Constraint.kind` 必填字段删除；7 条内置定义不再逐条手写 `kind: 'check'`；checkers 注册表闭环的恒真过滤 `c.kind === 'check'` 删除（通道判定走 `isGateConstraint`）；应用层约束加载器不再补写 kind。迁移：构造 Constraint 字面量的消费方删 `kind: 'check'` 属性（TS 多余属性报错即指路）；读 `constraint.kind` 的消费方删该读取（值恒为 'check'，无信息）
 - refactor(public-api)!: context 词汇类型收回（公共面 breaking，ADR-0040 Phase 4）——`CompactionConfig`/`CompactionLevel`/`ContextSource`/`ContextSourceType`/`SessionMessage` 自包根与 `./context` 子路径出口删除，类型本体随删（双仓零消费者：压缩引擎本体已随 ADR-0022 删除，词汇只剩仪式；studio 侧为本地重定义同构类型，不经 harness 导入）。`./context` 出口只剩 `SessionManager` 与 Session 四类型。迁移：无真实消费者，无迁移动作
 
+- refactor(public-api)!: 验证器单例壳出清 + SpecValidator 归位 cli spec 域（公共面 breaking，ADR-0040 Phase 4）。`CheckpointValidator.getInstance()` / `CSOValidator.getInstance()` 删除（无状态类不需要单例，构造器转公开直建）。**迁移：`X.getInstance()` → `new X()`；studio `cso.routes.ts` 现写法 `CSOValidator?.getInstance?.()` 是可选链——getInstance 消失后表达式静默得 undefined、落「not available」假绿分支，升级时必须改为 `new CSOValidator()`，不能依赖可选链兜底**。SpecValidator 自 `core/spec/validator` 移至 `cli/commands/spec/validator`（唯一消费方 = spec CLI 命令；判定纯函数 baseline-check 按 ADR-0020 格局留 `core/spec/`），`getInstance()`/`setConfig()` 全局可变状态与便捷包装 `validateAllSpecs` 同删（该面 #199 已收回包公共导出，受影响的是 deep import 消费方：改 `new SpecValidator(config)` 后调 `validateAll`）；YAML 校验的 `await import('js-yaml')` 动态导入改静态。**行为修复（#95 同型病灶）**：`validateAll(projectPath)` 的 Schema 与 Spec 文件同锚 projectPath，不再按进程 cwd 找；CLI 组合根恒传按项目根锚定的绝对 schemaPath
+
 ## [2.0.0] - 2026-09-30
 
 ### Changes

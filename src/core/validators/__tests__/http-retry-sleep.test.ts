@@ -215,7 +215,7 @@ describe('CheckpointValidator → http handler 的 context 接线', () => {
     const { waits, sleep } = recordingSleep();
     const calls = scriptedFetch([new Error('Network error')]);
 
-    const result = await CheckpointValidator.getInstance().validate(
+    const result = await new CheckpointValidator().validate(
       {
         id: 'cp-wiring',
         checks: [makeCheck('c-wiring', 'http_status', { url: URL_OK, expectedStatus: 200 })],

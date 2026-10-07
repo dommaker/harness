@@ -141,10 +141,6 @@ const DOWNSTREAM_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: strin
       'resolveRunEnv 的根兜底：RunTarget 只给了路径或什么也没给时自造一枚一次性观察面' +
       '（配置访问器族与 ProjectConfigLoader 的入参归一点，ADR-0023 决策 2）',
   },
-  'src/core/spec/validator.ts': {
-    lines: ['const cwd = projectPath || process.cwd();'],
-    reason: 'validateAll 的可选 projectPath 兜底（其相对 schemaPath 默认值见闸 3 豁免）',
-  },
   'src/bootstrap/bootstrap.ts': {
     lines: [
       'const resolvedPath = projectPath || process.cwd();',
@@ -178,10 +174,6 @@ const RELATIVE_PATH_DEFAULT =
   /\b\w+(?:Path|File|Log)\s*(?::\s*[^=,)]+?)?[:=]\s*['"`](?!\/)|\b\w+(?:Path|File|Log)\s*[:=]\s*[A-Z][A-Z0-9_]+\b/;
 
 const RELATIVE_PATH_DEFAULT_EXEMPTIONS: Record<string, string> = {
-  'src/core/spec/validator.ts':
-    'schemaPath: "./specs/schemas" 确实按 cwd 解析（同型病灶）。不随 #95 修：validateFile()/loadSchema() ' +
-    '签名里没有根，补齐要把根穿透整个 spec 域（属 spec 重构，非本票两门禁）。CLI 侧 `spec -s` 已 ' +
-    'path.resolve(projectPath, schema)，给了 -s 时口径正确。留待 spec 域单票收口。',
   'src/monitoring/traces.ts':
     'DEFAULT_CONFIG.traceFile 引用的是**项目相对片段**正本（#139 明确其语义），锚定在构造函数里做：' +
     '给了 projectPath → path.resolve(projectPath, traceFile)，没给 → 保持 cwd 解析（跨仓消费者的兼容面）。' +

@@ -30,20 +30,9 @@ import {
 import { checkHttpStatus, checkHttpBody } from './check-handlers/http';
 
 /**
- * 检查点验证器
+ * 检查点验证器（无状态，构造器直建——单例壳已随 ADR-0040 Phase 4 删除）
  */
 export class CheckpointValidator {
-  private static instance: CheckpointValidator;
-
-  private constructor() {}
-
-  static getInstance(): CheckpointValidator {
-    if (!CheckpointValidator.instance) {
-      CheckpointValidator.instance = new CheckpointValidator();
-    }
-    return CheckpointValidator.instance;
-  }
-
   /**
    * 验证检查点
    */

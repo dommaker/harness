@@ -13,21 +13,21 @@
 ## 目录
 | 目录 | 职责 |
 |------|------|
-| core/ | 约束引擎、检查点验证器、会话管理 |
+| core/ | 约束引擎、检查点验证器 |
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
 | monitoring/ | Execution Trace 收集/分析 |
 | failure/ | 错误分类、失败记录 |
 | context/ | 会话管理 |
 | cli/commands/ | 20 个顶层命令（COMMAND_DEFINITIONS 14 + GATE_DEFINITIONS 6）+ constraints 治理子命令 |
-| agents/ | Agent 生命周期状态机（7 状态） |
+| agents/ | Agent 生命周期状态机（5 状态） |
 | completion-checkers/ | 提交集收尾软观测三纯判定（tdd-chain / phase-format / contract-presence） |
-| bootstrap/ | harness 运行时 bootstrap 组合根（bootstrapHarness；原 hooks/，ADR-0040 Phase 3 正名） |
-| knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Linter、Reference Tracker |
+| bootstrap/ | harness 运行时 bootstrap 组合根（bootstrapHarness；原 hooks/，ADR-0041 Phase 3 正名） |
+| knowledge/ | 知识引擎：Store、Query、Lifecycle、Ingest、Audit、ColdStart |
 | presets/ | 预设纯数据（strict/standard/relaxed） |
 | release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
 | sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md；与 knowledge/index-generator 平行不合并是刻意分工，裁决见 knowledge/CONTEXT.md） |
-| types/ | 公共类型（checkpoint / command-io / constraint / cso / failure / gate / passes-gate / project-config / spec） |
-| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-json / package-version / detect-source-roots / glob-match / attempt） |
+| types/ | 公共类型（checkpoint / command-definition / command-io / constraint / cso / failure / gate / passes-gate / project-config / spec / trace） |
+| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-json / package-version / detect-source-roots / glob-match / attempt / clip / diff-parse / guards / log-rotate / yaml-edit） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
 
 ## 依赖关系
@@ -53,7 +53,7 @@
 | 测试产物解读（test-output） | 从测试运行器 stdout 读出「过了没 / 哪些失败 / 覆盖率」的判定；唯一实现 `core/validators/test-output.ts`（包内，不进导出面），passes-gate / acceptance 共消费（ADR-0012）。两门禁判定依据不一致待 #93 裁决，覆盖率取数归属待 #94 裁决 |
 | 飞轮指标（flywheel） | 知识条目的引用与消费度量（refCoverage / avgRefs / consumptionHitRate）；唯一实现 `knowledge/flywheel-metrics.ts`（包内，不进导出面），canonical 分子为过滤 synthetic 后的 genuine refs，audit D6 / knowledge stats / knowledge health 共消费（ADR-0013，#81） |
 | 测试夹具（project fixture） | 临时项目根 + 落盘声明；唯一实现 `test-setup/project-fixture.ts`（测试层，不进导出面）——`config` 槽是 `.harness/config.yml` 落点唯一正本（字符串原样落盘，畸形/脏配置用例依赖此口径），`traces` 槽/`writeProjectTraces` 是 trace 落盘唯一正本（路径锚定 `DEFAULT_TRACE_FILE`、序列化走 `appendJsonl` 生产写链，harness#108），其余文件走 `files` 相对路径；非缺省根必须经 `parentDir` **显式** opt-out（cwd 锚定用例语义），回收经 `mkdtemp-cleanup` 劫持（harness#90） |
-| 运行级观察面（run env） | 一次 `harness check` 运行内对项目上行数据的只读视图，口径 = **同一文件至多读一次、跑完即弃、不做进程级全局**；唯一实现 `core/constraints/run-env.ts`，承载 `rawConfig()` / `capabilities(population)` / `traceTail(limit)` / `sourceRoots()` 四个观察口（ADR-0029：`customConstraints(file)` 口随 custom 约束面退役移除）（配置与能力表的读取原进程级缓存已按 ADR-0023 决策 2 撤销），与 git 证据（#87/ADR-0021）同形：入口构造、沿调用链显式传递。与 `CheckEnv` 的分工是构造顺序决定的——`CheckEnv` 含 `context`，而 `context` 是经本观察面读文件算出的产物，故观察面只承载「不需要 context 就能造」的部分，`CheckEnv` 以 `extends RunEnv` 从它派生（ADR-0023）；`RunEnv` / `RunTarget`（= `RunEnv \| 项目根路径`）经 `./core` 以类型面导出，供消费方共享同一份读取。**只读是硬契约**：运行期状态文件的写口不走本面，走 StateIO（#148） |
+| 运行级观察面（run env） | 一次 `harness check` 运行内对项目上行数据的只读视图，口径 = **同一文件至多读一次、跑完即弃、不做进程级全局**；唯一实现 `core/constraints/run-env.ts`，承载 `rawConfig()` / `capabilities(population)` / `sourceRoots()` 三个观察口（ADR-0029：`customConstraints(file)` 口随 custom 约束面退役移除；ADR-0041 Phase 1：`traceTail(limit)` 口随死证据标志管道整串删除）（配置与能力表的读取原进程级缓存已按 ADR-0023 决策 2 撤销），与 git 证据（#87/ADR-0021）同形：入口构造、沿调用链显式传递。与 `CheckEnv` 的分工是构造顺序决定的——`CheckEnv` 含 `context`，而 `context` 是经本观察面读文件算出的产物，故观察面只承载「不需要 context 就能造」的部分，`CheckEnv` 以 `extends RunEnv` 从它派生（ADR-0023）；`RunEnv` / `RunTarget`（= `RunEnv \| 项目根路径`）经 `./core` 以类型面导出，供消费方共享同一份读取。**只读是硬契约**：运行期状态文件的写口不走本面，走 StateIO（#148） |
 | 状态文件 IO（StateIO） | harness 自身运行期状态文件（`.harness/.state.json`）读写的可注入接缝：`read()`/`write()` 两方法、默认真实 fs 实现 `fileStateIO(projectPath)`、命令可选参数注入（照 `CommandIO` 模式，但不扩 `CommandIO`）；唯一实现 `src/cli/state-io.ts`（cli 层，不进包根导出面），收编 check 智能提示与 status 两个写者，写语义统一为**读-改-写**（此前 `status` 不读就整文件重写、把 `check` 写的 `shownHints` 抹掉致提示去重失效，ADR-0026 已修）。决策 = **ADR-0026**，实现票 #148；与运行级观察面（只读、项目上行数据）分工：本面管 harness 自身状态、含写 |
 
 ## 注意事项

@@ -3,7 +3,7 @@
 ## 职责
 Harness 运行环境的组合根：一次调用装配起约束检查器、会话管理器与 trace 记录器，并加载项目配置。
 
-ADR-0027（#170）起本层只剩 bootstrap 一个面。原先的通用 hook 管线（`registry` / `pipeline` / `config` / `types` 四文件：注册 → 排序 → 错误隔离 → 采样执行）双仓零生产消费者，整体删除——裁决记录 `docs/adr/0027-hooks-pipeline-surface-trim.md`（事实前提：下游消费方侧 hooks 层已删除）。目录原名 `hooks/` 沿用历史，ADR-0040 Phase 3 正名 `bootstrap/`——职责即组合根。
+ADR-0027（#170）起本层只剩 bootstrap 一个面。原先的通用 hook 管线（`registry` / `pipeline` / `config` / `types` 四文件：注册 → 排序 → 错误隔离 → 采样执行）双仓零生产消费者，整体删除——裁决记录 `docs/adr/0027-hooks-pipeline-surface-trim.md`（事实前提：下游消费方侧 hooks 层已删除）。目录原名 `hooks/` 沿用历史，ADR-0041 Phase 3 正名 `bootstrap/`——职责即组合根。
 
 ## 核心导出
 - `bootstrapHarness` — 异步组合根（async 仅为公共签名兼容：配置读取是同步 fs，原 `loadConfigAsync` 假 async 已改同步 `loadConfig`）；也是 trace 记录器的接线点：`new ConstraintChecker(new TraceCollector({ projectPath }))`（harness#88：core 不上行依赖 monitoring，故由本层接线；#139 收根：两个入口本就收 projectPath，落点随之锚定。原 cwd 锚定的 `getTraceCollector()` 单例已随 #199 删除）

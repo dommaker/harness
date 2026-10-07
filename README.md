@@ -54,11 +54,11 @@ const meta = await import('child_process').then(cp =>
 | **error** | 3 | 代码级检查，违规 throw `ConstraintViolationError` 阻断执行 |
 | **warning** | 4 | 代码级检查，违规记录 warning 放行 |
 
-- 全部约束 kind='check'，每条必须带真实 checker（注册表闭环，引用未注册 checker 构建报错）；`capability_sync`/`docs_freshness`/`context_doc_sync` 为存在性探测——项目未采用对应约定文件时 skip（不阻断、不计 pass/fail）。
+- channel='gate'（缺省，ADR-0035）的约束每条必须带真实 checker（注册表闭环，引用未注册 checker 构建报错；ADR-0041 Phase 4：`Constraint.kind` 单值字段出清）；`capability_sync`/`docs_freshness`/`context_doc_sync` 为存在性探测——项目未采用对应约定文件时 skip（不阻断、不计 pass/fail）。
 - ADR-0029：三层命名（Iron Laws / Guidelines / Prompts）废弃，纯文本提示层（prompt 类约束 + promptInjection 注入 + HARNESS_CONSTRAINTS 注入段与漂移校验）整体关停，文本规则由消费方手写治理段承接；项目自定义纯文本约束（custom-constraints / scenes）随之一并退役。
 - 生效集由 `getEffectiveConstraints(projectRoot)` 统一计算：内置 → preset 裁剪 → config.yml 禁用。`harness check` 与外部消费者全部走它。
 
-约束定义按 severity 分组维护在数据文件中（`src/core/constraints/definitions/{iron-laws,guidelines}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
+约束定义按 severity 分组维护在数据文件中（`src/core/constraints/definitions/{errors,warnings}.ts`），检查逻辑在 `checkers/` 目录按规则独立实现。完整约束列表见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ---
 
@@ -70,8 +70,8 @@ const meta = await import('child_process').then(cp =>
 report 观测 → retire（人确认）→ 知识沉淀 → --export 回传 → 维护者发版演进内置集
 ```
 
-- `harness constraints report` — 只读观测：check 层统计、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、配置健康、注入漂移；`--export` 输出脱敏 markdown 摘要，供使用方回传给维护者。
-- `harness constraints retire` — 交互选择退役候选，**执行前保留一次人确认**。带 id 直达（`harness constraints retire <id> --yes`）也须显式 `--yes` 确认，无 `--yes` 报错不执行。落盘为 config.yml `enabled: false` + `retired` 元数据，同时写入 **KnowledgeStore**（规则原文 + 退役原因 + 历史统计），并自动同步 CLAUDE.md 注入段。退役不是删除——删除 config.yml 中对应段即可回滚。
+- `harness constraints report` — 只读观测：check 层统计、四类退役候选诊断（零触发/零拦截/不可评估/高噪）、配置健康；`--export` 输出脱敏 markdown 摘要，供使用方回传给维护者。
+- `harness constraints retire` — 交互选择退役候选，**执行前保留一次人确认**。带 id 直达（`harness constraints retire <id> --yes`）也须显式 `--yes` 确认，无 `--yes` 报错不执行。落盘为 config.yml `enabled: false` + `retired` 元数据，同时写入 **KnowledgeStore**（规则原文 + 退役原因 + 历史统计）。退役不是删除——删除 config.yml 中对应段即可回滚。
 - 维护者收到回传摘要后编辑内置 definitions 并发版，内置集由此演进。不使用遥测，不做自动降级。
 
 ---
@@ -139,14 +139,14 @@ scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
 | 门禁系统 | 6 种门禁：验收/性能/安全/契约/审查/命令（另有测试门控命令 passes-gate） |
 | 检查点验证 | 项目在 checkpoints.yml 自声明的通用检查项（13 种 check type），由 `harness validate` 执行；与门禁的分工见 ADR-0036 |
 | 运行环境引导 | `bootstrapHarness` / `bootstrapHarnessSync`：一次调用装配约束检查器 + trace 记录器 + 会话管理器（原「Hook 管线」面双仓零消费者，已随 ADR-0027 整体删除） |
-| 上下文/监控 | Token 预算 + 会话压缩 + Trace 收集/分析 |
+| 上下文/监控 | 会话管理 + Trace 收集/分析 |
 
 ### 代码结构
 
 ```
 src/
-├── core/constraints/       # 约束定义（definitions/{iron-laws,guidelines,prompts}）+ checkers/ + 注入渲染/漂移校验 + 使用统计
-├── core/effective-constraints.ts  # 生效集唯一来源（内置→preset→config→custom→scenes）
+├── core/constraints/       # 约束定义（definitions/{errors,warnings}）+ checkers/ + 使用统计
+├── core/effective-constraints.ts  # 生效集唯一来源（内置→preset→config）
 ├── core/validators/        # 检查点校验器（check-handlers/）
 ├── cli/                    # CLI 命令实现（sync-docs/ 模块族等）
 ├── knowledge/              # 知识引擎（存储/检索/衰减/诊断）

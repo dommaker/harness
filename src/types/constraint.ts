@@ -124,7 +124,7 @@ export interface ConstraintResult {
   /**
    * 是否跳过评估（ADR-0001 三态语义）
    *
-   * skip = 约定未采用（存在性探测未命中）或证据 flag 未接线（undefined）。
+   * skip = 约定未采用（存在性探测未命中）或检查输入不可得（harness#182 降级）。
    * skip 时 satisfied 恒为 true（fail-open，不阻断、不计警告），
    * 但不计入 pass/fail 统计；trace 记录为 result: 'skip'。
    */

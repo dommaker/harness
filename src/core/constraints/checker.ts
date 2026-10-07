@@ -297,33 +297,28 @@ export class ConstraintChecker {
     // context.operation 为主触发条件，extraTriggers 为次级推断（ADR-0001），任一命中即匹配
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-    // 1. error 级: block 模式首个违规即抛；collect 模式全量收集
-    //    （ADR-0035：channel 非 gate 的条目不进入检查分发，两级循环同口径过滤）
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error' && isGateConstraint(c))) {
-      if (!matchesTrigger(constraint, operations)) continue;
+    // error 级先行（block 模式首个违规即抛），warning 级随后记警告——单循环按 severity
+    // 分桶（原两个同构循环合一，执行顺序不变）。
+    // （ADR-0035：channel 非 gate 的条目不进入检查分发，两级同口径过滤）
+    for (const severity of ['error', 'warning'] as const) {
+      const bucket = severity === 'error' ? result.errors : result.warnings;
+      for (const constraint of Object.values(constraints).filter(c => c.severity === severity && isGateConstraint(c))) {
+        if (!matchesTrigger(constraint, operations)) continue;
 
-      const checkResult = await this.check(constraint, context, run, env);
-      result.errors.push(checkResult);
-      this.recordTrace(constraint, checkResult, context);
+        const checkResult = await this.check(constraint, context, run, env);
+        bucket.push(checkResult);
+        this.recordTrace(constraint, checkResult, context);
 
-      if (!checkResult.satisfied) {
-        result.passed = false;
-        if (mode === 'block') {
-          throw new ConstraintViolationError(checkResult);
+        if (!checkResult.satisfied) {
+          if (severity === 'error') {
+            result.passed = false;
+            if (mode === 'block') {
+              throw new ConstraintViolationError(checkResult);
+            }
+          } else {
+            result.warningCount++;
+          }
         }
-      }
-    }
-
-    // 2. warning 级: 记录警告
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'warning' && isGateConstraint(c))) {
-      if (!matchesTrigger(constraint, operations)) continue;
-
-      const checkResult = await this.check(constraint, context, run, env);
-      result.warnings.push(checkResult);
-      this.recordTrace(constraint, checkResult, context);
-
-      if (!checkResult.satisfied) {
-        result.warningCount++;
       }
     }
 

@@ -10,9 +10,12 @@
  * 两个消费形（同一条判定规则，不建第二套解析器）：
  * - `requireNumericFlag`：定义表 `mapActionArgs` 装配点用，脏值抛 `NumericFlagError`，
  *   bin/harness.js 捕获后映射 usage-error（非零退出）；
- * - `parseNumericFlag`：命令模块入口装配点用（knowledge/failure/passes-gate），
- *   返回值判别，就地 `logError` + `usage-error`。
+ * - `parseNumericFlagOrReport`：命令模块入口装配点用（knowledge/failure/passes-gate），
+ *   脏值就地 stderr 报错，调用方补一条带定位 reason 的 usage-error 返回。
  */
+
+import { format } from 'util';
+import type { CommandIO } from '../types/command-io';
 
 /** 数值形：int = 非负整数；float = 非负十进制（不收指数/符号/前后缀） */
 export type NumericFlagKind = 'int' | 'float';
@@ -61,4 +64,23 @@ export function requireNumericFlag(
   const result = parseNumericFlag(raw, kind);
   if (!result.ok) throw new NumericFlagError(numericFlagMessage(flag, result.raw, kind));
   return result.value;
+}
+
+/**
+ * 命令模块装配点的 io 感知形（原「parseNumericFlag + logError + usage-error」三块
+ * 合一的前两截）：脏值就地写 stderr（文案 = numericFlagMessage，写入语义与
+ * cli 侧 logError 逐字一致），调用方只补带定位 reason 的 usage-error 返回
+ * （reason 点名命令与旗帜，各站点不同，不进本 helper）。
+ */
+export function parseNumericFlagOrReport(
+  io: CommandIO,
+  flag: string,
+  raw: string | undefined,
+  kind: NumericFlagKind,
+): NumericFlagAssembly {
+  const result = parseNumericFlag(raw, kind);
+  if (!result.ok) {
+    io.stderr.write(format(numericFlagMessage(flag, result.raw, kind)) + '\n');
+  }
+  return result;
 }

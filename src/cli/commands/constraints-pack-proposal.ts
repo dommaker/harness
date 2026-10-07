@@ -39,6 +39,14 @@ export interface PackProposalOptions {
 }
 
 /**
+ * 未知约束 id 的校验失败出口（--stdout 与落盘两通道同文案同 kind）
+ */
+function unknownConstraintId(id: string, io: CommandIO): CommandResult {
+  logError(io, `❌ 未知约束 id: ${id}（内置与应用层 constraints.yml 均未找到），未做任何变更`);
+  return { kind: 'usage-error', reason: `未知约束 id: ${id}` };
+}
+
+/**
  * CLI handler: harness constraints pack-proposal <id>
  */
 export async function constraintsPackProposal(
@@ -57,19 +65,13 @@ export async function constraintsPackProposal(
 
   if (options.stdout) {
     const material = collectProposalMaterial(projectRoot, id);
-    if (!material) {
-      logError(io, `❌ 未知约束 id: ${id}（内置与应用层 constraints.yml 均未找到），未做任何变更`);
-      return { kind: 'usage-error', reason: `未知约束 id: ${id}` };
-    }
+    if (!material) return unknownConstraintId(id, io);
     log(io, renderProposalMarkdown(material, projectRoot, now));
     return { kind: 'ok' };
   }
 
   const result = packProposal(projectRoot, id, { now });
-  if (!result) {
-    logError(io, `❌ 未知约束 id: ${id}（内置与应用层 constraints.yml 均未找到），未做任何变更`);
-    return { kind: 'usage-error', reason: `未知约束 id: ${id}` };
-  }
+  if (!result) return unknownConstraintId(id, io);
 
   log(io, chalk.green(`✅ 提案材料已生成: ${result.materialPath}`));
   log(io, chalk.gray('   下一步：人工确认 params 无应用内部信息后，拿材料去 harness 仓开 issue（不自动开）'));

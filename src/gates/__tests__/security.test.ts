@@ -174,7 +174,7 @@ describe('SecurityGate', () => {
     });
   });
 
-  describe('analyzeResult() - npm audit format', () => {    it('should parse audit.advisories format', async () => {
+  describe('analyzeResult() - npm audit format', () => {    it('npm 6 audit.advisories 旧形状已随其 EOL 删除 → 不计数', async () => {
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(null, {
           stdout: JSON.stringify({
@@ -193,7 +193,7 @@ describe('SecurityGate', () => {
 
       const result = await gate.scan(baseContext);
 
-      expect(result.details?.high).toBe(1);
+      expect(result.details?.total).toBe(0);
     });
 
     it('should parse vulnerabilities format (new npm audit)', async () => {

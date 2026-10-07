@@ -9,7 +9,7 @@
 import { KnowledgeQuery } from '../../../knowledge/query';
 import type { KnowledgeEntry } from '../../../knowledge/types';
 import { logError, processIO, type CommandIO, type CommandResult } from '../../command-contract';
-import { numericFlagMessage, parseNumericFlag } from '../../../utils/numeric-flag';
+import { parseNumericFlagOrReport } from '../../../utils/numeric-flag';
 import {
   blankLine,
   emitKnowledgeView,
@@ -80,9 +80,8 @@ export async function knowledgeSearchCommand(
     logError(io, '请提供搜索关键词');
     return { kind: 'usage-error', reason: 'knowledge search 缺少关键词位置参数' };
   }
-  const limit = parseNumericFlag(options.limit as string | undefined, 'int');
+  const limit = parseNumericFlagOrReport(io, '--limit', options.limit as string | undefined, 'int');
   if (!limit.ok) {
-    logError(io, numericFlagMessage('--limit', limit.raw, 'int'));
     return { kind: 'usage-error', reason: `knowledge search --limit 非法限制: "${limit.raw}"` };
   }
   return knowledgeSearch(String(query), {

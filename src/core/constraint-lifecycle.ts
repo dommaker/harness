@@ -19,10 +19,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { getConstraint } from './constraints/definitions';
+import { findConstraintDefinition } from './constraints/find-constraint';
 import { ProjectConfigLoader } from './project-config-loader';
 import { isRetiredTombstone } from './retired-constraints';
-import { loadAppConstraints } from './app-constraints-loader';
 import { getEffectiveConstraints } from './effective-constraints';
 import type { RunTarget } from './constraints/run-env';
 import type { Constraint } from '../types/constraint';
@@ -78,34 +77,34 @@ export interface RetireTargetInfo {
 /**
  * 查找约束定义（内置 definitions + 应用层 constraints.yml，ADR-0033）
  *
+ * 查找单一口径 = `constraints/find-constraint`（原与 pack-proposal 同形两份，已并）；
+ * 本函数是它的 RetireTargetInfo 投影。
+ *
  * loader 由调用方给（一次退役一份观察面，见 retireConstraint）：本函数只读它的装载结果，
  * 不再自造 ProjectConfigLoader。应用层查找经 target 参数（项目根路径或观察面），
  * 不传 = 只查内置（历史行为）。
  */
 export function findRetireTarget(id: string, target?: RunTarget): RetireTargetInfo | undefined {
-  const builtIn = getConstraint(id);
-  if (builtIn) {
-    return {
-      severity: builtIn.severity,
-      description: builtIn.description,
-      rule: builtIn.rule,
-      message: builtIn.message,
-      source: 'builtin',
-    };
-  }
-  if (target !== undefined) {
-    const app = loadAppConstraints(target).find(c => c.id === id);
-    if (app) {
-      return {
-        severity: app.severity,
-        description: app.description,
-        rule: app.rule,
-        message: app.message,
-        source: 'app',
-      };
-    }
-  }
-  return undefined;
+  const c = findConstraintDefinition(id, target);
+  if (!c) return undefined;
+  return {
+    severity: c.severity,
+    description: c.description,
+    rule: c.rule,
+    message: c.message,
+    source: c.source ?? 'builtin',
+  };
+}
+
+/**
+ * 读 config.yml `constraints.<id>` 条目（retire/reactivate/disable 三处墓碑与
+ * 幂等判定共用）；缺段 = undefined
+ */
+function loadConstraintEntry(
+  loader: ProjectConfigLoader,
+  id: string
+): { enabled?: boolean; retired?: unknown } | undefined {
+  return loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
 }
 
 /**
@@ -253,7 +252,7 @@ export function retireConstraint(
   // 已退役保护：只认 retired 墓碑（ADR-0032 决策 6.6，票 02 断点 6）——
   // 裸 enabled:false 是"禁用"不是"退休"，落到下面正常退休流程：覆写墓碑 + 补写沉淀，
   // 不让一次裸 disable 吞掉 retire 的知识沉淀。判定谓词唯一实现 = isRetiredTombstone。
-  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
+  const existing = loadConstraintEntry(loader, id);
   if (isRetiredTombstone(existing)) {
     return { id, status: 'already_retired', isError, stats: emptyStats };
   }
@@ -347,7 +346,7 @@ export function reactivateConstraint(
   // 判定谓词唯一实现 = isRetiredTombstone）
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
-  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
+  const existing = loadConstraintEntry(loader, id);
   if (!isRetiredTombstone(existing)) {
     return { id, status: 'not_retired' };
   }
@@ -399,7 +398,7 @@ export function disableConstraint(projectRoot: string, id: string): DisableResul
   // 裸 enabled:false 即已禁用。判定谓词唯一实现 = isRetiredTombstone
   const loader = new ProjectConfigLoader(projectRoot);
   loader.load();
-  const existing = loader.getConfig().constraints?.[id] as { enabled?: boolean; retired?: unknown } | undefined;
+  const existing = loadConstraintEntry(loader, id);
   if (isRetiredTombstone(existing)) {
     return { id, status: 'already_retired' };
   }

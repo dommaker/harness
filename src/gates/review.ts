@@ -41,6 +41,21 @@ function parsePrView(stdout: string): GhPrView {
 }
 
 /**
+ * 内层失败上抛时自带报告标签与 details：check() 的 fromError 单点包装原样带出，
+ * 内层 catch 只附上下文（标签/建议），不再各自拼报告（原三层 try/catch 合一）
+ */
+class ReviewCheckError extends Error {
+  constructor(
+    readonly label: string,
+    reason: string,
+    readonly details?: Record<string, unknown>
+  ) {
+    super(reason);
+    this.name = 'ReviewCheckError';
+  }
+}
+
+/**
  * 审查门禁
  */
 export class ReviewGate implements Gate {
@@ -65,7 +80,7 @@ export class ReviewGate implements Gate {
   }
 
   /**
-   * 检查审查状态
+   * 检查审查状态（异常报告的单点包装：内层抛，这里统一 fromError）
    */
   async check(context: GateContext): Promise<GateResult> {
     const startTime = Date.now();
@@ -73,12 +88,15 @@ export class ReviewGate implements Gate {
     try {
       // 如果有 PR 号，使用 GitHub API
       if (context.prNumber) {
-        return this.checkGitHubPR(context);
+        return await this.checkGitHubPR(context);
       }
 
       // 否则尝试从 git 获取
-      return this.checkLocalGit(context);
+      return await this.checkLocalGit(context);
     } catch (error: unknown) {
+      if (error instanceof ReviewCheckError) {
+        return fromError('review', error.label, error, startTime, error.details);
+      }
       return fromError('review', '审查检查失败', error, startTime);
     }
   }
@@ -125,9 +143,11 @@ export class ReviewGate implements Gate {
       );
     } catch (error: unknown) {
       // gh CLI 不可用或 PR 不存在
-      return fromError('review', '无法获取 PR 状态', error, startTime, {
-        suggestion: '确保已安装 gh CLI 并配置了 GitHub token',
-      });
+      throw new ReviewCheckError(
+        '无法获取 PR 状态',
+        error instanceof Error ? error.message : String(error),
+        { suggestion: '确保已安装 gh CLI 并配置了 GitHub token' }
+      );
     }
   }
 
@@ -167,7 +187,10 @@ export class ReviewGate implements Gate {
         }
       );
     } catch (error: unknown) {
-      return fromError('review', 'Git 检查失败', error, startTime);
+      throw new ReviewCheckError(
+        'Git 检查失败',
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 }

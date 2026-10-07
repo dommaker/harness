@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { ContractGate } from '../../gates/contract';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
@@ -113,8 +114,6 @@ export async function validateSchema(
   const contractPath = options.contractPath || 'openapi.yaml';
 
   try {
-    const yaml = await import('js-yaml');
-
     const fullPath = path.join(projectPath, contractPath);
     const content = await fs.readFile(fullPath, 'utf-8');
 

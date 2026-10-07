@@ -15,33 +15,19 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { formatEvidence, type CheckDetail, type CheckEnv, type ConstraintCheck, type TemplatedCheckerFactory } from '../types';
 import { matchGlob } from './glob';
-
-/** 证据行单行长度上限（命中行可能是整行配置/长文本） */
-const MAX_LINE = 120;
+import { parseUnifiedDiff } from '../../../../utils/diff-parse';
+import { clip } from '../../../../utils/clip';
 
 interface AddedLine {
   file: string;
   line: string;
 }
 
-/** 从 unified diff 中取新增行（按 +++ b/<path> 归属文件，glob 过滤文件集） */
+/** 从 unified diff 中取新增行（文件归属见 utils/diff-parse 正本，glob 过滤文件集） */
 function collectAddedLines(diff: string, inScope: (file: string) => boolean): AddedLine[] {
-  const out: AddedLine[] = [];
-  let file = '';
-  for (const raw of diff.split('\n')) {
-    if (raw.startsWith('+++ b/')) {
-      file = raw.slice('+++ b/'.length);
-      continue;
-    }
-    if (raw.startsWith('+++') || raw.startsWith('diff --git')) {
-      if (raw.startsWith('diff --git')) file = '';
-      continue;
-    }
-    if (raw.startsWith('+') && file && inScope(file)) {
-      out.push({ file, line: raw.slice(1) });
-    }
-  }
-  return out;
+  return parseUnifiedDiff(diff)
+    .filter(l => l.kind === 'added' && l.file !== '' && inScope(l.file))
+    .map(l => ({ file: l.file, line: l.text }));
 }
 
 function hitEvidence(pattern: RegExp, hits: string[]): CheckDetail {
@@ -49,11 +35,6 @@ function hitEvidence(pattern: RegExp, hits: string[]): CheckDetail {
     pass: false,
     evidence: formatEvidence(`命中禁用模式 /${pattern.source}/`, hits),
   };
-}
-
-function clip(line: string): string {
-  const t = line.trim();
-  return t.length > MAX_LINE ? `${t.slice(0, MAX_LINE)}…` : t;
 }
 
 export const regexScan: TemplatedCheckerFactory = {

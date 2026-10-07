@@ -10,8 +10,8 @@ import * as path from 'path';
 import { execAsync } from '../../utils/exec';
 import { PassesGate, detectTestCommand } from '../../core/validators/passes-gate';
 import type { PassesGateConfig } from '../../types/passes-gate';
-import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
-import { numericFlagMessage, parseNumericFlag } from '../../utils/numeric-flag';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { parseNumericFlagOrReport } from '../../utils/numeric-flag';
 
 export interface PassesGateOptions {
   /** 测试命令 */
@@ -115,9 +115,8 @@ export async function coverageCheck(
   options: Record<string, unknown>,
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
-  const threshold = parseNumericFlag(options.coverageThreshold as string | undefined, 'int');
+  const threshold = parseNumericFlagOrReport(io, '--coverage-threshold', options.coverageThreshold as string | undefined, 'int');
   if (!threshold.ok) {
-    logError(io, numericFlagMessage('--coverage-threshold', threshold.raw, 'int'));
     return { kind: 'usage-error', reason: `passes-gate --coverage-threshold 非法阈值: "${threshold.raw}"` };
   }
   return checkCoverage(

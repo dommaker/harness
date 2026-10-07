@@ -24,6 +24,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { isRecord } from '../utils/guards';
 import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -113,11 +114,6 @@ export interface E2ETestResult {
 }
 
 // ==================== tasks.yml 解析与校验 ====================
-
-/** 是 plain object（非 null 非数组） */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /**
  * yaml.load 结果 → TasksFile：形状非法即抛错（fail-fast，不静默兜底）。

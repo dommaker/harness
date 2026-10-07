@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, appendJsonl } from '../utils/jsonl';
+import { rotateNumbered } from '../utils/log-rotate';
 import type { FailureRecord } from '../types/failure';
 
 /**
@@ -120,7 +121,7 @@ export class FailureRecorder {
   }
 
   /**
-   * 文件滚动
+   * 文件滚动（实现正本 = utils/log-rotate；大小阈值判定留本模块）
    */
   private rotateIfNeeded(): void {
     if (!fs.existsSync(this.logFile)) {
@@ -132,28 +133,6 @@ export class FailureRecorder {
       return;
     }
 
-    // 滚动文件
-    const dir = path.dirname(this.logFile);
-    const ext = path.extname(this.logFile);
-    const base = path.basename(this.logFile, ext);
-
-    // 删除最旧的历史文件
-    const oldestHistory = path.join(dir, `${base}.${this.maxHistoryFiles}${ext}`);
-    if (fs.existsSync(oldestHistory)) {
-      fs.unlinkSync(oldestHistory);
-    }
-
-    // 重命名现有历史文件
-    for (let i = this.maxHistoryFiles - 1; i >= 1; i--) {
-      const oldFile = path.join(dir, `${base}.${i}${ext}`);
-      const newFile = path.join(dir, `${base}.${i + 1}${ext}`);
-      if (fs.existsSync(oldFile)) {
-        fs.renameSync(oldFile, newFile);
-      }
-    }
-
-    // 重命名当前文件
-    const firstHistory = path.join(dir, `${base}.1${ext}`);
-    fs.renameSync(this.logFile, firstHistory);
+    rotateNumbered(this.logFile, this.maxHistoryFiles);
   }
 }

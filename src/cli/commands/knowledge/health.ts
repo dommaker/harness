@@ -2,14 +2,18 @@
  * harness knowledge health 子命令（飞轮健康检查 — 零 token 检测数据流状态；
  * Phase 3 自 knowledge.ts 拆出，纯移位）
  *
- * 本文件只做「取数 + 声明两投影」：json 面正本在 `data`，人读排版在 `human()` 的
- * display model。上色、json/人读分派、退出码、路径解析与 store 构造统一在
+ * 本文件只做「取数 + 声明两投影」：健康分与过期判定不自有算法——健康分 =
+ * `audit-scoring.calculateHealthScore`，过期条目 = `audit-rules` 的 stale-entry
+ * 规则命中（ADR-0040 Phase 4 收口，此前本文件内联第三套打分与过期口径）。
+ * 上色、json/人读分派、退出码、路径解析与 store 构造统一在
  * knowledge-view.ts（harness#133，架构评审候选4）。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { evaluateFlywheel } from '../../../knowledge/flywheel-metrics';
+import { AUDIT_RULE_LABELS } from '../../../knowledge/audit-rules';
+import { calculateHealthScore, scanEntries } from '../../../knowledge/audit-scoring';
 import { processIO, type CommandIO, type CommandResult } from '../../command-contract';
 import {
   blankLine,
@@ -43,31 +47,35 @@ interface HealthData {
   issues: HealthIssue[];
 }
 
+/** audit severity → 本命令三档展示severity */
+function displaySeverity(severity: 'low' | 'medium' | 'high' | 'critical'): HealthIssue['severity'] {
+  if (severity === 'critical' || severity === 'high') return 'error';
+  if (severity === 'medium') return 'warn';
+  return 'info';
+}
+
 export function knowledgeHealthView(options: KnowledgeOptions & KnowledgeDirOption, io: CommandIO) {
   const store = openKnowledgeStore(options, io);
   const baseDir = store.getBaseDir();
   const entries = store.list({ excludeArchived: true });
 
-  const issues: HealthIssue[] = [];
+  // 健康分与过期判定唯一正本 = audit 纯打分（stale-entry 口径：lastReferenced || created 超阈值）
+  const auditIssues = scanEntries(entries, {}, entries);
+  const healthScore = calculateHealthScore(entries, auditIssues);
+  const staleEntries = auditIssues.filter(i => i.rule === 'stale-entry').length;
 
-  // D1: 引用密度检查（低引用 = 可能孤立）
+  const issues: HealthIssue[] = auditIssues.map(i => ({
+    severity: displaySeverity(i.severity),
+    entry: i.entryId,
+    detail: `${AUDIT_RULE_LABELS[i.rule]}: ${i.detail}`,
+  }));
+
+  // D1: 引用密度检查（低引用 = 可能孤立；逐条 issue 线索，非聚合分子，ADR-0013 范围外）
   let lowRefEntries = 0;
   for (const entry of entries) {
     if (entry.referencedBy.length === 0 && entry.maturity === 'verified') {
       lowRefEntries++;
       issues.push({ severity: 'info', entry: entry.id, detail: `verified 条目零引用（可能孤立）` });
-    }
-  }
-
-  // D2: 新鲜度检查
-  const now = Date.now();
-  const staleThreshold = 90 * 24 * 60 * 60 * 1000; // 90 days
-  let staleEntries = 0;
-  for (const entry of entries) {
-    const created = new Date(entry.created).getTime();
-    if (now - created > staleThreshold && entry.maturity === 'draft') {
-      staleEntries++;
-      issues.push({ severity: 'warn', entry: entry.id, detail: `draft 超过 90 天未推进` });
     }
   }
 
@@ -82,10 +90,6 @@ export function knowledgeHealthView(options: KnowledgeOptions & KnowledgeDirOpti
   const metrics = evaluateFlywheel({ entries });
   const refCoverage = Math.round(metrics.refCoverage * 100);
   const avgRefs = Math.round(metrics.avgRefs * 10) / 10;
-
-  const totalIssues = issues.filter(i => i.severity === 'error').length * 3
-    + issues.filter(i => i.severity === 'warn').length * 1;
-  const healthScore = Math.max(0, 100 - totalIssues);
 
   const data: HealthData = {
     healthScore,
@@ -120,7 +124,7 @@ function healthSections(data: HealthData): DisplaySection[] {
       title: '  数据流状态:',
       rows: [
         densityRow('    引用密度: ', 'summary.lowRefEntries', summary.lowRefEntries, ' 个零引用 verified'),
-        densityRow('    新鲜度: ', 'summary.staleEntries', summary.staleEntries, ' 个过期 draft'),
+        densityRow('    新鲜度: ', 'summary.staleEntries', summary.staleEntries, ' 个过期条目'),
         { cells: [
           { label: '    消费追踪: ' },
           summary.consumptionData

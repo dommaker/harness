@@ -14,11 +14,11 @@ import type {
 } from './types';
 import { DEFAULT_DECAY_CONFIG } from './types';
 import type { KnowledgeStore } from './store';
+import { TEST_ID_PATTERN } from './audit-rules';
 import { attempt } from '../utils/attempt';
 
 const MAX_REFERENCED_BY = 20;
 const MIN_CONTENT_FOR_PROVEN = 100;
-const TEST_ID_PATTERN = /^(test-|inj-test)/;
 const SIGNAL_SATURATION_THRESHOLD = 3;
 const CONTEXT_DECAY_MONTHS = 3;
 const RULE_MIN_RESULTS_FOR_DECAY = 3;

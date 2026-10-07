@@ -102,7 +102,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
         // 不捏造 content 为空的空心条目（修复手段 = rebuildIndex）
         throw new Error(
           `[harness] 知识条目 "${idx.id}" 索引在册但条目文件缺失或不可解析（索引漂移），` +
-          `修复：harness knowledge lint --fix（rebuildIndex）`
+          `修复：harness knowledge index（rebuildIndex）`
         );
       }
       return full;
@@ -224,7 +224,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   /**
    * 从磁盘读取所有条目（不依赖索引）
-   * 用于 Lint 检查索引一致性
+   * 用于摄入去重等「不能在索引漂移现场先崩」的盘驱动枚举
    */
   readEntriesFromDisk(): KnowledgeEntry[] {
     const files = this.listFiles();

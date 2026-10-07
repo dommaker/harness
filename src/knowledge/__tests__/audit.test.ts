@@ -638,7 +638,7 @@ describe('构造收 store', () => {
     expect(Array.isArray(issues)).toBe(true);
   });
 
-  it('与兄弟模块同形：lint / doctor / query / lifecycle / ingest 一样收 store', async () => {
+  it('与兄弟模块同形：query / lifecycle / ingest 一样收 store', async () => {
     const dir = makeTmpDir();
     const store = setupStore(dir, [{ id: 'W-001', title: 'Wiring Entry' }]);
     const { KnowledgeLifecycle } = await import('../lifecycle');

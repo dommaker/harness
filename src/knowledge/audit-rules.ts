@@ -49,6 +49,9 @@ export interface AuditIssue {
 export const ZERO_CONTENT_THRESHOLD = 20;
 export const MAX_SOURCE_REFS = 20;
 
+/** 测试条目 ID 形态正本（audit 的 test-data-pollution 规则与 lifecycle 的 promotion 阻断共用） */
+export const TEST_ID_PATTERN = /^(test-|inj-test)/;
+
 const TEST_TAG_PATTERNS = [/^test-scope-/, /^test-empty-/, /^test-\d/];
 const DAILY_AUDIT_PATTERN = /^\[Auditor\] Daily audit/;
 const EVENT_NOISE_PATTERNS = [
@@ -111,7 +114,7 @@ export const perEntryRules: AuditRule[] = [
     scope: 'active',
     detect: (entry) => {
       // Match test ID patterns
-      if (/^(test-|inj-test)/.test(entry.id)) {
+      if (TEST_ID_PATTERN.test(entry.id)) {
         return `测试 ID: "${entry.id}"`;
       }
       const hasTestTag = entry.tags.some(t => TEST_TAG_PATTERNS.some(p => p.test(t)));

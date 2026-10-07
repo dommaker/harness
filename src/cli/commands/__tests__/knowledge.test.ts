@@ -261,11 +261,31 @@ describe('knowledgeHealth CLI', () => {
     if (storeSpy) storeSpy.mockRestore();
   });
 
+  // 健康判定已并回 audit 规则组（ADR-0040 Phase 4）：mock 条目须带齐规则读取的字段
+  // （真实 store 的 parseFile 会补默认值，mock 绕过该层）
+  function healthEntry(overrides: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: 'GUI-000',
+      type: 'guideline',
+      title: 'GUI 条目',
+      content: '内容足够长，不触发短内容与零内容规则。',
+      maturity: 'verified',
+      created: new Date().toISOString(),
+      lastReferenced: new Date().toISOString(),
+      contributors: ['human'],
+      projects: ['harness'],
+      tags: [],
+      sourceReferences: [],
+      referencedBy: [],
+      ...overrides,
+    };
+  }
+
   it('should output health score and summary in JSON mode', async () => {
     storeSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([
-        { id: 'GUI-001', maturity: 'verified', sourceReferences: [], referencedBy: ['GUI-002'], created: new Date().toISOString() },
-        { id: 'GUI-002', maturity: 'draft', sourceReferences: [], referencedBy: [], created: new Date().toISOString() },
+        healthEntry({ id: 'GUI-001', maturity: 'verified', referencedBy: ['GUI-002'] }),
+        healthEntry({ id: 'GUI-002', maturity: 'draft' }),
       ]),
       getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
     }));
@@ -280,7 +300,7 @@ describe('knowledgeHealth CLI', () => {
   it('should detect low-reference verified entries', async () => {
     storeSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([
-        { id: 'GUI-001', maturity: 'verified', sourceReferences: [], referencedBy: [], created: new Date().toISOString() },
+        healthEntry({ id: 'GUI-001', maturity: 'verified' }),
       ]),
       getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
     }));
@@ -295,7 +315,7 @@ describe('knowledgeHealth CLI', () => {
     const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(); // 100 days ago
     storeSpy = jest.spyOn(storeModule, 'FileKnowledgeStore').mockImplementation(() => ({
       list: jest.fn().mockReturnValue([
-        { id: 'GUI-001', maturity: 'draft', sourceReferences: [], referencedBy: [], created: oldDate },
+        healthEntry({ id: 'GUI-001', maturity: 'draft', created: oldDate, lastReferenced: '' }),
       ]),
       getBaseDir: jest.fn().mockReturnValue('/tmp/knowledge'),
     }));

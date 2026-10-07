@@ -48,7 +48,7 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 | `src/monitoring/` | Execution Trace collection/analysis |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
 | `src/context/` | Session management, compaction, knowledge injection |
-| `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
+| `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Audit, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
 | `src/bootstrap/` | Harness runtime bootstrap only (`bootstrapHarness` / `bootstrapHarnessSync`): loads `.harness/config.yml`, wires checker + trace collector + session manager. The generic hook pipeline was removed by ADR-0027 (zero consumers in both repos); directory renamed from `src/hooks/` in ADR-0040 Phase 3 |
 | `src/agents/` | Agent lifecycle state machine (idle → running → completed / failed) |

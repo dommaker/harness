@@ -11,11 +11,21 @@ import type {
   IngestOptions,
   SourceRef,
 } from './types';
+import { MATURITY_LEVELS, STORAGE_LAYERS } from './types';
 import type { KnowledgeStore } from './store';
 import { KnowledgeAudit } from './audit';
+import { MAX_SOURCE_REFS } from './audit-rules';
 import { splitFrontmatter } from '../utils/frontmatter';
 
-const MAX_SOURCE_REFS = 20;
+/**
+ * `validateEntry` 的一条摄入前校验问题（lint.ts 删除后的保种落点，ADR-0040 Phase 4）。
+ * severity='high' 按阻断处理（拒收），其余为提示。
+ */
+export interface IngestValidationIssue {
+  severity: 'low' | 'medium' | 'high';
+  description: string;
+  suggestion: string;
+}
 
 /**
  * `ingestEntry` / `ingestBatch` 的返回（判别联合）：
@@ -102,6 +112,103 @@ export class KnowledgeIngest {
     options: IngestOptions,
   ): IngestResult[] {
     return partials.map(p => this.ingestEntry(p, options));
+  }
+
+  /**
+   * 摄入前单条校验（KnowledgeLinter.validateEntry 的保种落点，ADR-0040 Phase 4；
+   * 原 lint.ts 随 audit 正本收口删除）。返回空数组 = 可摄入。
+   *
+   * 检查项：
+   * - maturity/layer 未声明枚举值 → high（字段缺省跳过，兼容只传四字段的
+   *   pre-ingest 调用方；存量枚举扫描由 audit 覆盖）
+   * - content < 20 字符 → high（疑似 LLM 幻觉，拒收）
+   * - title 过于宽泛（只有症状词）→ medium
+   * - 与同 type、共享 ≥2 tag 的 proven 条目矛盾风险 → high
+   * - 与存量条目标题精确重复 / 互相包含 → medium / low
+   */
+  validateEntry(entry: { title: string; content: string; tags: string[]; type: string; maturity?: string; layer?: string }): IngestValidationIssue[] {
+    const issues: IngestValidationIssue[] = [];
+
+    // 未声明枚举值（字段缺省跳过）
+    if (entry.maturity !== undefined && !(MATURITY_LEVELS as readonly string[]).includes(entry.maturity)) {
+      issues.push({
+        severity: 'high',
+        description: `maturity "${entry.maturity}" is not a declared value (${MATURITY_LEVELS.join(' | ')}).`,
+        suggestion: 'Map to a declared maturity (e.g. pending → draft) before writing; the store write gate rejects undeclared values.',
+      });
+    }
+    if (entry.layer !== undefined && !(STORAGE_LAYERS as readonly string[]).includes(entry.layer)) {
+      issues.push({
+        severity: 'high',
+        description: `layer "${entry.layer}" is not a declared value (${STORAGE_LAYERS.join(' | ')}).`,
+        suggestion: 'Map to a declared layer or drop the field; the store write gate rejects undeclared values.',
+      });
+    }
+
+    // Content too short
+    if ((entry.content || '').length < 20) {
+      issues.push({
+        severity: 'high',
+        description: `Content too short (${entry.content.length} chars). LLM may have hallucinated.`,
+        suggestion: 'Reject — re-extract with better prompt or discard.',
+      });
+    }
+
+    // Title too vague
+    const vaguePatterns = /^(错误|失败|问题|异常|bug|error|fail|issue|problem|unknown|untitled)$/i;
+    if (vaguePatterns.test(entry.title.trim())) {
+      issues.push({
+        severity: 'medium',
+        description: `Title "${entry.title}" is too vague to be useful.`,
+        suggestion: 'Re-extract with root cause in title, not symptom.',
+      });
+    }
+
+    // Contradicts proven entry with same tags
+    if (entry.tags && entry.tags.length > 0) {
+      const allEntries = this.store.list({ excludeArchived: false });
+      for (const existing of allEntries) {
+        if (existing.maturity !== 'proven') continue;
+        if (existing.type !== entry.type) continue;
+        const sharedTags = entry.tags.filter(t => existing.tags.includes(t));
+        if (sharedTags.length >= 2) {
+          issues.push({
+            severity: 'high',
+            description: `New entry "${entry.title}" shares tags [${sharedTags.join(', ')}] with proven entry "${existing.title}" (${existing.id}). Contradiction risk.`,
+            suggestion: `Review against ${existing.id}. If aligned, merge. If contradictory, flag for human review.`,
+          });
+        }
+      }
+    }
+
+    // Near-duplicate title check (simple: case-insensitive substring match)
+    if (entry.title.length > 10) {
+      const allEntries = this.store.list({ excludeArchived: false });
+      for (const existing of allEntries) {
+        if (existing.id === entry.title) continue; // not same entry (entry doesn't have id yet)
+        const existingTitle = (existing.title || '').toLowerCase();
+        const newTitle = (entry.title || '').toLowerCase();
+        if (existingTitle === newTitle) {
+          issues.push({
+            severity: 'medium',
+            description: `Exact title match with existing entry "${existing.title}" (${existing.id}).`,
+            suggestion: `Merge into ${existing.id} instead of creating duplicate.`,
+          });
+          break;
+        }
+        // Check high similarity (either title contains the other)
+        if (existingTitle.includes(newTitle) || newTitle.includes(existingTitle)) {
+          issues.push({
+            severity: 'low',
+            description: `Title similarity with existing "${existing.title}" (${existing.id}).`,
+            suggestion: `Consider merging with ${existing.id}.`,
+          });
+          break;
+        }
+      }
+    }
+
+    return issues;
   }
 
   // ── Internal ───────────────────────────────────────────────

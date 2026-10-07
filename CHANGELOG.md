@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- refactor(public-api)!: knowledge 健康面收口为 audit 唯一正本（公共面 breaking，ADR-0040 Phase 4）。删除三个公共类与三个关联类型：`ReferenceTracker`（references.jsonl 从无写入方，record/getReferencesForDecision/updateReferencedBy 三仓零调用，空转旁车）、`KnowledgeHealthScorer`（doctor.ts，被 audit 取代未退役的旧代健康分，阈值与 audit-rules 漂移）、`KnowledgeLinter`（lint.ts，检查项为 audit-rules 的过期子集；孤儿/重复/过时检查已由 orphan-draft/title-duplicate/stale-entry 规则覆盖）及 `ReferenceRecord`/`LintIssue`/`LintIssueType` 类型。**保种与迁移（studio 侧改法）**：① 摄入前校验 `linter.validateEntry(x)` → `ingest.validateEntry(x)`（`KnowledgeIngest` 新增同名方法，检查项逐字保留：枚举值域/短内容/宽泛标题/proven 矛盾/近似重复；返回新导出类型 `IngestValidationIssue[]`——`{severity, description, suggestion}`，原 `type` 字段随 LintIssue 退场，按 `severity === 'high'` 阻断的现有用法不变）；② `monitor-system-probes.ts` 的 doctor 健康分改走 audit 正本：`new KnowledgeAudit(store).run().healthScore.before`（`KnowledgeAudit` 包根已公开，人口口径同为 excludeArchived:false；纯打分 `calculateHealthScore`/`scanEntries` 不进包根，经 KnowledgeAudit 可达即可）；③ `knowledge-singletons.ts` 的 `new KnowledgeLinter(store, new ReferenceTracker(store))` 装配整体删除。索引漂移修复指路：CLI 从不存在 `knowledge lint`（`--fix` 无从谈起），修复入口 = `harness knowledge index`（内部调 `store.rebuildIndex()`）或库层直调 `store.rebuildIndex()`；store 漂移报错文案同步改正。**行为变化**：`knowledge health` 健康分由「100 − error×3 − warn×1」内联算法改判 `calculateHealthScore`（audit 口径，数值通常下降）；过期判定由「draft 超 90 天未推进」并回 audit-rules `stale-entry`（lastReferenced || created 超 90 天，不限 draft），「同一库三种过期口径」消并；问题清单改为 audit 规则命中（带规则中文 label）+ 既有数据流线索。常量归一：`MAX_SOURCE_REFS` 三份归一（audit-rules 正本，ingest 改 import）、`TEST_ID_PATTERN` 双份归一（audit-rules 导出，lifecycle 共用）
+
 ## [2.0.0] - 2026-09-30
 
 ### Changes

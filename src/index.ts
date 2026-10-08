@@ -243,6 +243,7 @@ export {
   KnowledgeQuery,
   KnowledgeLifecycle,
   KnowledgeIngest,
+  sanitizeExternalContent,
   ColdStartImporter,
   KnowledgeAudit,
   DEFAULT_DECAY_CONFIG,

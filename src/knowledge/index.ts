@@ -31,7 +31,7 @@ export { KnowledgeQuery, EXTERNAL_SOURCE_MARKER } from './query';
 export { estimateTokens } from './token-estimate';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';
-export { KnowledgeIngest } from './ingest';
+export { KnowledgeIngest, sanitizeExternalContent } from './ingest';
 export type { IngestValidationIssue } from './ingest';
 export { ColdStartImporter } from './cold-start';
 export { KnowledgeAudit } from './audit';

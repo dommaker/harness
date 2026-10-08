@@ -84,6 +84,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'renderProposalMarkdown',
   'resolveGlobs',
   'retireConstraint',
+  'sanitizeExternalContent',
   'verifyContractPresence',
   'verifyPhaseFormat',
   'verifyReleaseArtifacts',

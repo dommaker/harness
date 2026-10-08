@@ -34,7 +34,7 @@ ADR-0040 班次收口后，三路全量勘察（约 1.5 万行非测试源码逐
 
 ### 4. 公共面出清：健康面唯一正本、仪式字段删除、单例壳出清，迁移成本推向消费方
 
-- **knowledge 健康面收口 audit 唯一正本**（harness#134 的终局）：删 `KnowledgeLinter`/`KnowledgeHealthScorer`（被 audit 取代未退役的旧代，检查项为 audit-rules 过期子集、阈值已漂移）与 `ReferenceTracker`；保种——`validateEntry` 并入 `KnowledgeIngest`（检查项逐字保留，返回新类型 `IngestValidationIssue[]`），`knowledge health` 健康分并回 `calculateHealthScore`、过期判定并回 audit-rules `stale-entry`（消掉同库三种过期口径），CLI 只剩采集+输出。
+- **knowledge 健康面收口 audit 唯一正本**（harness#134 的终局）：删 `KnowledgeLinter`/`KnowledgeHealthScorer`（被 audit 取代未退役的旧代，检查项为 audit-rules 过期子集、阈值已漂移）与 `ReferenceTracker`；保种——`validateEntry` 并入 `KnowledgeIngest`（检查项逐字保留，返回新类型 `IngestValidationIssue[]`），`knowledge health` 健康分并回 `calculateHealthScore`、过期判定并回 audit-rules `stale-entry`（消掉同库三种过期口径），CLI 只剩采集+输出。**删除正当性的准确口径（2026-10-08 校正）**：三者中仅 `ReferenceTracker` 方法面三仓零调用成立；`KnowledgeLinter`/`KnowledgeHealthScorer` 在 studio 有活消费者（`monitor-system-probes.ts` 健康告警、`knowledge.routes.ts` 的 `POST /knowledge/lint`），其删除正当性来自 #134 audit 唯一正本裁决 + major breaking 通道 + CHANGELOG 逐条迁移说明，而非零消费判据。
 - **仪式字段删除**：`Constraint.kind`（ADR-0029 已收窄为 'check' 单值，通道判定走 `isGateConstraint`）；`DEFAULT_TRIGGERS` 硬编码 10 操作清单（trigger 转可选，未声明 = 恒评估，清单漂移口消除）；context 压缩词汇类型（引擎本体已随 ADR-0022 删除）。
 - **单例壳出清**：`CheckpointValidator.getInstance()` / `CSOValidator.getInstance()` 删除（无状态类不需要单例）；`SpecValidator` 归位 `cli/commands/spec/validator`（唯一消费方 = spec CLI），其全局可变状态同删。
 - 迁移成本有意推向消费方（同 ADR-0040 决策 2）：逐条迁移说明写进 CHANGELOG `[Unreleased]`，不做双写/别名过渡；对「可选链兜底会静默落假绿分支」的消费方写法（如 `CSOValidator?.getInstance?.()`）在 CHANGELOG 里点名警示。
@@ -54,3 +54,18 @@ ADR-0040 班次收口后，三路全量勘察（约 1.5 万行非测试源码逐
   - studio 锁 `^2.0.0`，本班次 breaking 暂不感知；3.0.0 发布时按 CHANGELOG 迁移说明逐条适配（CHANGELOG 已对 studio 侧具体改法点名）。
   - 知识库索引漂移现在所有读命令会抛（Phase 2 点 15 的既定代价）：盘上存量脏索引会在升级后首次读取时以报错浮出，修复入口 = `harness knowledge index`（内部调 `store.rebuildIndex()`）。
   - `knowledge health` 健康分切到 audit 口径后数值通常下降——不是质量回归，是尺子换成唯一正本。
+
+## 追记：悬空意图裁决（2026-10-08）
+
+事后对班次 2 全部删除项做历史意图审计（commit pickaxe 查引入史 + studio/mcp-local-rag 跨仓 grep + 按定位文档第一性复核），结论：一项删错恢复，四项确认放弃正确、本节正式记名。
+
+### ingestExternal / sanitizeExternalContent 恢复
+
+`KnowledgeIngest.ingestExternal()` 与 `sanitizeExternalContent()`（连同 barrel 与包根导出）原位恢复，签名与 2.0.0 一致，公共面净效果无 breaking。理由：studio 侧 AS-021 GAP-3 指向的外部知识摄入需求（AS-022 正文 Phase 4「外部知识 + Studio UI」）文档仍挂开，且明确点名复用 harness `ingestExternal()` 的 sanitization；studio 生产代码 `knowledge-singletons.ts` 的 span 包装清单也仍列该方法名。「当前三仓零调用」成立但「需求已死」不成立——删除等于单方面放弃一条挂开的活需求，超出减法判据的授权。判据边界由此补上一条：**零消费判据适用于无文档背书的遗留面；对有活需求文档点名的符号，先核需求状态再论删**。
+
+### 正式放弃四项
+
+- **`CommandGate.addRule()`**：按定位文档 §1 推论——命令钩子壳是过渡件，不再加新功能；运行时加规则是编排，归 studio。本条追记覆盖 ADR-0024 决策 5 的旧口径（彼处留 `addRule()` 作运行时扩展点）。
+- **check-cache 计数采样（harness#45 G5）**：无实测性能需求；studio 从未使用该参数、另自建采样缓存（边界盘点 B 项，回收方向是 studio→harness 归并，而非恢复 harness 这份半成品）。
+- **trace-analyzer 环比趋势家族（`runHourlySummary`/`saveSummary`/`loadSummary`/`compareWithPrevious`）**：汇总调度与报告分发是编排，归 studio（monitor agent 每日洞察已在做）；harness 留判定纯函数 `summarizeTraces`/`detectTraceAnomalies` 即可。
+- **`SessionManager.restoreSession()` + `AgentLifecycle` 的 `FallbackStrategy` 机制**：harness 是文件驱动 CLI、无常驻进程，无会话可恢复；agent 失败重试/降级是编排决策，归 studio agent-loop。两者属长错地方的越界物，不留。

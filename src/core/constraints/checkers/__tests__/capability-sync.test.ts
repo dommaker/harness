@@ -44,6 +44,7 @@ function makeEnv(
     stagedDiffNames: async () => staged.join('\n'),
     srcScan: (root: string) =>
       scan ? scan[root] ?? [] : collectSourceFiles(projectPath, [root]),
+    available: () => true,
   });
 }
 

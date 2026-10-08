@@ -5,13 +5,14 @@
  * 全部内置约束 kind='check'，severity 写死在定义上（error / warning），
  * 纯文本提示层（prompts.ts）已随文本注入层关停整体删除。
  *
- * 工单 20：字面量定义按 severity 分组放 ./definitions/{iron-laws,guidelines}.ts；
+ * 工单 20：字面量定义按 severity 分组放 ./definitions/{errors,warnings}.ts
+ * （文件名 ADR-0040 Phase 3 正名，原 iron-laws/guidelines 是 ADR-0029 前三层命名残留）；
  * 本文件保持原路径做薄聚合。
  */
 
 import type { Constraint, ConstraintTrigger } from '../../types/constraint';
-import { ERROR_CONSTRAINTS } from './definitions/iron-laws';
-import { WARNING_CONSTRAINTS } from './definitions/guidelines';
+import { ERROR_CONSTRAINTS } from './definitions/errors';
+import { WARNING_CONSTRAINTS } from './definitions/warnings';
 
 /** 全部内置约束（check 层全量，severity 在条目上） */
 export const CONSTRAINTS: Record<string, Constraint> = {

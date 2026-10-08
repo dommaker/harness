@@ -18,22 +18,27 @@ export interface ValidateOptions {
   file?: string;
   /** 项目路径 */
   projectPath?: string;
-  /** 是否严格模式 */
-  strict?: boolean;
 }
 
 /**
  * 加载检查点配置
+ *
+ * 缺失（ENOENT）= 合法空（返回 []）；YAML 损坏 / 读取失败（权限等）= 抛出
+ * （fail-fast：损坏 ≠ 缺失，损坏被报成「未找到」会让门禁在脏配置上永远放行）。
  */
 async function loadCheckpoints(filePath: string, io: CommandIO): Promise<Checkpoint[]> {
+  let content: string;
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    const data = yaml.load(content) as { checkpoints?: Checkpoint[] };
-    return data.checkpoints || [];
+    content = await fs.readFile(filePath, 'utf-8');
   } catch (error) {
-    log(io, chalk.yellow(`⚠️  未找到检查点文件: ${filePath}`));
-    return [];
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      log(io, chalk.yellow(`⚠️  未找到检查点文件: ${filePath}`));
+      return [];
+    }
+    throw error;
   }
+  const data = yaml.load(content) as { checkpoints?: Checkpoint[] } | undefined;
+  return data?.checkpoints || [];
 }
 
 /**
@@ -67,7 +72,7 @@ export async function validate(
   };
 
   // 执行验证
-  const validator = CheckpointValidator.getInstance();
+  const validator = new CheckpointValidator();
   const results = [];
   const failedIds: string[] = [];
 

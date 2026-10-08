@@ -36,7 +36,8 @@ import { coverageCheck } from '../passes-gate';
 import { FileKnowledgeStore } from '../../../knowledge/store';
 import type { KnowledgeEntry } from '../../../knowledge/types';
 import { FailureRecorder } from '../../../failure/recorder';
-import { DEFAULT_FAILURE_LOG_FILE, ErrorType, FailureLevel } from '../../../types/failure';
+import { DEFAULT_FAILURE_LOG_FILE } from '../../../types/failure';
+import { ErrorType, FailureLevel } from '../../../failure/error-types';
 import { NumericFlagError } from '../../../utils/numeric-flag';
 
 const repoRoot = path.join(__dirname, '..', '..', '..', '..');

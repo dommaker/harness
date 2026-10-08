@@ -24,6 +24,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { isRecord } from '../utils/guards';
 import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -35,6 +36,7 @@ import type {
   SpecAcceptanceGateConfig,
   AcceptanceGateContext,
 } from './types';
+import { gateResult } from './types';
 import { decisionFromResult } from './decision';
 
 
@@ -77,13 +79,15 @@ export interface TasksFile {
 /**
  * 验收门禁结果 details 负载（type alias 而非 interface：
  * 需要隐式索引签名以直接赋给 GateResult.details 的 Record 形状）
+ *
+ * totalCriteria/checkedCriteria/uncheckedCriteria 一律按**验收条件**计数
+ * （聚合路径逐任务累加，不填任务数）。
  */
 export type AcceptanceGateDetails = {
   taskId?: string;
   totalCriteria: number;
   checkedCriteria: number;
   uncheckedCriteria: string[];
-  missingCriteria: string[];
   e2eTestResults?: E2ETestResult[];
 };
 
@@ -110,11 +114,6 @@ export interface E2ETestResult {
 }
 
 // ==================== tasks.yml 解析与校验 ====================
-
-/** 是 plain object（非 null 非数组） */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /**
  * yaml.load 结果 → TasksFile：形状非法即抛错（fail-fast，不静默兜底）。
@@ -201,21 +200,19 @@ export class SpecAcceptanceGate implements Gate {
 
   /**
    * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导。
-   * AcceptanceGateResult 无 gate 字段，此处归一化为 GateResult 报告结构。
+   * AcceptanceGateResult 无 gate 字段，此处经 gateResult 构造器归一化为 GateResult
+   * 报告结构（本层约定不手拼 GateResult 字面量）。
    */
   async evaluate(context: GateContext): Promise<GateDecision> {
+    const startedAt = Date.now();
     const result = await this.check({
       projectPath: context.projectPath,
       taskId: context.taskId,
       tasksPath: context.tasksPath,
     });
-    return decisionFromResult({
-      gate: 'acceptance',
-      passed: result.passed,
-      message: result.message,
-      timestamp: result.timestamp,
-      ...(result.details ? { details: result.details } : {}),
-    });
+    return decisionFromResult(
+      gateResult('acceptance', result.passed, result.message, startedAt, result.details)
+    );
   }
 
   /**
@@ -288,6 +285,23 @@ export class SpecAcceptanceGate implements Gate {
     return this.validateTask(task, projectPath);
   }
 
+  /** 聚合 details：按验收条件计数（逐任务累加），未满足项带任务 id 前缀 */
+  private aggregateDetails(results: AcceptanceGateResult[]): AcceptanceGateDetails {
+    let totalCriteria = 0;
+    const unchecked: string[] = [];
+    for (const r of results) {
+      totalCriteria += r.details?.totalCriteria ?? 0;
+      for (const c of r.details?.uncheckedCriteria ?? []) {
+        unchecked.push(`${r.details?.taskId}: ${c}`);
+      }
+    }
+    return {
+      totalCriteria,
+      checkedCriteria: totalCriteria - unchecked.length,
+      uncheckedCriteria: unchecked,
+    };
+  }
+
   /**
    * 检查所有任务
    */
@@ -308,12 +322,7 @@ export class SpecAcceptanceGate implements Gate {
         passed: true,
         message: 'All tasks pass acceptance criteria',
         timestamp: new Date().toISOString(),
-        details: {
-          totalCriteria: results.length,
-          checkedCriteria: results.length,
-          uncheckedCriteria: [],
-          missingCriteria: [],
-        },
+        details: this.aggregateDetails(results),
       };
     }
 
@@ -321,12 +330,7 @@ export class SpecAcceptanceGate implements Gate {
       passed: false,
       message: `${failedTasks.length} task(s) fail acceptance criteria`,
       timestamp: new Date().toISOString(),
-      details: {
-        totalCriteria: results.length,
-        checkedCriteria: results.length - failedTasks.length,
-        uncheckedCriteria: failedTasks.map(r => r.message),
-        missingCriteria: [],
-      },
+      details: this.aggregateDetails(results),
     };
   }
 
@@ -366,12 +370,7 @@ export class SpecAcceptanceGate implements Gate {
       passed: false,
       message: `${failedTasks.length} completed task(s) fail acceptance criteria`,
       timestamp: new Date().toISOString(),
-      details: {
-        totalCriteria: results.length,
-        checkedCriteria: results.length - failedTasks.length,
-        uncheckedCriteria: failedTasks.map(r => r.message),
-        missingCriteria: [],
-      },
+      details: this.aggregateDetails(results),
     };
   }
 
@@ -420,7 +419,6 @@ export class SpecAcceptanceGate implements Gate {
       totalCriteria: conditions.length,
       checkedCriteria: conditions.length - unchecked.length,
       uncheckedCriteria: unchecked,
-      missingCriteria: [],
       ...(e2eResults.length > 0 ? { e2eTestResults: e2eResults } : {}),
     };
 

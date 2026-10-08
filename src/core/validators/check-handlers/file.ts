@@ -13,6 +13,15 @@ export function resolvePath(relativePath: string, workdir: string): string {
   return path.join(workdir, relativePath);
 }
 
+/** 读文本：existsSync 之后的权限/竞争失败回带诊断文本，由调用族判失败（同 command 族口径） */
+function readFileContent(filePath: string): { content: string } | { error: string } {
+  try {
+    return { content: fs.readFileSync(filePath, 'utf-8') };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export async function checkFileExists(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
   const filePath = resolvePath(check.config.path || '', context.workdir);
   const exists = fs.existsSync(filePath);
@@ -39,7 +48,21 @@ export async function checkFileNotEmpty(check: CheckpointCheck, context: Checkpo
     };
   }
 
-  const stats = fs.statSync(filePath);
+  // existsSync 与 stat 之间文件被删/无权限：文本即诊断，判失败回带（同 command 族口径）
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(filePath);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      checkId: check.id,
+      passed: false,
+      message: `文件读取失败: ${filePath}`,
+      actual: detail,
+      expected: '> 0',
+      error: detail,
+    };
+  }
   const notEmpty = stats.size > 0;
 
   return {
@@ -65,8 +88,18 @@ export async function checkFileContains(check: CheckpointCheck, context: Checkpo
     };
   }
 
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
-  const contains = fileContent.includes(content);
+  const read = readFileContent(filePath);
+  if ('error' in read) {
+    return {
+      checkId: check.id,
+      passed: false,
+      message: `文件读取失败: ${filePath}`,
+      actual: read.error,
+      expected: content,
+      error: read.error,
+    };
+  }
+  const contains = read.content.includes(content);
 
   return {
     checkId: check.id,
@@ -91,8 +124,18 @@ export async function checkFileNotContains(check: CheckpointCheck, context: Chec
     };
   }
 
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
-  const notContains = !fileContent.includes(content);
+  const read = readFileContent(filePath);
+  if ('error' in read) {
+    return {
+      checkId: check.id,
+      passed: false,
+      message: `文件读取失败: ${filePath}`,
+      actual: read.error,
+      expected: `不包含: ${content}`,
+      error: read.error,
+    };
+  }
+  const notContains = !read.content.includes(content);
 
   return {
     checkId: check.id,

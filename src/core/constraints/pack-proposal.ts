@@ -21,9 +21,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { getConstraint } from './definitions';
-import { loadAppConstraints } from '../app-constraints-loader';
-import { collectUsageByConstraint, readProjectTraces } from './usage-report';
+import { findConstraintDefinition } from './find-constraint';
+import { collectUsageByConstraint, readProjectTracesReport } from './usage-report';
 import type { Constraint } from '../../types/constraint';
 
 /** 提案材料的输入（查找结果 + 使用统计聚合） */
@@ -44,16 +43,6 @@ export interface ProposalMaterial {
 export interface PackProposalResult {
   materialPath: string;
   content: string;
-}
-
-/**
- * 查找约束定义（内置 + 应用层，与 findRetireTarget 同口径但带全量字段——
- * checker/params 是提案材料的核心内容，RetireTargetInfo 不带）
- */
-function findProposalTarget(id: string, projectRoot: string): Constraint | undefined {
-  const builtIn = getConstraint(id);
-  if (builtIn) return builtIn;
-  return loadAppConstraints(projectRoot).find(c => c.id === id);
 }
 
 function formatDate(ts: number | undefined): string {
@@ -129,10 +118,10 @@ export function renderProposalMarkdown(
  * 要落盘产物走 packProposal。
  */
 export function collectProposalMaterial(projectRoot: string, id: string): ProposalMaterial | undefined {
-  const constraint = findProposalTarget(id, projectRoot);
+  const constraint = findConstraintDefinition(id, projectRoot);
   if (!constraint) return undefined;
 
-  const usage = collectUsageByConstraint(readProjectTraces(projectRoot)).get(id);
+  const usage = collectUsageByConstraint(readProjectTracesReport(projectRoot).traces).get(id);
   return {
     constraint,
     stats: {

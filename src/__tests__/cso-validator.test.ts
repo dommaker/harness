@@ -7,15 +7,7 @@ import { CSOValidator } from '../core/validators/cso';
 import type { WorkflowMeta, StepMeta, ToolMeta } from '../types/cso';
 
 describe('CSOValidator', () => {
-  const validator = CSOValidator.getInstance();
-
-  describe('单例模式', () => {
-    it('应该返回单例实例', () => {
-      const instance1 = CSOValidator.getInstance();
-      const instance2 = CSOValidator.getInstance();
-      expect(instance1).toBe(instance2);
-    });
-  });
+  const validator = new CSOValidator();
 
   describe('validateWorkflow', () => {
     it('有效的描述应该通过', () => {

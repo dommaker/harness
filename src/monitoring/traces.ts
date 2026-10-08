@@ -12,6 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, readJsonlEnds, appendJsonl } from '../utils/jsonl';
+import { rotateTimestamped } from '../utils/log-rotate';
 import {
   DEFAULT_TRACE_FILE,
   type ExecutionTrace,
@@ -207,26 +208,6 @@ export class TraceCollector {
   }
 
   /**
-   * 读取最近 N 小时的 traces
-   *
-   * 经 `read()` 的兼容包装，丢计数；要带计数用 `readReport({ timeRange })`
-   * 或 `TraceAnalyzer.analyzeRecentReport()`。
-   */
-  readRecent(hours: number): ExecutionTrace[] {
-    const start = Date.now() - hours * 3600 * 1000;
-    return this.read({ timeRange: { start, end: Date.now() } });
-  }
-
-  /**
-   * 读取特定约束的 traces
-   *
-   * 同 `readRecent()`：兼容包装，计数走 `readReport({ constraintId })`。
-   */
-  readByConstraint(constraintId: string): ExecutionTrace[] {
-    return this.read({ constraintId });
-  }
-
-  /**
    * 应用过滤条件
    */
   private applyFilter(traces: ExecutionTrace[], filter: TraceFilter): ExecutionTrace[] {
@@ -287,17 +268,10 @@ export class TraceCollector {
   /**
    * 滚动文件
    *
-   * 将当前文件重命名为带时间戳的备份
+   * 将当前文件重命名为带时间戳的备份（实现正本 = utils/log-rotate）
    */
   private rotateFile(): void {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = this.traceFile.replace('.log', `-${timestamp}.log`);
-
-    // 重命名当前文件
-    fs.renameSync(this.traceFile, backupFile);
-
-    // 创建新文件
-    fs.writeFileSync(this.traceFile, '', 'utf-8');
+    rotateTimestamped(this.traceFile);
   }
 
   /**

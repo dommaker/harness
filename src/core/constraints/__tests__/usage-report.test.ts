@@ -14,12 +14,11 @@ import { createProjectFixture } from '../../../test-setup/project-fixture';
 import { readJsonl } from '../../../utils/jsonl';
 import {
   buildConstraintsUsageReport,
-  readProjectTraces,
   readProjectTracesReport,
 } from '../usage-report';
 import { DEFAULT_TRACE_FILE } from '../../../types/trace';
 
-describe('readProjectTraces 坏行容错（harness#82）', () => {
+describe('readProjectTracesReport 坏行容错（harness#82）', () => {
   let root: string;
 
   beforeEach(() => {
@@ -42,12 +41,12 @@ describe('readProjectTraces 坏行容错（harness#82）', () => {
       '{"constraintId":"b","broken',
       '{"constraintId":"c","level":"iron_law","timestamp":3,"result":"fail"}',
     ]);
-    const traces = readProjectTraces(root);
+    const traces = readProjectTracesReport(root).traces;
     expect(traces.map(t => t.constraintId)).toEqual(['a', 'c']);
   });
 
   it('缺文件返回空数组', () => {
-    expect(readProjectTraces(root)).toEqual([]);
+    expect(readProjectTracesReport(root).traces).toEqual([]);
   });
 });
 
@@ -79,8 +78,6 @@ describe('坏行计数透传到 report 数据层（harness#100）', () => {
       expect(report.skippedLines).toBe(
         readJsonl(path.join(root, TRACE_REL), 'skip').skippedLines
       );
-      // 兼容签名不变：旧入口仍只返回合法记录数组
-      expect(readProjectTraces(root)).toEqual(report.traces);
       expect(report.traces.map(t => t.constraintId)).toEqual(['a', 'b']);
     }
   );

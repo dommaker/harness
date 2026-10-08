@@ -13,6 +13,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { pass, fail, fromError } from './types';
+import { isRecord } from '../utils/guards';
 import type { GateResult, GateContext, ContractGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
@@ -29,10 +30,6 @@ export interface BreakingChange {
   type: string;
   description: string;
   path: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -214,19 +211,5 @@ export class ContractGate implements Gate {
     }
 
     return endpoints;
-  }
-
-  /**
-   * 设置契约路径
-   */
-  setContractPath(path: string): void {
-    this.config.contractPath = path;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): Required<ContractGateConfig> {
-    return { ...this.config };
   }
 }

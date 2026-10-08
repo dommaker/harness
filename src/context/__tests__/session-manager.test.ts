@@ -6,7 +6,7 @@ import { SessionManager } from '../session-manager';
 import * as fs from 'fs';
 
 jest.mock('fs', () => {
-  // restoreSession 经有界 head 读 events.jsonl（ADR-0023 决策 3），需要倒读四件；
+  // jsonl 有界读链的四件替身随夹具带上（readJsonl 的 head/tail 分支需要）；
   // 内容仍由下面按路径分派的 readFileSync 提供，两条读入口同源（夹具说明见其文件头）
   const { jsonlBoundedReadChain } = require('../../test-setup/jsonl-fake-fs');
   const readFileSync = jest.fn().mockReturnValue('');
@@ -115,64 +115,6 @@ describe('SessionManager', () => {
       expect(() => {
         manager.checkpointSession('nonexistent');
       }).toThrow('不存在');
-    });
-  });
-
-  describe('restoreSession', () => {
-    it('应该从 checkpoint 恢复会话', () => {
-      (mockFs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p.endsWith('sessions')) return true;
-        if (p.includes('checkpoints')) return true;
-        if (p.includes('events.jsonl')) return true;
-        return false;
-      });
-      (mockFs.readdirSync as jest.Mock).mockReturnValue(['session-1']);
-      (mockFs.readFileSync as jest.Mock).mockImplementation((p: string) => {
-        if (p.includes('checkpoint')) {
-          return JSON.stringify({
-            id: 'cp-123',
-            sessionId: 'session-1',
-            timestamp: 't1',
-            eventCount: 2,
-            summary: 'test',
-          });
-        }
-        if (p.includes('events.jsonl')) {
-          return JSON.stringify({ type: 'user_message', id: '1', content: 'a', timestamp: 't1' }) + '\n' +
-                 JSON.stringify({ type: 'assistant_message', id: '2', content: 'b', timestamp: 't2' });
-        }
-        return '';
-      });
-
-      const handle = manager.restoreSession('cp-123');
-      expect(handle.id).toBe('session-1');
-      expect(handle.events.length).toBe(2);
-    });
-
-    it('应该抛出当 checkpoint 不存在', () => {
-      (mockFs.existsSync as jest.Mock).mockReturnValue(false);
-      (mockFs.readdirSync as jest.Mock).mockReturnValue([]);
-
-      expect(() => {
-        manager.restoreSession('nonexistent');
-      }).toThrow('不存在');
-    });
-
-    it('checkpoint 文件损坏（坏 JSON）→ 抛 SyntaxError，不再伪装成「不存在」', () => {
-      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
-      (mockFs.readdirSync as jest.Mock).mockReturnValue(['session-1']);
-      (mockFs.readFileSync as jest.Mock).mockReturnValue('NOT VALID JSON{{{');
-
-      try {
-        expect(() => {
-          manager.restoreSession('cp-123');
-        }).toThrow(SyntaxError);
-      } finally {
-        // 本文件用 clearAllMocks（不清 mockReturnValue），恢复套件默认值防泄漏
-        (mockFs.existsSync as jest.Mock).mockReturnValue(false);
-        (mockFs.readdirSync as jest.Mock).mockReturnValue([]);
-        (mockFs.readFileSync as jest.Mock).mockReturnValue('');
-      }
     });
   });
 

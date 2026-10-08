@@ -49,6 +49,7 @@ describe('docs_freshness — FreshnessRunner 异常 → fail-open 但发声', ()
       stagedDiff: async () => '',
       stagedDiffNames: async () => '',
       srcScan: () => [],
+      available: () => true,
     });
 
     const outcome = normalizeCheckOutcome(await docsFreshness.evaluate(env));
@@ -72,6 +73,7 @@ describe('docs_freshness — FreshnessRunner 异常 → fail-open 但发声', ()
     const env = buildCheckEnv(context, {
       stagedDiff: async () => '',
       stagedDiffNames: async () => '',
+      available: () => true,
       srcScan: () => {
         throw new Error('scan boom');
       },

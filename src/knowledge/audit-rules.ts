@@ -49,6 +49,9 @@ export interface AuditIssue {
 export const ZERO_CONTENT_THRESHOLD = 20;
 export const MAX_SOURCE_REFS = 20;
 
+/** 测试条目 ID 形态正本（audit 的 test-data-pollution 规则与 lifecycle 的 promotion 阻断共用） */
+export const TEST_ID_PATTERN = /^(test-|inj-test)/;
+
 const TEST_TAG_PATTERNS = [/^test-scope-/, /^test-empty-/, /^test-\d/];
 const DAILY_AUDIT_PATTERN = /^\[Auditor\] Daily audit/;
 const EVENT_NOISE_PATTERNS = [
@@ -111,14 +114,15 @@ export const perEntryRules: AuditRule[] = [
     scope: 'active',
     detect: (entry) => {
       // Match test ID patterns
-      if (/^(test-|inj-test)/.test(entry.id)) {
+      if (TEST_ID_PATTERN.test(entry.id)) {
         return `测试 ID: "${entry.id}"`;
       }
-      const hasTestTag = (entry.tags ?? []).some(t => TEST_TAG_PATTERNS.some(p => p.test(t)));
+      const hasTestTag = entry.tags.some(t => TEST_TAG_PATTERNS.some(p => p.test(t)));
       if (hasTestTag) {
-        return `测试标签: ${(entry.tags ?? []).filter(t => TEST_TAG_PATTERNS.some(p => p.test(t))).join(', ')}`;
+        return `测试标签: ${entry.tags.filter(t => TEST_TAG_PATTERNS.some(p => p.test(t))).join(', ')}`;
       }
-      if (/^(Test Entry|Test pattern|Test incident|Empty Test)$/i.test(entry.title.trim())) {
+      // title 不经 parseFile 兜底（缺失正是 D1 的判定对象），运行时可能缺，判空前压空串
+      if (/^(Test Entry|Test pattern|Test incident|Empty Test)$/i.test((entry.title || '').trim())) {
         return `测试标题: "${entry.title}"`;
       }
       return null;
@@ -222,7 +226,7 @@ export const perEntryRules: AuditRule[] = [
     action: 'trim',
     scope: 'all',
     detect: (entry) => {
-      const refs = entry.sourceReferences ?? [];
+      const refs = entry.sourceReferences;
       if (refs.length > MAX_SOURCE_REFS) {
         return `sourceReferences ${refs.length} 条 (上限 ${MAX_SOURCE_REFS})`;
       }
@@ -314,7 +318,7 @@ export const perEntryRules: AuditRule[] = [
     action: 'archive',
     scope: 'active',
     detect: (entry) => {
-      const tags = (entry.tags ?? []).map(t => t.toLowerCase());
+      const tags = entry.tags.map(t => t.toLowerCase());
       // Tag-level: "pipeline" tag is deprecated (superseded by Agent Network)
       if (tags.includes('pipeline')) {
         return `标签 "pipeline" 属于已废弃领域（已被 Agent Network 取代）`;

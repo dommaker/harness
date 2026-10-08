@@ -20,11 +20,6 @@
 export type ConstraintId = string;
 
 /**
- * 约束类别（ADR-0029 收窄为单值）：check = 可执行检查
- */
-export type ConstraintKind = 'check';
-
-/**
  * 约束严重性（显式字段，取代三层 level 命名）
  */
 export type ConstraintSeverity = 'error' | 'warning' | 'info';
@@ -65,12 +60,6 @@ export interface Constraint {
   id: ConstraintId;
 
   /**
-   * 约束类别（ADR-0029）：恒为 'check'；
-   * 纯文本提示（kind='prompt'）已随文本注入层一并关停
-   */
-  kind: ConstraintKind;
-
-  /**
    * 约束通道（ADR-0035）：缺省 'gate'
    *
    * gate 通道必须带 checker（注册表闭环收窄后的口径）；workflow/discipline
@@ -87,8 +76,8 @@ export interface Constraint {
   /** 约束严重性：error = 违规即阻断；warning = 违规告警不阻断；info = 仅记录 */
   severity: ConstraintSeverity;
   
-  /** 触发条件（支持多个 trigger） */
-  trigger: ConstraintTrigger | ConstraintTrigger[];
+  /** 触发条件（支持多个 trigger）；未声明 = 恒评估（无触发域限制，ADR-0040 Phase 4） */
+  trigger?: ConstraintTrigger | ConstraintTrigger[];
   
   /** 强制执行的技能/步骤 */
   enforcement: string;
@@ -135,7 +124,7 @@ export interface ConstraintResult {
   /**
    * 是否跳过评估（ADR-0001 三态语义）
    *
-   * skip = 约定未采用（存在性探测未命中）或证据 flag 未接线（undefined）。
+   * skip = 约定未采用（存在性探测未命中）或检查输入不可得（harness#182 降级）。
    * skip 时 satisfied 恒为 true（fail-open，不阻断、不计警告），
    * 但不计入 pass/fail 统计；trace 记录为 result: 'skip'。
    */
@@ -213,27 +202,9 @@ export interface ConstraintContext {
   // ========================================
   // 前置条件检查
   // ========================================
-  
-  /** 是否有根本原因调查 */
-  hasRootCauseInvestigation?: boolean;
 
   /** 是否已通过诊断→修复闸门（设计方案已确认） */
   hasPlanApproval?: boolean;
-
-  /** 是否有测试 */
-  hasTest?: boolean;
-  
-  /** 是否有失败的测试 */
-  hasFailingTest?: boolean;
-  
-  /** 是否已进行复用检查 */
-  hasReuseCheck?: boolean;
-  
-  /** 是否只处理单个任务（证据标志，当前无内置 checker 消费，供自定义约束用） */
-  hasSingleTask?: boolean;
-  
-  /** 是否有需求文档（证据标志，当前无内置 checker 消费，供自定义约束用） */
-  hasRequirement?: boolean;
 
   /** worktree 路径（用于 worktree 相关检查） */
   worktreePath?: string;

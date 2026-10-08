@@ -2,7 +2,7 @@
  * 检查器输入契约测试（harness#182）
  *
  * 「检查器失效 ≠ 对象合规」的接缝锁定：
- * - findMissingInputs：checker 声明的 needs 与环境供给比对（缺证据 / flag 未接线）
+ * - findMissingInputs：checker 声明的 needs 与环境供给比对（缺证据）
  * - 编排层降级：git 取证失败 → 带原因的 skipped，不进入 evaluate（不再对空 diff 假 pass）
  * - skipReason 落 ConstraintResult 与 ExecutionTrace（可统计的失效信号）
  */
@@ -14,7 +14,6 @@ import {
   buildCheckEnv,
   findMissingInputs,
   normalizeCheckOutcome,
-  type ConstraintCheck,
 } from '../types';
 import { noTestSimplification } from '../no-test-simplification';
 import type { Constraint, ConstraintContext } from '../../../../types/constraint';
@@ -23,7 +22,6 @@ import type { ExecutionTrace } from '../../../../types/trace';
 
 const NO_TEST_SIMPLIFICATION: Constraint = {
   id: 'no_test_simplification',
-  kind: 'check',
   severity: 'error',
   rule: 'DO NOT DELETE TESTS',
   message: '禁止简化测试绕过困难',
@@ -52,28 +50,6 @@ describe('findMissingInputs — needs 与环境供给比对', () => {
     expect(missing).toEqual(['staged diff 不可得（git 取证失败或未接线）']);
   });
 
-  it('contextFlags 为 undefined → 缺项点名标志', () => {
-    const check: ConstraintCheck = {
-      id: 'flag-check',
-      needs: { contextFlags: ['hasFailingTest'] },
-      evaluate: () => true,
-    };
-    expect(findMissingInputs(check, envOf(CONTEXT, {}))).toEqual([
-      '证据标志 hasFailingTest 未接线',
-    ]);
-    expect(
-      findMissingInputs(check, envOf({ ...CONTEXT, hasFailingTest: false }, {}))
-    ).toEqual([]);
-  });
-
-  it('手写 env 未提供 evidenceAvailable → 按全部可得（旧形状兼容）', () => {
-    const env = buildCheckEnv(CONTEXT, {
-      stagedDiff: async () => '',
-      stagedDiffNames: async () => '',
-      srcScan: () => [],
-    });
-    expect(findMissingInputs(noTestSimplification, env)).toEqual([]);
-  });
 });
 
 describe('normalizeCheckOutcome — CheckSkip 归一', () => {

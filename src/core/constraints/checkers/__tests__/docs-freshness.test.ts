@@ -34,6 +34,7 @@ function makeEnv(projectPath: string): ReturnType<typeof buildCheckEnv> {
     stagedDiff: async () => '',
     stagedDiffNames: async () => '',
     srcScan: (root: string) => collectSourceFiles(projectPath, [root]),
+    available: () => true,
   });
 }
 

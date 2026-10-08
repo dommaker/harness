@@ -53,7 +53,9 @@ export class KnowledgeAudit {
    * 全量扫描（日兜底 / 手动模式）
    */
   run(options?: { autoFix?: boolean }): AuditReport {
-    const entries = this.store.list({ excludeArchived: false }).filter(e => e.title && e.type && e.content != null);
+    // 不在入口预过滤条目：字段缺失正是 D1（frontmatter-missing，scope 'all'）的判定对象，
+    // 预过滤会让该规则在 run() 模式下永远打不中
+    const entries = this.store.list({ excludeArchived: false });
 
     // Per-entry issues
     const allIssues = scanEntries(entries, this.options, entries);

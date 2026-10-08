@@ -24,27 +24,41 @@ describe('ReviewGate', () => {
   });
 
   describe('constructor', () => {
-    it('should use default config', () => {
-      const defaultGate = new ReviewGate();
-      const config = defaultGate.getConfig();
-      expect(config.minReviewers).toBe(1);
-      expect(config.requireApproval).toBe(true);
-      expect(config.blockOnChangesRequested).toBe(true);
-      expect(config.allowedReviewers).toEqual([]);
+    it('should use default config', async () => {
+      // 缺省 minReviewers=1：单个 APPROVED 即通过
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        callback(null, {
+          stdout: JSON.stringify({
+            reviews: [{ state: 'APPROVED', author: { login: 'alice' } }],
+            state: 'open',
+          }),
+        });
+      });
+
+      const result = await gate.check({ ...baseContext, prNumber: 123 });
+      expect(result.passed).toBe(true);
     });
 
-    it('should accept custom config', () => {
+    it('should accept custom config', async () => {
       const customGate = new ReviewGate({
         minReviewers: 2,
         requireApproval: false,
         blockOnChangesRequested: false,
         allowedReviewers: ['alice', 'bob'],
       });
-      const config = customGate.getConfig();
-      expect(config.minReviewers).toBe(2);
-      expect(config.requireApproval).toBe(false);
-      expect(config.blockOnChangesRequested).toBe(false);
-      expect(config.allowedReviewers).toEqual(['alice', 'bob']);
+
+      // minReviewers=2：单个 APPROVED 不够
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        callback(null, {
+          stdout: JSON.stringify({
+            reviews: [{ state: 'APPROVED', author: { login: 'alice' } }],
+            state: 'open',
+          }),
+        });
+      });
+
+      const result = await customGate.check({ ...baseContext, prNumber: 123 });
+      expect(result.passed).toBe(false);
     });
   });
 
@@ -228,43 +242,6 @@ describe('ReviewGate', () => {
 
       expect(result.passed).toBe(false);
       expect(result.message).toContain('Git 检查失败');
-    });
-  });
-
-  describe('setMinReviewers()', () => {
-    it('should update minReviewers', () => {
-      gate.setMinReviewers(3);
-      const config = gate.getConfig();
-      expect(config.minReviewers).toBe(3);
-    });
-
-    it('should affect check result', async () => {
-      gate.setMinReviewers(2);
-
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        callback(null, {
-          stdout: JSON.stringify({
-            reviews: [{ state: 'APPROVED', author: { login: 'alice' } }],
-            state: 'open',
-          }),
-        });
-      });
-
-      const result = await gate.check({
-        ...baseContext,
-        prNumber: 123,
-      });
-
-      expect(result.passed).toBe(false);
-    });
-  });
-
-  describe('getConfig()', () => {
-    it('should return copy of config', () => {
-      const config1 = gate.getConfig();
-      const config2 = gate.getConfig();
-      expect(config1).toEqual(config2);
-      expect(config1).not.toBe(config2);
     });
   });
 

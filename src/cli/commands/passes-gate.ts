@@ -10,8 +10,8 @@ import * as path from 'path';
 import { execAsync } from '../../utils/exec';
 import { PassesGate, detectTestCommand } from '../../core/validators/passes-gate';
 import type { PassesGateConfig } from '../../types/passes-gate';
-import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
-import { numericFlagMessage, parseNumericFlag } from '../../utils/numeric-flag';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { parseNumericFlagOrReport } from '../../utils/numeric-flag';
 
 export interface PassesGateOptions {
   /** 测试命令 */
@@ -115,9 +115,8 @@ export async function coverageCheck(
   options: Record<string, unknown>,
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
-  const threshold = parseNumericFlag(options.coverageThreshold as string | undefined, 'int');
+  const threshold = parseNumericFlagOrReport(io, '--coverage-threshold', options.coverageThreshold as string | undefined, 'int');
   if (!threshold.ok) {
-    logError(io, numericFlagMessage('--coverage-threshold', threshold.raw, 'int'));
     return { kind: 'usage-error', reason: `passes-gate --coverage-threshold 非法阈值: "${threshold.raw}"` };
   }
   return checkCoverage(
@@ -157,10 +156,12 @@ export async function checkCoverage(
       return { kind: 'ok' };
     }
     log(io, chalk.red(`❌ 覆盖率不足 (${totalCoverage}% < ${threshold}%)`));
-    // 历史行为：--coverage 路由的未达标不改退出码（今日返回值被 bin 丢弃）→ skip 保留 0 面
-    return { kind: 'skip', reason: `覆盖率不足: ${totalCoverage}% < ${threshold}%` };
+    return { kind: 'fail', reason: `覆盖率不足: ${totalCoverage}% < ${threshold}%` };
   } catch (error) {
-    log(io, chalk.yellow(`⚠️  无法获取覆盖率信息: ${(error as Error).message}`));
-    return { kind: 'skip', reason: `无法获取覆盖率信息: ${(error as Error).message}` }; // 无法获取时跳过检查
+    // fail-loud：覆盖率命令失败 / 报告缺失 / JSON 损坏都是「没查到」，不是「查过了」——
+    // 吞成 skip 退 0 会让门禁在故障时永远放行
+    const message = error instanceof Error ? error.message : String(error);
+    log(io, chalk.red(`❌ 无法获取覆盖率信息: ${message}`));
+    return { kind: 'fail', reason: `无法获取覆盖率信息: ${message}` };
   }
 }

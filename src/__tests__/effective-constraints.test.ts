@@ -38,12 +38,11 @@ describe('getEffectiveConstraints / lintEffectiveConfig', () => {
   });
 
   describe('合并矩阵', () => {
-    it('无配置项目：内置全集（全部 kind=check，带 severity）', () => {
+    it('无配置项目：内置全集（带 severity）', () => {
       const dir = setupProject();
       const constraints = getEffectiveConstraints(dir);
 
       expect(constraints.length).toBe(BUILTIN_TOTAL);
-      expect(constraints.every(c => c.kind === 'check')).toBe(true);
     });
 
     it('config.yml 禁用：条目从生效集移除', () => {
@@ -74,7 +73,6 @@ constraints:
         ])
       );
       expect(constraints).toHaveLength(2);
-      expect(constraints.every(c => c.kind === 'check')).toBe(true);
     });
 
     it('禁用未知 id（已移除约束的残留配置）：不报错，lint 可诊断', () => {

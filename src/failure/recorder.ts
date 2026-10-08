@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, appendJsonl } from '../utils/jsonl';
+import { rotateNumbered } from '../utils/log-rotate';
 import type { FailureRecord } from '../types/failure';
 
 /**
@@ -27,7 +28,7 @@ export interface FailureRecorderConfig {
  * 用法：
  * ```typescript
  * const recorder = new FailureRecorder({ logFile: DEFAULT_FAILURE_LOG_FILE });
- * await recorder.record({
+ * recorder.record({
  *   type: ErrorType.TEST_FAILED,
  *   level: FailureLevel.L1,
  *   message: 'Test failed',
@@ -55,21 +56,12 @@ export class FailureRecorder {
   /**
    * 记录失败
    */
-  async record(record: FailureRecord): Promise<void> {
+  record(record: FailureRecord): void {
     // 检查文件大小，必要时滚动
-    await this.rotateIfNeeded();
+    this.rotateIfNeeded();
 
     // 追加写入单行 JSON（写链收口：ensureDir + append，harness#82）
     appendJsonl(this.logFile, record);
-  }
-
-  /**
-   * 批量记录
-   */
-  async recordBatch(records: FailureRecord[]): Promise<void> {
-    for (const record of records) {
-      await this.record(record);
-    }
   }
 
   /**
@@ -81,7 +73,7 @@ export class FailureRecorder {
    * 计数去向：透传（harness#100 四消费点之一）——skippedLines 进下面那句 console.error，
    * #96 定稿的文案与退出码本票逐字不动。
    */
-  async getHistory(limit?: number): Promise<FailureRecord[]> {
+  getHistory(limit?: number): FailureRecord[] {
     const { records, skippedLines } = readJsonl<FailureRecord>(this.logFile, 'skip');
     if (skippedLines > 0) {
       console.error(`[harness] ${path.basename(this.logFile)} 跳过 ${skippedLines} 行损坏记录`);
@@ -95,40 +87,14 @@ export class FailureRecorder {
   }
 
   /**
-   * 按类型获取记录
-   */
-  async getByType(type: string, limit?: number): Promise<FailureRecord[]> {
-    return this.getFiltered((r) => r.type === type, limit);
-  }
-
-  /**
-   * 按等级获取记录
-   */
-  async getByLevel(level: string, limit?: number): Promise<FailureRecord[]> {
-    return this.getFiltered((r) => r.level === level, limit);
-  }
-
-  /**
-   * 按条件过滤记录
-   */
-  private async getFiltered(
-    predicate: (r: FailureRecord) => boolean,
-    limit?: number
-  ): Promise<FailureRecord[]> {
-    const records = await this.getHistory();
-    const filtered = records.filter(predicate);
-    return limit && limit > 0 ? filtered.slice(-limit) : filtered;
-  }
-
-  /**
    * 获取统计信息
    */
-  async getStats(): Promise<{
+  getStats(): {
     total: number;
     byType: Record<string, number>;
     byLevel: Record<string, number>;
-  }> {
-    const records = await this.getHistory();
+  } {
+    const records = this.getHistory();
 
     const byType: Record<string, number> = {};
     const byLevel: Record<string, number> = {};
@@ -148,16 +114,16 @@ export class FailureRecorder {
   /**
    * 清空记录
    */
-  async clear(): Promise<void> {
+  clear(): void {
     if (fs.existsSync(this.logFile)) {
       fs.writeFileSync(this.logFile, '', 'utf-8');
     }
   }
 
   /**
-   * 文件滚动
+   * 文件滚动（实现正本 = utils/log-rotate；大小阈值判定留本模块）
    */
-  private async rotateIfNeeded(): Promise<void> {
+  private rotateIfNeeded(): void {
     if (!fs.existsSync(this.logFile)) {
       return;
     }
@@ -167,37 +133,6 @@ export class FailureRecorder {
       return;
     }
 
-    // 滚动文件
-    const dir = path.dirname(this.logFile);
-    const ext = path.extname(this.logFile);
-    const base = path.basename(this.logFile, ext);
-
-    // 删除最旧的历史文件
-    const oldestHistory = path.join(dir, `${base}.${this.maxHistoryFiles}${ext}`);
-    if (fs.existsSync(oldestHistory)) {
-      fs.unlinkSync(oldestHistory);
-    }
-
-    // 重命名现有历史文件
-    for (let i = this.maxHistoryFiles - 1; i >= 1; i--) {
-      const oldFile = path.join(dir, `${base}.${i}${ext}`);
-      const newFile = path.join(dir, `${base}.${i + 1}${ext}`);
-      if (fs.existsSync(oldFile)) {
-        fs.renameSync(oldFile, newFile);
-      }
-    }
-
-    // 重命名当前文件
-    const firstHistory = path.join(dir, `${base}.1${ext}`);
-    fs.renameSync(this.logFile, firstHistory);
+    rotateNumbered(this.logFile, this.maxHistoryFiles);
   }
-}
-
-/**
- * 创建失败记录器
- */
-export function createFailureRecorder(
-  config: FailureRecorderConfig
-): FailureRecorder {
-  return new FailureRecorder(config);
 }

@@ -7,7 +7,8 @@ import {
   CONSTRAINTS,
   getAllConstraints,
   findConstraintsByTrigger,
-  getConstraint
+  getConstraint,
+  isGateConstraint
 } from '../core/constraints/definitions';
 import { constraintChecker } from '../core/constraints/checker';
 import { getConstraintCheck, registeredCheckCount } from '../core/constraints/checkers';
@@ -17,11 +18,10 @@ import * as path from 'path';
 import * as os from 'os';
 
 describe('Constraint System', () => {
-  describe('清单构成（ADR-0029：16 → 7，全部 kind=check）', () => {
-    it('getAllConstraints 返回 7 条 check 约束', () => {
+  describe('清单构成（ADR-0029：16 → 7）', () => {
+    it('getAllConstraints 返回 7 条约束', () => {
       const all = getAllConstraints();
       expect(all).toHaveLength(7);
-      expect(all.every(c => c.kind === 'check')).toBe(true);
     });
 
     it('severity 分桶 = 3 error + 4 warning（ADR-0032：凭证扫描升 error、docs_freshness 降 warning）', () => {
@@ -29,9 +29,6 @@ describe('Constraint System', () => {
       const warnings = Object.values(CONSTRAINTS).filter(c => c.severity === 'warning');
       expect(errors).toHaveLength(3);
       expect(warnings).toHaveLength(4);
-      Object.values(CONSTRAINTS).forEach(c => {
-        expect(c.kind).toBe('check');
-      });
     });
 
     it('prompt 面字段已删除（promptInjection / injectPrompt / appliesTo 不存在）', () => {
@@ -121,15 +118,15 @@ describe('Constraint System', () => {
   });
 
   describe('注册表闭环', () => {
-    it('每条 kind=check 约束都有已注册 checker', () => {
-      const checks = getAllConstraints().filter(c => c.kind === 'check');
+    it('每条 gate 通道约束都有已注册 checker', () => {
+      const checks = getAllConstraints().filter(isGateConstraint);
       for (const c of checks) {
         expect(getConstraintCheck(c.id)).toBeDefined();
       }
     });
 
-    it('注册表数量与 check 约束数量一致（无孤儿 checker）', () => {
-      const checkCount = getAllConstraints().filter(c => c.kind === 'check').length;
+    it('注册表数量与 gate 约束数量一致（无孤儿 checker）', () => {
+      const checkCount = getAllConstraints().filter(isGateConstraint).length;
       expect(registeredCheckCount()).toBe(checkCount);
     });
   });
@@ -143,7 +140,6 @@ describe('Constraint System', () => {
     it('should get single constraint by id', () => {
       const constraint = getConstraint('no_completion_without_verification');
       expect(constraint).toBeDefined();
-      expect(constraint?.kind).toBe('check');
       expect(constraint?.severity).toBe('error');
     });
 
@@ -169,7 +165,7 @@ describe('Constraint Checker', () => {
     expect(result.errors.length + result.warnings.length).toBeGreaterThan(0);
   });
 
-  it('kind=check 但未注册 checker 的约束应抛错（不许静默 pass）', async () => {
+  it('gate 通道但未注册 checker 的约束应抛错（不许静默 pass）', async () => {
     const context: ConstraintContext = {
       operation: 'code_implementation',
     };
@@ -178,7 +174,6 @@ describe('Constraint Checker', () => {
       constraintChecker.check(
         {
           id: 'ghost_check_constraint',
-          kind: 'check',
           severity: 'warning',
           rule: 'GHOST',
           message: 'test',
@@ -199,8 +194,6 @@ describe('Constraint Checker', () => {
       operation: 'code_implementation',
       projectPath,
       changedFiles: [],
-      hasRequirement: true,
-      hasSingleTask: true,
     };
 
     const result = await constraintChecker.checkConstraints(context);

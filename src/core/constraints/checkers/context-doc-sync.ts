@@ -9,7 +9,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { resolveContextFiles } from '../../project-config-loader';
+import { resolveContextFiles } from '../governance-accessors';
 import { formatEvidence, type ConstraintCheck } from './types';
 
 export const contextDocSync: ConstraintCheck = {

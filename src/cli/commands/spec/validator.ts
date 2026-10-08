@@ -1,18 +1,24 @@
 /**
- * Spec 验证器
- * 
+ * Spec 验证器（ADR-0040 Phase 4 自 core/spec 迁入 cli spec 域：唯一消费方是
+ * `spec` CLI 命令，类壳是采集+IO 形态，非纯判定）
+ *
  * 框架提供验证机制，项目定义自己的 Spec Schema
- * 
+ *
  * 设计原则：
  * - 框架不包含具体 Schema 定义
  * - 动态加载项目的 Schema
  * - 支持 Zod / JSON Schema / 自定义验证器
+ *
+ * schemaPath 锚定（#95 同型病灶修复）：`validateAll(projectPath)` 的 schema 与
+ * spec 文件同锚 projectPath，不再按 process.cwd() 找；`validateFile` 无根形参，
+ * 相对 schemaPath 由调用方在构造时锚好（CLI 组合根恒传绝对路径）。
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as glob from 'fast-glob';
-import { createGitEvidence, splitFileNames, type GitCommandRunner } from '../constraints/git-evidence';
+import * as yaml from 'js-yaml';
+import { createGitEvidence, splitFileNames, type GitCommandRunner } from '../../../core/constraints/git-evidence';
 import type {
   SpecValidatorConfig,
   SpecValidationResult,
@@ -20,16 +26,14 @@ import type {
   SpecSchemaDefinition,
   SpecType,
   SpecValidationError,
-} from '../../types/spec';
+} from '../../../types/spec';
 
 /**
  * 默认配置
  */
 const DEFAULT_CONFIG: SpecValidatorConfig = {
-  enabled: true,
   schemaPath: './specs/schemas',
   files: ['ARCHITECTURE.md', 'specs/**/*.yml', 'specs/**/*.yaml'],
-  failureLevel: 'error',
 };
 
 /**
@@ -46,33 +50,14 @@ function isSchemaModule(m: unknown): m is { name?: unknown; version?: unknown; v
 }
 
 /**
- * Spec 验证器
+ * Spec 验证器（构造器直建——getInstance/setConfig 全局可变状态已随 ADR-0040 Phase 4 删除）
  */
 export class SpecValidator {
-  private static instance: SpecValidator;
   private config: SpecValidatorConfig;
   private schemaCache: Map<string, SpecSchemaDefinition> = new Map();
 
-  private constructor(config?: Partial<SpecValidatorConfig>) {
+  constructor(config?: Partial<SpecValidatorConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-  }
-
-  /**
-   * 获取单例实例
-   */
-  static getInstance(config?: Partial<SpecValidatorConfig>): SpecValidator {
-    if (!SpecValidator.instance) {
-      SpecValidator.instance = new SpecValidator(config);
-    }
-    return SpecValidator.instance;
-  }
-
-  /**
-   * 更新配置
-   */
-  setConfig(config: Partial<SpecValidatorConfig>): void {
-    this.config = { ...this.config, ...config };
-    this.schemaCache.clear();
   }
 
   /**
@@ -217,7 +202,6 @@ export class SpecValidator {
     // YAML 文件基础检查
     if (filePath.endsWith('.yml') || filePath.endsWith('.yaml')) {
       try {
-        const yaml = await import('js-yaml');
         yaml.load(content);
       } catch (e) {
         errors.push({
@@ -247,8 +231,8 @@ export class SpecValidator {
     const cwd = projectPath || process.cwd();
     const results: SpecValidationResult[] = [];
 
-    // 加载项目的 Schema
-    const loadedSchema = await this.loadSchema(this.config.schemaPath);
+    // 加载项目的 Schema（与 spec 文件同锚 projectPath，不按进程 cwd 找）
+    const loadedSchema = await this.loadSchema(path.resolve(cwd, this.config.schemaPath));
     const schema = loadedSchema ?? undefined;
 
     // 获取要验证的文件
@@ -366,27 +350,4 @@ export class SpecValidator {
       throw err;
     }
   }
-}
-
-/**
- * 便捷函数
- */
-export async function validateSpec(
-  filePath: string,
-  schemaPath?: string
-): Promise<SpecValidationResult> {
-  const validator = SpecValidator.getInstance();
-  if (schemaPath) {
-    const loadedSchema = await validator.loadSchema(schemaPath);
-    return validator.validateFile(filePath, loadedSchema ?? undefined);
-  }
-  return validator.validateFile(filePath);
-}
-
-export async function validateAllSpecs(
-  projectPath?: string,
-  staged?: boolean
-): Promise<BatchSpecValidationResult> {
-  const validator = SpecValidator.getInstance();
-  return validator.validateAll(projectPath, staged);
 }

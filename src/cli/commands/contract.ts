@@ -5,8 +5,10 @@
  */
 
 import chalk from 'chalk';
+import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { ContractGate } from '../../gates/contract';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
@@ -34,11 +36,9 @@ export async function contract(
   const projectPath = options.projectPath || process.cwd();
   const contractPath = options.contractPath || 'openapi.yaml';
 
-  // 先验证文件是否存在
+  // 先验证文件是否存在（存在性探测用 existsSync，不用 try/catch）
   const fullPath = path.join(projectPath, contractPath);
-  try {
-    await fs.access(fullPath);
-  } catch {
+  if (!existsSync(fullPath)) {
     log(io);
     log(io, chalk.red('❌ 契约文件不存在'));
     log(io, chalk.red(`   ${fullPath}`));
@@ -114,8 +114,6 @@ export async function validateSchema(
   const contractPath = options.contractPath || 'openapi.yaml';
 
   try {
-    const yaml = await import('js-yaml');
-
     const fullPath = path.join(projectPath, contractPath);
     const content = await fs.readFile(fullPath, 'utf-8');
 

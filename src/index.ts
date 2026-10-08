@@ -28,7 +28,6 @@ export {
 export type {
   Constraint,
   ConstraintId,
-  ConstraintKind,
   ConstraintChannel,
   ConstraintSeverity,
   ConstraintTrigger,
@@ -107,7 +106,6 @@ export {
   buildConstraintsUsageReport,
   diagnoseRetireCandidates,
   collectUsageByConstraint,
-  readProjectTraces,
   readProjectTracesReport,
   CANDIDATE_KIND_LABEL,
   DEFAULT_DIAGNOSE_THRESHOLDS,
@@ -127,7 +125,6 @@ export {
   checkConstraint,
   checkConstraints,
   collectConstraints,
-  checkBeforeExecution,
 } from './core/constraints/checker';
 export type { CheckConstraintsOptions } from './core/constraints/checker';
 
@@ -140,8 +137,6 @@ export {
   buildCheckEnv,
   normalizeCheckOutcome,
   formatEvidence,
-  contextFlag,
-  contextEvidenceFlag,
 } from './core/constraints/checkers';
 export type {
   ConstraintCheck,
@@ -153,7 +148,6 @@ export type {
   EvidenceProviders,
   CheckInputNeeds,
   CheckEvidenceInput,
-  ContextEvidenceFlag,
 } from './core/constraints/checkers';
 
 // ========================================
@@ -218,11 +212,7 @@ export {
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
   ErrorClassifier,
-  createErrorClassifier,
-  classifyError,
-  getFailureLevel,
   FailureRecorder,
-  createFailureRecorder,
 } from './failure';
 export type {
   FailureRecord,
@@ -239,15 +229,10 @@ export {
   SessionManager,
 } from './context';
 export type {
-  CompactionConfig,
-  CompactionLevel,
-  ContextSource,
-  ContextSourceType,
   SessionCheckpoint,
   SessionEvent,
   SessionEventType,
   SessionHandle,
-  SessionMessage,
 } from './context';
 
 // ========================================
@@ -259,10 +244,7 @@ export {
   KnowledgeLifecycle,
   KnowledgeIngest,
   sanitizeExternalContent,
-  ReferenceTracker,
-  KnowledgeLinter,
   ColdStartImporter,
-  KnowledgeHealthScorer,
   KnowledgeAudit,
   DEFAULT_DECAY_CONFIG,
   estimateTokens,
@@ -279,12 +261,10 @@ export type {
   KnowledgeStore,
   KnowledgeSubsystem,
   KnowledgeOrigin,
-  KnowledgeReference,
   MaturityLevel,
   MaturityChange,
   DecayConfig,
   SourceRef,
-  DecisionRecord,
   QueryFilter,
   QueryBudget,
   QueryResult,
@@ -294,9 +274,7 @@ export type {
   ConsumptionEvent,
   ConsumptionMode,
   IngestOptions,
-  ReferenceRecord,
-  LintIssue,
-  LintIssueType,
+  IngestValidationIssue,
   AuditRuleName,
   AuditAction,
   AuditIssue,
@@ -349,10 +327,10 @@ export type { ArtifactIntegrityResult } from './release';
 export {
   bootstrapHarness,
   bootstrapHarnessSync,
-} from './hooks';
+} from './bootstrap';
 export type {
   HarnessBootstrap,
-} from './hooks';
+} from './bootstrap';
 
 // ========================================
 // Agent 生命周期
@@ -362,11 +340,8 @@ export {
 } from './agents';
 export type {
   AgentConfig,
-  AgentEvent,
   AgentState,
   AgentStatus,
-  EventHandler,
-  FallbackStrategy,
 } from './agents';
 
 // ========================================

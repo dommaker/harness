@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { ConstraintChecker } from '../core/constraints/checker';
 import { detectTrigger, buildConstraintContext } from '../core/constraints/context-builder';
-import { TraceAnalyzer } from '../monitoring/trace-analyzer';
+import { summarizeTraces } from '../monitoring/trace-analyzer';
 import type { Constraint, ConstraintContext } from '../types/constraint';
 import type { ExecutionTrace } from '../types/trace';
 import * as fs from 'fs';
@@ -31,7 +31,7 @@ function makeConstraint(
   severity: 'error' | 'warning',
   trigger: string = 'commit'
 ): Constraint {
-  return { id, kind: 'check', severity, rule: 'TEST', message: 'test', trigger, enforcement: 'test' };
+  return { id, severity, rule: 'TEST', message: 'test', trigger, enforcement: 'test' };
 }
 
 describe('skip 三态语义（ADR-0001）', () => {
@@ -186,8 +186,6 @@ describe('skip 三态语义（ADR-0001）', () => {
         checker.checkConstraints({
           operation: 'code_implementation',
           projectPath: path.join(tempDir, 'empty'),
-          hasSingleTask: true,
-          hasRequirement: true,
         })
       ).rejects.toThrow();
     });
@@ -268,8 +266,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       );
     });
 
-    it('TraceAnalyzer：skip 单独计数，不计入 pass/fail 率分母', () => {
-      const analyzer = new TraceAnalyzer(null as any);
+    it('summarizeTraces：skip 单独计数，不计入 pass/fail 率分母', () => {
       const traces: ExecutionTrace[] = [
         { constraintId: 'c1', severity: 'error', timestamp: 1, result: 'pass' },
         { constraintId: 'c1', severity: 'error', timestamp: 2, result: 'skip' },
@@ -277,7 +274,7 @@ describe('skip 三态语义（ADR-0001）', () => {
         { constraintId: 'c1', severity: 'error', timestamp: 4, result: 'fail' },
       ];
 
-      const [summary] = analyzer.summarize(traces);
+      const [summary] = summarizeTraces(traces);
       expect(summary.totalChecks).toBe(4);
       expect(summary.skipCount).toBe(2);
       // 分母 = 4 - 2 = 2（仅实际评估次数）

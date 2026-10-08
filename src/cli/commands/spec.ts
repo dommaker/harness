@@ -9,14 +9,17 @@
  * - 支持动态加载项目的 Schema
  *
  * 判定经返回值外溢（架构评审候选7）：批量验证的失败计数译成 fail（含失败数），
- * 无 Spec 文件译成 skip；单文件验证维持历史退出码面（无效仍为 0）。
+ * 无 Spec 文件译成 skip；单文件验证无效即 fail（与批量同口径）。
  */
 
 import chalk from 'chalk';
 import * as path from 'path';
-import { SpecValidator, validateAllSpecs } from '../../core/spec/validator';
+import { SpecValidator } from './spec/validator';
 import type { BatchSpecValidationResult, SpecValidationResult } from '../../types/spec';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+
+/** 项目内 Schema 缺省相对路径（组合根锚定：相对项目根解析，不按进程 cwd） */
+const DEFAULT_SCHEMA_PATH = './specs/schemas';
 
 export interface SpecValidateOptions {
   /** Schema 路径（项目定义） */
@@ -41,13 +44,12 @@ export async function specValidate(
   log(io, chalk.blue('📋 验证 Spec 文件...'));
 
   const projectPath = options.projectPath || process.cwd();
-  const validator = SpecValidator.getInstance();
+  // schema 路径在组合根一次锚定（#95 同型病灶：原缺省按 cwd 找 schema）
+  const schemaPath = path.resolve(projectPath, options.schema ?? DEFAULT_SCHEMA_PATH);
+  const validator = new SpecValidator({ schemaPath });
 
-  // 设置 Schema 路径
   if (options.schema) {
-    const absoluteSchemaPath = path.resolve(projectPath, options.schema);
-    validator.setConfig({ schemaPath: absoluteSchemaPath });
-    log(io, chalk.gray(`Schema 路径: ${absoluteSchemaPath}`));
+    log(io, chalk.gray(`Schema 路径: ${schemaPath}`));
   }
 
   let result: BatchSpecValidationResult | SpecValidationResult;
@@ -58,7 +60,9 @@ export async function specValidate(
     log(io, chalk.gray(`验证文件: ${absoluteFilePath}`));
     result = await validator.validateFile(absoluteFilePath);
     printSingleResult(result, io, options.verbose);
-    return { kind: 'ok' };
+    return result.valid
+      ? { kind: 'ok' }
+      : { kind: 'fail', reason: `Spec 文件验证失败: ${options.file}` };
   }
 
   // 批量验证
@@ -66,13 +70,13 @@ export async function specValidate(
   log(io, chalk.gray(`仅暂存: ${options.staged ? '是' : '否'}`));
   log(io);
 
-  result = await validateAllSpecs(projectPath, options.staged);
+  result = await validator.validateAll(projectPath, options.staged);
 
   // 打印结果
   printBatchResult(result, io, options.verbose);
 
-  // 根据失败级别决定退出码
-  if (!options.staged && result.failed > 0) {
+  // 根据失败级别决定退出码（staged 同口径：验证失败即 fail）
+  if (result.failed > 0) {
     return { kind: 'fail', reason: `${result.failed} 个 Spec 文件验证失败` };
   }
   if (result.total === 0) {

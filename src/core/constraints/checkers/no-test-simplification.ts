@@ -17,6 +17,7 @@
  */
 
 import { formatEvidence, type CheckDetail, type ConstraintCheck } from './types';
+import { parseUnifiedDiff } from '../../../utils/diff-parse';
 
 /** 测试文件判定：`.test.`/`.spec.` 后缀段或 `__tests__/` 目录段 */
 function isTestFile(path: string): boolean {
@@ -44,15 +45,13 @@ interface FileTally {
 const UNATTRIBUTED = '(无文件归属的 diff 行)';
 
 /**
- * 按文件归集 diff 增删行：`-`/`+` 行计入当前文件，文件头按 `--- a/`（删除
- * 文件时 `+++ /dev/null` 回落到它）与 `+++ b/` 归属；`\` 行（No newline）忽略。
+ * 按文件归集 diff 增删行：文件归属（含 `+++ /dev/null` 回落旧文件名）见
+ * utils/diff-parse 正本；无归属行挂兜底键（fail-closed 照判），`\` 行正本已忽略。
  */
 function tallyDiff(diff: string): Map<string, FileTally> {
   const tallies = new Map<string, FileTally>();
-  let file = '';
-  let oldName = '';
 
-  const tally = (): FileTally => {
+  const tally = (file: string): FileTally => {
     const key = file || UNATTRIBUTED;
     let t = tallies.get(key);
     if (!t) {
@@ -62,34 +61,13 @@ function tallyDiff(diff: string): Map<string, FileTally> {
     return t;
   };
 
-  for (const raw of diff.split('\n')) {
-    if (raw.startsWith('diff --git')) {
-      file = '';
-      oldName = '';
-      continue;
-    }
-    if (raw.startsWith('--- a/')) {
-      oldName = raw.slice('--- a/'.length);
-      continue;
-    }
-    if (raw.startsWith('+++ b/')) {
-      file = raw.slice('+++ b/'.length);
-      continue;
-    }
-    if (raw.startsWith('+++')) {
-      // 整文件删除（+++ /dev/null）：归属到被删文件，删测试文件 = 净删除
-      file = oldName;
-      continue;
-    }
-    const added = raw.startsWith('+');
-    const deleted = raw.startsWith('-');
-    if (!added && !deleted) continue;
-    const text = raw.slice(1);
-    const t = tally();
-    if (added && SKIP_ONLY_PATTERN.test(text)) t.skipOnlyLines.push(text.trim());
+  for (const line of parseUnifiedDiff(diff)) {
+    if (line.kind === 'context') continue;
+    const t = tally(line.file);
+    if (line.kind === 'added' && SKIP_ONLY_PATTERN.test(line.text)) t.skipOnlyLines.push(line.text.trim());
     NET_DELETE_CATEGORIES.forEach((cat, i) => {
-      if (!cat.pattern.test(text)) return;
-      if (deleted) t.counts[i].deleted++;
+      if (!cat.pattern.test(line.text)) return;
+      if (line.kind === 'deleted') t.counts[i].deleted++;
       else t.counts[i].added++;
     });
   }

@@ -16,84 +16,17 @@
  */
 
 import { requireNumericFlag } from '../../utils/numeric-flag';
+import type { CommandDefinition } from '../../types/command-definition';
 
-/**
- * 命令 CLI 选项元数据（直接映射 commander `.option()`）
- */
-export interface CommandCliOption {
-  /** commander option flags，如 '-p, --project-path <path>' */
-  flags: string;
-  /** 选项描述 */
-  description: string;
-  /** commander 缺省值；negated option（如 --no-strict）不设，由 commander 默认 true */
-  defaultValue?: string | boolean;
-}
-
-/**
- * 命令实现引用（per-command 懒加载路径）
- */
-export interface CommandImplRef {
-  /** 实现模块名（相对 src/cli/commands，如 'check' / 'sync-docs'） */
-  module: string;
-  /** 模块内导出函数名 */
-  export: string;
-}
-
-/**
- * 子命令条目：主名 → 实现（别名经 aliases 一名多注册，架构评审候选7）
- */
-export interface CommandSubcommand {
-  /** 实现引用 */
-  impl: CommandImplRef;
-  /** 别名：与主名解析到同一实现（不再整块复印 args 闭包） */
-  aliases?: string[];
-  /** true = 实现签名 (positionals, options)（需要位置参数的命令，如 knowledge search）；缺省 (options) */
-  withPositionals?: boolean;
-}
-
-/**
- * 选项条件路由（如 check --list）：选项值匹配时以路由替代默认 action；
- * 同一选项可挂多条路由（按序执行，如 passes-gate --coverage）。
- * 实现一律以 (options) 调用；需编组/取值的指向命令模块内的具名包装导出。
- */
-export interface CommandOptionRoute {
-  /** 触发选项键（commander options 对象键名，如 'list'） */
-  flag: string;
-  /** 触发值 */
-  when: unknown;
-  /** 实现引用 */
-  impl: CommandImplRef;
-}
-
-/**
- * 命令定义
- */
-export interface CommandDefinition {
-  /** 命令名（commander 注册字符串，可含位置参数，如 'retire [id]'） */
-  command: string;
-  /** 命令描述 */
-  description: string;
-  /** 命令别名 */
-  alias?: string;
-  /** 位置参数声明（如 '[subcommand]' / '[subcommand] [arg]' / '<planPath>'） */
-  argument?: string;
-  /** 命令选项 */
-  options: CommandCliOption[];
-  /** 子命令（commander 嵌套命令，如 constraints report / retire） */
-  children?: CommandDefinition[];
-  /** 默认 action 实现引用；缺省时裸调用显示帮助（subcommand 命令） */
-  action?: CommandImplRef;
-  /** 子命令路由：位置参数首值 → 条目；未知值报错退出（strict） */
-  subcommands?: Record<string, CommandSubcommand>;
-  /** false = 未知位置参数不报错、落回默认 action（spec 的文件参数用法） */
-  subcommandStrict?: boolean;
-  /** true = 有 subcommands 但无位置参数时运行默认 action 而非显示帮助（门禁命令语义） */
-  bareRunsAction?: boolean;
-  /** 选项条件路由（匹配时替代默认 action 执行） */
-  optionRoutes?: CommandOptionRoute[];
-  /** 默认 action 实参构造（缺省为 [options]） */
-  mapActionArgs?: (positionals: (string | undefined)[], options: Record<string, unknown>) => unknown[];
-}
+// 命令定义形状正本在 types/command-definition（gates 侧同用，ADR-0007；下沉见该文件头注释）；
+// 此处 re-export 保持本模块既有消费方（测试面）进口不变
+export type {
+  CommandCliOption,
+  CommandImplRef,
+  CommandSubcommand,
+  CommandOptionRoute,
+  CommandDefinition,
+} from '../../types/command-definition';
 
 /**
  * 全部非门禁 CLI 命令定义（门禁命令由 GATE_DEFINITIONS 生成，见 src/gates/definitions.ts）
@@ -122,7 +55,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     options: [
       { flags: '-f, --file <path>', description: '检查点文件路径' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
-      { flags: '--strict', description: '严格模式（任何失败都退出）', defaultValue: false },
     ],
     action: { module: 'validate', export: 'validate' },
   },
@@ -174,7 +106,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-p, --project-path <path>', description: '项目路径' },
       { flags: '-d, --detail', description: '显示详细信息', defaultValue: false },
       { flags: '-a, --anomalies', description: '只显示异常', defaultValue: false },
-      { flags: '--hours <n>', description: '分析最近 N 小时', defaultValue: '24' },
     ],
     action: { module: 'status', export: 'status' },
     mapActionArgs: (_pos, options) => [
@@ -182,7 +113,6 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
         projectPath: options.projectPath,
         detail: options.detail,
         anomalies: options.anomalies,
-        hours: parseInt(String(options.hours), 10),
       },
     ],
   },
@@ -232,7 +162,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     command: 'knowledge',
     argument: '[subcommand] [arg]',
     alias: 'kb',
-    description: '知识库管理（list/search/import/decay/stats/audit）',
+    description: '知识库管理（list/search/import/decay/stats/audit/snapshot/index/health）',
     options: [
       { flags: '-p, --project-path <path>', description: '项目路径' },
       { flags: '--type <types>', description: '按类型过滤（逗号分隔）' },
@@ -259,10 +189,8 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       import: { impl: { module: 'knowledge/import', export: 'knowledgeImport' }, aliases: ['i'] },
       decay: { impl: { module: 'knowledge/decay', export: 'knowledgeDecay' }, aliases: ['d'] },
       stats: { impl: { module: 'knowledge/stats', export: 'knowledgeStats' }, aliases: ['st'] },
-      'sync-rag': { impl: { module: 'knowledge/sync-rag', export: 'knowledgeSyncRag' } },
       audit: { impl: { module: 'knowledge/audit', export: 'knowledgeAudit' }, aliases: ['a'] },
       snapshot: { impl: { module: 'knowledge/snapshot', export: 'knowledgeSnapshot' } },
-      migrate: { impl: { module: 'knowledge/migrate', export: 'knowledgeMigrate' } },
       index: { impl: { module: 'knowledge/index', export: 'knowledgeIndex' }, aliases: ['idx'] },
       health: { impl: { module: 'knowledge/health', export: 'knowledgeHealth' }, aliases: ['h'] },
     },
@@ -302,7 +230,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     description: 'npm 发布流水线：tsc → dist 验证 → npm version → git push → npm publish → gh release。纯 CLI 实现，不依赖外部 API。',
     options: [
       { flags: '--bump <type>', description: '版本递增类型', defaultValue: 'patch' },
-      { flags: '--dry-run <bool>', description: '仅模拟执行', defaultValue: 'false' },
+      { flags: '--dry-run', description: '仅模拟执行', defaultValue: false },
     ],
     action: { module: 'release', export: 'release' },
     mapActionArgs: (_pos, options) => [{ bumpType: options.bump, dryRun: options.dryRun }],

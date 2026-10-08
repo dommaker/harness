@@ -29,7 +29,7 @@ import { log, logError, processIO, type CommandIO, type CommandResult } from '..
 
 export interface ReleaseOptions {
   bumpType?: 'patch' | 'minor' | 'major';
-  dryRun?: string;
+  dryRun?: boolean;
 }
 
 async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout: string; stderr: string }> {
@@ -51,10 +51,18 @@ function gateFail(gate: string, detail: string): CommandResult {
   return { kind: 'fail', reason: `gate ${gate}: ${detail}` };
 }
 
+/** 版本 bump 计算（dry-run 预告与实 bump 校验共用单点） */
+function bumpedVersion(oldVersion: string, bumpType: 'patch' | 'minor' | 'major'): string {
+  const [major, minor, patch] = oldVersion.split('.').map(Number);
+  if (bumpType === 'major') return `${major + 1}.0.0`;
+  if (bumpType === 'minor') return `${major}.${minor + 1}.0`;
+  return `${major}.${minor}.${patch + 1}`;
+}
+
 export async function release(options: ReleaseOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const pkgPath = process.cwd();
   const bumpType = options.bumpType || 'patch';
-  const dryRun = options.dryRun === 'true';
+  const dryRun = options.dryRun ?? false;
 
   // ── 1. Verify package ──
   const pkgJson = readPackageJson(pkgPath);
@@ -117,22 +125,13 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   log(io, chalk.green(`✅ dist: verified (${integrity.checked.length} critical artifacts)`));
 
   if (dryRun) {
-    const [major, minor, patch] = oldVersion.split('.').map(Number);
-    let newVer: string;
-    if (bumpType === 'major') newVer = `${major + 1}.0.0`;
-    else if (bumpType === 'minor') newVer = `${major}.${minor + 1}.0`;
-    else newVer = `${major}.${minor}.${patch + 1}`;
-    log(io, chalk.yellow(`🏁 Dry-run complete. Would publish: ${pkgName}@${newVer}`));
+    log(io, chalk.yellow(`🏁 Dry-run complete. Would publish: ${pkgName}@${bumpedVersion(oldVersion, bumpType)}`));
     return { kind: 'ok' };
   }
 
   // ── 5. Bump version (npm version creates git commit + tag atomically) ──
   log(io, chalk.cyan('🔢 Bumping version...'));
-  const [major, minor, patch] = oldVersion.split('.').map(Number);
-  let expectedNew: string;
-  if (bumpType === 'major') expectedNew = `${major + 1}.0.0`;
-  else if (bumpType === 'minor') expectedNew = `${major}.${minor + 1}.0`;
-  else expectedNew = `${major}.${minor}.${patch + 1}`;
+  const expectedNew = bumpedVersion(oldVersion, bumpType);
   const expectedTag = `v${expectedNew}`;
   const tagExists = await run(`git tag -l "${expectedTag}"`, pkgPath);
   if (tagExists.stdout.trim() === expectedTag) {

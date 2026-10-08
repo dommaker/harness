@@ -175,15 +175,6 @@ export function readProjectTracesReport(projectRoot: string): { traces: Executio
 }
 
 /**
- * 读取项目 traces.log（只读）
- *
- * 兼容签名：只返回记录数组、丢坏行计数，需要计数的消费方走 `readProjectTracesReport()`。
- */
-export function readProjectTraces(projectRoot: string): ExecutionTrace[] {
-  return readProjectTracesReport(projectRoot).traces;
-}
-
-/**
  * 按约束聚合 trace 统计（Map: constraintId → 计数）
  */
 export function collectUsageByConstraint(

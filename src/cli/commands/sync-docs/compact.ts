@@ -6,6 +6,7 @@
  */
 
 import chalk from 'chalk';
+import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { compactCapabilitiesContent } from './capabilities-syncer';
@@ -18,18 +19,18 @@ export async function runCompactSync(
   io: CommandIO,
 ): Promise<CommandResult> {
   const capsPath = path.join(projectPath, 'CAPABILITIES.md');
-  try {
-    const content = await fs.readFile(capsPath, 'utf-8');
-    const compacted = compactCapabilitiesContent(content);
-    if (compacted !== content) {
-      await fs.writeFile(capsPath, compacted, 'utf-8');
-      if (!isJson) log(io, chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
-    } else {
-      if (!isJson) log(io, chalk.green('✅ CAPABILITIES.md 无需折叠'));
-    }
-    return { kind: 'ok' };
-  } catch {
+  // 只兜「不存在」（existsSync 探测）；读/写失败一律抛出，不报成「不存在」
+  if (!existsSync(capsPath)) {
     if (!isJson) log(io, chalk.red('❌ CAPABILITIES.md 不存在，无法折叠'));
     return drift('CAPABILITIES.md 不存在，无法折叠');
   }
+  const content = await fs.readFile(capsPath, 'utf-8');
+  const compacted = compactCapabilitiesContent(content);
+  if (compacted !== content) {
+    await fs.writeFile(capsPath, compacted, 'utf-8');
+    if (!isJson) log(io, chalk.green('✅ 已将 CAPABILITIES.md 文件表格折叠为目录条目'));
+  } else {
+    if (!isJson) log(io, chalk.green('✅ CAPABILITIES.md 无需折叠'));
+  }
+  return { kind: 'ok' };
 }

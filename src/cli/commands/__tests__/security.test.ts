@@ -109,6 +109,20 @@ describe('security command', () => {
       expect(io.outText()).toContain('未发现安全漏洞');
     });
 
+    it('scan 失败（deny 无漏洞清单）→ fail 不假绿', async () => {
+      const mockScan = jest.fn().mockResolvedValue({
+        passed: false,
+        message: '安全扫描失败: npm audit 退出码 1 且无 JSON 输出',
+        details: undefined,
+      });
+      MockGate.mockImplementation(() => ({ scan: mockScan }) as any);
+
+      const result = await auditDetails({}, io);
+
+      expect(result.kind).toBe('fail');
+      expect(io.outText()).toContain('安全扫描失败');
+    });
+
     it('should list vulnerabilities when present', async () => {
       const mockScan = jest.fn().mockResolvedValue({
         passed: false,

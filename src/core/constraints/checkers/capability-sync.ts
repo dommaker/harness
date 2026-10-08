@@ -32,7 +32,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { getCapabilitiesMode } from '../../project-config-loader';
+import { getCapabilitiesMode } from '../governance-accessors';
 import {
   collectPopulationFiles,
   isCoveredByEntries,
@@ -66,7 +66,7 @@ export const capabilitySync: ConstraintCheck = {
       // 增量维度的输入可得性（harness#182）：git 取证失败时 stagedDiffNames 归空串不抛错，
       // uncoveredChanges 恒空 = Step 1 静默失效——放行路径必须带降级提示，不假「已核对」。
       // 不声明 needs 改走编排层 skip：全量扫描（Step 2）不依赖 git，非 git 项目照出漂移提示
-      const diffNamesAvailable = env.evidenceAvailable?.('stagedDiffNames') ?? true;
+      const diffNamesAvailable = env.evidenceAvailable('stagedDiffNames');
       const degradedNote = diffNamesAvailable
         ? []
         : ['增量检查降级：staged 变更清单不可得（git 取证失败），本次未核对变更文件的文档登记'];

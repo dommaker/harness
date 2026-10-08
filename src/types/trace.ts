@@ -226,12 +226,6 @@ export interface TraceCollectorConfig {
  * 分析器配置
  */
 export interface TraceAnalyzerConfig {
-  /** Summary 文件路径 */
-  summaryFile?: string;
-
-  /** 周期长度（毫秒），默认 1 小时 */
-  periodMs?: number;
-
   /** 异常阈值 */
   thresholds?: {
     failRate?: number;       // 失败率阈值，默认 0.5

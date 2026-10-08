@@ -22,13 +22,12 @@ import {
   type ConstraintCheck,
   type TemplatedCheckerFactory,
 } from '../types';
+import { clip } from '../../../../utils/clip';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 600_000;
 /** stdout/stderr 各自保留的字符上限（超出只记截断标记，不拖垮证据面与 trace） */
 const MAX_STREAM_CHARS = 8_192;
-/** 证据行单行长度上限（与 regex-scan 同口径） */
-const MAX_LINE = 120;
 
 interface CommandResult {
   code: number | null;
@@ -83,11 +82,6 @@ function runCommand(command: string, cwd: string, timeoutMs: number): Promise<Co
     child.on('error', (err) => finish({ code: null, signal: null, spawnError: err.message }));
     child.on('close', (code, signal) => finish({ code, signal }));
   });
-}
-
-function clip(line: string): string {
-  const t = line.trim();
-  return t.length > MAX_LINE ? `${t.slice(0, MAX_LINE)}…` : t;
 }
 
 /** 失败原因一行话（自描述，进证据首行） */

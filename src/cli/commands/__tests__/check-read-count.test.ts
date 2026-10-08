@@ -136,12 +136,12 @@ describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () 
         // —— 一次运行一份：本 ADR 的承诺面 ——
         ['.harness/config.yml', 1],
         ['CAPABILITIES.md', 1],
-        ['.harness/logs/traces.log', 2],
+        ['.harness/logs/traces.log', 1],
         ['.harness/.state.json', 1], // ADR-0026：智能提示经 StateIO 读状态，恰一次
         ['AGENTS.md', 1],
         // —— 已知例外（改动需明写理由）——
-        // traces.log = 2：head 50（智能提示的阈值判定，决策 3）与 tail 20（有无失败证据，
-        // 决策 4）是两个不同窗口的**有界**读；并成一个窗口就等于回到整读。
+        // traces.log = 1：head 50（智能提示的阈值判定，决策 3）是剩下的唯一窗口读；
+        // tail 20 的「有无失败证据」探测随死证据标志管道出清而消失。
         // AGENTS.md = 1：ADR-0029 注入漂移检测与 custom 约束面关停后，治理文档只剩
         // governance_presence 一处读者（夹具 CLAUDE.md 不存在且不再被探测，归零）。
       ].sort()
@@ -151,11 +151,8 @@ describe('一次 check 的文件读取计数闸（ADR-0023 决策 5 ①）', () 
   it('除上表点名例外外的项目文件，一次运行内一律至多读一次', async () => {
     await check({ staged: true, projectPath: dir }, io);
 
-    const except = new Set([
-      path.join('.harness', 'logs', 'traces.log'), // 两个窗口的有界读，见上表理由
-    ]);
     const offenders = [...readCounts()].filter(
-      ([file, n]) => !except.has(file) && n > 1
+      ([, n]) => n > 1
     );
     expect(offenders).toEqual([]);
   });

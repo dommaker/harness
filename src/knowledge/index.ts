@@ -14,17 +14,12 @@ export type {
   KnowledgeEntry,
   SourceRef,
   ExecutionResult,
-  KnowledgeReference,
   QueryBudget,
   QueryResult,
   QueryFilter,
-  LintIssueType,
-  LintIssue,
   IngestOptions,
   MaturityChange,
   DecayConfig,
-  DecisionRecord,
-  ReferenceRecord,
   IndexEntry,
   SnapshotSurvival,
   ConsumptionStats,
@@ -37,10 +32,8 @@ export { estimateTokens } from './token-estimate';
 export { KnowledgeLifecycle } from './lifecycle';
 export type { ConsumptionEvent } from './lifecycle';
 export { KnowledgeIngest, sanitizeExternalContent } from './ingest';
-export { ReferenceTracker } from './reference-tracker';
-export { KnowledgeLinter } from './lint';
-export { ColdStartImporter } from './import';
-export { KnowledgeHealthScorer } from './doctor';
+export type { IngestValidationIssue } from './ingest';
+export { ColdStartImporter } from './cold-start';
 export { KnowledgeAudit } from './audit';
 export type { AuditRuleName, AuditAction, AuditIssue } from './audit-rules';
 export type { AuditOptions } from './audit-scoring';

@@ -62,7 +62,7 @@ describe('SecurityGate 统一接口', () => {
 
   it('npm audit 零漏洞 → abstain', async () => {
     mockExec.mockImplementation((_cmd, _opts, callback) =>
-      callback(null, { stdout: JSON.stringify({ audit: { advisories: {} } }) })
+      callback(null, { stdout: JSON.stringify({ vulnerabilities: {} }) })
     );
     const decision = await new SecurityGate().evaluate({
       projectPath: '/test/project',
@@ -75,10 +75,8 @@ describe('SecurityGate 统一接口', () => {
     mockExec.mockImplementation((_cmd, _opts, callback) =>
       callback(null, {
         stdout: JSON.stringify({
-          audit: {
-            advisories: {
-              '1': { severity: 'critical', name: 'bad-lib', via: [{ title: 'RCE' }] },
-            },
+          vulnerabilities: {
+            'bad-lib': { severity: 'critical', via: [{ title: 'RCE' }] },
           },
         }),
       })

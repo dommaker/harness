@@ -8,8 +8,8 @@ import chalk from 'chalk';
 import * as path from 'path';
 import { FailureRecorder } from '../../failure/recorder';
 import { DEFAULT_FAILURE_LOG_FILE } from '../../types/failure';
-import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
-import { numericFlagMessage, parseNumericFlag } from '../../utils/numeric-flag';
+import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
+import { parseNumericFlagOrReport } from '../../utils/numeric-flag';
 
 export interface FailureOptions {
   /** 项目路径 */
@@ -40,9 +40,8 @@ export async function failureList(
   // 原先 parseInt 出 NaN → falsy → 静默不截断。
   let limit: number | undefined;
   if (typeof options.limit === 'string') {
-    const parsed = parseNumericFlag(options.limit, 'int');
+    const parsed = parseNumericFlagOrReport(io, '--limit', options.limit, 'int');
     if (!parsed.ok) {
-      logError(io, numericFlagMessage('--limit', parsed.raw, 'int'));
       return { kind: 'usage-error', reason: `failure list --limit 非法限制: "${parsed.raw}"` };
     }
     limit = parsed.value;
@@ -51,7 +50,7 @@ export async function failureList(
   }
   const recorder = getRecorder(options.projectPath);
 
-  let records = await recorder.getHistory();
+  let records = recorder.getHistory();
 
   if (options.type) {
     records = records.filter(r => r.type === options.type);
@@ -91,7 +90,7 @@ export async function failureList(
  */
 export async function failureStats(options: FailureOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
-  const stats = await recorder.getStats();
+  const stats = recorder.getStats();
 
   if (options.json) {
     log(io, JSON.stringify(stats, null, 2));
@@ -124,9 +123,9 @@ export async function failureStats(options: FailureOptions, io: CommandIO = proc
  */
 export async function failureClear(options: FailureOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const recorder = getRecorder(options.projectPath);
-  const stats = await recorder.getStats();
+  const stats = recorder.getStats();
 
-  await recorder.clear();
+  recorder.clear();
 
   if (options.json) {
     log(io, JSON.stringify({ cleared: stats.total }));

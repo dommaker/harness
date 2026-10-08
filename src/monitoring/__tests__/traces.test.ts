@@ -117,27 +117,6 @@ describe('TraceCollector', () => {
     });
   });
 
-  describe('readRecent()', () => {
-    it('should read recent traces', () => {
-      const now = Date.now();
-      mockFs.readFileSync.mockReturnValueOnce(
-        `{"constraintId":"new","severity":"error","timestamp":${now - 1000},"result":"pass"}\n`
-      );
-      const traces = collector.readRecent(1);
-      expect(traces.length).toBe(1);
-    });
-  });
-
-  describe('readByConstraint()', () => {
-    it('should read by constraint', () => {
-      mockFs.readFileSync.mockReturnValueOnce(
-        '{"constraintId":"a","severity":"error","timestamp":100,"result":"pass"}\n'
-      );
-      const traces = collector.readByConstraint('a');
-      expect(traces.length).toBe(1);
-    });
-  });
-
   describe('rotateFile()', () => {
     it('should rotate when size exceeded', () => {
       mockFs.statSync.mockReturnValueOnce({ size: 11 * 1024 * 1024 } as any);
@@ -199,11 +178,8 @@ describe('TraceCollector', () => {
       expect(stats.newestTrace).toBe(200);
     });
 
-    it('四个读方法签名与返回类型编译期固定（跨仓消费方 analyzeRecent 消费面零改动证据）', () => {
+    it('两个读方法签名与返回类型编译期固定（跨仓消费方消费面零改动证据）', () => {
       const read: (filter?: TraceFilter) => ExecutionTrace[] = collector.read.bind(collector);
-      const readRecent: (hours: number) => ExecutionTrace[] = collector.readRecent.bind(collector);
-      const readByConstraint: (constraintId: string) => ExecutionTrace[] =
-        collector.readByConstraint.bind(collector);
       const getStats: () => {
         fileExists: boolean;
         fileSize: number;
@@ -213,8 +189,6 @@ describe('TraceCollector', () => {
       } = collector.getStats.bind(collector);
 
       expect(read).toBeDefined();
-      expect(readRecent).toBeDefined();
-      expect(readByConstraint).toBeDefined();
       expect(getStats).toBeDefined();
     });
   });

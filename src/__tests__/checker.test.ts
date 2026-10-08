@@ -50,12 +50,12 @@ describe('ConstraintChecker', () => {
       };
 
       const resultWithEvidence = await checker.check(
-        { id: 'no_completion_without_verification', kind: 'check', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'no_completion_without_verification', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithEvidence
       );
 
       const resultWithoutEvidence = await checker.check(
-        { id: 'no_completion_without_verification', kind: 'check', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
+        { id: 'no_completion_without_verification', severity: 'error', rule: 'NO COMPLETION', message: 'test', trigger: 'code_implementation', enforcement: 'test' },
         contextWithoutEvidence
       );
 
@@ -80,7 +80,7 @@ describe('ConstraintChecker', () => {
       fs.writeFileSync(capabilitiesPath, '# Capabilities\n');
 
       const result = await checker.check(
-        { id: 'capability_sync', kind: 'check', severity: 'warning', rule: 'CAPABILITY SYNC', message: 'test', trigger: 'commit', enforcement: 'test' },
+        { id: 'capability_sync', severity: 'warning', rule: 'CAPABILITY SYNC', message: 'test', trigger: 'commit', enforcement: 'test' },
         context
       );
 
@@ -107,14 +107,12 @@ describe('ConstraintChecker', () => {
       expect(result.satisfied).toBe(true);
     });
 
-    it('should return false for unknown constraint', async () => {
+    it('should throw for unknown constraint（注册表闭环口径：未注册即抛，不回假结果）', async () => {
       const context: ConstraintContext = {
         operation: 'code_implementation',
       };
 
-      const result = await checkConstraint('unknown_constraint', context);
-      expect(result.satisfied).toBe(false);
-      expect(result.message).toContain('未知的约束');
+      await expect(checkConstraint('unknown_constraint', context)).rejects.toThrow('未知的约束');
     });
   });
 });

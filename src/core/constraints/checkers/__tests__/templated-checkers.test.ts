@@ -29,6 +29,7 @@ function makeEnv(
     stagedDiff: async () => opts.diff ?? '',
     stagedDiffNames: async () => (opts.changedFiles ?? []).join('\n'),
     srcScan: () => [],
+    available: () => true,
   });
 }
 

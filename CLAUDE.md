@@ -21,11 +21,11 @@ npm run hooks:install  # Install this repo's own pre-commit hook (dogfoods curre
 
 ### Severity-Explicit Constraint System (ADR-0029)
 
-Constraints are defined in `src/core/constraints/definitions/{iron-laws,guidelines}.ts` (7 total), grouped by severity:
+Constraints are defined in `src/core/constraints/definitions/{errors,warnings}.ts` (7 total), grouped by severity:
 - **error** (3) — real checkers; violation throws `ConstraintViolationError`, blocks execution.
 - **warning** (4) — real checkers; records warning, allows continuation.
 
-ADR-0029: the three-layer naming (Iron Laws / Guidelines / Prompts) is retired and the pure-text prompt layer (prompt-kind constraints, promptInjection, HARNESS_CONSTRAINTS injection section + drift checks) is shut down; custom text constraints (custom-constraints / scenes) retired with it. Every constraint is kind='check' and must reference a registered checker (registry closed loop — build fails otherwise). Convention-probing checks (`capability_sync`/`docs_freshness`/`context_doc_sync`) report `skip` when the project hasn't adopted the convention — no blocking, not counted in pass rate.
+ADR-0029: the three-layer naming (Iron Laws / Guidelines / Prompts) is retired and the pure-text prompt layer (prompt-kind constraints, promptInjection, HARNESS_CONSTRAINTS injection section + drift checks) is shut down; custom text constraints (custom-constraints / scenes) retired with it. ADR-0041 Phase 4: the single-value `Constraint.kind` field is removed — channel ('gate' default, ADR-0035) is the consequence axis; gate-channel constraints must reference a registered checker (registry closed loop — build fails otherwise). Convention-probing checks (`capability_sync`/`docs_freshness`/`context_doc_sync`) report `skip` when the project hasn't adopted the convention — no blocking, not counted in pass rate.
 
 `getEffectiveConstraints(projectRoot)` (`src/core/effective-constraints.ts`) is the single source of the effective set: built-ins → preset → config.yml disables. `check` and external consumers all go through it.
 
@@ -43,20 +43,20 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 
 | Directory | Purpose |
 |-----------|---------|
-| `src/core/` | Constraint engine, validators (checkpoint, CSO, passes-gate), session management, project config loading |
+| `src/core/` | Constraint engine, validators (checkpoint, CSO, passes-gate), project config loading |
 | `src/gates/` | Quality gates: acceptance, command blacklist, contract (OpenAPI), performance, review, security |
 | `src/monitoring/` | Execution Trace collection/analysis |
 | `src/failure/` | Error classification (extensible rules) and failure recording (file-based) |
-| `src/context/` | Session management, compaction, knowledge injection |
-| `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Linter, Reference Tracker, Cold Start Import |
+| `src/context/` | Session management |
+| `src/knowledge/` | Knowledge engine: Store, Query, Lifecycle, Ingest, Audit, Cold Start Import |
 | `src/sdd/` | SDD index generator: scans `docs/sdd/*/requirement.md`, generates `docs/sdd/_index.md` for grep-based lookup |
-| `src/hooks/` | Harness runtime bootstrap only (`bootstrapHarness` / `bootstrapHarnessSync`): loads `.harness/config.yml`, wires checker + trace collector + session manager. The generic hook pipeline was removed by ADR-0027 (zero consumers in both repos) |
-| `src/agents/` | Agent lifecycle state machine (init → running → paused → completed → failed) |
-| `src/cli/commands/` | 20 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, release, constraints, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health + injection drift, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record + CLAUDE.md injection sync, rollback-able) |
+| `src/bootstrap/` | Harness runtime bootstrap only (`bootstrapHarness` / `bootstrapHarnessSync`): loads `.harness/config.yml`, wires checker + trace collector + session manager. The generic hook pipeline was removed by ADR-0027 (zero consumers in both repos); directory renamed from `src/hooks/` in ADR-0041 Phase 3 |
+| `src/agents/` | Agent lifecycle state machine (idle → running → completed / failed) |
+| `src/cli/commands/` | 20 CLI subcommands (check, validate, passes-gate, init, report, status, spec, acceptance, performance, security, contract, review, command, sync-docs, knowledge, failure, release, constraints, spec-baseline-check, sdd). Governance subcommands live under `constraints`: `constraints report` (usage stats + retire candidates + config health, `--export` sanitized markdown) and `constraints retire` (interactive, human-confirmed retirement; direct `retire <id>` requires explicit `--yes` — without it errors with non-zero exit and no writes → config.yml retired metadata + KnowledgeStore record, rollback-able) |
 
 ### Entry Points
 
-- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`、`checkBeforeExecution()`）
+- **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
 - **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management)。`./gates` 入口已删除（ADR-0038 收回面，重构班次连壳出清，ADR-0040）
 
@@ -86,7 +86,7 @@ When making changes to this codebase, follow these rules:
 - Every new gate MUST have a corresponding CLI command in `src/cli/commands/` and a test file in `__tests__/`
 - New gates must implement the unified `Gate` interface from `src/gates/types.ts` (id/order/evaluate → 三态 `GateDecision`)，报告结构走 `GateResult`；同时必须在 `src/gates/definitions.ts` 补 GateDefinition（含 CLI 元数据）并在 `src/gates/registry.ts` 注册实现——注册表双向闭环，缺一构建期抛错；门禁 CLI 命令由定义表驱动生成（`bin/harness.js`），不再手写命令块
 - deny 单调是接口契约（正本 `src/gates/CONTEXT.md`「决策契约」）：deny 一旦出现即不可被下游改回 allow，决策浅冻结；ask 枚举预留、无实现 fail-closed = deny
-- Constraint definitions in `src/core/constraints/definitions/` must include `trigger`, `enforcement`, and `description` fields
+- Constraint definitions in `src/core/constraints/definitions/` must include `id` / `rule` / `message` / `severity` / `enforcement` fields; `trigger` 未声明 = 恒评估（ADR-0041 Phase 4）
 - Coverage must not decrease — run `npm test -- --coverage` before committing
 - Each `src/` subdirectory's entry point is its `CONTEXT.md` (not README). CONTEXT.md documents responsibilities, exports, dependencies, and conventions.
 - `CAPABILITIES.md` must be updated when adding or modifying gates or constraints
@@ -95,7 +95,7 @@ When making changes to this codebase, follow these rules:
 - Trace records must use the `ExecutionTrace` type from `src/types/trace.ts`
 - CLI 命令注册的单一来源是 `src/cli/commands/definitions.ts`（COMMAND_DEFINITIONS，含 CLI 元数据与 module+export 实现引用）；bin/harness.js 由定义表驱动生成，禁止手写命令块；definitions 是纯数据模块，禁止 import 任何命令实现/运行时依赖（per-command 懒加载，O2；唯一已落地例外：`utils/numeric-flag` 纯函数解析器——harness#154 指名的数值旗帜唯一解析器、零 IO，机器闸口径为「加载 definitions 不引入任何命令实现」，见 `registry.test.ts`）；新增命令 = 命令实现文件 + 定义表一条 + 测试，实现引用可解析性由 `src/cli/commands/__tests__/registry.test.ts` 断言
 - CLI 命令的判定只经返回值外溢（架构评审候选7）：`src/cli/commands/` 下命令实现返回 `CommandResult`（判别联合 `ok|skip|fail|usage-error`，`fail`/`usage-error` 必附可定位 `reason`，多闸门命令 reason 含 `gate <id>`），流式输出经末位可选形参 `io: CommandIO = processIO` 注入（缺省 process 流，`log`/`logError` 与 console 逐字节等价）。命令实现与定义表内禁止 `process.exit` / `process.exitCode`，kind → 退出码的唯一映射在 `bin/harness.js`；测试断言退出语义走返回值、输出走 `captureIO()`，禁止 `spyOn(process, 'exit')`。契约定义在 `src/cli/command-contract.ts`，细则见 `src/cli/commands/CONTEXT.md`
-- Hook 管线面已整体删除（ADR-0027，执行票 #170）：`HookRegistry` / `HookPipeline` / `assertHookRegistryClosed` / `toErrorStrategy` 与 `HookConfig` ↔ `HookDefinition` 的注册表闭环、`blocking → errorStrategy` 映射全部退出包根，`src/hooks/` 只剩 bootstrap 组合根。删除依据 = 双仓零生产消费者（ADR-0022 同判据）；要重开 hook 能力须先按该判据重新裁决，不要照旧符号名恢复实现
+- Hook 管线面已整体删除（ADR-0027，执行票 #170）：`HookRegistry` / `HookPipeline` / `assertHookRegistryClosed` / `toErrorStrategy` 与 `HookConfig` ↔ `HookDefinition` 的注册表闭环、`blocking → errorStrategy` 映射全部退出包根，组合根目录后正名 `src/bootstrap/`。删除依据 = 双仓零生产消费者（ADR-0022 同判据）；要重开 hook 能力须先按该判据重新裁决，不要照旧符号名恢复实现
 
 ### Behavioral Guidelines
 

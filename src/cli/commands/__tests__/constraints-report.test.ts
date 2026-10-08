@@ -14,7 +14,7 @@ import type { ExecutionTrace } from '../../../types/trace';
 import {
   buildConstraintsUsageReport,
   diagnoseRetireCandidates,
-  readProjectTraces,
+  readProjectTracesReport,
   WATCHLIST_PERIOD_DAYS,
 } from '../../../core/constraints/usage-report';
 import type { HarnessState, StateIO } from '../../state-io';
@@ -91,7 +91,7 @@ describe('buildConstraintsUsageReport', () => {
       '{"constraintId":"docs_freshness","timestamp":1,"result":"pass","severity":"error"}\n{bad json\n',
       'utf-8'
     );
-    expect(readProjectTraces(root).length).toBe(1);
+    expect(readProjectTracesReport(root).traces.length).toBe(1);
   });
 
   it('四类候选诊断：零触发/不可评估(flag)/不可评估(探测)/高噪/零拦截', () => {

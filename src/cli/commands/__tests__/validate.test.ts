@@ -18,9 +18,7 @@ jest.mock('fs/promises', () => ({
 
 // Mock CheckpointValidator
 jest.mock('../../../core/validators/checkpoint', () => ({
-  CheckpointValidator: {
-    getInstance: jest.fn(),
-  },
+  CheckpointValidator: jest.fn(),
 }));
 
 // Mock yaml
@@ -52,13 +50,32 @@ describe('validate command', () => {
   });
 
   describe('validate', () => {
-    it('应该跳过无检查点的情况', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('file not found'));
-      
+    it('应该跳过无检查点的情况（ENOENT = 合法空）', async () => {
+      const enoent = new Error('file not found') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      mockFs.readFile.mockRejectedValue(enoent);
+
       const result = await validate({}, io);
 
       expect(io.outText()).toContain('没有定义检查点');
       expect(result).toEqual({ kind: 'skip', reason: expect.stringContaining('没有定义检查点') });
+    });
+
+    it('检查点文件 YAML 损坏 → 抛出（fail-fast：损坏 ≠ 缺失，不装「未找到」放行）', async () => {
+      mockFs.readFile.mockResolvedValue('checkpoints: [broken');
+      mockYaml.load.mockImplementation(() => {
+        throw new Error('YAMLException: unexpected end of stream');
+      });
+
+      await expect(validate({}, io)).rejects.toThrow('YAMLException');
+    });
+
+    it('检查点文件读取失败（非 ENOENT，如权限） → 抛出', async () => {
+      const eacces = new Error('permission denied') as NodeJS.ErrnoException;
+      eacces.code = 'EACCES';
+      mockFs.readFile.mockRejectedValue(eacces);
+
+      await expect(validate({}, io)).rejects.toThrow('permission denied');
     });
 
     it('应该通过所有检查点', async () => {
@@ -72,7 +89,7 @@ describe('validate command', () => {
       const mockValidator = {
         validate: jest.fn().mockResolvedValue({ passed: true, checks: [] }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       const result = await validate({}, io);
 
@@ -94,7 +111,7 @@ describe('validate command', () => {
           checks: [{ checkId: 'check-1', passed: false, message: 'failed' }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       // 工单 23：检查点失败一律 exit 1（门控语义）
 
@@ -123,7 +140,7 @@ describe('validate command', () => {
           }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       await validate({}, io);
 
@@ -145,7 +162,7 @@ describe('validate command', () => {
           checks: [{ checkId: 'check-1', passed: false, message: '同一个原因', error: '同一个原因' }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
       await validate({}, io);
 
@@ -153,11 +170,11 @@ describe('validate command', () => {
       expect(printed).toHaveLength(1);
     });
 
-    it('应该在严格模式下退出', async () => {
+    it('检查点失败一律 fail（门控语义）', async () => {
       const mockCheckpoints = [
         { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
       ];
-      
+
       mockFs.readFile.mockResolvedValue('checkpoints content');
       mockYaml.load.mockReturnValue({ checkpoints: mockCheckpoints });
 
@@ -167,11 +184,11 @@ describe('validate command', () => {
           checks: [{ checkId: 'check-1', passed: false, message: 'failed' }],
         }),
       };
-      (MockCheckpointValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+      (MockCheckpointValidator as unknown as jest.Mock).mockImplementation(() => mockValidator);
 
-      const result = await validate({ strict: true }, io);
+      const result = await validate({}, io);
 
-      // 工单 23 语义：--strict 与否都是 fail；退出码映射在 bin
+      // 工单 23 语义：检查点失败即 fail；退出码映射在 bin
       expect(result).toEqual({ kind: 'fail', reason: '1 个检查点未通过: test-1' });
     });
   });

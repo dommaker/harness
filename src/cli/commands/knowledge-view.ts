@@ -9,14 +9,13 @@
  *   要么声明是人读面独有的派生量（derived，须在测试的豁免表逐条登记理由）。
  * - **角色→样式单表 + 键→中文 label 映射**：维度 label、成熟度颜色、规则 label 的唯一权威。
  * - **json / 人读的唯一分派与退出码**：`--json` 打 `data` 的序列化，否则渲染 display model。
- * - **路径解析与 store 构造**：`-p` / `KNOWLEDGE_BASE_DIR` / 缺省目录解析只在这一处
- *   （ADR-0034：消费方数据区正本由编排侧经 KNOWLEDGE_BASE_DIR 显式注入）。
+ *
+ * 路径解析与 store 构造已拆至 `knowledge/store-access.ts`（与 view 无关，
+ * retire/reactivate 的写口接线亦消费；ADR-0034 目录收编口径随之搬迁），本模块
+ * re-export 保持子命令既有进口不变。
  */
 
 import chalk from 'chalk';
-import * as os from 'os';
-import * as path from 'path';
-import { FileKnowledgeStore } from '../../knowledge/store';
 import { AUDIT_RULE_LABELS } from '../../knowledge/audit-rules';
 import type { AuditIssue, AuditRuleName } from '../../knowledge/audit-rules';
 import type { AuditReport } from '../../knowledge/audit-dimensions';
@@ -177,30 +176,7 @@ export function emitKnowledgeView<T>(io: CommandIO, options: { json?: boolean },
 
 // ── 路径解析与 store 构造 ─────────────────────────────────
 
-/** 缺省知识库数据根（相对用户 home）。裸 CLI 项目缺省目录；消费方数据区正本由编排侧经 KNOWLEDGE_BASE_DIR 显式注入（ADR-0034） */
-const KNOWLEDGE_DATA_DIR = path.join('.harness', 'knowledge');
-
-export interface KnowledgePathOptions {
-  /** 覆盖知识库目录（audit/snapshot/migrate/index/health 收） */
-  dir?: string;
-  /** -p/--project-path */
-  projectPath?: string;
-}
-
-/**
- * 知识库数据根的唯一解析点。`-p` 优先，其次 KNOWLEDGE_BASE_DIR，
- * 最后落到用户 home 缺省目录（ADR-0034 目录收编：消费方数据区正本由
- * 编排侧经 KNOWLEDGE_BASE_DIR 显式注入，本命令不做任何旧目录兼容沿用；
- * io 参数随兼容提示一并失去用途，签名保留免动全部调用方）。
- */
-export function resolveKnowledgeBaseDir(options: KnowledgePathOptions, _io: CommandIO): string {
-  if (options.dir) return options.dir;
-  if (options.projectPath) return `${options.projectPath}/.harness/knowledge`;
-  if (process.env.KNOWLEDGE_BASE_DIR) return process.env.KNOWLEDGE_BASE_DIR;
-  return path.join(os.homedir(), KNOWLEDGE_DATA_DIR);
-}
-
-/** 知识库句柄的唯一构造点（路径解析全权交给 resolveKnowledgeBaseDir） */
-export function openKnowledgeStore(options: KnowledgePathOptions, io: CommandIO): FileKnowledgeStore {
-  return new FileKnowledgeStore({ baseDir: resolveKnowledgeBaseDir(options, io) });
-}
+// 正本已拆至 knowledge/store-access.ts（与 view 无关，retire/reactivate 亦消费）；
+// 此处 re-export 保持 knowledge 族子命令的既有进口不变
+export { resolveKnowledgeBaseDir, openKnowledgeStore } from './knowledge/store-access';
+export type { KnowledgePathOptions } from './knowledge/store-access';

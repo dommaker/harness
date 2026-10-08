@@ -14,11 +14,11 @@ import type {
 } from './types';
 import { DEFAULT_DECAY_CONFIG } from './types';
 import type { KnowledgeStore } from './store';
+import { TEST_ID_PATTERN } from './audit-rules';
 import { attempt } from '../utils/attempt';
 
 const MAX_REFERENCED_BY = 20;
 const MIN_CONTENT_FOR_PROVEN = 100;
-const TEST_ID_PATTERN = /^(test-|inj-test)/;
 const SIGNAL_SATURATION_THRESHOLD = 3;
 const CONTEXT_DECAY_MONTHS = 3;
 const RULE_MIN_RESULTS_FOR_DECAY = 3;
@@ -71,7 +71,7 @@ export class KnowledgeLifecycle {
       // But still record execution result if provided
       if (success !== undefined) {
         const executionResults = [
-          ...(entry.executionResults || []),
+          ...(entry.executionResults),
           { contributor: contributor || 'unknown', success, timestamp: now, source: execSource },
         ].slice(-MAX_REFERENCED_BY);
         this.store.update(entryId, { executionResults });
@@ -81,7 +81,7 @@ export class KnowledgeLifecycle {
 
     const referencedBy = [...entry.referencedBy, refKey].slice(-MAX_REFERENCED_BY);
     const executionResults = success !== undefined
-      ? [...(entry.executionResults || []), { contributor: contributor || 'unknown', success, timestamp: now, source: execSource }].slice(-MAX_REFERENCED_BY)
+      ? [...(entry.executionResults), { contributor: contributor || 'unknown', success, timestamp: now, source: execSource }].slice(-MAX_REFERENCED_BY)
       : entry.executionResults;
 
     const updated = this.store.update(entryId, {
@@ -117,7 +117,7 @@ export class KnowledgeLifecycle {
     // RC2: block test entries from any promotion
     if (TEST_ID_PATTERN.test(entryId)) return undefined;
 
-    const mode = entry.consumptionMode || 'reference';
+    const mode = entry.consumptionMode;
 
     switch (mode) {
       case 'rule':      return this.checkRulePromotion(entry);
@@ -143,7 +143,7 @@ export class KnowledgeLifecycle {
       return 'archived';
     }
 
-    const mode = entry.consumptionMode || 'reference';
+    const mode = entry.consumptionMode;
 
     switch (mode) {
       case 'rule':      return this.checkRuleDecay(entry);
@@ -319,20 +319,12 @@ export class KnowledgeLifecycle {
   }
 
   /**
-   * Check if a source should auto-promote to verified on ingest.
-   * Used by KnowledgeBus to decide initial maturity level.
-   */
-  shouldAutoPromote(source: string): boolean {
-    return this.config.autoPromoteSources.some(s => source.includes(s));
-  }
-
-  /**
    * Get execution success rate for an entry.
    * Returns { rate, total } or undefined if no execution data.
    */
   getExecutionSuccessRate(entryId: string): { rate: number; total: number } | undefined {
     const entry = this.store.get(entryId);
-    if (!entry || !entry.executionResults || entry.executionResults.length === 0) return undefined;
+    if (!entry || entry.executionResults.length === 0) return undefined;
     const total = entry.executionResults.length;
     const successes = entry.executionResults.filter(r => r.success).length;
     return { rate: successes / total, total };
@@ -344,7 +336,7 @@ export class KnowledgeLifecycle {
    */
   getHumanSuccessRate(entryId: string): { rate: number; total: number } | undefined {
     const entry = this.store.get(entryId);
-    if (!entry || !entry.executionResults || entry.executionResults.length === 0) return undefined;
+    if (!entry || entry.executionResults.length === 0) return undefined;
     const humanResults = entry.executionResults.filter(r => r.source === 'human');
     if (humanResults.length === 0) return undefined;
     const total = humanResults.length;
@@ -376,8 +368,8 @@ export class KnowledgeLifecycle {
         const execRate = this.getExecutionSuccessRate(entry.id);
         if (execRate && execRate.total >= 3 && execRate.rate >= 0.8) return 'proven';
         if (entry.contributors.length >= 3 && entry.projects.length >= 2) return 'proven';
-        const refCount = entry.referencedBy?.length || 0;
-        const distinctSources = new Set(entry.sourceReferences?.map(s => s.workflow).filter(Boolean) || []);
+        const refCount = entry.referencedBy.length;
+        const distinctSources = new Set(entry.sourceReferences.map(s => s.workflow).filter(Boolean));
         if (refCount >= 3 && distinctSources.size >= 2) return 'proven';
         return undefined;
       }
@@ -440,7 +432,7 @@ export class KnowledgeLifecycle {
    */
   private checkSignalDecay(entry: KnowledgeEntry): MaturityLevel | undefined {
     if (entry.maturity !== 'active') return undefined;
-    const refCount = entry.referencedBy?.length || 0;
+    const refCount = entry.referencedBy.length;
     if (refCount < SIGNAL_SATURATION_THRESHOLD) return undefined;
 
     const newer = this.store.list({
@@ -448,7 +440,7 @@ export class KnowledgeLifecycle {
       excludeArchived: false,
     }).find(e =>
       e.id !== entry.id &&
-      (e.consumptionMode || 'reference') === 'signal' &&
+      e.consumptionMode === 'signal' &&
       e.created > entry.created
     );
     if (newer) return 'archived';

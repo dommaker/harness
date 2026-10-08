@@ -230,7 +230,7 @@ describe('passes-gate command', () => {
       expect(io.outText()).toContain('覆盖率达标');
     });
 
-    it('覆盖率不足：skip（历史面：--coverage 路由不改退出码）', async () => {
+    it('覆盖率不足：fail（门禁判定结果非零退出）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
       mockFs.readFile.mockResolvedValue(JSON.stringify({
         total: { lines: { pct: 60 } },
@@ -238,16 +238,16 @@ describe('passes-gate command', () => {
 
       const result = await checkCoverage('/project', 80, io);
 
-      expect(result).toEqual({ kind: 'skip', reason: '覆盖率不足: 60% < 80%' });
+      expect(result).toEqual({ kind: 'fail', reason: '覆盖率不足: 60% < 80%' });
       expect(io.outText()).toContain('覆盖率不足');
     });
 
-    it('取不到覆盖率：skip（不阻断）', async () => {
+    it('取不到覆盖率：fail（fail-loud——「没查到」不是「查过了」，不放行）', async () => {
       mockExecAsync.mockRejectedValue(new Error('command failed'));
 
       const result = await checkCoverage('/project', 80, io);
 
-      expect(result).toEqual({ kind: 'skip', reason: expect.stringContaining('无法获取覆盖率信息') });
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('无法获取覆盖率信息') });
       expect(io.outText()).toContain('无法获取覆盖率信息');
     });
 
@@ -268,7 +268,7 @@ describe('passes-gate command', () => {
 
       const result = await checkCoverage('/project', 80);
 
-      expect(result).toEqual({ kind: 'skip', reason: '覆盖率不足: 0% < 80%' });
+      expect(result).toEqual({ kind: 'fail', reason: '覆盖率不足: 0% < 80%' });
     });
   });
 

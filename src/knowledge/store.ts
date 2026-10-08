@@ -24,14 +24,6 @@ const DEFAULT_DIR = '.harness/knowledge';
 const INDEX_FILE = 'index.json';
 const CONSUMPTION_STATS_FILE = '.consumption-stats.json';
 
-interface StoreConfig {
-  baseDir: string;
-}
-
-const DEFAULT_CONFIG: StoreConfig = {
-  baseDir: DEFAULT_DIR,
-};
-
 /**
  * KnowledgeStore interface — abstract contract for knowledge storage.
  */
@@ -81,8 +73,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
    */
   private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;
 
-  constructor(config?: Partial<StoreConfig>) {
-    this.baseDir = config?.baseDir || DEFAULT_CONFIG.baseDir;
+  constructor(config?: { baseDir?: string }) {
+    this.baseDir = config?.baseDir || DEFAULT_DIR;
     this.ensureDirectory();
   }
 
@@ -105,7 +97,15 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
     return entries.map(idx => {
       const full = this.get(idx.id);
-      return full || this.indexToEntry(idx);
+      if (!full) {
+        // 索引在册但条目文件缺失/不可解析 = 索引漂移：抛出让它暴露，
+        // 不捏造 content 为空的空心条目（修复手段 = rebuildIndex）
+        throw new Error(
+          `[harness] 知识条目 "${idx.id}" 索引在册但条目文件缺失或不可解析（索引漂移），` +
+          `修复：harness knowledge index（rebuildIndex）`
+        );
+      }
+      return full;
     });
   }
 
@@ -224,7 +224,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
 
   /**
    * 从磁盘读取所有条目（不依赖索引）
-   * 用于 Lint 检查索引一致性
+   * 用于摄入去重等「不能在索引漂移现场先崩」的盘驱动枚举
    */
   readEntriesFromDisk(): KnowledgeEntry[] {
     const files = this.listFiles();
@@ -368,28 +368,6 @@ export class FileKnowledgeStore implements KnowledgeStore {
       created: entry.created,
       consumptionMode: entry.consumptionMode,
       origin: entry.origin,
-    };
-  }
-
-  private indexToEntry(idx: IndexEntry): KnowledgeEntry {
-    return {
-      id: idx.id,
-      type: idx.type,
-      title: idx.title,
-      content: '',
-      maturity: idx.maturity,
-      layer: idx.layer,
-      created: idx.created,
-      lastReferenced: idx.lastReferenced,
-      contributors: [],
-      projects: [],
-      tags: idx.tags ?? [],
-      applicablePhases: idx.applicablePhases ?? [],
-      sourceReferences: [],
-      referencedBy: [],
-      executionResults: [],
-      consumptionMode: idx.consumptionMode || 'reference',
-      origin: idx.origin || 'agent',
     };
   }
 

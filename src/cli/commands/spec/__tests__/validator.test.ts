@@ -2,8 +2,8 @@
  * SpecValidator 测试
  */
 
-import { SpecValidator, validateSpec, validateAllSpecs } from '../validator';
-import type { GitCommandRunner } from '../../constraints/git-evidence';
+import { SpecValidator } from '../validator';
+import type { GitCommandRunner } from '../../../../core/constraints/git-evidence';
 import * as fs from 'fs/promises';
 
 // Mock fs
@@ -21,29 +21,13 @@ describe('SpecValidator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset singleton
-    (SpecValidator as any).instance = undefined;
-    validator = SpecValidator.getInstance();
+    validator = new SpecValidator();
   });
 
-  describe('getInstance()', () => {
-    it('should return singleton instance', () => {
-      const v1 = SpecValidator.getInstance();
-      const v2 = SpecValidator.getInstance();
-      expect(v1).toBe(v2);
-    });
-
+  describe('constructor', () => {
     it('should accept custom config', () => {
-      (SpecValidator as any).instance = undefined;
-      const v = SpecValidator.getInstance({ enabled: false });
+      const v = new SpecValidator({ schemaPath: './custom/schemas' });
       expect(v).toBeDefined();
-    });
-  });
-
-  describe('setConfig()', () => {
-    it('should update config', () => {
-      validator.setConfig({ enabled: false });
-      expect(validator).toBeDefined();
     });
   });
 
@@ -258,12 +242,6 @@ describe('SpecValidator', () => {
       expect(schema1).toBeNull();
       expect(schema2).toBeNull();
     });
-
-    it('should clear cache on setConfig', () => {
-      validator.setConfig({ schemaPath: './new/path' });
-      // Cache should be cleared
-      expect(validator).toBeDefined();
-    });
   });
 
   describe('detectSpecType() edge cases', () => {
@@ -421,35 +399,19 @@ describe('SpecValidator', () => {
     });
   });
 
-  describe('convenience functions', () => {
-    it('validateSpec should work without schemaPath', async () => {
-      mockFs.access.mockImplementation((p: any) =>
-      String(p).includes('schemas')
-        ? Promise.reject(new Error('no schema'))
-        : Promise.resolve(undefined)
-    );
-      mockFs.readFile.mockResolvedValue('content');
-
-      const result = await validateSpec('specs/test.yml');
-      expect(result).toBeDefined();
-      expect(result.file).toBe('specs/test.yml');
-    });
-
-    it('validateSpec should work with schemaPath', async () => {
+  describe('schemaPath 锚定（#95 同型病灶修复）', () => {
+    it('validateAll 的 schema 与 spec 文件同锚 projectPath（相对 schemaPath 按项目根解析）', async () => {
+      const seen: string[] = [];
+      const v = new SpecValidator({ schemaPath: './my-schemas' });
+      jest.spyOn(v, 'loadSchema').mockImplementation(async (p: string) => {
+        seen.push(p);
+        return null;
+      });
       mockFs.access.mockRejectedValue(new Error('Not found'));
 
-      const result = await validateSpec('specs/test.yml', '/non/existent/schema');
-      expect(result).toBeDefined();
-    });
+      await v.validateAll('/test/project');
 
-    it('validateAllSpecs should return batch result', async () => {
-      mockFs.access.mockRejectedValue(new Error('Not found'));
-
-      const result = await validateAllSpecs('/test/project');
-      expect(result).toBeDefined();
-      expect(typeof result.total).toBe('number');
-      expect(typeof result.passed).toBe('number');
-      expect(typeof result.failed).toBe('number');
+      expect(seen).toEqual(['/test/project/my-schemas']);
     });
   });
 });

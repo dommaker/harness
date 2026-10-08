@@ -7,7 +7,7 @@ import { captureIO, type CapturingIO } from '../../command-contract';
 import * as path from 'path';
 import * as os from 'os';
 import { FailureRecorder } from '../../../failure/recorder';
-import { ErrorType, FailureLevel } from '../../../types/failure';
+import { ErrorType, FailureLevel } from '../../../failure/error-types';
 import type { FailureRecord } from '../../../types/failure';
 
 // Mock FailureRecorder
@@ -56,10 +56,10 @@ describe('failure CLI commands', () => {
 
     // Setup mock instance methods
     mockRecorderInstance = {
-      record: jest.fn().mockResolvedValue(undefined),
-      getHistory: jest.fn().mockResolvedValue(sampleRecords),
-      getStats: jest.fn().mockResolvedValue(sampleStats),
-      clear: jest.fn().mockResolvedValue(undefined),
+      record: jest.fn().mockReturnValue(undefined),
+      getHistory: jest.fn().mockReturnValue(sampleRecords),
+      getStats: jest.fn().mockReturnValue(sampleStats),
+      clear: jest.fn().mockReturnValue(undefined),
     };
 
     (FailureRecorder as jest.Mock).mockImplementation(() => mockRecorderInstance);
@@ -96,7 +96,7 @@ describe('failure CLI commands', () => {
     });
 
     it('空记录应该输出提示', async () => {
-      mockRecorderInstance.getHistory.mockResolvedValue([]);
+      mockRecorderInstance.getHistory.mockReturnValue([]);
       const { failureList } = await import('../failure');
       await failureList({ projectPath: tempDir }, io);
 
@@ -116,7 +116,7 @@ describe('failure CLI commands', () => {
     });
 
     it('--json 模式空记录应该输出 total:0', async () => {
-      mockRecorderInstance.getHistory.mockResolvedValue([]);
+      mockRecorderInstance.getHistory.mockReturnValue([]);
       const { failureList } = await import('../failure');
       await failureList({ projectPath: tempDir, json: true }, io);
 
@@ -151,7 +151,7 @@ describe('failure CLI commands', () => {
     });
 
     it('空记录应该输出绿色提示', async () => {
-      mockRecorderInstance.getStats.mockResolvedValue({ total: 0, byType: {}, byLevel: {} });
+      mockRecorderInstance.getStats.mockReturnValue({ total: 0, byType: {}, byLevel: {} });
       const { failureStats } = await import('../failure');
       await failureStats({ projectPath: tempDir }, io);
 
@@ -159,7 +159,7 @@ describe('failure CLI commands', () => {
     });
 
     it('--json 模式空记录应该输出空统计', async () => {
-      mockRecorderInstance.getStats.mockResolvedValue({ total: 0, byType: {}, byLevel: {} });
+      mockRecorderInstance.getStats.mockReturnValue({ total: 0, byType: {}, byLevel: {} });
       const { failureStats } = await import('../failure');
       await failureStats({ projectPath: tempDir, json: true }, io);
 

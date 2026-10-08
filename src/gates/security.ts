@@ -11,6 +11,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { isRecord } from '../utils/guards';
 import { gateResult, fromError } from './types';
 import type { GateResult, GateContext, SecurityGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
@@ -32,14 +33,6 @@ interface VulnerabilityAnalysis {
   vulnerabilities: VulnerabilityEntry[];
 }
 
-/** npm audit（旧版 audit.advisories 形状）单条 advisory 已读字段 */
-interface NpmAdvisory {
-  name?: string;
-  severity?: string;
-  title?: string;
-  via?: Array<{ title?: string } | string>;
-}
-
 /** npm audit（v7+ vulnerabilities 形状）单条记录已读字段 */
 interface NpmVulnerability {
   name?: string;
@@ -47,12 +40,8 @@ interface NpmVulnerability {
   via?: Array<{ title?: string } | string>;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /** via 的首个来源标题（字符串直取，对象取 title） */
-function viaTitle(via: NpmAdvisory['via']): string | undefined {
+function viaTitle(via: NpmVulnerability['via']): string | undefined {
   const first = via?.[0];
   if (typeof first === 'string') return first;
   return first?.title;
@@ -155,7 +144,8 @@ export class SecurityGate implements Gate {
   }
 
   /**
-   * 分析扫描结果：只认 npm audit 的两种 JSON 形状（audit.advisories / vulnerabilities）。
+   * 分析扫描结果：只认 npm audit v7+ 的 vulnerabilities 形状（npm 6 的
+   * audit.advisories 旧格式分支已随其 EOL 删除）。
    * 输出不是合法 JSON 对象 → 抛错（不再有文本正则兜底）。
    */
   private analyzeResult(output: string): VulnerabilityAnalysis {
@@ -179,22 +169,6 @@ export class SecurityGate implements Gate {
       throw new Error('安全扫描输出不是 JSON 对象');
     }
 
-    // npm audit 旧格式
-    if (isRecord(raw.audit)) {
-      const advisories = isRecord(raw.audit.advisories) ? raw.audit.advisories : {};
-      for (const [key, entry] of Object.entries(advisories)) {
-        const advisory = (isRecord(entry) ? entry : {}) as NpmAdvisory;
-        const severity = advisory.severity?.toLowerCase() ?? 'low';
-        count(severity);
-        vulnerabilities.push({
-          name: advisory.name ?? key,
-          severity,
-          via: viaTitle(advisory.via) ?? advisory.title ?? 'Unknown',
-        });
-      }
-    }
-
-    // 新版 npm audit 格式
     if (isRecord(raw.vulnerabilities)) {
       for (const [name, entry] of Object.entries(raw.vulnerabilities)) {
         const vuln = (isRecord(entry) ? entry : {}) as NpmVulnerability;
@@ -233,19 +207,5 @@ export class SecurityGate implements Gate {
       case 'low':
         return analysis.total === 0;
     }
-  }
-
-  /**
-   * 设置严重程度阈值
-   */
-  setSeverityThreshold(threshold: 'low' | 'moderate' | 'high' | 'critical'): void {
-    this.config.severityThreshold = threshold;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): SecurityGateConfig {
-    return { ...this.config };
   }
 }

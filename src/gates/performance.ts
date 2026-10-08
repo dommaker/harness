@@ -240,27 +240,4 @@ export class PerformanceGate implements Gate {
     if (metrics.bundleSize !== undefined) parts.push(`打包=${metrics.bundleSize}KB`);
     return parts.join(', ') || '无指标';
   }
-
-  /**
-   * 设置阈值
-   */
-  setThresholds(thresholds: Partial<PerformanceThresholds>): void {
-    this.config.thresholds = { ...this.config.thresholds, ...thresholds };
-  }
-
-  /**
-   * 设置超时时间
-   */
-  setTimeouts(options: {
-    coverage?: number;
-  }): void {
-    if (options.coverage) this.config.coverageTimeout = options.coverage;
-  }
-
-  /**
-   * 获取配置
-   */
-  getConfig(): Required<ExtendedPerformanceGateConfig> {
-    return { ...this.config };
-  }
 }

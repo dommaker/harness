@@ -10,11 +10,9 @@ import { tmpdir } from 'os';
 
 describe('CheckpointValidator', () => {
   let tempDir: string;
-  let validator: CheckpointValidator;
 
   beforeAll(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'temp-test-checkpoint-'));
-    validator = CheckpointValidator.getInstance();
     // 创建测试文件
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');
     writeFileSync(join(tempDir, 'empty.txt'), '');
@@ -29,21 +27,9 @@ describe('CheckpointValidator', () => {
     }
   });
 
-  describe('getSupportedCheckTypes', () => {
-    it('应该返回支持的检查类型', () => {
-      const types = validator.getSupportedCheckTypes();
-      
-      expect(types.length).toBe(13);
-      expect(types).toContain('file_exists');
-      expect(types).toContain('file_contains');
-      expect(types).toContain('command_success');
-      expect(types).toContain('json_path');
-    });
-  });
-
   describe('file_exists', () => {
     it('文件存在应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-1',
           checks: [{ id: 'c-1', type: 'file_exists', config: { path: 'test.txt' } }],
@@ -56,7 +42,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('文件不存在应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-2',
           checks: [{ id: 'c-2', type: 'file_exists', config: { path: 'not-exist.txt' } }],
@@ -72,7 +58,7 @@ describe('CheckpointValidator', () => {
 
   describe('file_not_empty', () => {
     it('非空文件应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-3',
           checks: [{ id: 'c-3', type: 'file_not_empty', config: { path: 'test.txt' } }],
@@ -84,7 +70,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('空文件应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-4',
           checks: [{ id: 'c-4', type: 'file_not_empty', config: { path: 'empty.txt' } }],
@@ -99,7 +85,7 @@ describe('CheckpointValidator', () => {
 
   describe('file_contains', () => {
     it('文件包含内容应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-5',
           checks: [{ id: 'c-5', type: 'file_contains', config: { path: 'test.txt', content: 'hello' } }],
@@ -111,7 +97,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('文件不包含内容应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-6',
           checks: [{ id: 'c-6', type: 'file_contains', config: { path: 'test.txt', content: 'goodbye' } }],
@@ -125,7 +111,7 @@ describe('CheckpointValidator', () => {
 
   describe('file_not_contains', () => {
     it('文件不包含内容应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-20',
           checks: [{ id: 'c-20', type: 'file_not_contains', config: { path: 'test.txt', content: 'goodbye' } }],
@@ -137,7 +123,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('文件包含内容应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-21',
           checks: [{ id: 'c-21', type: 'file_not_contains', config: { path: 'test.txt', content: 'hello' } }],
@@ -152,7 +138,7 @@ describe('CheckpointValidator', () => {
 
   describe('json_path', () => {
     it('JSON 路径匹配应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-7',
           checks: [{ id: 'c-7', type: 'json_path', config: { jsonPath: 'name', expected: 'test' } }],
@@ -164,7 +150,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('JSON 路径不匹配应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-8',
           checks: [{ id: 'c-8', type: 'json_path', config: { jsonPath: 'value', expected: 100 } }],
@@ -178,7 +164,7 @@ describe('CheckpointValidator', () => {
 
   describe('output_contains', () => {
     it('输出包含内容应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-9',
           checks: [{ id: 'c-9', type: 'output_contains', config: { content: 'success' } }],
@@ -190,7 +176,7 @@ describe('CheckpointValidator', () => {
     });
     
     it('输出不包含内容应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-9b',
           checks: [{ id: 'c-9b', type: 'output_contains', config: { content: 'error' } }],
@@ -205,7 +191,7 @@ describe('CheckpointValidator', () => {
 
   describe('output_not_contains', () => {
     it('输出不包含内容应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-14',
           checks: [{ id: 'c-14', type: 'output_not_contains', config: { content: 'error' } }],
@@ -217,7 +203,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('输出包含内容应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-15',
           checks: [{ id: 'c-15', type: 'output_not_contains', config: { content: 'success' } }],
@@ -232,7 +218,7 @@ describe('CheckpointValidator', () => {
 
   describe('output_matches', () => {
     it('输出匹配正则应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-16',
           checks: [{ id: 'c-16', type: 'output_matches', config: { pattern: '\\d+ tests passed' } }],
@@ -244,7 +230,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('输出不匹配正则应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-17',
           checks: [{ id: 'c-17', type: 'output_matches', config: { pattern: 'Error:.*' } }],
@@ -259,7 +245,7 @@ describe('CheckpointValidator', () => {
 
   describe('command_output', () => {
     it('命令输出匹配应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-18',
           checks: [{ id: 'c-18', type: 'command_output', config: { command: 'echo hello', expected: 'hello' } }],
@@ -271,7 +257,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('命令输出不匹配应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-19',
           checks: [{ id: 'c-19', type: 'command_output', config: { command: 'echo hello', expected: 'world' } }],
@@ -285,7 +271,7 @@ describe('CheckpointValidator', () => {
 
   describe('command_success', () => {
     it('命令成功应该通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-10',
           checks: [{ id: 'c-10', type: 'command_success', config: { command: 'echo test' } }],
@@ -297,7 +283,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('命令失败应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-11',
           checks: [{ id: 'c-11', type: 'command_success', config: { command: 'exit 1' } }],
@@ -311,7 +297,7 @@ describe('CheckpointValidator', () => {
 
   describe('多检查组合', () => {
     it('所有检查通过才算整体通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-12',
           checks: [
@@ -329,7 +315,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('一个检查失败则整体失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-13',
           checks: [
@@ -347,7 +333,7 @@ describe('CheckpointValidator', () => {
 
   describe('空检查点', () => {
     it('无检查应该默认通过', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         { id: 'cp-empty', checks: [] },
         { workdir: tempDir, projectPath: tempDir }
       );
@@ -362,7 +348,7 @@ describe('CheckpointValidator', () => {
 
     it('HTTP 状态码匹配应该通过', async () => {
       globalThis.fetch = (async () => new Response(null, { status: 200 })) as any;
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-22',
           checks: [{ id: 'c-22', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
@@ -374,7 +360,7 @@ describe('CheckpointValidator', () => {
 
     it('HTTP 状态码不匹配应该失败', async () => {
       globalThis.fetch = (async () => new Response(null, { status: 404 })) as any;
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-23',
           checks: [{ id: 'c-23', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
@@ -391,7 +377,7 @@ describe('CheckpointValidator', () => {
 
     it('HTTP 响应体包含内容应该通过', async () => {
       globalThis.fetch = (async () => new Response('{"args": "test"}', { status: 200 })) as any;
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-24',
           checks: [{ id: 'c-24', type: 'http_body', config: { url: 'https://example.com', expected: 'args' } }],
@@ -403,7 +389,7 @@ describe('CheckpointValidator', () => {
 
     it('HTTP 响应体不包含内容应该失败', async () => {
       globalThis.fetch = (async () => new Response('{"data": "test"}', { status: 200 })) as any;
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-25',
           checks: [{ id: 'c-25', type: 'http_body', config: { url: 'https://example.com', expected: 'NONEXISTENT' } }],
@@ -424,7 +410,7 @@ describe('CheckpointValidator', () => {
         message: '自定义检查通过',
       }));
 
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-26',
           checks: [{ id: 'c-26', type: 'custom', config: { customFunction: 'myValidator' } }],
@@ -443,7 +429,7 @@ describe('CheckpointValidator', () => {
         message: '自定义检查失败',
       }));
 
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-26b',
           checks: [{ id: 'c-26b', type: 'custom', config: { customFunction: 'failValidator' } }],
@@ -455,7 +441,7 @@ describe('CheckpointValidator', () => {
     });
 
     it('未注册的自定义检查应该失败', async () => {
-      const result = await CheckpointValidator.getInstance().validate(
+      const result = await new CheckpointValidator().validate(
         {
           id: 'cp-27',
           checks: [{ id: 'c-27', type: 'custom', config: { customFunction: 'unknownValidator' } }],
@@ -474,7 +460,7 @@ describe('CheckpointValidator', () => {
   describe('边缘情况', () => {
     describe('未知检查类型', () => {
       it('未知类型应该返回错误', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-unknown',
             checks: [{ id: 'c-unknown', type: 'unknown_type' as any, config: {} }],
@@ -490,7 +476,7 @@ describe('CheckpointValidator', () => {
 
     describe('file_not_empty 文件不存在', () => {
       it('文件不存在应该失败', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-fne-missing',
             checks: [{ id: 'c-fne-missing', type: 'file_not_empty', config: { path: 'nonexistent.txt' } }],
@@ -505,7 +491,7 @@ describe('CheckpointValidator', () => {
 
     describe('file_contains 文件不存在', () => {
       it('文件不存在应该失败', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-fc-missing',
             checks: [{ id: 'c-fc-missing', type: 'file_contains', config: { path: 'nonexistent.txt', content: 'test' } }],
@@ -520,7 +506,7 @@ describe('CheckpointValidator', () => {
 
     describe('file_not_contains 文件不存在', () => {
       it('文件不存在应该失败', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-fnc-missing',
             checks: [{ id: 'c-fnc-missing', type: 'file_not_contains', config: { path: 'nonexistent.txt', content: 'test' } }],
@@ -535,7 +521,7 @@ describe('CheckpointValidator', () => {
 
     describe('command_output 命令失败', () => {
       it('命令执行失败应该返回错误', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-co-fail',
             checks: [{ id: 'c-co-fail', type: 'command_output', config: { command: 'exit 1', expected: 'anything' } }],
@@ -550,7 +536,7 @@ describe('CheckpointValidator', () => {
 
     describe('json_path 无效路径', () => {
       it('无效 JSON 路径应该失败', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-jp-invalid',
             checks: [{ id: 'c-jp-invalid', type: 'json_path', config: { jsonPath: 'invalid..path', expected: 'test' } }],
@@ -575,7 +561,7 @@ describe('CheckpointValidator', () => {
           return Promise.reject(new Error('Network error'));
         }) as any;
         const waits: number[] = [];
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-hs-fail',
             checks: [{ id: 'c-hs-fail', type: 'http_status', config: { url: 'https://example.com', expectedStatus: 200 } }],
@@ -600,7 +586,7 @@ describe('CheckpointValidator', () => {
           return Promise.reject(new Error('Network error'));
         }) as any;
         const waits: number[] = [];
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-hb-fail',
             checks: [{ id: 'c-hb-fail', type: 'http_body', config: { url: 'https://example.com', expected: 'test' } }],
@@ -617,7 +603,7 @@ describe('CheckpointValidator', () => {
 
     describe('output_contains JSON 输出', () => {
       it('JSON 对象输出应该被正确处理', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-oc-json',
             checks: [{ id: 'c-oc-json', type: 'output_contains', config: { content: 'success' } }],
@@ -632,7 +618,7 @@ describe('CheckpointValidator', () => {
     describe('output_matches 复杂正则', () => {
       it('多行匹配应该工作', async () => {
         // 注意：正则默认不匹配换行符，需要使用 s 标志或 [\s\S]
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-om-multi',
             checks: [{ id: 'c-om-multi', type: 'output_matches', config: { pattern: 'passed[\\s\\S]*failed' } }],
@@ -644,7 +630,7 @@ describe('CheckpointValidator', () => {
       });
 
       it('单行匹配应该工作', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-om-single',
             checks: [{ id: 'c-om-single', type: 'output_matches', config: { pattern: '\\d+ passed' } }],
@@ -658,7 +644,7 @@ describe('CheckpointValidator', () => {
 
     describe('边界场景', () => {
       it('未知检查类型应该失败', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-unknown',
             checks: [{ id: 'c-unknown', type: 'unknown_type' as any, config: {} }],
@@ -671,7 +657,7 @@ describe('CheckpointValidator', () => {
       });
 
       it('output 为 null 应该被正确处理', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-null-output',
             checks: [{ id: 'c-null-output', type: 'output_contains', config: { content: 'test' } }],
@@ -684,7 +670,7 @@ describe('CheckpointValidator', () => {
       });
 
       it('output 为 undefined 应该被正确处理', async () => {
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-undef-output',
             checks: [{ id: 'c-undef-output', type: 'output_contains', config: { content: 'test' } }],
@@ -698,7 +684,7 @@ describe('CheckpointValidator', () => {
 
       it('JSON 路径获取抛出错误应该失败', async () => {
         // 创建一个复杂的 JSON 路径测试场景
-        const result = await CheckpointValidator.getInstance().validate(
+        const result = await new CheckpointValidator().validate(
           {
             id: 'cp-json-err',
             checks: [{ id: 'c-json-err', type: 'json_path', config: { jsonPath: '$.deeply.nested.array[999].field', expected: 'test' } }],

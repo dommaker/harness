@@ -7,6 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import { SpecAcceptanceGate } from '../../gates/acceptance';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
@@ -87,7 +88,6 @@ export async function listAcceptanceCriteria(
 
   try {
     const content = await fs.readFile(tasksPath, 'utf-8');
-    const yaml = await import('js-yaml');
     const tasks: unknown = yaml.load(content);
 
     if (typeof tasks !== 'object' || tasks === null) {

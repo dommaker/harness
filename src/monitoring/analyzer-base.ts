@@ -2,14 +2,9 @@
  * 分析器共享基础（工单 19-D）
  *
  * TraceAnalyzer 与 PerformanceAnalyzer 的镜像同构部分收敛于此：
- * 分组、时间范围、统计助手、summary 文件读写。
+ * 分组、时间范围、统计助手。
  * 两个分析器保持各自的公开类接口（P1 符号冻结），仅内部复用。
  */
-
-import * as fs from 'fs';
-import * as path from 'path';
-
-export type Trend = 'stable' | 'rising' | 'falling';
 
 /**
  * 按键分组（保持插入顺序）
@@ -47,26 +42,4 @@ export function splitByTime<T extends { timestamp: number }>(items: T[]): [T[], 
   const sorted = [...items].sort((a, b) => a.timestamp - b.timestamp);
   const half = Math.floor(sorted.length / 2);
   return [sorted.slice(0, half), sorted.slice(half)];
-}
-
-/**
- * 保存 JSON summary 文件（目录不存在时创建）
- */
-export function writeSummaryJson(summaryFile: string, data: unknown): void {
-  const dir = path.dirname(summaryFile);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(summaryFile, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-/**
- * 读取 JSON summary 文件；不存在时返回 null
- */
-export function readSummaryJson<T>(summaryFile: string): T | null {
-  if (!fs.existsSync(summaryFile)) {
-    return null;
-  }
-  const content = fs.readFileSync(summaryFile, 'utf-8');
-  return JSON.parse(content) as T;
 }

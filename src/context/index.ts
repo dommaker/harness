@@ -6,15 +6,10 @@
 
 // 类型
 export type {
-  CompactionConfig,
-  CompactionLevel,
-  ContextSource,
-  ContextSourceType,
   SessionCheckpoint,
   SessionEvent,
   SessionEventType,
   SessionHandle,
-  SessionMessage,
 } from './types';
 
 // 会话管理

@@ -12,7 +12,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { FailureRecorder } from '../recorder';
 import { failureList, failureStats } from '../../cli/commands/failure';
-import { ErrorType, FailureLevel, DEFAULT_FAILURE_LOG_FILE } from '../../types/failure';
+import { DEFAULT_FAILURE_LOG_FILE } from '../../types/failure';
+import { ErrorType, FailureLevel } from '../error-types';
 
 const CORRUPT_LINE = '{"type":"TEST_FAILED","level":"L1","mess'; // 半写入截断
 

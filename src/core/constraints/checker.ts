@@ -297,68 +297,34 @@ export class ConstraintChecker {
     // context.operation 为主触发条件，extraTriggers 为次级推断（ADR-0001），任一命中即匹配
     const operations = [context.operation, ...(context.extraTriggers ?? [])];
 
-    // 1. error 级: block 模式首个违规即抛；collect 模式全量收集
-    //    （ADR-0035：channel 非 gate 的条目不进入检查分发，两级循环同口径过滤）
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error' && isGateConstraint(c))) {
-      if (!matchesTrigger(constraint, operations)) continue;
+    // error 级先行（block 模式首个违规即抛），warning 级随后记警告——单循环按 severity
+    // 分桶（原两个同构循环合一，执行顺序不变）。
+    // （ADR-0035：channel 非 gate 的条目不进入检查分发，两级同口径过滤）
+    for (const severity of ['error', 'warning'] as const) {
+      const bucket = severity === 'error' ? result.errors : result.warnings;
+      for (const constraint of Object.values(constraints).filter(c => c.severity === severity && isGateConstraint(c))) {
+        if (!matchesTrigger(constraint, operations)) continue;
 
-      const checkResult = await this.check(constraint, context, run, env);
-      result.errors.push(checkResult);
-      this.recordTrace(constraint, checkResult, context);
+        const checkResult = await this.check(constraint, context, run, env);
+        bucket.push(checkResult);
+        this.recordTrace(constraint, checkResult, context);
 
-      if (!checkResult.satisfied) {
-        result.passed = false;
-        if (mode === 'block') {
-          throw new ConstraintViolationError(checkResult);
+        if (!checkResult.satisfied) {
+          if (severity === 'error') {
+            result.passed = false;
+            if (mode === 'block') {
+              throw new ConstraintViolationError(checkResult);
+            }
+          } else {
+            result.warningCount++;
+          }
         }
-      }
-    }
-
-    // 2. warning 级: 记录警告
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'warning' && isGateConstraint(c))) {
-      if (!matchesTrigger(constraint, operations)) continue;
-
-      const checkResult = await this.check(constraint, context, run, env);
-      result.warnings.push(checkResult);
-      this.recordTrace(constraint, checkResult, context);
-
-      if (!checkResult.satisfied) {
-        result.warningCount++;
       }
     }
 
     return result;
   }
 
-  /**
-   * 执行前检查（仅检查 severity='error' 的约束）
-   *
-   * @param context 约束上下文
-   * @param customConfig 可选，per-request 自定义配置（避免多请求间的单例状态污染）
-   * @param evidence 可选，本次检查共用的 git 证据 adapter（#87，同 checkConstraints）
-   * @throws ConstraintViolationError 如果有 error 级违规
-   */
-  async beforeExecution(
-    context: ConstraintContext,
-    customConfig?: MergedConstraintsConfig | null,
-    evidence?: GitEvidence
-  ): Promise<void> {
-    const projectPath = context.projectPath || process.cwd();
-    const run = evidence ?? createGitEvidence(projectPath);
-    // 独立 run 入口（ADR-0023）：本函数内所有 checker 共用一枚观察面
-    const env = createRunEnv(projectPath);
-    const constraints = this.getConstraints(customConfig);
-    const operations = [context.operation, ...(context.extraTriggers ?? [])];
-
-    for (const constraint of Object.values(constraints).filter(c => c.severity === 'error' && isGateConstraint(c))) {
-      if (!matchesTrigger(constraint, operations)) continue;
-
-      const result = await this.check(constraint, context, run, env);
-      if (!result.satisfied) {
-        throw new ConstraintViolationError(result);
-      }
-    }
-  }
 }
 
 // ========================================
@@ -381,13 +347,10 @@ export async function checkConstraint(
   const constraint = constraints[constraintId];
 
   if (!constraint) {
-    return {
-      id: constraintId,
-      severity: 'warning',
-      satisfied: false,
-      message: `未知的约束: ${constraintId}`,
-      checkedAt: new Date(),
-    };
+    // 注册表闭环同款口径（ADR-0035）：未知 id 是调用方 bug，抛错而非回假结果
+    throw new Error(
+      `[harness] 未知的约束: ${constraintId}（未在内置约束集与 customConfig 中注册）。`
+    );
   }
 
   return checker.check(constraint, context);
@@ -439,19 +402,6 @@ export async function collectConstraints(
     for (const r of result.warnings) options.onTrace(r);
   }
   return result;
-}
-
-/**
- * 快捷函数：执行前检查
- *
- * @param context 约束上下文
- * @param customConfig 可选，per-request 自定义配置
- */
-export async function checkBeforeExecution(
-  context: ConstraintContext,
-  customConfig?: MergedConstraintsConfig | null
-): Promise<void> {
-  return ConstraintChecker.getInstance().beforeExecution(context, customConfig);
 }
 
 // 导出单例（未接线记录器：只评估约束，不写 trace；写 trace 由组合根自行 new）

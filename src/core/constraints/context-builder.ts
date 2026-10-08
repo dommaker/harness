@@ -1,23 +1,19 @@
 /**
  * 约束上下文构造器（工单 23）
  *
- * 从仓库状态（git diff / traces / 文档标记）推断 ConstraintContext：
- * 触发条件 + 各类证据标志。此前散落在 cli/commands/check.ts，
- * 迁入 core 供 CLI 与其他调用方共用。
+ * 从仓库状态（git diff）推断 ConstraintContext：触发条件 + 变更文件清单。
+ * 此前散落在 cli/commands/check.ts，迁入 core 供 CLI 与其他调用方共用。
  *
  * 架构评审 #87：本模块只做装配不做取证——git 证据一律经 git-evidence
  * adapter 取（缺省真 git adapter，调用方可注入与 checker 层同源的那一份），
  * 因此此处不再有 child_process / raw execSync。
  *
- * ADR-0023：同理，trace 记录与源码根探测改经运行级观察面 `RunEnv` 取——
- * 此前本模块的两个证据探测各自整读一次 traces.log、detectTrigger 与 checker 层
- * 各探一次源码根，同一次运行内重复读同一批文件。缺省自造一份 env，调用方（CLI check）
- * 注入即全 run 共用。
+ * ADR-0023：源码根探测经运行级观察面 `RunEnv` 取，缺省自造一份 env，
+ * 调用方（CLI check）注入即全 run 共用。
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
-import { createRunEnv, TRACE_TAIL_WINDOW, type RunEnv } from './run-env';
+import { createRunEnv, type RunEnv } from './run-env';
 import type { ConstraintContext, ConstraintTrigger } from '../../types/constraint';
 import { createGitEvidence, splitFileNames, type GitEvidence } from './git-evidence';
 
@@ -89,93 +85,28 @@ export function detectTrigger(
 }
 
 /**
- * 检测是否有失败的测试记录（取运行级观察面的最近 20 条）
- */
-async function detectFailingTest(env: RunEnv): Promise<boolean> {
-  // 坏行策略与计数去向见 run-env 的读点（ADR-0023 合并两处独立 tail 读为一份窗口）；
-  // fail-fast：traceTail 对缺文件返回空窗口，走到抛错只剩真 IO 故障，不吞
-  return env
-    .traceTail(TRACE_TAIL_WINDOW)
-    .records.some(trace => trace.result === 'fail');
-}
-
-/**
- * 检测是否有根因分析文档
- * 检查 ROOT_CAUSE.md、.harness/diagnoses/、或 git commit 消息
- */
-export function detectRootCauseInvestigation(projectPath: string): boolean {
-  // 检查 ROOT_CAUSE.md
-  if (fs.existsSync(path.join(projectPath, 'ROOT_CAUSE.md'))) return true;
-
-  // 检查 .harness/diagnoses/ 目录（existsSync 过了却读不出 = 真 IO 故障，fail-fast 抛出）
-  const diagnosesDir = path.join(projectPath, '.harness', 'diagnoses');
-  if (fs.existsSync(diagnosesDir)) {
-    if (fs.readdirSync(diagnosesDir).length > 0) return true;
-  }
-
-  return false;
-}
-
-/**
- * 检测是否有需求来源
- * 检查 CLAUDE.md、README.md、specs/、docs/specs/ 等
- */
-export function detectRequirement(projectPath: string): boolean {
-  // Check for CLAUDE.md with HARNESS_CONSTRAINTS section
-  const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-  if (fs.existsSync(claudeMdPath)) {
-    const content = fs.readFileSync(claudeMdPath, 'utf-8');
-    if (content.includes('HARNESS_CONSTRAINTS')) {
-      return true;
-    }
-  }
-
-  const indicators = [
-    'README.md',
-    'specs',
-    'docs/specs',
-    '.specs',
-  ];
-  return indicators.some(f => fs.existsSync(path.join(projectPath, f)));
-}
-
-/**
- * 检测是否有复用检查
- * 检查 .harness/reuse/ 目录或相关文档
- */
-export function detectReuseCheck(projectPath: string): boolean {
-  const reuseDir = path.join(projectPath, '.harness', 'reuse');
-  if (fs.existsSync(reuseDir)) {
-    if (fs.readdirSync(reuseDir).length > 0) return true;
-  }
-
-  return false;
-}
-
-/**
- * 构建约束上下文：变更文件 + 触发条件推断 + 证据标志检测
+ * 构建约束上下文：变更文件 + 触发条件推断
  *
  * options.evidence（#87）：git 证据适配器。调用方（CLI check）注入同一实例给
  * checkConstraints，即可让 context-builder 与 checker 层共用同一证据来源。
- * options.runEnv（ADR-0023）：运行级观察面。注入即本函数内的源根探测与两处 trace
- * 证据探测与其余消费方共用同一份读取，缺省自造一份（只服务本次调用）。
+ * options.runEnv（ADR-0023）：运行级观察面。注入即本函数内的源根探测
+ * 与其余消费方共用同一份读取，缺省自造一份（只服务本次调用）。
  */
-export async function buildConstraintContext(options: {
+export function buildConstraintContext(options: {
   projectPath?: string;
   staged: boolean;
   trigger?: ConstraintTrigger;
   evidence?: GitEvidence;
   runEnv?: RunEnv;
-}): Promise<ConstraintContext> {
+}): ConstraintContext {
   const projectPath = options.projectPath || process.cwd();
-  const runEnv = options.runEnv ?? createRunEnv(projectPath);
   const evidence = options.evidence ?? createGitEvidence(projectPath);
   const changedFiles = splitFileNames(evidence.changedFileNames(options.staged));
   const inferred = detectTrigger(changedFiles, {
     trigger: options.trigger,
     projectPath,
     evidence,
-    runEnv,
+    runEnv: options.runEnv,
   });
   const triggers = Array.isArray(inferred) ? inferred : [inferred];
 
@@ -184,10 +115,5 @@ export async function buildConstraintContext(options: {
     extraTriggers: triggers.slice(1),
     projectPath,
     changedFiles,
-    hasTest: changedFiles.some(f => f.includes('.test.') || f.includes('.spec.')),
-    hasFailingTest: await detectFailingTest(runEnv),
-    hasRootCauseInvestigation: detectRootCauseInvestigation(projectPath),
-    hasReuseCheck: detectReuseCheck(projectPath),
-    hasRequirement: detectRequirement(projectPath),
   };
 }

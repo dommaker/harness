@@ -5,8 +5,6 @@
  */
 
 import type {
-  ErrorType,
-  FailureLevel,
   ErrorClassificationRule,
   ClassificationResult,
 } from '../types/failure';
@@ -15,7 +13,8 @@ import {
   FailureLevel as FailureLevelEnum,
   DEFAULT_CLASSIFICATION_RULES,
   DEFAULT_LEVEL_MAPPING,
-} from '../types/failure';
+} from './error-types';
+import type { ErrorType, FailureLevel } from './error-types';
 
 /**
  * 错误分类器配置
@@ -89,21 +88,6 @@ export class ErrorClassifier {
   }
 
   /**
-   * 添加自定义规则
-   */
-  addRule(rule: ErrorClassificationRule): void {
-    // 自定义规则插入到前面，优先匹配
-    this.rules.unshift(rule);
-  }
-
-  /**
-   * 获取所有规则
-   */
-  getRules(): ErrorClassificationRule[] {
-    return [...this.rules];
-  }
-
-  /**
    * 匹配规则
    */
   private matchRule(message: string, name: string, rule: ErrorClassificationRule): boolean {
@@ -129,28 +113,4 @@ export class ErrorClassifier {
 
     return false;
   }
-}
-
-/**
- * 创建错误分类器
- */
-export function createErrorClassifier(
-  config?: ErrorClassifierConfig
-): ErrorClassifier {
-  return new ErrorClassifier(config);
-}
-
-/**
- * 快速分类错误（无需创建实例）
- */
-export function classifyError(error: Error): ErrorType {
-  const classifier = new ErrorClassifier();
-  return classifier.classify(error).type;
-}
-
-/**
- * 快速获取失败等级
- */
-export function getFailureLevel(type: ErrorType): FailureLevel {
-  return DEFAULT_LEVEL_MAPPING[type] ?? FailureLevelEnum.L2;
 }

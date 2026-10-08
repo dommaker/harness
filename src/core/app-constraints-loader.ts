@@ -11,7 +11,7 @@
  * - checker 必须是模板注册表（checkers/index.ts TEMPLATES）里的 id，且 validateParams 通过，
  *   否则加载期抛错；checker 仅 channel='gate'（缺省）必填，非 gate 条目允许无 checker
  * - 必填字段：id / rule / severity；可选：channel / checker / params / trigger / message /
- *   description / enforcement。channel 缺省 = 'gate'；trigger 缺省 = 每次 check 都评估（全操作集）
+ *   description / enforcement。channel 缺省 = 'gate'；trigger 缺省 = 恒评估（未声明即无触发域限制）
  * - channel 三值（ADR-0035）：gate = 硬门禁（带 checker 进检查分发）；workflow = 流程承载；
  *   discipline = 登记记录（harness 不渲染、不注入、不执行，供消费方计数晋升）
  *
@@ -24,9 +24,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { Constraint, ConstraintChannel, ConstraintSeverity, ConstraintTrigger } from '../types/constraint';
 import { CONSTRAINTS } from './constraints/definitions';
-// 模板注册表直引 templates-registry 而非 checkers 桶：checkers/index.ts 经内置
-// checker 回头依赖 project-config-loader，从本模块引桶会成值级循环
-import { TEMPLATES } from './constraints/checkers/templates-registry';
+import { TEMPLATES } from './constraints/checkers';
 import { resolveRunEnv, type RunEnv, type RunTarget } from './constraints/run-env';
 
 /** 应用层约束定义文件在项目根下的相对路径 */
@@ -38,23 +36,6 @@ const APP_ID_PREFIX = 'app_';
 const SEVERITIES: readonly ConstraintSeverity[] = ['error', 'warning', 'info'];
 
 const CHANNELS: readonly ConstraintChannel[] = ['gate', 'workflow', 'discipline'];
-
-/**
- * trigger 缺省值 = 全操作集：应用层约束未声明 trigger 时每次 check 都评估
- * （填空式模板多为扫描/存在性形态，与 no_hardcoded_credentials 同类，不猜触发域）
- */
-const DEFAULT_TRIGGERS: ConstraintTrigger[] = [
-  'code_implementation',
-  'test_creation',
-  'module_creation',
-  'module_modification',
-  'module_extension',
-  'module_deletion',
-  'file_modification',
-  'doc_update',
-  'config_change',
-  'commit',
-];
 
 /** run 内 memo（与 RunEnv.rawConfig 同形：一枚观察面至多读一次） */
 const memo = new WeakMap<RunEnv, Constraint[]>();
@@ -129,12 +110,13 @@ function toConstraint(raw: unknown, index: number, rel: string): Constraint {
 
   return {
     id,
-    kind: 'check',
     channel: channel as ConstraintChannel,
     rule,
     message: asString(entry.message) ?? rule,
     severity: severity as ConstraintSeverity,
-    trigger: (trigger as ConstraintTrigger | ConstraintTrigger[] | undefined) ?? DEFAULT_TRIGGERS,
+    // trigger 未声明 = undefined（恒评估，语义正本 matchesTrigger；不再用硬编码
+    // 操作清单凑数——trigger 是开放 string，清单会悄悄漂移，ADR-0040 Phase 4）
+    trigger: trigger as ConstraintTrigger | ConstraintTrigger[] | undefined,
     enforcement: asString(entry.enforcement) ?? '',
     description: asString(entry.description),
     source: 'app',

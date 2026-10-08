@@ -42,10 +42,11 @@ import chalk from 'chalk';
 import {
   retireConstraint as coreRetireConstraint,
   findRetireTarget,
+  type LifecycleKnowledgeSink,
   type RetireExecuteOptions,
   type RetireResult,
 } from '../../core/constraint-lifecycle';
-import { openKnowledgeStore } from './knowledge-view';
+import { openKnowledgeStore } from './knowledge/store-access';
 import { fileStateIO } from '../state-io';
 import {
   buildConstraintsUsageReport,
@@ -70,20 +71,39 @@ export interface ConstraintsRetireOptions {
 }
 
 /**
- * CLI 侧 wired 包装：core retireConstraint + 知识沉淀写口接线
- * （openKnowledgeStore 同一解析点：KNOWLEDGE_BASE_DIR / 用户 home 缺省目录，harness#177）。
- * 库消费方请直接用包根导出的 retireConstraint，按需注入 openKnowledgeStore。
+ * CLI 侧 wired 包装的 options：core 执行 options + 知识沉淀写口的输出 IO
+ * （io 只被写口接线消费，不是 core 的签名——core RetireExecuteOptions 无此字段）
+ */
+export interface RetireCliOptions extends RetireExecuteOptions {
+  /** 知识沉淀写口的输出 IO（缺省 processIO） */
+  io?: CommandIO;
+}
+
+/**
+ * CLI 侧 wired 包装共形（retire/reactivate 两枚原同形两份）：剥出 io、把知识沉淀
+ * 写口接进 core 执行 options（openKnowledgeStore 同一解析点：KNOWLEDGE_BASE_DIR /
+ * 用户 home 缺省目录，harness#177）。库消费方请直接用包根导出的执行函数，按需注入
+ * openKnowledgeStore。
+ */
+export function wireKnowledgeSink<T extends { io?: CommandIO; openKnowledgeStore?: () => LifecycleKnowledgeSink }>(
+  options: T
+): Omit<T, 'io' | 'openKnowledgeStore'> & { openKnowledgeStore: () => LifecycleKnowledgeSink } {
+  const { io, openKnowledgeStore: injected, ...coreOptions } = options;
+  return {
+    ...coreOptions,
+    openKnowledgeStore: injected ?? (() => openKnowledgeStore({}, io ?? processIO)),
+  };
+}
+
+/**
+ * CLI 侧 wired 包装：core retireConstraint + 知识沉淀写口接线（接线共形见 wireKnowledgeSink）。
  */
 export function retireConstraint(
   projectRoot: string,
   id: string,
-  options: RetireExecuteOptions = {}
+  options: RetireCliOptions = {}
 ): RetireResult {
-  return coreRetireConstraint(projectRoot, id, {
-    ...options,
-    openKnowledgeStore:
-      options.openKnowledgeStore ?? (() => openKnowledgeStore({}, options.io ?? processIO)),
-  });
+  return coreRetireConstraint(projectRoot, id, wireKnowledgeSink(options));
 }
 
 /**

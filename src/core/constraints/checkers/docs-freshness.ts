@@ -9,7 +9,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { getGovernanceConfig, resolveContextFiles } from '../../project-config-loader';
+import { getGovernanceConfig, resolveContextFiles } from '../governance-accessors';
 import { FreshnessRunner, type FreshnessCheckResult } from '../doc-freshness/runner';
 import { collectPopulationFiles } from '../capabilities-reconcile';
 import { CAPABILITIES_FILE_REL } from '../run-env';

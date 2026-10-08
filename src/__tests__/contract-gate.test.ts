@@ -265,36 +265,4 @@ paths:
       expect(result).toBeDefined();
     });
   });
-
-  describe('配置方法', () => {
-    it('setContractPath 应该更新路径', () => {
-      const gate = new ContractGate();
-      gate.setContractPath('new/path.yaml');
-
-      const config = gate.getConfig();
-      expect(config.contractPath).toBe('new/path.yaml');
-    });
-
-    it('getConfig 应该返回当前配置', () => {
-      const gate = new ContractGate({
-        strict: false,
-        allowBreakingChanges: true,
-        contractPath: 'api.yaml',
-      });
-
-      const config = gate.getConfig();
-      expect(config.strict).toBe(false);
-      expect(config.allowBreakingChanges).toBe(true);
-      expect(config.contractPath).toBe('api.yaml');
-    });
-
-    it('默认配置', () => {
-      const gate = new ContractGate();
-      const config = gate.getConfig();
-
-      expect(config.strict).toBe(true);
-      expect(config.allowBreakingChanges).toBe(false);
-      expect(config.contractPath).toBe('openapi.yaml');
-    });
-  });
 });

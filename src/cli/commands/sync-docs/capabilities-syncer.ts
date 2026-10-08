@@ -9,7 +9,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
-import type { CapabilitiesMode } from '../../../core/project-config-loader';
+import type { CapabilitiesMode } from '../../../core/constraints/governance-accessors';
 import type { ModuleInfo, SyncResult } from './project-reader';
 
 /**
@@ -76,11 +76,7 @@ export async function updateCapabilitiesFile(
 
     // 添加新文件的行（在最后一个表格行之后）；module 模式跳过
     if (mode !== 'module' && result.added.length > 0) {
-      const getBasenameLocal = (f: string) => {
-        const segments = f.split('/');
-        return segments[segments.length - 1];
-      };
-      const addedModules = currentModules.filter(m => result.added.includes(getBasenameLocal(m.file)));
+      const addedModules = currentModules.filter(m => result.added.includes(path.basename(m.file)));
       const tableEndRegex = /(^\|[^|]+\|[^|]+\|[^|]+\|\s*$)/gm;
       let lastTableRow = '';
       let match;
@@ -278,8 +274,7 @@ function generateDirTable(modules: ModuleInfo[]): string {
   }
 
   const rows = dirs.map(d => {
-    const segments = d.replace(/\/$/, '').split('/');
-    const name = segments[segments.length - 1];
+    const name = path.posix.basename(d.replace(/\/$/, ''));
     return `| ${name} | ${d} | ${name} |`;
   }).join('\n');
 
@@ -322,8 +317,7 @@ export function compactCapabilitiesContent(content: string): string {
   const deleteLines = new Set<number>();
   for (const [dir, rows] of groups) {
     if (rows.length < 2) continue;
-    const segments = dir.split('/');
-    const name = segments[segments.length - 1];
+    const name = path.posix.basename(dir);
     const desc = rows[0].desc || name;
     lines[rows[0].lineIndex] = `| ${name} | ${dir}/ | ${desc} |`;
     for (const row of rows.slice(1)) {

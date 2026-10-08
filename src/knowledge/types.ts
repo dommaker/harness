@@ -15,10 +15,10 @@ export type MaturityLevel = 'draft' | 'verified' | 'proven' | 'archived' | 'acti
 
 export type StorageLayer = 'personal' | 'team' | 'tech' | 'domain' | 'project' | 'system';
 
-/** MaturityLevel 的运行时值域正本（store 写入闸与 lint 枚举校验共用） */
+/** MaturityLevel 的运行时值域正本（store 写入闸与摄入校验共用） */
 export const MATURITY_LEVELS: readonly MaturityLevel[] = ['draft', 'verified', 'proven', 'archived', 'active', 'deprecated'];
 
-/** StorageLayer 的运行时值域正本（store 写入闸与 lint 枚举校验共用） */
+/** StorageLayer 的运行时值域正本（store 写入闸与摄入校验共用） */
 export const STORAGE_LAYERS: readonly StorageLayer[] = ['personal', 'team', 'tech', 'domain', 'project', 'system'];
 
 /** How agent consumes this knowledge — drives injection strategy and lifecycle */
@@ -74,12 +74,6 @@ export interface ExecutionResult {
 
 // ── Query ───────────────────────────────────────────────────
 
-export interface KnowledgeReference {
-  id: string;
-  title: string;
-  usedIn: string;
-}
-
 export interface QueryBudget {
   phase: string;
   maxTokens: number;
@@ -103,18 +97,6 @@ export interface QueryFilter {
   excludeArchived?: boolean;
   consumptionModes?: ConsumptionMode[];
   origins?: KnowledgeOrigin[];
-}
-
-// ── Lint ────────────────────────────────────────────────────
-
-export type LintIssueType = 'orphan' | 'contradiction' | 'outdated' | 'duplicate' | 'index_inconsistent' | 'invalid_enum';
-
-export interface LintIssue {
-  type: LintIssueType;
-  entryId?: string;
-  severity: 'low' | 'medium' | 'high';
-  description: string;
-  suggestion: string;
 }
 
 // ── Ingest ──────────────────────────────────────────────────
@@ -143,41 +125,13 @@ export interface DecayConfig {
   provenDecayMonths: number;
   verifiedDecayMonths: number;
   draftDecayMonths: number;
-  /** Sources whose entries skip draft→verified promotion (start at verified) */
-  autoPromoteSources: string[];
 }
 
 export const DEFAULT_DECAY_CONFIG: DecayConfig = {
   provenDecayMonths: 12,
   verifiedDecayMonths: 6,
   draftDecayMonths: 3,
-  autoPromoteSources: [],
 };
-
-// ── Decision ────────────────────────────────────────────────
-
-export interface DecisionRecord {
-  topic: string;
-  category: 'architecture' | 'tooling' | 'process' | 'design';
-  context: string;
-  decision: string;
-  alternatives: string[];
-  rationale: string;
-  consequences: string;
-  participants: string[];
-  sourceType: string;
-  sourceId?: string;
-  revisable: boolean;
-  revisitCondition?: string;
-}
-
-// ── Reference ───────────────────────────────────────────────
-
-export interface ReferenceRecord {
-  decisionId: string;
-  entryIds: string[];
-  timestamp: string;
-}
 
 // ── Index ───────────────────────────────────────────────────
 

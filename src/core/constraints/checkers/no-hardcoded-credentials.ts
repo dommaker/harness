@@ -20,6 +20,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { formatEvidence, type CheckDetail, type ConstraintCheck } from './types';
+import { parseUnifiedDiff } from '../../../utils/diff-parse';
 
 /** 私钥/令牌指纹模式（命中即违规，无例外） */
 const FINGERPRINT_PATTERNS: RegExp[] = [
@@ -126,39 +127,11 @@ interface AddedLine {
   text: string;
 }
 
-/** 从 unified diff 中取新增行：按 +++ b/<path> 归属文件，按 @@ +n @@ 推算新文件行号 */
+/** 从 unified diff 中取新增行：文件归属与行号推算见 utils/diff-parse 正本 */
 function collectAddedLines(diff: string): AddedLine[] {
-  const out: AddedLine[] = [];
-  let file = '';
-  let newLine = 0;
-  for (const raw of diff.split('\n')) {
-    if (raw.startsWith('diff --git')) {
-      file = '';
-      newLine = 0;
-      continue;
-    }
-    if (raw.startsWith('+++ b/')) {
-      file = raw.slice('+++ b/'.length);
-      continue;
-    }
-    if (raw.startsWith('+++')) {
-      file = '';
-      continue;
-    }
-    if (raw.startsWith('@@')) {
-      const m = raw.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      newLine = m ? parseInt(m[1], 10) : 0;
-      continue;
-    }
-    if (!file || newLine === 0) continue;
-    if (raw.startsWith('+')) {
-      out.push({ file, lineNo: newLine, text: raw.slice(1) });
-      newLine++;
-    } else if (!raw.startsWith('-') && !raw.startsWith('\\')) {
-      newLine++;
-    }
-  }
-  return out;
+  return parseUnifiedDiff(diff)
+    .filter(l => l.kind === 'added' && l.file !== '' && l.newLineNo !== 0)
+    .map(l => ({ file: l.file, lineNo: l.newLineNo, text: l.text }));
 }
 
 function failDetail(hits: Hit[]): CheckDetail {

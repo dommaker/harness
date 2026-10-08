@@ -13,7 +13,6 @@ import type {
   CheckpointResult,
   CheckResult,
   CheckpointContext,
-  CheckType,
 } from '../../types/checkpoint';
 import {
   checkFileExists,
@@ -31,53 +30,16 @@ import {
 import { checkHttpStatus, checkHttpBody } from './check-handlers/http';
 
 /**
- * 检查点验证器
+ * 检查点验证器（无状态，构造器直建——单例壳已随 ADR-0040 Phase 4 删除）
  */
 export class CheckpointValidator {
-  private static instance: CheckpointValidator;
-
-  /**
-   * 支持的检查类型列表
-   */
-  private static readonly SUPPORTED_CHECK_TYPES: CheckType[] = [
-    'file_exists',
-    'file_not_empty',
-    'file_contains',
-    'file_not_contains',
-    'command_success',
-    'command_output',
-    'output_contains',
-    'output_not_contains',
-    'output_matches',
-    'json_path',
-    'http_status',
-    'http_body',
-    'custom',
-  ];
-
-  private constructor() {}
-
-  static getInstance(): CheckpointValidator {
-    if (!CheckpointValidator.instance) {
-      CheckpointValidator.instance = new CheckpointValidator();
-    }
-    return CheckpointValidator.instance;
-  }
-
-  /**
-   * 获取支持的检查类型
-   */
-  getSupportedCheckTypes(): CheckType[] {
-    return [...CheckpointValidator.SUPPORTED_CHECK_TYPES];
-  }
-
   /**
    * 验证检查点
    */
   async validate(checkpoint: Checkpoint, context: CheckpointContext): Promise<CheckpointResult> {
-    if (!checkpoint || !checkpoint.checks || checkpoint.checks.length === 0) {
+    if (!checkpoint.checks || checkpoint.checks.length === 0) {
       return {
-        checkpointId: checkpoint?.id || 'unknown',
+        checkpointId: checkpoint.id,
         passed: true,
         checks: [],
         message: '无检查点要求',
@@ -105,51 +67,45 @@ export class CheckpointValidator {
 
   /**
    * 执行单个检查项（分发至 check-handlers/ 各族）
+   *
+   * 无外层 try/catch：13 个 handler 与 custom 分支各自把执行错误译成 CheckResult
+   * （错误文本即诊断），外层再兜是对不可能状态的二次防御。
    */
   private async executeCheck(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-    try {
-      switch (check.type) {
-        case 'file_exists':
-          return await checkFileExists(check, context);
-        case 'file_not_empty':
-          return await checkFileNotEmpty(check, context);
-        case 'file_contains':
-          return await checkFileContains(check, context);
-        case 'file_not_contains':
-          return await checkFileNotContains(check, context);
-        case 'command_success':
-          return await checkCommandSuccess(check, context);
-        case 'command_output':
-          return await checkCommandOutput(check, context);
-        case 'output_contains':
-          return await checkOutputContains(check, context);
-        case 'output_not_contains':
-          return await checkOutputNotContains(check, context);
-        case 'output_matches':
-          return await checkOutputMatches(check, context);
-        case 'json_path':
-          return await checkJsonPath(check, context);
-        case 'http_status':
-          return await checkHttpStatus(check, context);
-        case 'http_body':
-          return await checkHttpBody(check, context);
-        case 'custom':
-          return await this.checkCustom(check, context);
-        default:
-          return {
-            checkId: check.id,
-            passed: false,
-            message: `未知检查类型: ${check.type}`,
-            error: `Unknown check type: ${check.type}`,
-          };
-      }
-    } catch (error) {
-      return {
-        checkId: check.id,
-        passed: false,
-        message: `检查执行失败: ${(error as Error).message}`,
-        error: (error as Error).message,
-      };
+    switch (check.type) {
+      case 'file_exists':
+        return await checkFileExists(check, context);
+      case 'file_not_empty':
+        return await checkFileNotEmpty(check, context);
+      case 'file_contains':
+        return await checkFileContains(check, context);
+      case 'file_not_contains':
+        return await checkFileNotContains(check, context);
+      case 'command_success':
+        return await checkCommandSuccess(check, context);
+      case 'command_output':
+        return await checkCommandOutput(check, context);
+      case 'output_contains':
+        return await checkOutputContains(check, context);
+      case 'output_not_contains':
+        return await checkOutputNotContains(check, context);
+      case 'output_matches':
+        return await checkOutputMatches(check, context);
+      case 'json_path':
+        return await checkJsonPath(check, context);
+      case 'http_status':
+        return await checkHttpStatus(check, context);
+      case 'http_body':
+        return await checkHttpBody(check, context);
+      case 'custom':
+        return await this.checkCustom(check, context);
+      default:
+        return {
+          checkId: check.id,
+          passed: false,
+          message: `未知检查类型: ${check.type}`,
+          error: `Unknown check type: ${check.type}`,
+        };
     }
   }
 
@@ -161,7 +117,18 @@ export class CheckpointValidator {
     const handler = context.customHandlers?.get(check.config.customFunction || '');
 
     if (handler) {
-      return await handler(check.config);
+      // 用户注入的 handler 是唯一不受本仓控制的分支：抛错译成 CheckResult（与其余 13 族同口径）
+      try {
+        return await handler(check.config);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return {
+          checkId: check.id,
+          passed: false,
+          message: `自定义检查执行失败: ${check.config.customFunction}`,
+          error: detail,
+        };
+      }
     }
 
     return {

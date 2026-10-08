@@ -4,15 +4,12 @@
 
 import { specValidate, listSpecTypes } from '../spec';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { SpecValidator, validateAllSpecs } from '../../../core/spec/validator';
+import { SpecValidator } from '../spec/validator';
 import type { BatchSpecValidationResult, SpecValidationResult } from '../../../types/spec';
 
 // Mock SpecValidator
-jest.mock('../../../core/spec/validator', () => ({
-  SpecValidator: {
-    getInstance: jest.fn(),
-  },
-  validateAllSpecs: jest.fn(),
+jest.mock('../spec/validator', () => ({
+  SpecValidator: jest.fn(),
 }));
 
 // Mock chalk
@@ -25,8 +22,7 @@ jest.mock('chalk', () => ({
   bold: jest.fn((str: string) => str),
 }));
 
-const MockSpecValidator = SpecValidator as jest.Mocked<typeof SpecValidator>;
-const mockValidateAllSpecs = validateAllSpecs as jest.MockedFunction<typeof validateAllSpecs>;
+const MockSpecValidator = SpecValidator as unknown as jest.Mock;
 
 let io: CapturingIO;
 beforeEach(() => {
@@ -35,18 +31,18 @@ beforeEach(() => {
 
 describe('spec command', () => {
   let mockValidator: {
-    setConfig: jest.Mock;
     validateFile: jest.Mock;
+    validateAll: jest.Mock;
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     mockValidator = {
-      setConfig: jest.fn(),
       validateFile: jest.fn(),
+      validateAll: jest.fn(),
     };
-    (MockSpecValidator.getInstance as jest.Mock).mockReturnValue(mockValidator);
+    MockSpecValidator.mockImplementation(() => mockValidator);
   });
 
   describe('specValidate', () => {
@@ -75,9 +71,10 @@ describe('spec command', () => {
         };
         mockValidator.validateFile.mockResolvedValue(mockResult);
 
-        await specValidate({ file: 'test.yml' }, io);
+        const result = await specValidate({ file: 'test.yml' }, io);
         expect(io.outText()).toContain('验证失败');
         expect(io.outText()).toContain('错误');
+        expect(result).toEqual({ kind: 'fail', reason: 'Spec 文件验证失败: test.yml' });
       });
 
       it('应该显示警告', async () => {
@@ -119,7 +116,7 @@ describe('spec command', () => {
           warnings: 0,
           results: [],
         };
-        mockValidateAllSpecs.mockResolvedValue(mockResult);
+        mockValidator.validateAll.mockResolvedValue(mockResult);
 
         await specValidate({}, io);
         expect(io.outText()).toContain('所有 Spec 文件验证通过');
@@ -135,7 +132,7 @@ describe('spec command', () => {
             { file: 'fail1.yml', type: 'custom', valid: false, errors: [{ path: 'x', message: 'err', severity: 'error' }], warnings: [] },
           ],
         };
-        mockValidateAllSpecs.mockResolvedValue(mockResult);
+        mockValidator.validateAll.mockResolvedValue(mockResult);
 
         await specValidate({}, io);
         expect(io.outText()).toContain('失败: 2');
@@ -149,7 +146,7 @@ describe('spec command', () => {
           warnings: 0,
           results: [],
         };
-        mockValidateAllSpecs.mockResolvedValue(mockResult);
+        mockValidator.validateAll.mockResolvedValue(mockResult);
 
         await specValidate({}, io);
         expect(io.outText()).toContain('没有找到 Spec 文件');
@@ -163,13 +160,13 @@ describe('spec command', () => {
           warnings: 0,
           results: [],
         };
-        mockValidateAllSpecs.mockResolvedValue(mockResult);
+        mockValidator.validateAll.mockResolvedValue(mockResult);
 
         const result = await specValidate({}, io);
         expect(result).toEqual({ kind: 'fail', reason: '1 个 Spec 文件验证失败' });
       });
 
-      it('--staged 有失败：ok（历史退出码面 0，冻结不变）', async () => {
+      it('--staged 有失败：fail（与非 staged 同口径，staged 不再是免 fail 通道）', async () => {
         const mockResult: BatchSpecValidationResult = {
           total: 2,
           passed: 1,
@@ -177,21 +174,34 @@ describe('spec command', () => {
           warnings: 0,
           results: [],
         };
-        mockValidateAllSpecs.mockResolvedValue(mockResult);
+        mockValidator.validateAll.mockResolvedValue(mockResult);
 
         const result = await specValidate({ staged: true }, io);
-        expect(result).toEqual({ kind: 'ok' });
+        expect(result).toEqual({ kind: 'fail', reason: '1 个 Spec 文件验证失败' });
       });
     });
 
     describe('Schema 配置', () => {
-      it('应该设置自定义 Schema 路径', async () => {
-        mockValidateAllSpecs.mockResolvedValue({
+      it('自定义 Schema 路径在组合根锚定到项目根（不按进程 cwd）', async () => {
+        mockValidator.validateAll.mockResolvedValue({
           total: 0, passed: 0, failed: 0, warnings: 0, results: [],
         });
 
-        await specValidate({ schema: 'custom-schema.ts' }, io);
-        expect(mockValidator.setConfig).toHaveBeenCalled();
+        await specValidate({ schema: 'custom-schema.ts', projectPath: '/proj' }, io);
+        expect(MockSpecValidator).toHaveBeenCalledWith({
+          schemaPath: '/proj/custom-schema.ts',
+        });
+      });
+
+      it('缺省 Schema 路径同样锚定项目根', async () => {
+        mockValidator.validateAll.mockResolvedValue({
+          total: 0, passed: 0, failed: 0, warnings: 0, results: [],
+        });
+
+        await specValidate({ projectPath: '/proj' }, io);
+        expect(MockSpecValidator).toHaveBeenCalledWith({
+          schemaPath: '/proj/specs/schemas',
+        });
       });
     });
   });

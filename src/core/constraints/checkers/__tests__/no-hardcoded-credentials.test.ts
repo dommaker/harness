@@ -23,6 +23,7 @@ function makeEnv(stagedDiff: string): CheckEnv {
     stagedDiff: async () => stagedDiff,
     stagedDiffNames: async () => '',
     srcScan: () => [],
+    evidenceAvailable: () => true,
   };
 }
 
@@ -44,6 +45,7 @@ async function textHitsCredential(text: string): Promise<boolean> {
     stagedDiff: async () => '',
     stagedDiffNames: async () => '',
     srcScan: () => [],
+    evidenceAvailable: () => true,
   };
   return (await noHardcodedCredentials.evaluate(env)) !== true;
 }
@@ -209,6 +211,7 @@ describe('noHardcodedCredentials checker', () => {
         stagedDiff: async () => '',
         stagedDiffNames: async () => '',
         srcScan: () => [],
+        evidenceAvailable: () => true,
       };
     }
 

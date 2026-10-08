@@ -27,6 +27,7 @@ function makeEnv(projectPath: string): CheckEnv {
     stagedDiff: async () => '',
     stagedDiffNames: async () => '',
     srcScan: () => [],
+    evidenceAvailable: () => true,
   };
 }
 

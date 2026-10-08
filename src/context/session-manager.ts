@@ -139,50 +139,6 @@ export class SessionManager {
   }
 
   /**
-   * 从 checkpoint 恢复会话
-   */
-  restoreSession(checkpointId: string): SessionHandle {
-    // 搜索所有会话的 checkpoints（sessions 目录不存在 = 没有任何 checkpoint，直接落底部抛错）
-    const sessionsDir = path.join(this.basePath, '.harness', 'sessions');
-
-    if (fs.existsSync(sessionsDir)) {
-      const sessionIds = fs.readdirSync(sessionsDir);
-
-      for (const sessionId of sessionIds) {
-        const checkpointPath = path.join(sessionsDir, sessionId, 'checkpoints', `${checkpointId}.json`);
-
-        if (fs.existsSync(checkpointPath)) {
-          // checkpoint 文件损坏（JSON 解析失败）直接抛出——曾经整体 catch 吞掉
-          // 真错再抛「不存在」，把损坏伪装成查无此 checkpoint
-          const checkpointData = JSON.parse(fs.readFileSync(checkpointPath, 'utf-8')) as SessionCheckpoint;
-
-          // 恢复会话
-          const handle = this.createSession(sessionId);
-
-          // 从 events.jsonl 恢复事件
-          const eventsPath = path.join(sessionsDir, sessionId, 'events.jsonl');
-          if (fs.existsSync(eventsPath)) {
-            // 坏行策略：skip（原逐行 null-filter 语义不变，harness#82）；
-            // 只恢复 checkpoint 之前的原始行（head 截断在 parse 之前）；
-            // !== null 沿用原过滤口径
-            // 计数去向：豁免（harness#100）——恢复路径没有用户可见输出面（失败即整体抛
-            // `Checkpoint ${id} 不存在`），坏行只会让恢复出的事件少于 checkpoint 声明数；
-            // 告知需要改 loadCheckpoint 的抛错形状，属行为变更不在本票
-            const { records } = readJsonl<SessionEvent>(eventsPath, 'skip', {
-              head: checkpointData.eventCount,
-            });
-            handle.events = records.filter((e): e is SessionEvent => e !== null);
-          }
-
-          return handle;
-        }
-      }
-    }
-
-    throw new Error(`Checkpoint ${checkpointId} 不存在`);
-  }
-
-  /**
    * 生成 checkpoint 摘要
    */
   private generateCheckpointSummary(events: SessionEvent[]): string {

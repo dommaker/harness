@@ -10,6 +10,7 @@
  * 退出码映射收敛在 bin 一处。
  */
 
+import chalk from 'chalk';
 import { createCommandGate, DEFAULT_COMMAND_BLACKLIST } from '../../gates/command';
 import type { CommandBlacklistRule } from '../../types/gate';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
@@ -77,12 +78,12 @@ export async function executeCommand(
     if (options.json) {
       log(io, JSON.stringify({ level, command: cmd }));
     } else {
-      const levelColors: Record<string, string> = {
-        high: '\x1b[31m',
-        medium: '\x1b[33m',
-        low: '\x1b[32m',
+      const levelColors: Record<string, (s: string) => string> = {
+        high: chalk.red,
+        medium: chalk.yellow,
+        low: chalk.green,
       };
-      log(io, `${levelColors[level]}${level}\x1b[0m ${cmd}`);
+      log(io, `${levelColors[level](level)} ${cmd}`);
     }
     // 严重级闸门（历史条件式）：high → 非零退出
     return level === 'high'
@@ -98,7 +99,7 @@ export async function executeCommand(
       details: result.details,
     }, null, 2));
   } else {
-    log(io, result.passed ? `\x1b[32m✓\x1b[0m ${result.message}` : `\x1b[31m✗\x1b[0m ${result.message}`);
+    log(io, result.passed ? `${chalk.green('✓')} ${result.message}` : `${chalk.red('✗')} ${result.message}`);
   }
 
   return gateCommandResult('command', decision);

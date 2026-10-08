@@ -13,7 +13,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { readPackageJson } from '../utils/package-json';
+import { attempt } from '../utils/attempt';
 import type { KnowledgeEntry, KnowledgeSubsystem, StorageLayer } from './types';
 import type { KnowledgeStore } from './store';
 
@@ -35,7 +37,6 @@ export interface ImportResult {
 export interface ImportError {
   source: ImportSource;
   message: string;
-  recoverable: boolean;
 }
 
 // ── 导入状态 ─────────────────────────────────────────────
@@ -45,7 +46,6 @@ export interface ImportState {
   startedAt: string;
   lastUpdated: string;
   completedSources: string[];
-  pendingSources: string[];
   totalImported: number;
   totalErrors: number;
 }
@@ -94,29 +94,19 @@ export class ColdStartImporter {
         continue;
       }
 
-      let result: ImportResult;
-
-      switch (sourceType) {
-        case 'code':
-          result = await this.importFromCode();
-          break;
-        case 'git':
-          result = await this.importFromGit();
-          break;
-        case 'docs':
-          result = await this.importFromDocs();
-          break;
-        case 'manual':
-          result = await this.importManual();
-          break;
-        default:
-          // sourceType 静态收窄为 never（switch 已穷尽四源）；分支防的是运行时脏配置
-          result = {
+      // 降级记名（attempt，fail-open）：单源失败记进 result.errors——CLI 输出面露出错误行
+      // 与错误计数——并继续后续源，不拖死整批冷启动导入；非静默吞错
+      const result = attempt(
+        () => this.dispatchSource(sourceType),
+        (err): ImportResult => ({
+          source: { type: sourceType },
+          entries: [],
+          errors: [{
             source: { type: sourceType },
-            entries: [],
-            errors: [{ source: { type: sourceType }, message: `未知源类型: ${sourceType}`, recoverable: false }],
-          };
-      }
+            message: `${sourceType} 导入失败: ${err instanceof Error ? err.message : String(err)}`,
+          }],
+        })
+      );
 
       results.push(result);
 
@@ -131,126 +121,121 @@ export class ColdStartImporter {
     return results;
   }
 
+  private dispatchSource(sourceType: ImportSource['type']): ImportResult {
+    switch (sourceType) {
+      case 'code':
+        return this.importFromCode();
+      case 'git':
+        return this.importFromGit();
+      case 'docs':
+        return this.importFromDocs();
+      case 'manual':
+        return this.importManual();
+      default:
+        // sourceType 静态收窄为 never（switch 已穷尽四源）；分支防的是运行时脏配置
+        throw new Error(`未知源类型: ${String(sourceType)}`);
+    }
+  }
+
   /**
    * 从代码仓库扫描提取知识
    */
-  private async importFromCode(): Promise<ImportResult> {
+  private importFromCode(): ImportResult {
     const entries: KnowledgeEntry[] = [];
-    const errors: ImportError[] = [];
     const source: ImportSource = { type: 'code', path: this.config.projectRoot };
 
-    try {
-      // 扫描 package.json 获取技术栈（缺失 → 无条目；损坏 → 抛出，落下方 errors）
-      const pkg = readPackageJson(this.config.projectRoot);
-      if (pkg) {
-        entries.push(this.createEntry({
-          title: `技术栈: ${pkg.name || 'unknown'}`,
-          content: this.formatPackageInfo(pkg),
-          type: 'model',
-          tags: ['tech-stack', 'auto-import'],
-          layer: 'project',
-        }));
-      }
+    // 扫描 package.json 获取技术栈（缺失 → 无条目；损坏 → 抛出，由 importAll 记名降级为错误行）
+    const pkg = readPackageJson(this.config.projectRoot);
+    if (pkg) {
+      entries.push(this.createEntry({
+        title: `技术栈: ${pkg.name || 'unknown'}`,
+        content: this.formatPackageInfo(pkg),
+        type: 'model',
+        tags: ['tech-stack', 'auto-import'],
+        layer: 'project',
+      }));
+    }
 
-      // 扫描 tsconfig.json
-      const tsconfigPath = path.join(this.config.projectRoot, 'tsconfig.json');
-      if (fs.existsSync(tsconfigPath)) {
-        entries.push(this.createEntry({
-          title: 'TypeScript 配置',
-          content: fs.readFileSync(tsconfigPath, 'utf-8'),
-          type: 'model',
-          tags: ['typescript', 'config', 'auto-import'],
-          layer: 'project',
-        }));
-      }
+    // 扫描 tsconfig.json
+    const tsconfigPath = path.join(this.config.projectRoot, 'tsconfig.json');
+    if (fs.existsSync(tsconfigPath)) {
+      entries.push(this.createEntry({
+        title: 'TypeScript 配置',
+        content: fs.readFileSync(tsconfigPath, 'utf-8'),
+        type: 'model',
+        tags: ['typescript', 'config', 'auto-import'],
+        layer: 'project',
+      }));
+    }
 
-      // 扫描目录结构
-      const dirs = this.scanDirectoryStructure(this.config.projectRoot);
-      if (dirs.length > 0) {
-        entries.push(this.createEntry({
-          title: '项目目录结构',
-          content: dirs.join('\n'),
-          type: 'model',
-          tags: ['architecture', 'auto-import'],
-          layer: 'project',
-        }));
-      }
-    } catch (error) {
-      errors.push({
-        source,
-        message: `代码扫描失败: ${error instanceof Error ? error.message : String(error)}`,
-        recoverable: true,
-      });
+    // 扫描目录结构
+    const dirs = this.scanDirectoryStructure(this.config.projectRoot);
+    if (dirs.length > 0) {
+      entries.push(this.createEntry({
+        title: '项目目录结构',
+        content: dirs.join('\n'),
+        type: 'model',
+        tags: ['architecture', 'auto-import'],
+        layer: 'project',
+      }));
     }
 
     // 写入知识库
     this.config.store.saveAll(entries);
 
-    return { source, entries, errors };
+    return { source, entries, errors: [] };
   }
 
   /**
    * 从 Git 历史分析提取知识
    */
-  private async importFromGit(): Promise<ImportResult> {
+  private importFromGit(): ImportResult {
     const entries: KnowledgeEntry[] = [];
-    const errors: ImportError[] = [];
     const source: ImportSource = { type: 'git', path: this.config.projectRoot };
+    const cwd = this.config.projectRoot;
 
-    try {
-      const { execSync } = require('child_process');
-      const cwd = this.config.projectRoot;
+    // 查找 fix/hotfix 相关提交
+    const fixCommits = execSync(
+      'git log --oneline --grep="fix\\|hotfix\\|bug" --since="6 months ago" | head -20',
+      { cwd, encoding: 'utf-8', timeout: 10000 },
+    );
 
-      // 查找 fix/hotfix 相关提交
-      const fixCommits = execSync(
-        'git log --oneline --grep="fix\\|hotfix\\|bug" --since="6 months ago" | head -20',
-        { cwd, encoding: 'utf-8', timeout: 10000 },
-      );
+    if (fixCommits.trim()) {
+      entries.push(this.createEntry({
+        title: '近期 Bug 修复记录',
+        content: fixCommits.trim(),
+        type: 'pitfall',
+        tags: ['git-history', 'bug-fix', 'auto-import'],
+        layer: 'project',
+      }));
+    }
 
-      if (fixCommits.trim()) {
-        entries.push(this.createEntry({
-          title: '近期 Bug 修复记录',
-          content: fixCommits.trim(),
-          type: 'pitfall',
-          tags: ['git-history', 'bug-fix', 'auto-import'],
-          layer: 'project',
-        }));
-      }
+    // 查找 refactor 相关提交
+    const refactorCommits = execSync(
+      'git log --oneline --grep="refactor\\|重构" --since="6 months ago" | head -20',
+      { cwd, encoding: 'utf-8', timeout: 10000 },
+    );
 
-      // 查找 refactor 相关提交
-      const refactorCommits = execSync(
-        'git log --oneline --grep="refactor\\|重构" --since="6 months ago" | head -20',
-        { cwd, encoding: 'utf-8', timeout: 10000 },
-      );
-
-      if (refactorCommits.trim()) {
-        entries.push(this.createEntry({
-          title: '近期重构记录',
-          content: refactorCommits.trim(),
-          type: 'decision',
-          tags: ['git-history', 'refactor', 'auto-import'],
-          layer: 'project',
-        }));
-      }
-    } catch (error) {
-      errors.push({
-        source,
-        message: `Git 分析失败: ${error instanceof Error ? error.message : String(error)}`,
-        recoverable: true,
-      });
+    if (refactorCommits.trim()) {
+      entries.push(this.createEntry({
+        title: '近期重构记录',
+        content: refactorCommits.trim(),
+        type: 'decision',
+        tags: ['git-history', 'refactor', 'auto-import'],
+        layer: 'project',
+      }));
     }
 
     this.config.store.saveAll(entries);
 
-    return { source, entries, errors };
+    return { source, entries, errors: [] };
   }
 
   /**
    * 从文档导入
    */
-  private async importFromDocs(): Promise<ImportResult> {
+  private importFromDocs(): ImportResult {
     const entries: KnowledgeEntry[] = [];
-    const errors: ImportError[] = [];
     const source: ImportSource = { type: 'docs' };
 
     const docPaths = this.config.docPaths ?? [
@@ -262,92 +247,70 @@ export class ColdStartImporter {
 
     for (const docPath of docPaths) {
       const fullPath = path.join(this.config.projectRoot, docPath);
+      if (!fs.existsSync(fullPath)) continue;
 
-      try {
-        if (!fs.existsSync(fullPath)) continue;
+      const stat = fs.statSync(fullPath);
 
-        const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        // 扫描目录下的 markdown 文件
+        // 口径记名（harness#134）：本 walker 吃的是**项目文档树**（README/docs/），不是知识库树，
+        // 故不适用 tree-walker 的条目排除口径——知识树的 `_index.md`/`.snapshots` 在这里没有对应物。
+        const files = fs.readdirSync(fullPath)
+          .filter(f => f.endsWith('.md'))
+          .slice(0, 10); // 最多 10 个
 
-        if (stat.isDirectory()) {
-          // 扫描目录下的 markdown 文件
-          // 口径记名（harness#134）：本 walker 吃的是**项目文档树**（README/docs/），不是知识库树，
-          // 故不适用 tree-walker 的条目排除口径——知识树的 `_index.md`/`.snapshots` 在这里没有对应物。
-          const files = fs.readdirSync(fullPath)
-            .filter(f => f.endsWith('.md'))
-            .slice(0, 10); // 最多 10 个
-
-          for (const file of files) {
-            const filePath = path.join(fullPath, file);
-            const content = fs.readFileSync(filePath, 'utf-8');
-            if (content.length > 0) {
-              entries.push(this.createEntry({
-                title: `文档: ${docPath}${file}`,
-                content: content.slice(0, 5000), // 限制大小
-                type: 'guideline',
-                tags: ['docs', 'auto-import'],
-                layer: 'project',
-              }));
-            }
-          }
-        } else {
-          const content = fs.readFileSync(fullPath, 'utf-8');
+        for (const file of files) {
+          const filePath = path.join(fullPath, file);
+          const content = fs.readFileSync(filePath, 'utf-8');
           if (content.length > 0) {
             entries.push(this.createEntry({
-              title: `文档: ${docPath}`,
-              content: content.slice(0, 5000),
+              title: `文档: ${docPath}${file}`,
+              content: content.slice(0, 5000), // 限制大小
               type: 'guideline',
               tags: ['docs', 'auto-import'],
               layer: 'project',
             }));
           }
         }
-      } catch (error) {
-        errors.push({
-          source: { type: 'docs', path: docPath },
-          message: `文档导入失败 ${docPath}: ${error instanceof Error ? error.message : String(error)}`,
-          recoverable: true,
-        });
+      } else {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        if (content.length > 0) {
+          entries.push(this.createEntry({
+            title: `文档: ${docPath}`,
+            content: content.slice(0, 5000),
+            type: 'guideline',
+            tags: ['docs', 'auto-import'],
+            layer: 'project',
+          }));
+        }
       }
     }
 
     this.config.store.saveAll(entries);
 
-    return { source, entries, errors };
+    return { source, entries, errors: [] };
   }
 
   /**
    * 口述录入
    */
-  private async importManual(): Promise<ImportResult> {
+  private importManual(): ImportResult {
     const entries: KnowledgeEntry[] = [];
-    const errors: ImportError[] = [];
     const source: ImportSource = { type: 'manual' };
 
-    if (!this.config.manualEntries || this.config.manualEntries.length === 0) {
-      return { source, entries, errors };
-    }
-
-    for (const item of this.config.manualEntries) {
-      try {
-        entries.push(this.createEntry({
-          title: item.title,
-          content: item.content,
-          type: item.type,
-          tags: [...(item.tags ?? []), 'manual-import'],
-          layer: 'project',
-        }));
-      } catch (error) {
-        errors.push({
-          source,
-          message: `口述录入失败: ${error instanceof Error ? error.message : String(error)}`,
-          recoverable: true,
-        });
-      }
+    for (const item of this.config.manualEntries ?? []) {
+      entries.push(this.createEntry({
+        title: item.title,
+        content: item.content,
+        type: item.type,
+        tags: [...(item.tags ?? []), 'manual-import'],
+        layer: 'project',
+      }));
     }
 
     this.config.store.saveAll(entries);
 
-    return { source, entries, errors };
+    return { source, entries, errors: [] };
   }
 
   // ── 辅助方法 ───────────────────────────────────────────
@@ -423,18 +386,16 @@ export class ColdStartImporter {
     const scan = (dir: string, depth: number) => {
       if (depth > maxDepth) return;
 
-      try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (ignore.has(entry.name)) continue;
-          if (!entry.isDirectory()) continue;
+      // 目录不可读（权限等）直抛，由 importAll 的记名降级露成错误行——
+      // 静默跳过会让「目录结构」条目悄悄缺胳膊少腿
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (ignore.has(entry.name)) continue;
+        if (!entry.isDirectory()) continue;
 
-          const relative = path.relative(root, path.join(dir, entry.name));
-          dirs.push(relative || entry.name);
-          scan(path.join(dir, entry.name), depth + 1);
-        }
-      } catch {
-        // skip unreadable directories
+        const relative = path.relative(root, path.join(dir, entry.name));
+        dirs.push(relative || entry.name);
+        scan(path.join(dir, entry.name), depth + 1);
       }
     };
 
@@ -445,11 +406,9 @@ export class ColdStartImporter {
   private loadState(): ImportState {
     const statePath = path.join(this.config.projectRoot, STATE_FILE);
     if (fs.existsSync(statePath)) {
-      try {
-        return JSON.parse(fs.readFileSync(statePath, 'utf-8'));
-      } catch {
-        // corrupt state, start fresh
-      }
+      // fail-fast：状态文件在场但损坏直接抛（对齐 store.ts「损坏 ≠ 缺失」口径）——
+      // 静默重置会把已完成源再导入一遍，重复条目落库
+      return JSON.parse(fs.readFileSync(statePath, 'utf-8')) as ImportState;
     }
 
     return {
@@ -457,7 +416,6 @@ export class ColdStartImporter {
       startedAt: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
       completedSources: [],
-      pendingSources: [...this.config.sources],
       totalImported: 0,
       totalErrors: 0,
     };
@@ -488,7 +446,6 @@ export class ColdStartImporter {
       startedAt: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
       completedSources: [],
-      pendingSources: [...this.config.sources],
       totalImported: 0,
       totalErrors: 0,
     };

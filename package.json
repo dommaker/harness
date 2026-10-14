@@ -41,9 +41,7 @@
   "files": [
     "dist",
     "bin",
-    "src",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

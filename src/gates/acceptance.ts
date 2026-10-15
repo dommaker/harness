@@ -28,7 +28,7 @@ import { isRecord } from '../utils/guards';
 import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../utils/yaml';
 import type {
   Gate,
   GateContext,

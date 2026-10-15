@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 import * as effectiveConstraints from '../../../core/effective-constraints';

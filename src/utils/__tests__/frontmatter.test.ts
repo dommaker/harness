@@ -136,14 +136,15 @@ describe('joinFrontmatter', () => {
     expect(joinFrontmatter({ b: 1, a: 2 }, '')).toBe('---\nb: 1\na: 2\n---\n\n');
   });
 
-  it('dump 用 lineWidth 120：100 字符标量不折行（非 js-yaml 缺省 80）', () => {
+  it('dump 用 lineWidth 120：100 字符标量不折行（非缺省 80）', () => {
     const joined = joinFrontmatter({ title: 'a'.repeat(100) }, '');
     expect(joined.split('\n')[1]).toBe(`title: ${'a'.repeat(100)}`);
   });
 
-  it('dump 用 lineWidth 120：200 字符标量按 120 折行（非不折行）', () => {
-    const joined = joinFrontmatter({ title: 'a'.repeat(200) }, '');
-    expect(joined).toContain('title: >-\n');
+  it('dump 用 lineWidth 120：超长标量按词边界折行（yaml@2 只折空格处，非不折行）', () => {
+    const longWords = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+    const joined = joinFrontmatter({ title: longWords }, '');
+    expect(joined).toContain('word16\n  word17');
   });
 });
 
@@ -196,7 +197,7 @@ describe('join ↔ split 往返闭环（已落盘条目不产生 diff 噪声）'
   it('meta 含被 120 折行的长标量时往返仍字节稳定（load→save 无 diff 噪声）', () => {
     const meta = { ...realisticMeta, title: Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ') };
     const first = joinFrontmatter(meta, 'Body\n');
-    expect(first).toContain('title: >-\n');
+    expect(first).toContain('word16\n  word17');
     const parsed = splitFrontmatter(first);
     expect(parsed.state).toBe('ok');
     if (parsed.state !== 'ok') return;

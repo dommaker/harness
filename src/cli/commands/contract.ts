@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import { ContractGate } from '../../gates/contract';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';

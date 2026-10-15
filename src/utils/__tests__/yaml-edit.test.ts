@@ -6,7 +6,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../yaml';
 import { describe, it, expect, afterAll } from '@jest/globals';
 import { setYamlEntry, removeYamlEntry } from '../yaml-edit';
 

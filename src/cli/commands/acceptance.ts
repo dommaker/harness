@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import { SpecAcceptanceGate } from '../../gates/acceptance';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';

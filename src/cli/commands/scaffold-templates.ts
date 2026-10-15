@@ -9,7 +9,7 @@
  */
 
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import type { Checkpoint } from '../../types/checkpoint';
 import type { CiPlatform } from '../../types/project-config';
 

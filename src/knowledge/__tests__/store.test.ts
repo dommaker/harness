@@ -577,7 +577,8 @@ describe('KnowledgeStore', () => {
   });
 
   describe('saveAll 批量写入（harness#107）', () => {
-    // writeIndex 是 store 内 JSON.stringify 的唯一调用方，用其调用次数度量 index.json 重写次数
+    // writeIndex 是 store 内 JSON.stringify(entries, null, 2) 的唯一调用方，用其调用次数度量 index.json 重写次数。
+    // yaml@2 内部 stringifyNumber 也借道 JSON.stringify（单参数字调用）——按 writeIndex 的三参签名过滤再计数。
     it('K 条批量保存只重写一次 index.json', () => {
       const stringifySpy = jest.spyOn(JSON, 'stringify');
       try {
@@ -586,7 +587,7 @@ describe('KnowledgeStore', () => {
           makeEntry({ id: 'DEC-002', title: 'Second' }),
           makeEntry({ id: 'DEC-003', title: 'Third' }),
         ]);
-        expect(stringifySpy).toHaveBeenCalledTimes(1);
+        expect(stringifySpy.mock.calls.filter(args => args[2] === 2)).toHaveLength(1);
       } finally {
         stringifySpy.mockRestore();
       }
@@ -668,7 +669,7 @@ describe('KnowledgeStore', () => {
           { id: 'DEC-002', partial: { maturity: 'draft' } },
           { id: 'DEC-003', partial: { tags: ['low_quality'] } },
         ]);
-        expect(stringifySpy).toHaveBeenCalledTimes(1);
+        expect(stringifySpy.mock.calls.filter(args => args[2] === 2)).toHaveLength(1);
       } finally {
         stringifySpy.mockRestore();
       }

@@ -15,7 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { reconcileCapabilities, type CapabilityVerdict } from './capabilities-reconcile';
 

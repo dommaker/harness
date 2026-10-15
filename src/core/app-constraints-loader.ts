@@ -21,7 +21,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../utils/yaml';
 import type { Constraint, ConstraintChannel, ConstraintSeverity, ConstraintTrigger } from '../types/constraint';
 import { CONSTRAINTS } from './constraints/definitions';
 import { TEMPLATES } from './constraints/checkers';

@@ -16,7 +16,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 import { walkMatches } from '../../../utils/file-walk';
 import { createGitEvidence, splitFileNames, type GitCommandRunner } from '../../../core/constraints/git-evidence';
 import type {

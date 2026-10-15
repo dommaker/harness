@@ -3,20 +3,20 @@
  * harness#198 自 cli 下移——core 的约束变更面也要写 config.yml，分层闸禁止 core 值导入 cli）
  *
  * config.yml 类 YAML 的读-改-写单点（harness#137）。
- * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
+ * YAML 重写不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
  * 文件名）。落盘字节由 `commands/__tests__/constraints-retire.test.ts`
  * 的逐字节冻结用例钉住——对外产物不得漂移。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml';
 import chalk from 'chalk';
 
 /**
  * YAML 条目的读-改-写单点（harness#137）
  *
- * js-yaml 不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
+ * YAML 重写不保留注释：原文件含注释行时重写会丢失，console 说明（`label` 是给用户看的
  * 文件名）。落盘字节由 `commands/__tests__/constraints-retire.test.ts`
  * 的逐字节冻结用例钉住——合并属内部重构，对外产物不得漂移。
  *
@@ -46,7 +46,7 @@ export function setYamlEntry(
   fs.writeFileSync(filePath, yaml.dump(raw, { lineWidth: 120 }), 'utf-8');
 
   if (hadComments) {
-    console.log(chalk.yellow(`   ⚠️  ${label} 已重写：js-yaml 不保留原文件注释`));
+    console.log(chalk.yellow(`   ⚠️  ${label} 已重写：YAML 重写不保留原文件注释`));
   }
 }
 

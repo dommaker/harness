@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import { CheckpointValidator } from '../../core/validators/checkpoint';
 import type { Checkpoint, CheckpointContext } from '../../types/checkpoint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
@@ -37,7 +37,7 @@ async function loadCheckpoints(filePath: string, io: CommandIO): Promise<Checkpo
     }
     throw error;
   }
-  const data = yaml.load(content) as { checkpoints?: Checkpoint[] } | undefined;
+  const data = yaml.load(content) as { checkpoints?: Checkpoint[] } | null;
   return data?.checkpoints || [];
 }
 

@@ -20,7 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import { findConstraintDefinition } from './find-constraint';
 import { collectUsageByConstraint, readProjectTracesReport } from './usage-report';
 import type { Constraint } from '../../types/constraint';

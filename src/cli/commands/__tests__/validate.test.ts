@@ -6,7 +6,7 @@ import { validate } from '../validate';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs/promises';
 import { CheckpointValidator } from '../../../core/validators/checkpoint';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 
 // Mock fs/promises
 jest.mock('fs/promises', () => ({
@@ -21,8 +21,8 @@ jest.mock('../../../core/validators/checkpoint', () => ({
   CheckpointValidator: jest.fn(),
 }));
 
-// Mock yaml
-jest.mock('js-yaml', () => ({
+// Mock yaml 收口（内部 wrapper，唯一 import 'yaml' 的模块）
+jest.mock('../../../utils/yaml', () => ({
   load: jest.fn(),
   dump: jest.fn(),
 }));
@@ -64,10 +64,10 @@ describe('validate command', () => {
     it('检查点文件 YAML 损坏 → 抛出（fail-fast：损坏 ≠ 缺失，不装「未找到」放行）', async () => {
       mockFs.readFile.mockResolvedValue('checkpoints: [broken');
       mockYaml.load.mockImplementation(() => {
-        throw new Error('YAMLException: unexpected end of stream');
+        throw new Error('YAMLParseError: unexpected end of stream');
       });
 
-      await expect(validate({}, io)).rejects.toThrow('YAMLException');
+      await expect(validate({}, io)).rejects.toThrow('YAMLParseError');
     });
 
     it('检查点文件读取失败（非 ENOENT，如权限） → 抛出', async () => {

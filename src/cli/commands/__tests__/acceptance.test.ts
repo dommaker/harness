@@ -19,7 +19,7 @@ jest.mock('../../../gates/acceptance', () => ({
   })),
 }));
 
-jest.mock('js-yaml', () => ({
+jest.mock('../../../utils/yaml', () => ({
   load: jest.fn(),
 }));
 
@@ -34,7 +34,7 @@ jest.mock('chalk', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const MockGate = SpecAcceptanceGate as jest.MockedClass<typeof SpecAcceptanceGate>;
-const yaml = require('js-yaml');
+const yaml = require('../../../utils/yaml');
 
 describe('acceptance command', () => {
   let io: CapturingIO;

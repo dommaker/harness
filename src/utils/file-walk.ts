@@ -7,24 +7,27 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { globToRegExp } from './glob-match';
 
 export interface FileWalkOptions {
   /** 需要整体跳过的目录名（精确匹配） */
   skipDirs?: string[];
   /** 是否跳过 `.` 开头的条目，默认 false */
   skipHidden?: boolean;
-  /** 文件过滤器（文件名, 完整路径）；缺省收集所有文件 */
+  /** 目录是否也进结果（fast-glob onlyFiles:false 的等价底座），默认 false 只收文件 */
+  includeDirs?: boolean;
+  /** 文件过滤器（文件名, 完整路径）；缺省收集所有文件。includeDirs 时对目录同口径生效 */
   filter?: (fileName: string, fullPath: string) => boolean;
 }
 
 /**
- * 递归收集 root 下的文件路径（同步）
+ * 递归收集 root 下的文件路径（同步）；includeDirs 时目录（含空目录）一并收集
  *
  * fail-fast：目录不可读（权限等）直接抛出，不再静默跳过——
  * 遍历缺一块而调用方不知情，比报错更难查。
  */
 export function walkFiles(root: string, options: FileWalkOptions = {}): string[] {
-  const { skipDirs = [], skipHidden = false, filter } = options;
+  const { skipDirs = [], skipHidden = false, includeDirs = false, filter } = options;
   const results: string[] = [];
 
   const entries = fs.readdirSync(root, { withFileTypes: true });
@@ -35,6 +38,9 @@ export function walkFiles(root: string, options: FileWalkOptions = {}): string[]
 
     const fullPath = path.join(root, entry.name);
     if (entry.isDirectory()) {
+      if (includeDirs && (!filter || filter(entry.name, fullPath))) {
+        results.push(fullPath);
+      }
       results.push(...walkFiles(fullPath, options));
     } else if (entry.isFile()) {
       if (!filter || filter(entry.name, fullPath)) {
@@ -54,6 +60,20 @@ export function walkFiles(root: string, options: FileWalkOptions = {}): string[]
  * 各调用方自有的更广名单（如 AGENTS.md 目录表跳过 build/out/coverage）不并入。
  */
 export const DEFAULT_SKIP_DIRS = ['node_modules', '__tests__', 'dist'];
+
+/**
+ * 遍历 root 并返回匹配 glob 的相对路径集（正斜杠口径，matchGlob 同口径）
+ *
+ * 「遍历 → 相对化 → glob 匹配」的公共形状正本（harness#208：file-exists 与
+ * spec validator 各写一遍收敛至此）。glob 支持 `**`/`*`/`?`（glob-match 口径）；
+ * 目录是否算命中由 options.includeDirs 决定。
+ */
+export function walkMatches(root: string, glob: string, options: FileWalkOptions = {}): string[] {
+  const re = globToRegExp(glob);
+  return walkFiles(root, options)
+    .map(p => path.relative(root, p).split(path.sep).join('/'))
+    .filter(rel => re.test(rel));
+}
 
 export interface TsSourceWalkOptions {
   /** 是否跳过 barrel 文件 index.ts，默认 false */

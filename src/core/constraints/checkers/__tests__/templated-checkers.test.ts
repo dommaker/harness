@@ -122,6 +122,12 @@ describe('file-exists 参数校验', () => {
     expect(fileExists.validateParams({ path: 'a' })).toEqual([]);
     expect(fileExists.validateParams({ glob: 'docs/**' })).toEqual([]);
   });
+
+  it('glob 含 braces 或取反 → 报错（不支持的特性 fail-fast，不静默按字面量匹配）', () => {
+    expect(fileExists.validateParams({ glob: 'docs/{a,b}.md' }).join()).toContain('braces');
+    expect(fileExists.validateParams({ glob: '!dist/**' }).join()).toContain('取反');
+    expect(fileExists.validateParams({ glob: 'docs/?.md' })).toEqual([]);
+  });
 });
 
 describe('file-exists evaluate', () => {

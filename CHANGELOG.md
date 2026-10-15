@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- perf(deps): 替换 fast-glob 为仓内 glob-match + file-walk（#208）——生产运行时依赖减至 chalk / commander / js-yaml 三个，依赖树 -1.3MB 装机体积（fast-glob 及 13 个传递依赖），收益经 external 依赖传导至下游每个用户的 node_modules。`walkFiles` 新增 `includeDirs` 选项（fast-glob `onlyFiles: false` 的等价底座，目录与文件都算命中）。**file-exists 模板行为变化**：`glob` 参数口径由 fast-glob 收窄为仓内 `**`/`*`/`?`，braces `{a,b}` 与取反 `!` 不再支持——`validateParams` 加载期显式报错 fail-fast，不静默按字面量匹配出假绿（四仓现存 config.yml 普查零真实使用，#206 评估依据）；node_modules 排除由根层级改全层级跳过（防扫穿方向，与既有 ignore 意图一致）；symlink 不再跟随
+- feat(spec): `spec` 批量验证的文件发现同步换仓内遍历（同上口径），不再逐模式 spawn glob 引擎；fast-glob 原 `dot: false` 对点目录的排除一并放弃（点目录下 spec 文件同收）
+
 ## [3.0.0] - 2026-10-08
 
 ### Changes

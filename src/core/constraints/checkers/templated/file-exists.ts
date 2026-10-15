@@ -7,15 +7,17 @@
  *
  * 参数：
  * - path（可选）：相对项目根的单文件路径
- * - glob（可选）：文件集 glob（fast-glob 口径，dot: true 以覆盖 .harness 等点目录）
+ * - glob（可选）：文件集 glob（仓内口径：`**`/`*`/`?`，目录与文件都算命中，
+ *   点目录照常匹配以覆盖 .harness 等；braces/取反不支持，加载期报错；
+ *   extglob 等其余高级语法不支持，勿用）
  * - mustExist（可选，缺省 true）：true = 必须存在；false = 必须不存在
  * path 与 glob 至少填一个；都填 = 两者都要满足。
  */
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import * as glob from 'fast-glob';
 import { formatEvidence, type ConstraintCheck, type TemplatedCheckerFactory } from '../types';
+import { walkMatches } from '../../../../utils/file-walk';
 
 export const fileExists: TemplatedCheckerFactory = {
   validateParams(params) {
@@ -25,6 +27,11 @@ export const fileExists: TemplatedCheckerFactory = {
     }
     if (params.glob !== undefined && typeof params.glob !== 'string') {
       errors.push('glob 必须是字符串');
+    }
+    if (typeof params.glob === 'string') {
+      if (params.glob.startsWith('!') || params.glob.includes('{') || params.glob.includes('}')) {
+        errors.push('glob 不支持 braces {} 与取反 !（仓内口径仅 `**`/`*`/`?`）');
+      }
     }
     const hasPath = typeof params.path === 'string' && params.path.length > 0;
     const hasGlob = typeof params.glob === 'string' && params.glob.length > 0;
@@ -46,14 +53,15 @@ export const fileExists: TemplatedCheckerFactory = {
       id,
       evaluate(env) {
         const pathHit = rel !== undefined && existsSync(join(env.projectPath, rel));
-        const globHits = globPattern !== undefined
-          ? glob.sync(globPattern, { cwd: env.projectPath, dot: true, onlyFiles: false, ignore: ['node_modules/**'] })
+        // 目录与文件都算命中；node_modules 全层级跳过防扫穿
+        const hits = globPattern !== undefined
+          ? walkMatches(env.projectPath, globPattern, { includeDirs: true, skipDirs: ['node_modules'] })
           : [];
 
         if (mustExist) {
           const missing: string[] = [];
           if (rel !== undefined && !pathHit) missing.push(rel);
-          if (globPattern !== undefined && globHits.length === 0) missing.push(`${globPattern}（无匹配文件）`);
+          if (globPattern !== undefined && hits.length === 0) missing.push(`${globPattern}（无匹配文件）`);
           if (missing.length > 0) {
             return { pass: false, evidence: formatEvidence('必需文件不存在', missing) };
           }
@@ -63,7 +71,7 @@ export const fileExists: TemplatedCheckerFactory = {
         // mustExist=false：任何目标存在即违规
         const present: string[] = [
           ...(pathHit && rel !== undefined ? [rel] : []),
-          ...globHits,
+          ...hits,
         ];
         if (present.length > 0) {
           return { pass: false, evidence: formatEvidence('禁存文件存在', present) };

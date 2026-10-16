@@ -21,12 +21,39 @@ import type {
   TraceAnalyzerConfig,
 } from '../types/trace';
 import { TraceCollector } from './traces';
-import {
-  groupByKey,
-  timeRangeOf,
-  splitByTime,
-  MIN_TREND_SAMPLES,
-} from './analyzer-base';
+
+// ── 分析助手（原 monitoring/analyzer-base.ts，班次 3 Phase 4 并回——
+// 为已删的 PerformanceAnalyzer 维持的「镜像同构」抽象层，唯一消费者就是本文件）──
+
+/** 按键分组（保持插入顺序） */
+function groupByKey<T>(items: T[], keyOf: (item: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const existing = grouped.get(key) || [];
+    existing.push(item);
+    grouped.set(key, existing);
+  }
+  return grouped;
+}
+
+/** 时间戳序列的起止范围 */
+function timeRangeOf(timestamps: number[]): { start: number; end: number } {
+  return {
+    start: Math.min(...timestamps),
+    end: Math.max(...timestamps),
+  };
+}
+
+/** 样本量不足时的趋势兜底阈值 */
+const MIN_TREND_SAMPLES = 10;
+
+/** 按时间排序后对半分，供前后半段对比 */
+function splitByTime<T extends { timestamp: number }>(items: T[]): [T[], T[]] {
+  const sorted = [...items].sort((a, b) => a.timestamp - b.timestamp);
+  const half = Math.floor(sorted.length / 2);
+  return [sorted.slice(0, half), sorted.slice(half)];
+}
 
 /**
  * 默认配置

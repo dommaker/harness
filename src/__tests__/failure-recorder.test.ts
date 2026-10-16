@@ -8,7 +8,7 @@ import { ErrorType, FailureLevel } from '../failure/error-types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { FailureRecord } from '../types/failure';
+import type { FailureRecord } from '../failure/error-types';
 
 describe('FailureRecorder', () => {
   let tempDir: string;

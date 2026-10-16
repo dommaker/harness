@@ -1,12 +1,58 @@
 /**
- * 失败处理的运行时数据（ADR-0040 Phase 3 自 types/failure.ts 移回）
+ * 失败处理的运行时数据 + 纯类型（ADR-0040 Phase 3 自 types/failure.ts 移回）
  *
  * enum 与默认分类规则/等级映射是运行时值，不属于 types 层「零依赖公共类型层」；
- * 纯类型（ErrorClassificationRule / FailureRecord / ClassificationResult 与
- * DEFAULT_FAILURE_LOG_FILE 路径常量）留在 `src/types/failure.ts` 正本。
+ * 纯类型（ErrorClassificationRule / FailureRecord / ClassificationResult）随重构
+ * 班次 3 Phase 4 同文件归位——原住 types/failure.ts 造成 types/ ↔ failure/ 的
+ * type 级互引环（本文件 type-import 接口、接口文件 type-import 枚举），下移后
+ * types/failure.ts 只剩零依赖路径常量 DEFAULT_FAILURE_LOG_FILE。
  */
 
-import type { ErrorClassificationRule } from '../types/failure';
+/**
+ * 错误分类规则
+ */
+export interface ErrorClassificationRule {
+  /** 匹配的错误类型 */
+  type: ErrorType;
+  /** 正则匹配模式 */
+  patterns?: RegExp[];
+  /** 关键词匹配（不区分大小写） */
+  keywords?: string[];
+  /** 失败等级 */
+  level?: FailureLevel;
+  /** 规则描述 */
+  description?: string;
+}
+
+/**
+ * 失败记录
+ */
+export interface FailureRecord {
+  /** 错误类型 */
+  type: ErrorType;
+  /** 失败等级 */
+  level: FailureLevel;
+  /** 错误消息 */
+  message: string;
+  /** 时间戳 */
+  timestamp: number;
+  /** 元数据 */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * 分类结果
+ */
+export interface ClassificationResult {
+  /** 错误类型 */
+  type: ErrorType;
+  /** 失败等级 */
+  level: FailureLevel;
+  /** 匹配的规则（如果有） */
+  matchedRule?: ErrorClassificationRule;
+  /** 原始错误 */
+  originalError: Error;
+}
 
 /**
  * 错误类型枚举

@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { detectSourceRoots } from '../../../utils/detect-source-roots';
+import { escapeRegExp } from '../../../utils/text';
 import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
 import type {
   DocFreshnessCheck,
@@ -196,7 +197,7 @@ export class FreshnessRunner {
 
     // 提取目标章节（$ 不要求末尾有 \n，适配无 trailing newline 的内容）
     const sectionRegex = new RegExp(
-      `## ${this.escapeRegExp(check.section)}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n---|$)`
+      `## ${escapeRegExp(check.section)}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n---|$)`
     );
     const sectionMatch = content.match(sectionRegex);
     if (!sectionMatch) {
@@ -461,11 +462,5 @@ export class FreshnessRunner {
     }
 
     return count;
-  }
-
-  // ── helpers ──────────────────────────────────────────────────────
-
-  private escapeRegExp(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

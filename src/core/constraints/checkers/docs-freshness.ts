@@ -10,6 +10,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getGovernanceConfig, resolveContextFiles } from '../governance-accessors';
+import { errorMessage } from '../../../utils/error';
 import { FreshnessRunner, type FreshnessCheckResult } from '../doc-freshness/runner';
 import { collectPopulationFiles } from '../capabilities-reconcile';
 import { CAPABILITIES_FILE_REL } from '../run-env';
@@ -93,7 +94,7 @@ export const docsFreshness: ConstraintCheck = {
     // 对齐 capability_sync 姿势）：任一步异常 → console.warn + 降级提示累积进 evidence，
     // 不吞错、也不让一步的异常吞掉另一步的 fail 面
     const degraded: string[] = [];
-    const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+    const reasonOf = errorMessage;
 
     // Step 1: 文件表格式 — 登记的条目（文件+目录）是否仍存在（ADR-0009）
     try {

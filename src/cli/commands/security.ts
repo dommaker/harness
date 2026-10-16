@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SecurityGate } from '../../gates/security';
+import { errorMessage } from '../../utils/error';
 import { execAsync } from '../../utils/exec';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
@@ -163,7 +164,7 @@ export async function secretsScan(
         const parsed: unknown = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
         findings = Array.isArray(parsed) ? (parsed as GitleaksFinding[]) : [];
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         log(io, chalk.red(`❌ gitleaks 报告解析失败: ${message}`));
         return { kind: 'fail', reason: `secrets scan error: report parse failed: ${message}` };
       }

@@ -10,6 +10,7 @@
 import { execAsync } from '../../utils/exec';
 import { judgeTestRun } from './test-output';
 import { readPackageJson } from '../../utils/package-json';
+import { errorMessage } from '../../utils/error';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
@@ -211,7 +212,7 @@ export class PassesGate {
         failedTests: null,
         totalTests: 0,
         duration: Date.now() - startTime,
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage(error),
       };
     }
   }

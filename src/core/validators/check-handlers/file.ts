@@ -4,6 +4,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { errorMessage } from '../../../utils/error';
+import { failResult } from './fail-result';
 import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 export function resolvePath(relativePath: string, workdir: string): string {
@@ -18,7 +20,7 @@ function readFileContent(filePath: string): { content: string } | { error: strin
   try {
     return { content: fs.readFileSync(filePath, 'utf-8') };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    return { error: errorMessage(error) };
   }
 }
 
@@ -53,15 +55,7 @@ export async function checkFileNotEmpty(check: CheckpointCheck, context: Checkpo
   try {
     stats = fs.statSync(filePath);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `文件读取失败: ${filePath}`,
-      actual: detail,
-      expected: '> 0',
-      error: detail,
-    };
+    return failResult(check.id, `文件读取失败: ${filePath}`, errorMessage(error), '> 0');
   }
   const notEmpty = stats.size > 0;
 
@@ -90,14 +84,7 @@ export async function checkFileContains(check: CheckpointCheck, context: Checkpo
 
   const read = readFileContent(filePath);
   if ('error' in read) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `文件读取失败: ${filePath}`,
-      actual: read.error,
-      expected: content,
-      error: read.error,
-    };
+    return failResult(check.id, `文件读取失败: ${filePath}`, read.error, content);
   }
   const contains = read.content.includes(content);
 
@@ -126,14 +113,7 @@ export async function checkFileNotContains(check: CheckpointCheck, context: Chec
 
   const read = readFileContent(filePath);
   if ('error' in read) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `文件读取失败: ${filePath}`,
-      actual: read.error,
-      expected: `不包含: ${content}`,
-      error: read.error,
-    };
+    return failResult(check.id, `文件读取失败: ${filePath}`, read.error, `不包含: ${content}`);
   }
   const notContains = !read.content.includes(content);
 

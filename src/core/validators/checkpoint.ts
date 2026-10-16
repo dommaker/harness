@@ -28,6 +28,7 @@ import {
   checkJsonPath,
 } from './check-handlers/output';
 import { checkHttpStatus, checkHttpBody } from './check-handlers/http';
+import { errorMessage } from '../../utils/error';
 
 /**
  * 检查点验证器（无状态，构造器直建——单例壳已随 ADR-0040 Phase 4 删除）
@@ -121,7 +122,7 @@ export class CheckpointValidator {
       try {
         return await handler(check.config);
       } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
+        const detail = errorMessage(error);
         return {
           checkId: check.id,
           passed: false,

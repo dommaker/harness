@@ -25,6 +25,7 @@
 
 import { execAsync } from '../utils/exec';
 import { isRecord } from '../utils/guards';
+import { errorMessage } from '../utils/error';
 import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -479,7 +480,7 @@ export class SpecAcceptanceGate implements Gate {
       };
     } catch (error: unknown) {
       // 超时或非零退出的分支：判负，文本不参与（文本救不回非零退出，ADR-0014）
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       const stdout = isRecord(error) && typeof error.stdout === 'string' ? error.stdout : undefined;
       return {
         criteria: testFile,

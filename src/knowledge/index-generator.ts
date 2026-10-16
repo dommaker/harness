@@ -10,6 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitFrontmatter } from '../utils/frontmatter';
+import { sanitizeInline } from '../utils/text';
 import { INDEX_MD_FILE, isEntryFile, isInfraDir } from './tree-walker';
 
 interface IndexEntry {
@@ -214,17 +215,16 @@ export class KnowledgeIndexGenerator {
   }
 
   private formatLine(entry: IndexEntry): string {
-    const sanitize = (s: string) => s.replace(/[\n\r]/g, ' ').replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
     const tags = entry.tags.join(';');
     const terms = entry.headings.join(';');
     return [
-      sanitize(entry.filename),
-      sanitize(entry.id),
-      sanitize(entry.type),
-      sanitize(entry.title),
-      sanitize(entry.maturity),
-      sanitize(tags),
-      sanitize(terms),
+      sanitizeInline(entry.filename),
+      sanitizeInline(entry.id),
+      sanitizeInline(entry.type),
+      sanitizeInline(entry.title),
+      sanitizeInline(entry.maturity),
+      sanitizeInline(tags),
+      sanitizeInline(terms),
     ].join('|');
   }
 }

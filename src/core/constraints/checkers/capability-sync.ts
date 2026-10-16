@@ -39,6 +39,7 @@ import {
   significantCodeChanges,
 } from '../capabilities-reconcile';
 import { CAPABILITIES_FILE_REL } from '../run-env';
+import { errorMessage } from '../../../utils/error';
 import { formatEvidence, type ConstraintCheck } from './types';
 
 export const capabilitySync: ConstraintCheck = {
@@ -123,7 +124,7 @@ export const capabilitySync: ConstraintCheck = {
     } catch (err) {
       // fail-open 语义保留，但异常放行也要落地可见：warn 只进本地 stderr，
       // 进不了 trace——静默吞错会让解析 bug 变成「永远通过」（harness#119 同族问题）
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = errorMessage(err);
       console.warn('[capability_sync] 检查执行异常，默认放行：', err);
       return {
         pass: true,

@@ -16,6 +16,8 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { readPackageJson } from '../utils/package-json';
 import { attempt } from '../utils/attempt';
+import { errorMessage } from '../utils/error';
+import { readJsonDocIfExists } from '../utils/json-doc';
 import type { KnowledgeEntry, KnowledgeSubsystem, StorageLayer } from './types';
 import type { KnowledgeStore } from './store';
 
@@ -103,7 +105,7 @@ export class ColdStartImporter {
           entries: [],
           errors: [{
             source: { type: sourceType },
-            message: `${sourceType} 导入失败: ${err instanceof Error ? err.message : String(err)}`,
+            message: `${sourceType} 导入失败: ${errorMessage(err)}`,
           }],
         })
       );
@@ -405,11 +407,10 @@ export class ColdStartImporter {
 
   private loadState(): ImportState {
     const statePath = path.join(this.config.projectRoot, STATE_FILE);
-    if (fs.existsSync(statePath)) {
-      // fail-fast：状态文件在场但损坏直接抛（对齐 store.ts「损坏 ≠ 缺失」口径）——
-      // 静默重置会把已完成源再导入一遍，重复条目落库
-      return JSON.parse(fs.readFileSync(statePath, 'utf-8')) as ImportState;
-    }
+    // fail-fast：状态文件在场但损坏直接抛（对齐 store.ts「损坏 ≠ 缺失」口径）——
+    // 静默重置会把已完成源再导入一遍，重复条目落库
+    const state = readJsonDocIfExists<ImportState>(statePath);
+    if (state !== undefined) return state;
 
     return {
       projectRoot: this.config.projectRoot,

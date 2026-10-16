@@ -8,6 +8,8 @@
  */
 
 import { execAsync } from '../../../utils/exec';
+import { errorMessage } from '../../../utils/error';
+import { failResult } from './fail-result';
 import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 export function stringifyOutput(output: unknown): string {
@@ -38,7 +40,7 @@ async function resolveOutput(
       return { output: stdout };
     } catch (error) {
       // 命令不存在/启动失败：错误文本即诊断信息，落 commandError 由调用族判失败
-      return { output: '', commandError: error instanceof Error ? error.message : String(error) };
+      return { output: '', commandError: errorMessage(error) };
     }
   }
   return { output: '' };
@@ -47,14 +49,7 @@ async function resolveOutput(
 export async function checkOutputContains(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
   const { output, commandError } = await resolveOutput(check, context);
   if (commandError) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${check.config.command}`,
-      actual: commandError,
-      expected: 'exit code 0',
-      error: commandError,
-    };
+    return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
 
   const content = check.config.content || String(check.config.expected || '');
@@ -73,14 +68,7 @@ export async function checkOutputContains(check: CheckpointCheck, context: Check
 export async function checkOutputNotContains(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
   const { output, commandError } = await resolveOutput(check, context);
   if (commandError) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${check.config.command}`,
-      actual: commandError,
-      expected: 'exit code 0',
-      error: commandError,
-    };
+    return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
 
   const content = check.config.content || String(check.config.expected || '');
@@ -99,14 +87,7 @@ export async function checkOutputNotContains(check: CheckpointCheck, context: Ch
 export async function checkOutputMatches(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
   const { output, commandError } = await resolveOutput(check, context);
   if (commandError) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${check.config.command}`,
-      actual: commandError,
-      expected: 'exit code 0',
-      error: commandError,
-    };
+    return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
 
   const pattern = check.config.pattern || '';

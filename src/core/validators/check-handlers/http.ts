@@ -2,6 +2,8 @@
  * 检查点 http_* 族处理器（工单 23）
  */
 
+import { errorMessage } from '../../../utils/error';
+import { failResult } from './fail-result';
 import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 /**
@@ -54,15 +56,7 @@ export async function checkHttpStatus(check: CheckpointCheck, context: Checkpoin
       expected,
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `HTTP 请求失败: ${url}`,
-      actual: detail,
-      expected,
-      error: detail,
-    };
+    return failResult(check.id, `HTTP 请求失败: ${url}`, errorMessage(error), expected);
   }
 }
 
@@ -88,14 +82,6 @@ export async function checkHttpBody(check: CheckpointCheck, context: CheckpointC
       expected,
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `HTTP 请求失败: ${url}`,
-      actual: detail,
-      expected,
-      error: detail,
-    };
+    return failResult(check.id, `HTTP 请求失败: ${url}`, errorMessage(error), expected);
   }
 }

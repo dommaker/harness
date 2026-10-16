@@ -17,6 +17,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from '../../../utils/yaml';
+import { errorMessage } from '../../../utils/error';
 import { walkMatches } from '../../../utils/file-walk';
 import { createGitEvidence, splitFileNames, type GitCommandRunner } from '../../../core/constraints/git-evidence';
 import type {
@@ -171,7 +172,7 @@ export class SpecValidator {
         type: specType,
         errors: [{
           path: '',
-          message: `验证失败: ${error instanceof Error ? error.message : String(error)}`,
+          message: `验证失败: ${errorMessage(error)}`,
           severity: 'error',
         }],
         warnings: [],
@@ -206,7 +207,7 @@ export class SpecValidator {
       } catch (e) {
         errors.push({
           path: '',
-          message: `YAML 解析失败: ${e instanceof Error ? e.message : String(e)}`,
+          message: `YAML 解析失败: ${errorMessage(e)}`,
           severity: 'error' as const,
         });
       }

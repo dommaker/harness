@@ -45,6 +45,7 @@
  */
 
 import * as yaml from './yaml';
+import { errorMessage } from './error';
 
 /** frontmatter 界符（整行） */
 const DELIMITER = '---';
@@ -93,7 +94,7 @@ export function splitFrontmatter(raw: string): FrontmatterSplit {
       state: 'malformed',
       reason: 'invalid-yaml',
       // YAML parser 的 message 带多行代码片段，detail 只取首行描述——消费方要嵌进单行报告/stderr
-      detail: (error instanceof Error ? error.message : String(error)).split('\n')[0],
+      detail: errorMessage(error).split('\n')[0],
     };
   }
 

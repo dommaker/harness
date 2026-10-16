@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from '../../utils/yaml';
 import { ContractGate } from '../../gates/contract';
+import { errorMessage } from '../../utils/error';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
 
@@ -121,7 +122,7 @@ export async function validateSchema(
     try {
       parsed = yaml.load(content);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = errorMessage(e);
       log(io, chalk.red(`❌ YAML 解析错误: ${message}`));
       return { kind: 'fail', reason: `contract YAML parse error: ${message}` };
     }
@@ -180,7 +181,7 @@ export async function validateSchema(
     }
     return { kind: 'ok' };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     log(io, chalk.red(`❌ 验证失败: ${message}`));
     return { kind: 'fail', reason: `contract schema read error: ${message}` };
   }

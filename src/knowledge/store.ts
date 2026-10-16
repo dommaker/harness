@@ -9,6 +9,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
+import { readJsonDocIfExists } from '../utils/json-doc';
+import { isoDate } from '../utils/date';
 import { isEntryFile, SNAPSHOTS_DIR } from './tree-walker';
 import type {
   KnowledgeEntry,
@@ -393,7 +395,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     if (!fs.existsSync(snapDir)) {
       fs.mkdirSync(snapDir, { recursive: true });
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = isoDate(new Date());
     const snapPath = path.join(snapDir, `index-${today}.json`);
     const indexPath = path.join(this.baseDir, INDEX_FILE);
     if (fs.existsSync(indexPath)) {
@@ -407,9 +409,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
    */
   getSnapshot(date: string): IndexEntry[] | undefined {
     const snapPath = path.join(this.baseDir, SNAPSHOTS_DIR, `index-${date}.json`);
-    if (!fs.existsSync(snapPath)) return undefined;
     // fail-fast：快照在场但损坏直接抛——吞成 undefined 会把损坏伪装成「没有快照」
-    return JSON.parse(fs.readFileSync(snapPath, 'utf-8')) as IndexEntry[];
+    return readJsonDocIfExists<IndexEntry[]>(snapPath);
   }
 
   /**
@@ -417,7 +418,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
    * 存活 = 当前 index 中存在且 maturity !== 'archived'
    */
   getSurvivalRate(daysAgo: number): SnapshotSurvival | undefined {
-    const target = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const target = isoDate(new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000));
     const snapshot = this.getSnapshot(target);
     if (!snapshot || snapshot.length === 0) return undefined;
 
@@ -443,9 +444,9 @@ export class FileKnowledgeStore implements KnowledgeStore {
    */
   getConsumptionStats(): ConsumptionStats | undefined {
     const statsPath = path.join(this.baseDir, CONSUMPTION_STATS_FILE);
-    if (!fs.existsSync(statsPath)) return undefined;
     // fail-fast：统计文件在场但损坏直接抛，不装成「无统计」
-    const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8')) as { dailyEvents?: number };
+    const stats = readJsonDocIfExists<{ dailyEvents?: number }>(statsPath);
+    if (stats === undefined) return undefined;
     return { dailyEvents: stats.dailyEvents ?? 0 };
   }
 
@@ -463,8 +464,12 @@ export class FileKnowledgeStore implements KnowledgeStore {
       return cached.entries;
     }
     // fail-fast：index 在场但损坏直接抛——吞成 [] 会让 store 误以为库是空的
-    const raw = fs.readFileSync(indexPath, 'utf-8');
-    const entries = JSON.parse(raw) as IndexEntry[];
+    const entries = readJsonDocIfExists<IndexEntry[]>(indexPath);
+    if (entries === undefined) {
+      // existsSync 与读取之间的竞态删除：按缺失处理（同首个 guard 口径）
+      this.indexCache = undefined;
+      return [];
+    }
     this.indexCache = { mtimeMs: stat.mtimeMs, size: stat.size, entries };
     return entries;
   }

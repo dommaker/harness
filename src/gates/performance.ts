@@ -16,6 +16,8 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { errorMessage } from '../utils/error';
+import { readCoverageSummaryPct } from './coverage';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { gateResult, fromError } from './types';
@@ -180,16 +182,8 @@ export class PerformanceGate implements Gate {
         }
       );
 
-      // 读取覆盖率报告
-      const coveragePath = path.join(projectPath, 'coverage', 'coverage-summary.json');
-      const content = await fs.readFile(coveragePath, 'utf-8');
-      const summary: unknown = JSON.parse(content);
-      const total = typeof summary === 'object' && summary !== null
-        ? (summary as { total?: { lines?: { pct?: unknown } } }).total
-        : undefined;
-      const pct = total?.lines?.pct;
-
-      return { coverage: typeof pct === 'number' ? pct : 0 };
+      // 读取覆盖率报告（取数正本：缺失/损坏/字段缺失抛出，由下方 catch 归 warnings 口径）
+      return { coverage: await readCoverageSummaryPct(projectPath) };
     } catch (error: unknown) {
       // 区分超时和其他错误
       if (execErrorField(error, 'killed')) {
@@ -198,7 +192,7 @@ export class PerformanceGate implements Gate {
       if (execErrorField(error, 'code') === 'ENOENT') {
         return { error: '未找到覆盖率报告文件' };
       }
-      return { error: error instanceof Error ? error.message : '覆盖率测试失败' };
+      return { error: errorMessage(error) };
     }
   }
 
@@ -227,7 +221,7 @@ export class PerformanceGate implements Gate {
       if (execErrorField(error, 'code') === 'ENOENT') {
         return { error: '未找到 dist 目录' };
       }
-      return { error: error instanceof Error ? error.message : '打包大小检查失败' };
+      return { error: errorMessage(error) };
     }
   }
 

@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { splitFrontmatter } from '../utils/frontmatter';
+import { sanitizeInline } from '../utils/text';
 
 const INDEX_FILENAME = '_index.md';
 
@@ -69,7 +70,7 @@ export class SDDIndexGenerator {
         slug: String(fm.slug || dir),
         pmoNumber: String(fm.pmoNumber || ''),
         status,
-        title: this.sanitize(String(fm.title || dir)),
+        title: sanitizeInline(String(fm.title || dir)),
         tags: Array.isArray(fm.tags) ? fm.tags.join(',') : '',
       });
     }
@@ -85,10 +86,6 @@ export class SDDIndexGenerator {
       console.error(`[harness] SDD 索引 frontmatter ${fm.reason}（${fm.detail}），已跳过 ${filePath}`);
     }
     return null;
-  }
-
-  private sanitize(s: string): string {
-    return s.replace(/\n/g, ' ').replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
   }
 
   private buildContent(entries: SDDIndexEntry[]): string {

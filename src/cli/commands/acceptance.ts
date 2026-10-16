@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from '../../utils/yaml';
 import { SpecAcceptanceGate } from '../../gates/acceptance';
+import { errorMessage } from '../../utils/error';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
 
@@ -111,7 +112,7 @@ export async function listAcceptanceCriteria(
     }
     return { kind: 'ok' };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     log(io, chalk.red(`❌ 读取 tasks.yml 失败: ${message}`));
     return { kind: 'skip', reason: `读取 tasks.yml 失败: ${message}` };
   }

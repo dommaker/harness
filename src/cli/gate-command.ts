@@ -9,6 +9,7 @@
  */
 
 import chalk from 'chalk';
+import { errorMessage } from '../utils/error';
 import type { GateDecision, GateResult } from '../types/gate';
 import { log, type CommandIO, type CommandResult } from './command-contract';
 
@@ -74,7 +75,7 @@ export function reportGateError(
   error: unknown,
   extra?: (message: string) => string[]
 ): CommandResult {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
 
   log(io);
   log(io, chalk.red(`❌ ${label}检查出错`));

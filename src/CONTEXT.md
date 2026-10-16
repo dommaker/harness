@@ -27,7 +27,7 @@
 | release/ | 发布物完整性自检（integrity.ts，从包声明面推导关键发布物清单） |
 | sdd/ | SDD 索引生成（扫 docs/sdd/*/requirement.md → _index.md；布局与字段约定见 docs/sdd.md；与 knowledge/index-generator 平行不合并是刻意分工，裁决见 knowledge/CONTEXT.md） |
 | types/ | 公共类型（checkpoint / command-definition / command-io / constraint / cso / failure / gate / passes-gate / project-config / spec / trace） |
-| utils/ | 共享工具（exec / jsonl / file-walk / frontmatter / numeric-flag / package-json / package-version / detect-source-roots / glob-match / attempt / clip / diff-parse / guards / log-rotate / yaml-edit / yaml） |
+| utils/ | 共享工具（exec / jsonl / json-doc / file-walk / frontmatter / numeric-flag / package-json / package-version / detect-source-roots / glob-match / attempt / clip / diff-parse / guards / log-rotate / yaml-edit / yaml / text / error / date） |
 | test-setup/ | 测试夹具层：`project-fixture` 构造临时项目根（config/traces/files 声明式落盘，非缺省根显式 opt-out）、`mkdtemp-cleanup` 统一回收 |
 
 ## 依赖关系

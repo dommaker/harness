@@ -170,7 +170,10 @@ describe('FailureRecorder', () => {
 
     it('文件不存在时清空不应报错', () => {
       const newRecorder = new FailureRecorder({ logFile: path.join(tempDir, 'new.log') });
-      expect(() => newRecorder.clear()).not.toThrow();
+      newRecorder.clear();
+      // 缺失 no-op 的完整语义：历史为空且不凭空造文件
+      expect(newRecorder.getHistory()).toEqual([]);
+      expect(fs.existsSync(path.join(tempDir, 'new.log'))).toBe(false);
     });
   });
 

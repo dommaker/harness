@@ -148,8 +148,12 @@ describe('status command', () => {
     it('应该经 StateIO 写入 lastStatusRun', async () => {
       mockFs.readFileSync.mockReturnValue(traceFile([{ constraintId: 'test' }]));
 
+      const before = Date.now();
       await runStatus();
-      expect(stateIO.snapshot().lastStatusRun).toBeTruthy();
+      const ts = Date.parse(stateIO.snapshot().lastStatusRun ?? '');
+      // 是本次运行写入的时间戳（落在运行窗口内），不是随便一个非空值
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(Date.now());
     });
 
     it('读-改-写：已有的 shownHints 不被 status 抹掉（ADR-0026 决策 2 的行为修复）', async () => {
@@ -158,7 +162,7 @@ describe('status command', () => {
 
       await runStatus();
       expect(stateIO.snapshot().shownHints).toEqual(['trace_50']);
-      expect(stateIO.snapshot().lastStatusRun).toBeTruthy();
+      expect(Date.parse(stateIO.snapshot().lastStatusRun ?? '')).not.toBeNaN();
     });
   });
 

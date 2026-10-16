@@ -6,5 +6,5 @@
  * - TraceAnalyzer：统计汇总，异常检测
  */
 
-export { TraceCollector, pruneTraceLogs } from './traces';
+export { TraceCollector } from './traces';
 export { TraceAnalyzer } from './trace-analyzer';

@@ -2,7 +2,8 @@
  * 门禁定义表（G1：定义即注册的单一定义源）
  *
  * - 每个门禁在此声明 id / description / 默认 order / CLI 元数据；
- *   registry.ts 按此表做「定义↔实现」双向闭环校验（复制 checker 闭环模式）。
+ *   「定义↔实现」闭环由 `__tests__/definitions.test.ts` 断言（registry.ts 已删，
+ *   闭环保护改测试形状承载）。
  * - CLI 元数据即 CommandDefinition（架构评审候选8，ADR-0007：形状对齐通用
  *   命令定义，bin/harness.js 单引擎单循环生成全部命令）：命令名/别名/选项/
  *   子命令路由与历史手工块完全兼容；实现引用为 module+export（CommandImplRef），
@@ -10,8 +11,8 @@
  *   subcommandStrict:false（未知位置参数落回默认 action）+
  *   bareRunsAction:true（无位置参数时跑默认 action 而非显示帮助）。
  * - 本模块禁止 import 任何门禁/命令实现（仅 type import，运行时零依赖）——
- *   bin 启动期只加载本纯数据模块（保持 --help/--version 懒加载，
- *   闭环校验在 registry 加载期执行）。唯一例外 import：`utils/numeric-flag`
+ *   bin 启动期只加载本纯数据模块（保持 --help/--version 懒加载）。
+ *   唯一例外 import：`utils/numeric-flag`
  *   纯函数解析器（harness#154 口径条目指名的数值旗帜唯一解析器）。
  */
 

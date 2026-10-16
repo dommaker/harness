@@ -9,12 +9,10 @@
 export {
   CONSTRAINTS,
   getAllConstraints,
-  findConstraintsByTrigger,
   getConstraint,
   ConstraintChecker,
   checkConstraint,
   checkConstraints,
-  constraintChecker,
   ConstraintViolationError,
   buildCheckEnv,
   normalizeCheckOutcome,
@@ -45,7 +43,6 @@ export type {
 export {
   CheckpointValidator,
   PassesGate,
-  createPassesGate,
   CSOValidator,
 } from './validators';
 export type {

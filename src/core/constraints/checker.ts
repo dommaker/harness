@@ -403,6 +403,3 @@ export async function collectConstraints(
   }
   return result;
 }
-
-// 导出单例（未接线记录器：只评估约束，不写 trace；写 trace 由组合根自行 new）
-export const constraintChecker = ConstraintChecker.getInstance();

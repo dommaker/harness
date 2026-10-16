@@ -6,7 +6,6 @@
 export {
   CONSTRAINTS,
   getAllConstraints,
-  findConstraintsByTrigger,
   getConstraint,
 } from './definitions';
 
@@ -15,7 +14,6 @@ export {
   ConstraintChecker,
   checkConstraint,
   checkConstraints,
-  constraintChecker,
 } from './checker';
 export type { CheckConstraintsOptions, TraceRecorder } from './checker';
 

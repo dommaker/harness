@@ -310,25 +310,6 @@ function diagnose(
 }
 
 /**
- * 退役候选诊断（纯函数）——观察名单兼容包装
- *
- * 每条约束最多归入一个类别，优先级：
- * zero_trigger → unevaluable → high_noise → zero_intercept
- *
- * 只返回退役候选；观察名单分组与待写回状态走 `buildConstraintsUsageReport`
- * 的 `watchlist` / `nextWatchlist` 字段。zero_intercept 仅在观察期满且样本足时
- * 才出现在本返回值里（ADR-0032），未期满的命中不再直接列候选。
- */
-export function diagnoseRetireCandidates(
-  stats: ConstraintUsageStats[],
-  thresholds: Partial<DiagnoseThresholds> = {},
-  watch: DiagnoseWatchOptions = {}
-): RetireCandidate[] {
-  const t = { ...DEFAULT_DIAGNOSE_THRESHOLDS, ...thresholds };
-  return diagnose(stats, t, watch).candidates;
-}
-
-/**
  * 构建 report 数据模型（只读；观察名单状态以快照入、以 nextWatchlist 出，不写盘）
  *
  * @param projectRoot 项目根路径（必传，无 cwd 缺省——harness#201）

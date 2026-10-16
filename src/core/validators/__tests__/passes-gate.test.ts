@@ -6,31 +6,31 @@
  * 测试产物解析判定不在此面：见 test-output.test.ts（ADR-0012）
  */
 
-import { PassesGate, createPassesGate } from '../passes-gate';
+import { PassesGate } from '../passes-gate';
 
 describe('PassesGate', () => {
-  describe('createPassesGate', () => {
+  describe('constructor', () => {
     it('creates a PassesGate instance with default config', () => {
-      const gate = createPassesGate();
+      const gate = new PassesGate();
       expect(gate).toBeInstanceOf(PassesGate);
     });
 
     it('creates a PassesGate instance with custom config', () => {
-      const gate = createPassesGate({ enabled: false, allowPartialPass: true });
+      const gate = new PassesGate({ enabled: false, allowPartialPass: true });
       expect(gate).toBeInstanceOf(PassesGate);
     });
   });
 
   describe('check()', () => {
     it('returns allowed=true when test passes and evidence is not required', () => {
-      const gate = createPassesGate({ requireEvidence: false });
+      const gate = new PassesGate({ requireEvidence: false });
       const result = gate.check({ passed: true });
       expect(result.allowed).toBe(true);
       expect(result.violations).toBeUndefined();
     });
 
     it('returns violations when test does not pass', () => {
-      const gate = createPassesGate({ requireEvidence: false });
+      const gate = new PassesGate({ requireEvidence: false });
       const result = gate.check({ passed: false });
       expect(result.allowed).toBe(false);
       expect(result.violations).toHaveLength(1);
@@ -38,7 +38,7 @@ describe('PassesGate', () => {
     });
 
     it('returns violations when evidence is missing and requireEvidence is true', () => {
-      const gate = createPassesGate({ requireEvidence: true });
+      const gate = new PassesGate({ requireEvidence: true });
       const result = gate.check({ passed: true, evidence: undefined });
       expect(result.allowed).toBe(false);
       expect(result.violations).toHaveLength(1);
@@ -46,7 +46,7 @@ describe('PassesGate', () => {
     });
 
     it('returns both violations when test fails and evidence is missing', () => {
-      const gate = createPassesGate({ requireEvidence: true });
+      const gate = new PassesGate({ requireEvidence: true });
       const result = gate.check({ passed: false });
       expect(result.allowed).toBe(false);
       expect(result.violations).toHaveLength(2);
@@ -55,13 +55,13 @@ describe('PassesGate', () => {
     });
 
     it('returns allowed=true when test passes and evidence is provided', () => {
-      const gate = createPassesGate({ requireEvidence: true });
+      const gate = new PassesGate({ requireEvidence: true });
       const result = gate.check({ passed: true, evidence: '/path/to/evidence.log' });
       expect(result.allowed).toBe(true);
     });
 
     it('preserves the test result in output', () => {
-      const gate = createPassesGate();
+      const gate = new PassesGate();
       const testResult = { passed: true, command: 'npm test', coverage: 85 };
       const result = gate.check(testResult);
       expect(result.testResult).toEqual(testResult);

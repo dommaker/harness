@@ -258,7 +258,7 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
       ['core/constraints/probe.ts', '../../knowledge/store', 'core', 'knowledge'],
       ['core/constraints/probe.ts', '../../cli/commands/definitions', 'core', 'cli'],
       ['knowledge/probe.ts', '../context/session-manager', 'knowledge', 'context'],
-      ['monitoring/probe.ts', '../gates/registry', 'monitoring', 'gates'],
+      ['monitoring/probe.ts', '../gates/definitions', 'monitoring', 'gates'],
       ['presets/probe.ts', '../core/constraints/definitions', 'presets', 'core'],
       ['release/probe.ts', '../core/effective-constraints', 'release', 'core'],
     ])('%s 值导入 %s 报违例（%s ↛ %s）', (rel, source, unit, target) => {
@@ -286,7 +286,7 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
       ['core/constraints/__tests__/probe.test.ts', `import { checkConstraints } from '../../index';`],
       ['gates/__tests__/probe.test.ts', `import { createProjectFixture } from '../../test-setup/project-fixture';`],
       ['monitoring/probe.ts', `import * as fs from 'fs';`],
-      ['monitoring/probe.ts', `const hint = 'src/gates/registry.ts';\nexport const h = hint;`],
+      ['monitoring/probe.ts', `const hint = 'src/gates/definitions.ts';\nexport const h = hint;`],
     ])('合法边与噪声不误报：%s', (rel, statement) => {
       expect(scanViolations(rel, `${statement}\n`)).toEqual([]);
     });

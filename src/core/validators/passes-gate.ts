@@ -284,9 +284,3 @@ export class PassesGate {
 
 }
 
-/**
- * 创建 PassesGate 实例
- */
-export function createPassesGate(config?: Partial<PassesGateConfig>): PassesGate {
-  return new PassesGate(config);
-}

@@ -35,7 +35,7 @@ Presets (`src/presets/`) are pure data with severity-named keys (`errors`/`warni
 
 The layering `types → utils → core → 领域层 → cli` is machine-enforced (harness#88): `src/core/**` has **zero value imports** of `cli/`, `gates/`, `monitoring/` (type-only imports are allowed), checked by the error-level `@typescript-eslint/no-restricted-imports` rule in `eslint.config.mjs` and guarded by `src/__tests__/layering.test.ts`. When core needs data or a capability that lives above it, the caller injects it:
 
-- `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context. Its trace recorder is constructor-injected and defaults to no-op; `constraintChecker` / `getInstance()` are therefore the *unwired* instance (they never write traces).
+- `ConstraintChecker` (`src/core/constraints/checker.ts`) — evaluates constraints against a context. Its trace recorder is constructor-injected and defaults to no-op; `getInstance()` is therefore the *unwired* instance (it never writes traces).
 - `TraceCollector` (`src/monitoring/traces.ts`) — collects execution traces as append-only JSONL (`.harness/logs/traces.log`). Composition roots wire it: CLI `check`, CLI `report`, and `bootstrapHarness` do `new ConstraintChecker(new TraceCollector({ projectPath }))`.
 - `capabilities-parser` takes a caller-supplied `CapabilityDefinitionSource` (`sync-docs` assembles `COMMAND_DEFINITIONS` + `GATE_DEFINITIONS`) for capability-listing counts in CAPABILITIES.md.
 
@@ -84,7 +84,7 @@ When making changes to this codebase, follow these rules:
 ### Process
 
 - Every new gate MUST have a corresponding CLI command in `src/cli/commands/` and a test file in `__tests__/`
-- New gates must implement the unified `Gate` interface from `src/gates/types.ts` (id/order/evaluate → 三态 `GateDecision`)，报告结构走 `GateResult`；同时必须在 `src/gates/definitions.ts` 补 GateDefinition（含 CLI 元数据）并在 `src/gates/registry.ts` 注册实现——注册表双向闭环，缺一构建期抛错；门禁 CLI 命令由定义表驱动生成（`bin/harness.js`），不再手写命令块
+- New gates must implement the unified `Gate` interface from `src/gates/types.ts` (id/order/evaluate → 三态 `GateDecision`)，报告结构走 `GateResult`；同时必须在 `src/gates/definitions.ts` 补 GateDefinition（含 CLI 元数据）并有对应实现类——定义↔实现闭环由 `src/gates/__tests__/definitions.test.ts` 断言（id 双向对齐 + CLI 实现引用可解析 + Gate 接口形状）；门禁 CLI 命令由定义表驱动生成（`bin/harness.js`），不再手写命令块
 - deny 单调是接口契约（正本 `src/gates/CONTEXT.md`「决策契约」）：deny 一旦出现即不可被下游改回 allow，决策浅冻结；ask 枚举预留、无实现 fail-closed = deny
 - Constraint definitions in `src/core/constraints/definitions/` must include `id` / `rule` / `message` / `severity` / `enforcement` fields; `trigger` 未声明 = 恒评估（ADR-0041 Phase 4）
 - Coverage must not decrease — run `npm test -- --coverage` before committing

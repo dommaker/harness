@@ -13,7 +13,6 @@ import * as path from 'path';
 import type { ExecutionTrace } from '../../../types/trace';
 import {
   buildConstraintsUsageReport,
-  diagnoseRetireCandidates,
   readProjectTracesReport,
   WATCHLIST_PERIOD_DAYS,
 } from '../../../core/constraints/usage-report';
@@ -149,16 +148,16 @@ describe('buildConstraintsUsageReport', () => {
     expect(relaxed.watchlist.find(w => w.id === 'no_hardcoded_credentials')).toBeDefined();
   });
 
-  it('diagnoseRetireCandidates 优先级：全 skip 不重复计入零拦截', () => {
-    const candidates = diagnoseRetireCandidates([
-      {
-        id: 'x', severity: 'warning',
-        total: 60, pass: 0, fail: 0, skip: 60,
-        evaluated: 0, failRate: 0,
-      },
-    ]);
-    expect(candidates.length).toBe(1);
-    expect(candidates[0].kind).toBe('unevaluable');
+  it('候选诊断优先级：全 skip 判 unevaluable，不重复计入零拦截', () => {
+    const root = createProjectFixture({
+      name: 'harness-report-test',
+      traces: tracesOf('no_hardcoded_credentials', 'skip', 60),
+    });
+    const report = buildConstraintsUsageReport(root);
+    const kinds = report.candidates
+      .filter(c => c.id === 'no_hardcoded_credentials')
+      .map(c => c.kind);
+    expect(kinds).toEqual(['unevaluable']);
   });
 
   it('配置健康：config.yml 中未知 id 进入 unknownIds', () => {
@@ -383,21 +382,6 @@ describe('零拦截观察名单（ADR-0032，块 3 子项 4）', () => {
     expect(report.candidates.length).toBeGreaterThan(0);
     expect(report.watchlist).toEqual([]);
     expect(report.nextWatchlist).toEqual({});
-  });
-
-  it('diagnoseRetireCandidates 兼容签名：只回候选，观察期内的零拦截不出现', () => {
-    const stats = [{
-      id: 'x', severity: 'warning' as const,
-      total: 50, pass: 50, fail: 0, skip: 0,
-      evaluated: 50, failRate: 0,
-    }];
-    expect(diagnoseRetireCandidates(stats)).toEqual([]);
-    const listedAt = new Date(NOW - 100 * DAY_MS).toISOString();
-    const converted = diagnoseRetireCandidates(stats, {}, {
-      watchlist: { x: { listedAt } },
-      now: NOW,
-    });
-    expect(converted.map(c => c.kind)).toEqual(['zero_intercept']);
   });
 
   it('列入时间损坏按未列入处理：重新列入、时钟重启', () => {

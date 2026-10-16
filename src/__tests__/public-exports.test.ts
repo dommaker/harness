@@ -30,8 +30,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'DEFAULT_DIAGNOSE_THRESHOLDS',
   'DEFAULT_FAILURE_LOG_FILE',
   'DEFAULT_LEVEL_MAPPING',
-  'DEFAULT_NONCODE_GLOBS',
-  'DEFAULT_TEST_GLOBS',
   'DEFAULT_TRACE_FILE',
   'EXTERNAL_SOURCE_MARKER',
   'ErrorClassifier',
@@ -39,7 +37,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'FailureLevel',
   'FailureRecorder',
   'FileKnowledgeStore',
-  'HARNESS_CONFIG_FILES',
   'KnowledgeAudit',
   'KnowledgeIngest',
   'KnowledgeLifecycle',
@@ -60,11 +57,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'collectConstraints',
   'collectProposalMaterial',
   'collectUsageByConstraint',
-  'createPassesGate',
-  'diagnoseRetireCandidates',
   'disableConstraint',
   'estimateTokens',
-  'findConstraintsByTrigger',
   'formatEvidence',
   'getAllConstraints',
   'getConstraint',
@@ -72,17 +66,11 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'getCriticalArtifacts',
   'getEffectiveConstraints',
   'listRetiredConstraints',
-  'matchAnyGlob',
-  'matchGlob',
   'normalizeCheckOutcome',
   'packProposal',
-  'propagateConfig',
-  'proposalMaterialPath',
-  'pruneTraceLogs',
   'reactivateConstraint',
   'readProjectTracesReport',
   'renderProposalMarkdown',
-  'resolveGlobs',
   'retireConstraint',
   'sanitizeExternalContent',
   'verifyContractPresence',
@@ -259,7 +247,6 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
     'SpecSchemaDefinition',
     'SpecType',
     'SpecValidationError',
-    'SchemaLoader',
     'migrateKnowledgeEntries',
   ];
 
@@ -337,10 +324,8 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
     const t24: import('../index').SpecType | undefined = undefined;
     // @ts-expect-error 随 SpecValidator 收回（#199 B）
     const t25: import('../index').SpecValidationError | undefined = undefined;
-    // @ts-expect-error 随 SpecValidator 收回（#199 B）
-    const t26: import('../index').SchemaLoader | undefined = undefined;
     expect([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13]).toEqual(Array(13).fill(undefined));
-    expect([t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26]).toEqual(Array(13).fill(undefined));
+    expect([t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25]).toEqual(Array(12).fill(undefined));
   });
 
   it('#199 保留面仍可经包根导入（防止删多：下游仓真实消费的三类 + spec 面相邻活类型）', () => {

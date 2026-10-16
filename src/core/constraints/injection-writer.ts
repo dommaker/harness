@@ -28,14 +28,6 @@ export type MarkerWrite =
   | { kind: 'absent' }
   | { kind: 'half' };
 
-/** 完整标记块的内容切分（inner 含首尾标记行外的全部文本，含原换行） */
-export interface MarkerBlock {
-  before: string;
-  inner: string;
-  /** 后标记之后的原文（未规一） */
-  after: string;
-}
-
 /** 读文件内容；不存在返回 null（在调用方语义里是「无注入对象」），读失败抛出 */
 export function readIfExists(filePath: string): string | null {
   if (!fs.existsSync(filePath)) return null;
@@ -49,20 +41,6 @@ function findPair(content: string, begin: string, end: string): { startIdx: numb
   if (startIdx === -1 && endIdx === -1) return 'absent';
   if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) return 'half';
   return { startIdx, endIdx };
-}
-
-/**
- * 切出完整标记块（before + begin + inner + end + after）。
- * 'absent' = 两俱无；'half' = 残缺/乱序，拒切。
- */
-export function cutMarkerBlock(content: string, begin: string, end: string): MarkerBlock | 'absent' | 'half' {
-  const pair = findPair(content, begin, end);
-  if (pair === 'absent' || pair === 'half') return pair;
-  return {
-    before: content.slice(0, pair.startIdx),
-    inner: content.slice(pair.startIdx + begin.length, pair.endIdx),
-    after: content.slice(pair.endIdx + end.length),
-  };
 }
 
 /**

@@ -50,13 +50,6 @@ export interface SpecValidatorConfig {
 }
 
 /**
- * Schema 加载器函数类型
- * 
- * 项目可以自定义 Schema 加载逻辑
- */
-export type SchemaLoader = (schemaPath: string) => Promise<SpecSchemaDefinition>;
-
-/**
  * Schema 定义（通用接口）
  * 
  * 项目需要实现这个接口

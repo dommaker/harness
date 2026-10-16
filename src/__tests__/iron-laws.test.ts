@@ -6,11 +6,10 @@ import { describe, it, expect } from '@jest/globals';
 import {
   CONSTRAINTS,
   getAllConstraints,
-  findConstraintsByTrigger,
   getConstraint,
   isGateConstraint
 } from '../core/constraints/definitions';
-import { constraintChecker } from '../core/constraints/checker';
+import { ConstraintChecker } from '../core/constraints/checker';
 import { getConstraintCheck, registeredCheckCount } from '../core/constraints/checkers';
 import type { ConstraintContext } from '../types/constraint';
 import * as fs from 'fs';
@@ -132,11 +131,6 @@ describe('Constraint System', () => {
   });
 
   describe('Helper Functions', () => {
-    it('should find constraints by trigger', () => {
-      const constraints = findConstraintsByTrigger('code_implementation');
-      expect(constraints.length).toBeGreaterThan(0);
-    });
-
     it('should get single constraint by id', () => {
       const constraint = getConstraint('no_completion_without_verification');
       expect(constraint).toBeDefined();
@@ -151,6 +145,8 @@ describe('Constraint System', () => {
 });
 
 describe('Constraint Checker', () => {
+  const constraintChecker = ConstraintChecker.getInstance();
+
   it('should return singleton instance', () => {
     const instance1 = constraintChecker;
     expect(instance1).toBeDefined();

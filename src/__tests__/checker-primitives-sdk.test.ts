@@ -4,8 +4,8 @@
  * 导出纪律 = 只导出存量：CheckOutcome / buildCheckEnv / normalizeCheckOutcome +
  * 现有 checker 真实在用的辅助件（formatEvidence 与接缝类型）。本套件从包根
  * import 原语组装一个「事实 ↔ 期望」式业务 checker，验证导出真实可用；
- * 三处 barrel 清单与三道冻结钉见 public-exports /
- * public-value-surface / public-type-surface。
+ * barrel 清单与冻结钉见 public-exports / public-type-surface。
+ * （`./core` 子路径入口已随班次 3 摘除——三仓零消费，原「包根与 ./core 同源」用例随之退场。）
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -18,18 +18,9 @@ import {
   type CheckOutcome,
   type ConstraintCheck,
 } from '../index';
-import {
-  buildCheckEnv as buildCheckEnvFromCore,
-  normalizeCheckOutcome as normalizeFromCore,
-} from '../core';
 import { createProjectFixture } from '../test-setup/project-fixture';
 
 describe('检查器原语 SDK（harness#181）', () => {
-  it('包根与 ./core 子路径同源导出', () => {
-    expect(buildCheckEnvFromCore).toBe(buildCheckEnv);
-    expect(normalizeFromCore).toBe(normalizeCheckOutcome);
-  });
-
   it('原语组装业务 checker：事实 ↔ 期望的几行绑定', async () => {
     const root = createProjectFixture({
       name: 'sdk-compose',

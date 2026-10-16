@@ -102,7 +102,6 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
   const BARREL_CHAIN = [
     '../types/passes-gate.ts',
     '../core/validators/index.ts',
-    '../core/index.ts',
     '../index.ts',
   ];
 
@@ -116,11 +115,11 @@ describe('包根类型面（ADR-0022 关联类型随迁）', () => {
     }
   }
 
-  it('PassesGateResult 在整条 barrel 链四级都已消失', () => {
+  it('PassesGateResult 在整条 barrel 链上都已消失', () => {
     expectAbsentAcrossBarrelChain('PassesGateResult');
   });
 
-  it('DynamicTask 在整条 barrel 链四级都已消失', () => {
+  it('DynamicTask 在整条 barrel 链上都已消失', () => {
     expectAbsentAcrossBarrelChain('DynamicTask');
   });
 

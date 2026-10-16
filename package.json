@@ -21,21 +21,6 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "import": "./dist/index.js"
-    },
-    "./core": {
-      "types": "./dist/core/index.d.ts",
-      "require": "./dist/core/index.js",
-      "import": "./dist/core/index.js"
-    },
-    "./presets": {
-      "types": "./dist/presets/index.d.ts",
-      "require": "./dist/presets/index.js",
-      "import": "./dist/presets/index.js"
-    },
-    "./context": {
-      "types": "./dist/context/index.d.ts",
-      "require": "./dist/context/index.js",
-      "import": "./dist/context/index.js"
     }
   },
   "files": [

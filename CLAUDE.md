@@ -58,7 +58,7 @@ The layering `types → utils → core → 领域层 → cli` is machine-enforce
 
 - **Library**: `src/index.ts` — 显式公共导出清单（ADR-0003）：types、子系统公共面与便捷函数（`checkConstraints()`、`collectConstraints()`）
 - **CLI**: `bin/harness.js` — commander-based；命令块由 `COMMAND_DEFINITIONS`/`GATE_DEFINITIONS` 注册表驱动生成（无手写命令块），实现按 module+export 引用 per-command 懒加载 `dist/cli/commands/`（O2，--help/--version 零命令实现加载）
-- **Package exports**: `.` (full), `./core` (core only), `./presets` (presets only), `./context` (context management)。`./gates` 入口已删除（ADR-0038 收回面，重构班次连壳出清，ADR-0040）
+- **Package exports**: 仅包根 `.`。`./gates` 入口已删除（ADR-0038 收回面，重构班次连壳出清，ADR-0040）；`./core` / `./presets` / `./context` 三个子路径随班次 3 摘除（三仓零编程消费，studio 全部走包根）
 
 ### Design Principles
 

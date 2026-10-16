@@ -146,14 +146,8 @@ describe('真实包根清单同步闸门', () => {
       [
         // 声明面（main/exports/bin）推导的脚本入口：动 package.json 声明面须同步本清单
         'bin/harness.js',
-        'dist/context/index.d.ts',
-        'dist/context/index.js',
-        'dist/core/index.d.ts',
-        'dist/core/index.js',
         'dist/index.d.ts',
         'dist/index.js',
-        'dist/presets/index.d.ts',
-        'dist/presets/index.js',
         // extras 单一来源在 integrity.ts，另由上方 toEqual 用例精确冻结，此处展开引用不复制
         ...EXTRA_CRITICAL_ARTIFACTS,
       ].sort(),

@@ -17,7 +17,7 @@ import { captureIO, type CapturingIO } from '../../command-contract';
 import * as os from 'os';
 import * as path from 'path';
 import { PassThrough, Writable } from 'stream';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 import { getConstraint } from '../../../core/constraints/definitions';
 import { getEffectiveConstraints } from '../../../core/effective-constraints';
 import { FileKnowledgeStore } from '../../../knowledge/store';
@@ -223,7 +223,7 @@ describe('落盘字节与装载次数冻结（harness#137）', () => {
 
     expect(fs.readFileSync(path.join(root, '.harness', 'config.yml'), 'utf-8')).toBe(
       'preset: standard\nci:\n  platform: gitlab\nconstraints:\n  capability_sync:\n    enabled: false\n' +
-        "    retired:\n      at: '2026-08-08T12:00:00.000Z'\n      reason: 逐字节冻结\n" +
+        "    retired:\n      at: 2026-08-08T12:00:00.000Z\n      reason: 逐字节冻结\n" +
         '      stats:\n        total: 0\n        fail: 0\n        failRate: 0\n'
     );
   });

@@ -17,6 +17,7 @@ import { formatEvidence, type CheckDetail, type CheckEnv, type ConstraintCheck, 
 import { matchGlob } from './glob';
 import { parseUnifiedDiff } from '../../../../utils/diff-parse';
 import { clip } from '../../../../utils/clip';
+import { errorMessage } from '../../../../utils/error';
 
 interface AddedLine {
   file: string;
@@ -47,7 +48,7 @@ export const regexScan: TemplatedCheckerFactory = {
       try {
         new RegExp(pattern);
       } catch (err) {
-        errors.push(`pattern 不是合法正则：${err instanceof Error ? err.message : String(err)}`);
+        errors.push(`pattern 不是合法正则：${errorMessage(err)}`);
       }
     }
     if (params.glob !== undefined && typeof params.glob !== 'string') {

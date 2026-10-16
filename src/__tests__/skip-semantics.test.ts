@@ -110,7 +110,7 @@ describe('skip 三态语义（ADR-0001）', () => {
       fs.mkdirSync(path.join(dir, '.harness'), { recursive: true });
       fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
 
-      const yaml = require('js-yaml');
+      const yaml = require('../utils/yaml');
       fs.writeFileSync(
         path.join(dir, '.harness', 'config.yml'),
         yaml.dump({ governance: { context_files: { enabled: true, required_dirs: ['src'] } } })

@@ -9,10 +9,10 @@
 
 import { describe, it, expect } from '@jest/globals';
 import { checkCommandSuccess } from '../check-handlers/command';
-import type { CheckpointCheck, CheckpointContext } from '../../../types/checkpoint';
+import type { CommandSuccessCheck, CheckpointContext } from '../../../types/checkpoint';
 
-function check(command: string): CheckpointCheck {
-  return { id: 'c-1', type: 'command_success', config: { command } } as CheckpointCheck;
+function check(command: string): CommandSuccessCheck {
+  return { id: 'c-1', type: 'command_success', config: { command } };
 }
 
 const context = { workdir: process.cwd(), projectPath: process.cwd() } as CheckpointContext;

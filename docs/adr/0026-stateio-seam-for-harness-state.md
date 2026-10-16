@@ -1,7 +1,7 @@
 # ADR-0026: 新立 StateIO 接缝收编 `.harness/.state.json` 的读写——`RunEnv` 只读契约不动（harness#140 C 票 / #148）
 
 - 日期：2026-09-16
-- 状态：**已接受**（当人面确认，2026-09-16）；本篇只冻结决策，**代码未落**——实现见 harness#148 步骤 2
+- 状态：**已接受**（当人面确认，2026-09-16）——代码已落：`src/cli/state-io.ts`（harness#148，2026-09-17 CLOSED）
 - 影响版本：行为纠偏一处（智能提示的去重从此真的生效）+ 包内新增接缝（不进包根导出面）→ 建议按 **patch/minor** 定级，随发布裁。
 - 关联：harness#148（本 ADR 的来实现票）；harness#140（母票，三处「verifier 自己找文件」之三）；ADR-0023（`RunEnv` = 一次 check 的运行级**只读**快照，本 ADR 明确不动它）；ADR-0018 / ADR-0022（零生产者/零消费者面按删除处理）；`src/cli/command-contract.ts`（`CommandIO` 注入模式，本 ADR 照其形状但**不扩它**）
 

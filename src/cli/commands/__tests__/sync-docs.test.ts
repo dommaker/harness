@@ -223,7 +223,7 @@ describe('sync-docs command', () => {
       fs.mkdirSync(srcDir, { recursive: true });
 
       // 写入 governance 配置
-      const yaml = require('js-yaml');
+      const yaml = require('../../../utils/yaml');
       fs.writeFileSync(
         path.join(harnessDir, 'config.yml'),
         yaml.dump({
@@ -252,7 +252,7 @@ describe('sync-docs command', () => {
       fs.mkdirSync(harnessDir, { recursive: true });
       fs.mkdirSync(srcDir, { recursive: true });
 
-      const yaml = require('js-yaml');
+      const yaml = require('../../../utils/yaml');
       fs.writeFileSync(
         path.join(harnessDir, 'config.yml'),
         yaml.dump({
@@ -293,7 +293,7 @@ describe('sync-docs command', () => {
       fs.mkdirSync(harnessDir, { recursive: true });
       fs.mkdirSync(srcDir, { recursive: true });
 
-      const yaml = require('js-yaml');
+      const yaml = require('../../../utils/yaml');
       fs.writeFileSync(
         path.join(harnessDir, 'config.yml'),
         yaml.dump({
@@ -529,7 +529,7 @@ describe('sync-docs command', () => {
   describe('module 模式（governance.capabilities.mode=module）', () => {
     /** 写入 module 模式配置 */
     const writeModuleConfig = (testDir: string) => {
-      const yaml = require('js-yaml');
+      const yaml = require('../../../utils/yaml');
       fs.mkdirSync(path.join(testDir, '.harness'), { recursive: true });
       fs.writeFileSync(
         path.join(testDir, '.harness', 'config.yml'),

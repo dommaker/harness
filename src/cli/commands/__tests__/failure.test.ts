@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { FailureRecorder } from '../../../failure/recorder';
 import { ErrorType, FailureLevel } from '../../../failure/error-types';
-import type { FailureRecord } from '../../../types/failure';
+import type { FailureRecord } from '../../../failure/error-types';
 
 // Mock FailureRecorder
 jest.mock('../../../failure/recorder');

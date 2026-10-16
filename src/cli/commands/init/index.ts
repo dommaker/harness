@@ -15,7 +15,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 import { getHarnessPackageVersion } from '../../../utils/package-version';
 import type { CiPlatform } from '../../../types/project-config';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../../command-contract';
@@ -71,7 +71,7 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   // 非法值 usage-error、先于任何落盘；合法值域与装配共用同一份 GOVERNANCE_PRESETS 表，
   // github / gitlab / none 三平台同判（bin 把用户敲的字符串原样递进来）。
   // 用 Object.hasOwn 而非 `in`（harness#164）：`in` 走原型链，`-g constructor`/`toString`
-  // 会穿透校验、把 Object 构造函数写进 configData 并在 yaml.dump 炸成 YAMLException。
+  // 会穿透校验、把 Object 构造函数写进 configData 并在 YAML 序列化时抛错。
   if (options.governance !== undefined && !Object.hasOwn(GOVERNANCE_PRESETS, options.governance)) {
     const reason = `-g/--governance 取值非法: ${String(options.governance)}（可取 ${Object.keys(GOVERNANCE_PRESETS).join(' | ')}）`;
     logError(io, chalk.red(`❌ 用法错误: ${reason}`));

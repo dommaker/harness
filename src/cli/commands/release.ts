@@ -25,6 +25,7 @@ import { execSync } from 'child_process';
 import chalk from 'chalk';
 import { verifyReleaseArtifacts } from '../../release';
 import { readPackageJson } from '../../utils/package-json';
+import { errorMessage } from '../../utils/error';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ReleaseOptions {
@@ -42,7 +43,7 @@ async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout
     const chunk = (v: unknown): string => (typeof v === 'string' ? v : v != null ? String(v) : '');
     const stderr = chunk(err.stderr);
     const stdout = chunk(err.stdout);
-    return { stdout: stdout.trim(), stderr: stderr.trim() || (e instanceof Error ? e.message : String(e)) };
+    return { stdout: stdout.trim(), stderr: stderr.trim() || errorMessage(e) };
   }
 }
 

@@ -33,8 +33,8 @@ jest.mock('fs/promises', () => ({
   readdir: (...args: any[]) => mockReaddir(...args),
 }));
 
-// Mock js-yaml
-jest.mock('js-yaml', () => ({
+// Mock yaml 收口（内部 wrapper）
+jest.mock('../../../utils/yaml', () => ({
   dump: jest.fn().mockReturnValue('yaml content'),
   load: jest.fn(),
 }));

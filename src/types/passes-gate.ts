@@ -35,7 +35,13 @@ export interface PassesGateConfig {
 }
 
 /**
- * 测试结果
+ * 测试结果（PassesGate.runTests 的产出：harness 真跑测试命令后的运行结果）
+ *
+ * 与 TestResult 的边界（近同构七字段是刻意不合一，班次 3 Phase 5 划界）：
+ * 本类型是 **harness 产出**（runTests 返回值），command 必填（跑过的命令）、
+ * 带 timestamp；TestResult 是 **调用方自备输入**（check() 形参，业务层跑完测试
+ * 喂给 harness 判定），command 可选、可带 coverage（harness 只回显不取数）。
+ * 产出与输入角色不同，字段可选性正是契约差异，合一必破其中一边的公共面。
  */
 export interface TaskTestResult {
   /** 是否通过 */
@@ -68,9 +74,10 @@ export interface TaskTestResult {
 // ========================================
 
 /**
- * 测试结果输入（用于 check() 方法）
+ * 测试结果输入（用于 check() 方法：调用方自备的运行结果，harness 只验证不再跑）
  * 
- * 业务层运行测试后传入，harness 只验证结果
+ * 业务层运行测试后传入，harness 只验证结果。与 TaskTestResult 的边界见其注释
+ * （本类型 = 输入面，command/coverage 可选；TaskTestResult = runTests 产出面）。
  */
 export interface TestResult {
   /** 是否通过（必填） */

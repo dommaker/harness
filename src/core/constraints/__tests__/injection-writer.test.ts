@@ -11,7 +11,6 @@ import { describe, it, expect } from '@jest/globals';
 import {
   replaceStandaloneRange,
   replaceEnclosedRange,
-  cutMarkerBlock,
   GOVERNANCE_HEADING,
   hasGovernanceContract,
   countGovernanceHeadings,
@@ -73,22 +72,6 @@ describe('replaceEnclosedRange — 外层收口紧随形状', () => {
   it('absent → 调用方走追加；half → 拒写', () => {
     expect(replaceEnclosedRange('\n纯手写段\n', CS, CE, 'x')).toEqual({ kind: 'absent' });
     expect(replaceEnclosedRange(`${CS}orphan`, CS, CE, 'x')).toEqual({ kind: 'half' });
-  });
-});
-
-describe('cutMarkerBlock', () => {
-  it('切出 before/inner/after 三段，inner 含首尾标记行间全部文本', () => {
-    const content = `before\n${B}\ninner-body\n${E}\nafter\n`;
-    expect(cutMarkerBlock(content, B, E)).toEqual({
-      before: 'before\n',
-      inner: '\ninner-body\n',
-      after: '\nafter\n',
-    });
-  });
-
-  it('absent / half 与替换函数同一判定', () => {
-    expect(cutMarkerBlock('clean', B, E)).toBe('absent');
-    expect(cutMarkerBlock(`${B} only`, B, E)).toBe('half');
   });
 });
 

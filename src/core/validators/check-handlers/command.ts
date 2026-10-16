@@ -4,7 +4,9 @@
 
 import { spawn } from 'child_process';
 import { execAsync } from '../../../utils/exec';
-import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
+import { errorMessage } from '../../../utils/error';
+import { failResult } from './fail-result';
+import type { CommandSuccessCheck, CommandOutputCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 /**
  * 失败时回带的输出末段字节数。
@@ -35,8 +37,8 @@ function runForExitCode(command: string, cwd?: string): Promise<{ code: number; 
   });
 }
 
-export async function checkCommandSuccess(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const command = check.config.command || '';
+export async function checkCommandSuccess(check: CommandSuccessCheck, context: CheckpointContext): Promise<CheckResult> {
+  const command = check.config.command;
 
   try {
     const { code, tail } = await runForExitCode(command, context.workdir);
@@ -59,21 +61,13 @@ export async function checkCommandSuccess(check: CheckpointCheck, context: Check
     };
   } catch (error) {
     // spawn 自身失败（如 shell 不可用）：文本即诊断，判失败回带
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${command}`,
-      actual: detail,
-      expected: 'exit code 0',
-      error: detail,
-    };
+    return failResult(check.id, `命令执行失败: ${command}`, errorMessage(error), 'exit code 0');
   }
 }
 
-export async function checkCommandOutput(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const command = check.config.command || '';
-  const expected = String(check.config.expected || '');
+export async function checkCommandOutput(check: CommandOutputCheck, context: CheckpointContext): Promise<CheckResult> {
+  const command = check.config.command;
+  const expected = String(check.config.expected);
 
   try {
     const { stdout } = await execAsync(command, { cwd: context.workdir });
@@ -88,14 +82,6 @@ export async function checkCommandOutput(check: CheckpointCheck, context: Checkp
       expected,
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${command}`,
-      actual: detail,
-      expected,
-      error: detail,
-    };
+    return failResult(check.id, `命令执行失败: ${command}`, errorMessage(error), expected);
   }
 }

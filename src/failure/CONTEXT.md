@@ -6,8 +6,8 @@
 ## 核心导出
 - `ErrorClassifier` — 错误分类器(可配置规则)
 - `FailureRecorder` — 失败记录器(文件存储)
-- `index.ts` 直连类型正本 `src/types/failure.ts`（ErrorType/FailureLevel/FailureRecord/分类规则数据）
-- 数据常量 `DEFAULT_FAILURE_LOG_FILE`（`.harness/logs/failures.log`）、`DEFAULT_CLASSIFICATION_RULES`、`DEFAULT_LEVEL_MAPPING` 正本同在 `src/types/failure.ts`
+- `index.ts` 的类型/数据正本在 `./error-types.ts`（ErrorType/FailureLevel/FailureRecord/ErrorClassificationRule/ClassificationResult 与分类规则数据；班次 3 Phase 4 自 `src/types/failure.ts` 下移，断 types/ ↔ failure/ type 级互引环）
+- 路径常量 `DEFAULT_FAILURE_LOG_FILE`（`.harness/logs/failures.log`）正本在 `src/types/failure.ts`（types 层只剩这枚零依赖常量）；`DEFAULT_CLASSIFICATION_RULES`、`DEFAULT_LEVEL_MAPPING` 正本在 `./error-types.ts`
 
 ## 依赖关系
 - 依赖 `src/types/` 错误分类/记录类型

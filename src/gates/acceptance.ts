@@ -25,10 +25,11 @@
 
 import { execAsync } from '../utils/exec';
 import { isRecord } from '../utils/guards';
+import { errorMessage } from '../utils/error';
 import { judgeTestRun } from '../core/validators/test-output';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../utils/yaml';
 import type {
   Gate,
   GateContext,
@@ -38,43 +39,15 @@ import type {
 } from './types';
 import { gateResult } from './types';
 import { decisionFromResult } from './decision';
+import { parseTasksFile } from './tasks-file';
+import type { TaskDefinition, TasksFile } from './tasks-file';
 
 
 // ==================== 类型定义 ====================
 // SpecAcceptanceGateConfig / AcceptanceGateContext 正本在 ./types
-// （harness#101：本文件不再持有双份定义与工厂）
-
-/**
- * 验收条件（唯一契约，支持 E2E 测试关联）
- */
-export interface AcceptanceCondition {
-  description: string;
-  e2e_test?: string;
-  test_name?: string;
-  checked?: boolean;
-}
-
-/**
- * 任务定义
- */
-export interface TaskDefinition {
-  id: string;
-  title?: string;
-  name?: string;
-  description?: string;
-  /** 验收条件（支持 E2E 测试） */
-  acceptance?: AcceptanceCondition[];
-  status?: string;
-  completed?: boolean;
-}
-
-/**
- * Tasks 文件结构
- */
-export interface TasksFile {
-  tasks: TaskDefinition[];
-  version?: string;
-}
+// （harness#101：本文件不再持有双份定义与工厂）；
+// tasks.yml 解析（parseTasksFile 与 AcceptanceCondition/TaskDefinition/TasksFile）
+// 正本在 ./tasks-file（班次 3 Phase 4 拆出，零外部消费不挂 re-export）
 
 /**
  * 验收门禁结果 details 负载（type alias 而非 interface：
@@ -111,72 +84,6 @@ export interface E2ETestResult {
   passed: boolean;
   output?: string;
   error?: string;
-}
-
-// ==================== tasks.yml 解析与校验 ====================
-
-/**
- * yaml.load 结果 → TasksFile：形状非法即抛错（fail-fast，不静默兜底）。
- * 校验只到判定实际读取的字段：tasks 数组、任务 id、acceptance 条目的
- * description / e2e_test / test_name / checked。
- */
-export function parseTasksFile(raw: unknown, tasksPath: string): TasksFile {
-  if (!isRecord(raw) || !Array.isArray(raw.tasks)) {
-    throw new Error(`tasks.yml 格式非法（缺 tasks 数组）: ${tasksPath}`);
-  }
-
-  const tasks: TaskDefinition[] = raw.tasks.map((entry: unknown, index: number) => {
-    if (!isRecord(entry) || typeof entry.id !== 'string' || entry.id.length === 0) {
-      throw new Error(`tasks.yml 格式非法（tasks[${index}] 缺 id）: ${tasksPath}`);
-    }
-
-    let acceptance: AcceptanceCondition[] | undefined;
-    if (entry.acceptance !== undefined) {
-      if (!Array.isArray(entry.acceptance)) {
-        throw new Error(`tasks.yml 格式非法（任务 ${entry.id} 的 acceptance 不是数组）: ${tasksPath}`);
-      }
-      acceptance = entry.acceptance.map((c: unknown, ci: number) => {
-        if (!isRecord(c) || typeof c.description !== 'string') {
-          throw new Error(
-            `tasks.yml 格式非法（任务 ${entry.id} 的 acceptance[${ci}] 缺 description）: ${tasksPath}`
-          );
-        }
-        for (const key of ['e2e_test', 'test_name'] as const) {
-          if (c[key] !== undefined && typeof c[key] !== 'string') {
-            throw new Error(
-              `tasks.yml 格式非法（任务 ${entry.id} 的 acceptance[${ci}].${key} 不是字符串）: ${tasksPath}`
-            );
-          }
-        }
-        if (c.checked !== undefined && typeof c.checked !== 'boolean') {
-          throw new Error(
-            `tasks.yml 格式非法（任务 ${entry.id} 的 acceptance[${ci}].checked 不是布尔）: ${tasksPath}`
-          );
-        }
-        return {
-          description: c.description,
-          e2e_test: c.e2e_test as string | undefined,
-          test_name: c.test_name as string | undefined,
-          checked: c.checked as boolean | undefined,
-        };
-      });
-    }
-
-    return {
-      id: entry.id,
-      title: typeof entry.title === 'string' ? entry.title : undefined,
-      name: typeof entry.name === 'string' ? entry.name : undefined,
-      description: typeof entry.description === 'string' ? entry.description : undefined,
-      acceptance,
-      status: typeof entry.status === 'string' ? entry.status : undefined,
-      completed: typeof entry.completed === 'boolean' ? entry.completed : undefined,
-    };
-  });
-
-  return {
-    tasks,
-    version: typeof raw.version === 'string' ? raw.version : undefined,
-  };
 }
 
 // ==================== SpecAcceptanceGate 类 ====================
@@ -479,7 +386,7 @@ export class SpecAcceptanceGate implements Gate {
       };
     } catch (error: unknown) {
       // 超时或非零退出的分支：判负，文本不参与（文本救不回非零退出，ADR-0014）
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       const stdout = isRecord(error) && typeof error.stdout === 'string' ? error.stdout : undefined;
       return {
         criteria: testFile,

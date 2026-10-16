@@ -2,7 +2,9 @@
  * 检查点 http_* 族处理器（工单 23）
  */
 
-import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
+import { errorMessage } from '../../../utils/error';
+import { failResult } from './fail-result';
+import type { HttpStatusCheck, HttpBodyCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 /**
  * 缺省退避等待：真定时器，生产行为
@@ -37,8 +39,8 @@ async function fetchWithRetry(
   throw lastError;
 }
 
-export async function checkHttpStatus(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const url = check.config.url || '';
+export async function checkHttpStatus(check: HttpStatusCheck, context: CheckpointContext): Promise<CheckResult> {
+  const url = check.config.url;
   const expected = check.config.expectedStatus || check.config.expected || 200;
 
   try {
@@ -54,21 +56,13 @@ export async function checkHttpStatus(check: CheckpointCheck, context: Checkpoin
       expected,
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `HTTP 请求失败: ${url}`,
-      actual: detail,
-      expected,
-      error: detail,
-    };
+    return failResult(check.id, `HTTP 请求失败: ${url}`, errorMessage(error), expected);
   }
 }
 
-export async function checkHttpBody(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const url = check.config.url || '';
-  const expected = String(check.config.expected || '');
+export async function checkHttpBody(check: HttpBodyCheck, context: CheckpointContext): Promise<CheckResult> {
+  const url = check.config.url;
+  const expected = String(check.config.expected);
 
   try {
     const response = await fetchWithRetry(url, {
@@ -88,14 +82,6 @@ export async function checkHttpBody(check: CheckpointCheck, context: CheckpointC
       expected,
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `HTTP 请求失败: ${url}`,
-      actual: detail,
-      expected,
-      error: detail,
-    };
+    return failResult(check.id, `HTTP 请求失败: ${url}`, errorMessage(error), expected);
   }
 }

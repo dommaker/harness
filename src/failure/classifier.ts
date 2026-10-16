@@ -7,7 +7,7 @@
 import type {
   ErrorClassificationRule,
   ClassificationResult,
-} from '../types/failure';
+} from './error-types';
 import {
   ErrorType as ErrorTypeEnum,
   FailureLevel as FailureLevelEnum,

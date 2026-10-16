@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { PassesGate, createPassesGate, detectTestCommand } from '../core/validators/passes-gate';
+import { PassesGate, detectTestCommand } from '../core/validators/passes-gate';
 import type { TaskTestResult } from '../types/passes-gate';
 import { createProjectFixture } from '../test-setup/project-fixture';
 import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'fs';
@@ -23,7 +23,7 @@ describe('PassesGate', () => {
       scripts: { test: 'echo "1 passed"' },
     }));
     
-    gate = createPassesGate({ enabled: true });
+    gate = new PassesGate({ enabled: true });
   });
 
   afterAll(() => {
@@ -149,7 +149,7 @@ describe('PassesGate', () => {
     });
 
     it('runTests 结果不带 coverage 字段', async () => {
-      const covGate = createPassesGate({ enabled: true, requireEvidence: false });
+      const covGate = new PassesGate({ enabled: true, requireEvidence: false });
 
       const result = await covGate.runTests(covDir);
 

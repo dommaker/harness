@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonl, appendJsonl } from '../utils/jsonl';
 import { rotateNumbered } from '../utils/log-rotate';
-import type { FailureRecord } from '../types/failure';
+import type { FailureRecord } from './error-types';
 
 /**
  * 失败记录器配置

@@ -18,6 +18,7 @@
 
 import { formatEvidence, type CheckDetail, type ConstraintCheck } from './types';
 import { parseUnifiedDiff } from '../../../utils/diff-parse';
+import { errorMessage } from '../../../utils/error';
 
 /** 测试文件判定：`.test.`/`.spec.` 后缀段或 `__tests__/` 目录段 */
 function isTestFile(path: string): boolean {
@@ -111,7 +112,7 @@ export const noTestSimplification: ConstraintCheck = {
       return items.length > 0 ? failDetail(items) : true;
     } catch (err) {
       // 输入不可得 = 未评估（fail-open 但不假 pass）：原因进结果面与 trace，可统计
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = errorMessage(err);
       return { skip: true, reason: `staged diff 取证失败：${reason}` };
     }
   },

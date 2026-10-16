@@ -21,7 +21,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../utils/yaml';
+import { errorMessage } from '../utils/error';
 import type { Constraint, ConstraintChannel, ConstraintSeverity, ConstraintTrigger } from '../types/constraint';
 import { CONSTRAINTS } from './constraints/definitions';
 import { TEMPLATES } from './constraints/checkers';
@@ -144,7 +145,7 @@ export function loadAppConstraints(target: RunTarget): Constraint[] {
     try {
       loaded = yaml.load(fs.readFileSync(file, 'utf-8'));
     } catch (err) {
-      fail(rel, `YAML 解析失败：${err instanceof Error ? err.message : String(err)}`);
+      fail(rel, `YAML 解析失败：${errorMessage(err)}`);
     }
     const root = (loaded ?? {}) as unknown;
     if (root === null || typeof root !== 'object' || Array.isArray(root)) {

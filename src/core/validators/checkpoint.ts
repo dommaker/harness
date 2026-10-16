@@ -13,6 +13,8 @@ import type {
   CheckpointResult,
   CheckResult,
   CheckpointContext,
+  CheckType,
+  CustomCheck,
 } from '../../types/checkpoint';
 import {
   checkFileExists,
@@ -28,6 +30,63 @@ import {
   checkJsonPath,
 } from './check-handlers/output';
 import { checkHttpStatus, checkHttpBody } from './check-handlers/http';
+import { errorMessage } from '../../utils/error';
+import { isRecord } from '../../utils/guards';
+
+/**
+ * 各 CheckType 的 config 必填字段（判别联合的运行时校验表，
+ * 与 types/checkpoint.ts 的联合成员一一对应——新增 type 两处同步）
+ */
+const REQUIRED_CONFIG_FIELDS: Record<CheckType, readonly string[]> = {
+  file_exists: ['path'],
+  file_not_empty: ['path'],
+  file_contains: ['path', 'content'],
+  file_not_contains: ['path', 'content'],
+  command_success: ['command'],
+  command_output: ['command', 'expected'],
+  output_contains: [],
+  output_not_contains: [],
+  output_matches: ['pattern'],
+  json_path: ['jsonPath'],
+  http_status: ['url'],
+  http_body: ['url', 'expected'],
+  custom: ['customFunction'],
+};
+
+/**
+ * checkpoints.yml 解析结果的形状校验（fail-fast，重构班次 3 Phase 5）：
+ * 每条 check 按 type 校验 config 必填字段——缺字段/空串/非字符串即抛错
+ * 指名字段（不做 `as Checkpoint[]` 强转蒙混：配置损坏在加载期暴露，
+ * 不流到 handler 才被假值兜底吞掉）。
+ */
+export function assertCheckpointShape(data: unknown, source: string): asserts data is Checkpoint[] {
+  if (!Array.isArray(data)) {
+    throw new Error(`checkpoints 形状非法（顶层不是数组）: ${source}`);
+  }
+  for (const cp of data) {
+    if (!isRecord(cp) || typeof cp.id !== 'string' || !Array.isArray(cp.checks)) {
+      throw new Error(`checkpoints 形状非法（checkpoint 缺 id 或 checks 数组）: ${source}`);
+    }
+    for (const check of cp.checks) {
+      if (!isRecord(check) || typeof check.id !== 'string' || typeof check.type !== 'string') {
+        throw new Error(`checkpoints 形状非法（check 缺 id 或 type）: ${source}`);
+      }
+      const required = REQUIRED_CONFIG_FIELDS[check.type as CheckType];
+      if (!required) {
+        throw new Error(`checkpoints 检查 ${check.id} 未知检查类型: ${check.type}（${source}）`);
+      }
+      if (!isRecord(check.config)) {
+        throw new Error(`checkpoints 检查 ${check.id}（${check.type}）缺 config 对象（${source}）`);
+      }
+      for (const field of required) {
+        const value = check.config[field];
+        if (value === undefined || value === '') {
+          throw new Error(`checkpoints 检查 ${check.id}（${check.type}）缺少必填 config 字段: ${field}（${source}）`);
+        }
+      }
+    }
+  }
+}
 
 /**
  * 检查点验证器（无状态，构造器直建——单例壳已随 ADR-0040 Phase 4 删除）
@@ -99,29 +158,33 @@ export class CheckpointValidator {
         return await checkHttpBody(check, context);
       case 'custom':
         return await this.checkCustom(check, context);
-      default:
+      default: {
+        // 判别联合在 TS 层已穷尽（default 收窄为 never）；checkpoints.yml 的未知类型
+        // 由加载期 assertCheckpointShape 拦截，本分支只兜绕过校验的直构造调用方
+        const unknown = check as { id: string; type: string };
         return {
-          checkId: check.id,
+          checkId: unknown.id,
           passed: false,
-          message: `未知检查类型: ${check.type}`,
-          error: `Unknown check type: ${check.type}`,
+          message: `未知检查类型: ${unknown.type}`,
+          error: `Unknown check type: ${unknown.type}`,
         };
+      }
     }
   }
 
   /**
    * 自定义检查
    */
-  private async checkCustom(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
+  private async checkCustom(check: CustomCheck, context: CheckpointContext): Promise<CheckResult> {
     // 检查是否有自定义处理器
-    const handler = context.customHandlers?.get(check.config.customFunction || '');
+    const handler = context.customHandlers?.get(check.config.customFunction);
 
     if (handler) {
       // 用户注入的 handler 是唯一不受本仓控制的分支：抛错译成 CheckResult（与其余 13 族同口径）
       try {
         return await handler(check.config);
       } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
+        const detail = errorMessage(error);
         return {
           checkId: check.id,
           passed: false,

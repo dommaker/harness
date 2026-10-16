@@ -12,7 +12,7 @@
  */
 
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 import chalk from 'chalk';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import {

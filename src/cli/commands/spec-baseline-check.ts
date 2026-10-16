@@ -62,6 +62,8 @@ export function createBaselineIndex(
   let sources: Map<string, string> | null | undefined;
   let dependencySnapshot: DependencySnapshot | undefined;
   const stats = new Map<string, boolean>();
+  /** 读取失败被跳过的源文件（去重；两条读取路径共用，harness#100 口径露出） */
+  const unreadable = new Set<string>();
 
   const walkSourceFiles = () =>
     walkFiles(projectPath, {
@@ -83,7 +85,7 @@ export function createBaselineIndex(
           return null; // 已读内容随 map 一起弃，驻留峰值 ≤ 上限
         }
       } catch {
-        /* skip：读失败的文件不入表（与改前逐文件 try/catch 跳过同义） */
+        unreadable.add(fullPath); // 读失败记名跳过，不静默（计数经 unreadableFiles 露出）
       }
     }
     return map;
@@ -105,7 +107,7 @@ export function createBaselineIndex(
         try {
           if (fs.readFileSync(fullPath, 'utf-8').includes(keyword)) count++;
         } catch {
-          /* skip */
+          unreadable.add(fullPath);
         }
       }
       return count;
@@ -128,6 +130,9 @@ export function createBaselineIndex(
       }
       return hit;
     },
+    unreadableFiles() {
+      return [...unreadable];
+    },
   };
 }
 
@@ -135,7 +140,7 @@ export function createBaselineIndex(
 // 输出格式化
 // ============================================
 
-function formatTable(results: PrerequisiteResult[]): string {
+function formatTable(results: PrerequisiteResult[], unreadableFiles: string[] = []): string {
   if (results.length === 0) return chalk.yellow('未找到 Baseline / 前置条件 section');
 
   const lines: string[] = [];
@@ -162,6 +167,15 @@ function formatTable(results: PrerequisiteResult[]): string {
     lines.push(`  ${icon} ${r.prerequisite}`);
     if (!r.satisfied) {
       lines.push(`    ${chalk.yellow(r.evidence)}`);
+    }
+  }
+
+  // harness#100 同口径：读失败跳过的文件计数 + 文件名进报告体，不静默低估关键词计数
+  if (unreadableFiles.length > 0) {
+    lines.push('');
+    lines.push(chalk.yellow(`  读取失败跳过: ${unreadableFiles.length} 个源文件（关键词计数不含它们）`));
+    for (const f of unreadableFiles) {
+      lines.push(chalk.gray(`    - ${f}`));
     }
   }
 
@@ -211,8 +225,13 @@ export async function specBaselineCheck(
   // 输出
   if (options.json) {
     log(io, JSON.stringify(results, null, 2));
+    // JSON 面不挤动既有输出形状：读失败计数走 stderr（harness#100「诊断告知」去向）
+    const unreadable = index.unreadableFiles();
+    if (unreadable.length > 0) {
+      logError(io, chalk.yellow(`警告：${unreadable.length} 个源文件读取失败，关键词计数不含它们: ${unreadable.join(', ')}`));
+    }
   } else {
-    log(io, formatTable(results));
+    log(io, formatTable(results, index.unreadableFiles()));
   }
 
   // 有未满足或无法判定的前置条件时非零退出（无法判定不假绿放过）

@@ -38,6 +38,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EVIDENCE_DIR_REL } from '../../../types/passes-gate';
+import { errorMessage } from '../../../utils/error';
 import type { ConstraintCheck } from './types';
 import { formatEvidence } from './types';
 
@@ -51,7 +52,7 @@ function probeEvidence(evidenceDir: string): EvidenceProbe {
     entries = fs.readdirSync(evidenceDir, { withFileTypes: true });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { missing: true };
-    return { unreadable: err instanceof Error ? err.message : String(err) };
+    return { unreadable: errorMessage(err) };
   }
   const files = entries.filter(e => e.isFile());
   if (files.length === 0) return { missing: true };

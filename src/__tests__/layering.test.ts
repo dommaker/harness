@@ -70,9 +70,9 @@ const DOWNSTREAM: Record<string, string[]> = {
   monitoring: ['types', 'utils'],
   release: ['utils'], // utils 边 = readPackageJson 正本（重构 Phase 5 收口），release/CONTEXT.md 自我声明同步更新
   sdd: ['types', 'utils'],
-  // 同层互 import（现状冻结，不是许可）：context 注入取知识、SessionManager 取 trace 采集器。
-  // 收口方向同 harness#88 对 core 的裁决——改注入，另票评估
-  context: ['knowledge', 'monitoring', 'types', 'utils'],
+  // 同层互 import 的旧债（context 注入取知识、SessionManager 取 trace 采集器）已还清，
+  // context 实面只剩 →utils 的边（班次 3 Phase 4 实扫收窄登记）
+  context: ['utils'],
   // bootstrapHarness 是本包组合根（装配 checker / SessionManager / TraceCollector），
   // monitoring 对它是下行而非债
   bootstrap: ['context', 'core', 'monitoring', 'types', 'utils'],
@@ -258,7 +258,7 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
       ['core/constraints/probe.ts', '../../knowledge/store', 'core', 'knowledge'],
       ['core/constraints/probe.ts', '../../cli/commands/definitions', 'core', 'cli'],
       ['knowledge/probe.ts', '../context/session-manager', 'knowledge', 'context'],
-      ['monitoring/probe.ts', '../gates/registry', 'monitoring', 'gates'],
+      ['monitoring/probe.ts', '../gates/definitions', 'monitoring', 'gates'],
       ['presets/probe.ts', '../core/constraints/definitions', 'presets', 'core'],
       ['release/probe.ts', '../core/effective-constraints', 'release', 'core'],
     ])('%s 值导入 %s 报违例（%s ↛ %s）', (rel, source, unit, target) => {
@@ -279,14 +279,13 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
       ['core/constraints/probe.ts', `import type { GateDefinition } from '../../gates/definitions';`],
       ['types/probe.ts', `import type { RunEnv } from '../core/constraints/run-env';`],
       ['knowledge/probe.ts', `import { DEFAULT_DECAY_CONFIG } from './types';`],
-      ['context/probe.ts', `import { KnowledgeQuery } from '../knowledge/query';`],
       ['bootstrap/probe.ts', `import { TraceCollector } from '../monitoring/traces';`],
       ['core/probe.ts', `import { PRESETS_BY_NAME } from '../presets';`],
       ['failure/__tests__/probe.test.ts', `import { failureList } from '../../cli/commands/failure';`],
       ['core/constraints/__tests__/probe.test.ts', `import { checkConstraints } from '../../index';`],
       ['gates/__tests__/probe.test.ts', `import { createProjectFixture } from '../../test-setup/project-fixture';`],
       ['monitoring/probe.ts', `import * as fs from 'fs';`],
-      ['monitoring/probe.ts', `const hint = 'src/gates/registry.ts';\nexport const h = hint;`],
+      ['monitoring/probe.ts', `const hint = 'src/gates/definitions.ts';\nexport const h = hint;`],
     ])('合法边与噪声不误报：%s', (rel, statement) => {
       expect(scanViolations(rel, `${statement}\n`)).toEqual([]);
     });

@@ -643,7 +643,6 @@ describe('构造收 store', () => {
     const store = setupStore(dir, [{ id: 'W-001', title: 'Wiring Entry' }]);
     const { KnowledgeLifecycle } = await import('../lifecycle');
     const { KnowledgeQuery } = await import('../query');
-    expect(() => new KnowledgeAudit(store)).not.toThrow();
     expect(new KnowledgeAudit(store).run().totalEntries).toBe(1);
     // 兄弟模块的构造第一形参就是 store
     expect(new KnowledgeLifecycle(store)).toBeInstanceOf(KnowledgeLifecycle);

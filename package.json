@@ -1,6 +1,6 @@
 {
   "name": "@dommaker/harness",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "通用工程约束框架 - 约束检查（severity 分级）、检查点验证、测试门控",
   "keywords": [
     "harness",
@@ -21,29 +21,12 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "import": "./dist/index.js"
-    },
-    "./core": {
-      "types": "./dist/core/index.d.ts",
-      "require": "./dist/core/index.js",
-      "import": "./dist/core/index.js"
-    },
-    "./presets": {
-      "types": "./dist/presets/index.d.ts",
-      "require": "./dist/presets/index.js",
-      "import": "./dist/presets/index.js"
-    },
-    "./context": {
-      "types": "./dist/context/index.d.ts",
-      "require": "./dist/context/index.js",
-      "import": "./dist/context/index.js"
     }
   },
   "files": [
     "dist",
     "bin",
-    "src",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -57,14 +40,12 @@
   "dependencies": {
     "chalk": "^4.1.2",
     "commander": "^12.1.0",
-    "fast-glob": "^3.3.3",
-    "js-yaml": "^4.1.1"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@eslint/js": "^8.57.1",
     "@jest/globals": "^29.7.0",
     "@types/jest": "^29.5.0",
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",

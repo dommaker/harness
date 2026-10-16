@@ -14,7 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
 import { bootstrapHarnessSync, bootstrapHarness } from '../bootstrap';
 
 function setupTempDir(dir: string): string {

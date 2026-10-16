@@ -10,7 +10,7 @@
  * 本文件保持原路径做薄聚合。
  */
 
-import type { Constraint, ConstraintTrigger } from '../../types/constraint';
+import type { Constraint } from '../../types/constraint';
 import { ERROR_CONSTRAINTS } from './definitions/errors';
 import { WARNING_CONSTRAINTS } from './definitions/warnings';
 
@@ -29,16 +29,6 @@ export const CONSTRAINTS: Record<string, Constraint> = {
  */
 export function getAllConstraints(): Constraint[] {
   return Object.values(CONSTRAINTS);
-}
-
-/**
- * 根据触发条件查找适用的约束
- */
-export function findConstraintsByTrigger(trigger: ConstraintTrigger): Constraint[] {
-  return getAllConstraints().filter(constraint => {
-    const triggers = Array.isArray(constraint.trigger) ? constraint.trigger : [constraint.trigger];
-    return triggers.includes(trigger);
-  });
 }
 
 /**

@@ -8,7 +8,18 @@
  */
 
 import { execAsync } from '../../../utils/exec';
-import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
+import { errorMessage } from '../../../utils/error';
+import { failResult } from './fail-result';
+import type {
+  OutputContentCheck,
+  OutputMatchesCheck,
+  JsonPathCheck,
+  CheckResult,
+  CheckpointContext,
+} from '../../../types/checkpoint';
+
+/** output_* 三族共享的 check 形状（resolveOutput 读可选 config.command） */
+type OutputCheck = OutputContentCheck | OutputMatchesCheck | JsonPathCheck;
 
 export function stringifyOutput(output: unknown): string {
   if (typeof output === 'string') {
@@ -25,7 +36,7 @@ export function stringifyOutput(output: unknown): string {
  * 返回 [输出文本, 命令执行错误（若有）]
  */
 async function resolveOutput(
-  check: CheckpointCheck,
+  check: OutputCheck,
   context: CheckpointContext
 ): Promise<{ output: string; commandError?: string }> {
   if (context.output !== undefined && context.output !== null) {
@@ -38,23 +49,16 @@ async function resolveOutput(
       return { output: stdout };
     } catch (error) {
       // 命令不存在/启动失败：错误文本即诊断信息，落 commandError 由调用族判失败
-      return { output: '', commandError: error instanceof Error ? error.message : String(error) };
+      return { output: '', commandError: errorMessage(error) };
     }
   }
   return { output: '' };
 }
 
-export async function checkOutputContains(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
+export async function checkOutputContains(check: OutputContentCheck, context: CheckpointContext): Promise<CheckResult> {
   const { output, commandError } = await resolveOutput(check, context);
   if (commandError) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${check.config.command}`,
-      actual: commandError,
-      expected: 'exit code 0',
-      error: commandError,
-    };
+    return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
 
   const content = check.config.content || String(check.config.expected || '');
@@ -70,17 +74,10 @@ export async function checkOutputContains(check: CheckpointCheck, context: Check
   };
 }
 
-export async function checkOutputNotContains(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
+export async function checkOutputNotContains(check: OutputContentCheck, context: CheckpointContext): Promise<CheckResult> {
   const { output, commandError } = await resolveOutput(check, context);
   if (commandError) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${check.config.command}`,
-      actual: commandError,
-      expected: 'exit code 0',
-      error: commandError,
-    };
+    return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
 
   const content = check.config.content || String(check.config.expected || '');
@@ -96,20 +93,13 @@ export async function checkOutputNotContains(check: CheckpointCheck, context: Ch
   };
 }
 
-export async function checkOutputMatches(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
+export async function checkOutputMatches(check: OutputMatchesCheck, context: CheckpointContext): Promise<CheckResult> {
   const { output, commandError } = await resolveOutput(check, context);
   if (commandError) {
-    return {
-      checkId: check.id,
-      passed: false,
-      message: `命令执行失败: ${check.config.command}`,
-      actual: commandError,
-      expected: 'exit code 0',
-      error: commandError,
-    };
+    return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
 
-  const pattern = check.config.pattern || '';
+  const pattern = check.config.pattern;
   const regex = new RegExp(pattern, 'gm');
   const matches = regex.test(output);
 
@@ -122,8 +112,8 @@ export async function checkOutputMatches(check: CheckpointCheck, context: Checkp
   };
 }
 
-export async function checkJsonPath(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const jsonPath = check.config.jsonPath || '';
+export async function checkJsonPath(check: JsonPathCheck, context: CheckpointContext): Promise<CheckResult> {
+  const jsonPath = check.config.jsonPath;
   const expected = check.config.expected;
 
   let actual: unknown;

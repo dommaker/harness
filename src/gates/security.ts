@@ -31,6 +31,8 @@ interface VulnerabilityAnalysis {
   low: number;
   total: number;
   vulnerabilities: VulnerabilityEntry[];
+  /** 畸形（非 JSON 对象）被跳过的条目数——不伪装成空漏洞对象，计数露出 */
+  skippedMalformed: number;
 }
 
 /** npm audit（v7+ vulnerabilities 形状）单条记录已读字段 */
@@ -107,6 +109,7 @@ export class SecurityGate implements Gate {
           low: analysis.low,
           total: analysis.total,
           vulnerabilities: analysis.vulnerabilities.slice(0, 10), // 只返回前 10 个
+          skippedMalformed: analysis.skippedMalformed, // 畸形条目跳过计数（不伪装成漏洞）
           scanCommand,
         }
       );
@@ -153,6 +156,7 @@ export class SecurityGate implements Gate {
     let high = 0;
     let moderate = 0;
     let low = 0;
+    let skippedMalformed = 0;
     const vulnerabilities: VulnerabilityEntry[] = [];
 
     const count = (severity: string): void => {
@@ -171,7 +175,13 @@ export class SecurityGate implements Gate {
 
     if (isRecord(raw.vulnerabilities)) {
       for (const [name, entry] of Object.entries(raw.vulnerabilities)) {
-        const vuln = (isRecord(entry) ? entry : {}) as NpmVulnerability;
+        // 畸形条目（非对象）跳过并计数——不伪装成空漏洞对象（原 `as NpmVulnerability`
+        // 会把字符串/数组条目当成 {severity: undefined} 的低危漏洞计入 total）
+        if (!isRecord(entry)) {
+          skippedMalformed++;
+          continue;
+        }
+        const vuln = entry as NpmVulnerability;
         const severity = vuln.severity?.toLowerCase() ?? 'low';
         count(severity);
         vulnerabilities.push({
@@ -189,6 +199,7 @@ export class SecurityGate implements Gate {
       low,
       total: critical + high + moderate + low,
       vulnerabilities,
+      skippedMalformed,
     };
   }
 

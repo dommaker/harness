@@ -5,6 +5,9 @@
 import { SpecValidator } from '../validator';
 import type { GitCommandRunner } from '../../../../core/constraints/git-evidence';
 import * as fs from 'fs/promises';
+import * as realFs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Mock fs
 jest.mock('fs/promises', () => ({
@@ -83,9 +86,13 @@ describe('SpecValidator', () => {
     it('should validate multiple files', async () => {
       mockFs.access.mockRejectedValue(new Error('Not found'));
 
-      const result = await validator.validateAll('/test/project');
-
-      expect(result).toBeDefined();
+      const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'spec-validator-'));
+      try {
+        const result = await validator.validateAll(dir);
+        expect(result).toBeDefined();
+      } finally {
+        realFs.rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it('should validate staged files', async () => {
@@ -409,9 +416,14 @@ describe('SpecValidator', () => {
       });
       mockFs.access.mockRejectedValue(new Error('Not found'));
 
-      await v.validateAll('/test/project');
+      const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'spec-validator-'));
+      try {
+        await v.validateAll(dir);
+      } finally {
+        realFs.rmSync(dir, { recursive: true, force: true });
+      }
 
-      expect(seen).toEqual(['/test/project/my-schemas']);
+      expect(seen).toEqual([path.join(dir, 'my-schemas')]);
     });
   });
 });

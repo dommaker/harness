@@ -119,8 +119,8 @@ const SUBS: SubDriver[] = [
   },
   {
     name: 'import',
-    build: (r, out) => knowledgeImportView({ projectPath: r, sources: 'docs,bogus' }, out),
-    run: (r, out, json) => knowledgeImport({ projectPath: r, json, sources: 'docs,bogus' }, out),
+    build: (r, out) => knowledgeImportView({ projectPath: r, sources: 'docs' }, out),
+    run: (r, out, json) => knowledgeImport({ projectPath: r, json, sources: 'docs' }, out),
   },
   {
     name: 'decay',
@@ -306,11 +306,10 @@ const HUMAN_BASELINE: Record<SubName, string[]> = {
     '    这是 K-003 的正文，包含 autolink 关键词，长度足够避开短内容规则所以问题数可控。',
   ],
   import: [
-    '📥 开始导入知识 (源: docs, bogus)...',
+    '📥 开始导入知识 (源: docs)...',
     '  ✅ docs: 1 条',
-    '  ❌ bogus: bogus 导入失败: 未知源类型: bogus',
     '',
-    '✅ 导入完成: 1 条，1 个错误',
+    '✅ 导入完成: 1 条，0 个错误',
   ],
   decay: [
     '🔄 运行衰减周期...',
@@ -445,6 +444,12 @@ describe('闸 1：源形状——投影分派与上色只有一处', () => {
       // #152：--threshold 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 静默关掉短内容判定）。
       // 豁免理由——入参闸门而非投影出口，取值/排版仍只在 emit 一处。
       "return { kind: 'usage-error', reason: `knowledge audit --threshold 非法阈值: \"${threshold.raw}\"` };",
+      // 班次 3 Phase 5：import --sources 枚举白名单校验（原 split+as 强转不校验）。
+      // 豁免理由同上——入参闸门而非投影出口。
+      "kind: 'usage-error',",
+      // 班次 3 Phase 5：list --type/--maturity 枚举白名单校验（同上理由豁免）。
+      "if (!typeCheck.ok) return { kind: 'usage-error', reason: typeCheck.reason };",
+      "if (!maturityCheck.ok) return { kind: 'usage-error', reason: maturityCheck.reason };",
       "return { kind: 'usage-error', reason: 'knowledge search 缺少关键词位置参数' };",
       // #154：search --limit 脏输入在装配点 fail-loud（原先 parseInt 出 NaN 被 `|| 20`
       // 静默兜成缺省量）。豁免理由同上——入参闸门而非投影出口。
@@ -624,7 +629,7 @@ describe('闸 4：人读视图逐行冻结（改造前基线）', () => {
 const EMPTY_HUMAN_BASELINE: Record<SubName, string[]> = {
   list: ['知识库为空'],
   search: ['未找到匹配 "autolink" 的知识条目'],
-  import: ['📥 开始导入知识 (源: docs, bogus)...', '  ❌ bogus: bogus 导入失败: 未知源类型: bogus', '', '✅ 导入完成: 0 条，1 个错误'],
+  import: ['📥 开始导入知识 (源: docs)...', '', '✅ 导入完成: 0 条，0 个错误'],
   decay: ['🔄 运行衰减周期...', '✅ 没有需要衰减的知识条目'],
   stats: [
     '📊 知识库统计',

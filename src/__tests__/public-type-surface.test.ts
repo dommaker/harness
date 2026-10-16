@@ -8,11 +8,12 @@
  * 实测 v1.6.0 源 `src/index.ts:106` 与已发布 npm 产物 `dist/index.d.ts:38` 都在导出它。
  * 本闸让「在不在公开面上」变成跑一下就有答案的事实。
  *
- * **公开面 = `package.json` 的 exports 映射，不是只有包根。** 本包发布四个入口点
- * （`.` / `./core` / `./presets` / `./context`），`import type { X } from
- * '@dommaker/harness/core'` 与从包根导入同样是对外承诺。入口清单从 exports **派生**而非
- * 硬编码：新增子路径会立刻落进本闸（未登记冻结清单即红），免得重演「公开面的定义比现实窄」
- * 这个 B1 病因——`DynamicTask` 除包根外同时经 `./core` 可达，只冻包根会留同一个洞。
+ * **公开面 = `package.json` 的 exports 映射，不是只有包根。** 本包当前只发布包根一个入口
+ * （`./core` / `./presets` / `./context` 三个子路径已随班次 3 摘除——三仓零消费；
+ * 历史上 `import type { X } from '@dommaker/harness/core'` 与从包根导入同样是对外承诺）。
+ * 入口清单从 exports **派生**而非硬编码：新增子路径会立刻落进本闸（未登记冻结清单即红），
+ * 免得重演「公开面的定义比现实窄」这个 B1 病因——`DynamicTask` 除包根外同时经 `./core` 可达，
+ * 只冻包根会留同一个洞。
  *
  * 与 `public-exports.test.ts` 的分工：那边钉的是**删完之后**（已删类型 `@ts-expect-error`
  * 负钉 + 活类型正钉 + 四级 barrel 链残留扫描），且它 `import('../index')`。本闸只做源码文本
@@ -21,10 +22,11 @@
  * 0 tests），拿不到可执行的清单 diff；本闸在那种改动下必须仍然跑得动、报得出是哪个入口的
  * 哪个符号。
  *
- * 清单来源不是手抄：四个入口的 `src` 解析结果与 tsc 产物（各自 exports 的 types 指向，如
- * `dist/core/index.d.ts`）逐项对撞，140/35/1/11 全部逐字一致，产物侧同时零 `export *`。
+ * 清单来源不是手抄：入口的 `src` 解析结果与 tsc 产物（exports 的 types 指向，如
+ * `dist/index.d.ts`）逐项对撞，逐字一致，产物侧同时零 `export *`。
  * （`./gates` 子路径入口已随 gates 层现代化整体摘除：#199 收回全部导出后入口只剩
- * 空壳，package.json `exports` 不再登记。）
+ * 空壳，package.json `exports` 不再登记；`./core` / `./presets` / `./context`
+ * 随班次 3 摘除——三仓零编程消费。）
  * 改动入口清单文件时同步改本文件对应条目，diff 即 PR 评审材料；增删符号属公共面 breaking，
  * 须按 ADR-0003/0022 走发布级别裁决。
  */
@@ -225,50 +227,6 @@ const PUBLISHED_ENTRY_TYPES: Record<string, string[]> = {
     'TraceFilter',
     'TraceSummary',
     'WorkflowMeta',
-  ],
-  './core': [
-    'CSOIssue',
-    'CSOValidationResult',
-    'CapabilitiesMode',
-    'CheckConfig',
-    'CheckConstraintsOptions',
-    'CheckDetail',
-    'CheckEnv',
-    'CheckEvidenceInput',
-    'CheckInputNeeds',
-    'CheckOutcome',
-    'CheckResult',
-    'CheckSkip',
-    'CheckType',
-    'Checkpoint',
-    'CheckpointCheck',
-    'CheckpointContext',
-    'CheckpointResult',
-    'Constraint',
-    'ConstraintChannel',
-    'ConstraintCheck',
-    'ConstraintCheckResult',
-    'ConstraintContext',
-    'ConstraintId',
-    'ConstraintSeverity',
-    'ConstraintResult',
-    'ConstraintTrigger',
-    'ContextFilesResolution',
-    'EvidenceProviders',
-    'NormalizedOutcome',
-    'PassesGateConfig',
-    'RunEnv',
-    'RunTarget',
-    'TaskTestResult',
-  ],
-  './presets': [
-    'PresetConfig',
-  ],
-  './context': [
-    'SessionCheckpoint',
-    'SessionEvent',
-    'SessionEventType',
-    'SessionHandle',
   ],
 };
 

@@ -79,9 +79,9 @@ describe('子 barrel 显式清单（harness#137）', () => {
     expect(fs.existsSync(path.join(SRC_DIR, 'failure', 'types.ts'))).toBe(false);
   });
 
-  it('failure barrel 直连类型正本，不再经 shim 中转', () => {
+  it('failure barrel 的类型正本在 ./error-types（types 层零依赖，班次 3 Phase 4 断环后），不再经 shim 中转', () => {
     const text = stripComments(fs.readFileSync(path.join(SRC_DIR, 'failure', 'index.ts'), 'utf-8'));
-    expect(text).toContain("from '../types/failure'");
+    expect(text).toContain("from './error-types'");
     expect(text).not.toMatch(/from '\.\/types'/);
   });
 });

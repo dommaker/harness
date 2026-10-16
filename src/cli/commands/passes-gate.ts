@@ -5,9 +5,9 @@
  */
 
 import chalk from 'chalk';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { execAsync } from '../../utils/exec';
+import { errorMessage } from '../../utils/error';
+import { readCoverageSummaryPct } from '../../gates/coverage';
 import { PassesGate, detectTestCommand } from '../../core/validators/passes-gate';
 import type { PassesGateConfig } from '../../types/passes-gate';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
@@ -142,12 +142,8 @@ export async function checkCoverage(
       cwd: projectPath,
     });
 
-    // 读取覆盖率报告
-    const coveragePath = path.join(projectPath, 'coverage', 'coverage-summary.json');
-    const content = await fs.readFile(coveragePath, 'utf-8');
-    const coverage = JSON.parse(content);
-
-    const totalCoverage = coverage.total?.lines?.pct || 0;
+    // 读取覆盖率报告（取数正本：缺失/损坏/字段缺失抛出，catch 统一 fail-loud）
+    const totalCoverage = await readCoverageSummaryPct(projectPath);
 
     log(io, chalk.gray(`当前覆盖率: ${totalCoverage}%`));
 
@@ -160,7 +156,7 @@ export async function checkCoverage(
   } catch (error) {
     // fail-loud：覆盖率命令失败 / 报告缺失 / JSON 损坏都是「没查到」，不是「查过了」——
     // 吞成 skip 退 0 会让门禁在故障时永远放行
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     log(io, chalk.red(`❌ 无法获取覆盖率信息: ${message}`));
     return { kind: 'fail', reason: `无法获取覆盖率信息: ${message}` };
   }

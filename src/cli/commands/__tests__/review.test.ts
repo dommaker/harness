@@ -13,6 +13,8 @@ jest.mock('../../../utils/exec', () => ({
 }));
 
 jest.mock('../../../gates/review', () => ({
+  // parsePrView 用真实现（reviewStatus 的解析正本集成路径），只换 ReviewGate 类壳
+  ...jest.requireActual('../../../gates/review'),
   ReviewGate: jest.fn().mockImplementation(() => ({
     evaluate: jest.fn(),
   })),

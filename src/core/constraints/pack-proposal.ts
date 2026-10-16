@@ -20,7 +20,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../utils/yaml';
+import { isoDate, compactDate } from '../../utils/date';
 import { findConstraintDefinition } from './find-constraint';
 import { collectUsageByConstraint, readProjectTracesReport } from './usage-report';
 import type { Constraint } from '../../types/constraint';
@@ -46,7 +47,7 @@ export interface PackProposalResult {
 }
 
 function formatDate(ts: number | undefined): string {
-  return ts === undefined ? '（无记录）' : new Date(ts).toISOString().slice(0, 10);
+  return ts === undefined ? '（无记录）' : isoDate(new Date(ts));
 }
 
 /**
@@ -66,7 +67,7 @@ export function renderProposalMarkdown(
   const lines: string[] = [];
   lines.push(`# 约束升级提案材料：${c.id}`);
   lines.push('');
-  lines.push(`- 生成日期: ${now.toISOString().slice(0, 10)}`);
+  lines.push(`- 生成日期: ${isoDate(now)}`);
   lines.push(`- 来源: ${isApp ? '应用层（.harness/constraints.yml）' : '内置'}`);
   lines.push(`- severity: ${c.severity}`);
   lines.push('');
@@ -142,7 +143,7 @@ export function collectProposalMaterial(projectRoot: string, id: string): Propos
  * 消费方拿产物路径一律经本函数（或 packProposal 的返回），不在库外拼字符串。
  */
 export function proposalMaterialPath(projectRoot: string, id: string, now: Date = new Date()): string {
-  const date = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const date = compactDate(now);
   return path.join(projectRoot, '.harness', 'reports', `proposal-${id}-${date}.md`);
 }
 

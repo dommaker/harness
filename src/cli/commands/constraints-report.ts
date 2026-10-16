@@ -24,6 +24,7 @@ import {
   type DiagnoseThresholds,
 } from '../../core/constraints/usage-report';
 import { fileStateIO, type StateIO } from '../state-io';
+import { isoDate, compactDate } from '../../utils/date';
 import { getConstraintsMeta } from './constraints';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -48,7 +49,7 @@ export interface ConstraintsReportOptions {
 }
 
 function formatTime(ts: number | undefined): string {
-  return ts === undefined ? '-' : new Date(ts).toISOString().slice(0, 10);
+  return ts === undefined ? '-' : isoDate(new Date(ts));
 }
 
 function formatPct(rate: number): string {
@@ -77,7 +78,7 @@ export function renderExportMarkdown(
   lines.push('# Harness Constraints Report');
   lines.push('');
   lines.push(`- harness 版本: ${version}`);
-  lines.push(`- 日期: ${now.toISOString().slice(0, 10)}`);
+  lines.push(`- 日期: ${isoDate(now)}`);
   if (report.skippedLines > 0) {
     // 脱敏：只报条数，不报路径、不报坏行内容
     lines.push(`- ⚠️ trace 文件有 ${report.skippedLines} 行损坏已跳过，下表统计只含其余合法记录`);
@@ -212,7 +213,7 @@ export async function constraintsReport(options: ConstraintsReportOptions = {}, 
     if (typeof options.export === 'string' && options.export.length > 0) {
       exportPath = path.isAbsolute(options.export) ? options.export : path.join(projectRoot, options.export);
     } else {
-      const date = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const date = compactDate(now);
       exportPath = path.join(projectRoot, '.harness', 'reports', `constraints-${date}.md`);
     }
 

@@ -8,6 +8,7 @@
  */
 
 import { execAsync } from '../utils/exec';
+import { errorMessage } from '../utils/error';
 import { gateResult, fromError } from './types';
 import type { GateResult, GateContext, ReviewGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
@@ -23,12 +24,16 @@ interface GhReview {
 interface GhPrView {
   reviews?: GhReview[];
   state?: string;
+  /** 以下为 cli `review status` 展示读取的字段（命令与门禁共用同一解析正本） */
+  number?: number;
+  title?: string;
+  reviewDecision?: string;
 }
 
 /**
  * JSON.parse 结果 → GhPrView：不是对象即抛错（fail-fast，不拿畸形输出假评）
  */
-function parsePrView(stdout: string): GhPrView {
+export function parsePrView(stdout: string): GhPrView {
   const raw: unknown = JSON.parse(stdout);
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new Error('gh pr view 返回不是 JSON 对象');
@@ -145,7 +150,7 @@ export class ReviewGate implements Gate {
       // gh CLI 不可用或 PR 不存在
       throw new ReviewCheckError(
         '无法获取 PR 状态',
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         { suggestion: '确保已安装 gh CLI 并配置了 GitHub token' }
       );
     }
@@ -189,7 +194,7 @@ export class ReviewGate implements Gate {
     } catch (error: unknown) {
       throw new ReviewCheckError(
         'Git 检查失败',
-        error instanceof Error ? error.message : String(error)
+        errorMessage(error)
       );
     }
   }

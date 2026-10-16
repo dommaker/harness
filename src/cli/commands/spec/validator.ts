@@ -16,8 +16,9 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as glob from 'fast-glob';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
+import { errorMessage } from '../../../utils/error';
+import { walkMatches } from '../../../utils/file-walk';
 import { createGitEvidence, splitFileNames, type GitCommandRunner } from '../../../core/constraints/git-evidence';
 import type {
   SpecValidatorConfig,
@@ -171,7 +172,7 @@ export class SpecValidator {
         type: specType,
         errors: [{
           path: '',
-          message: `验证失败: ${error instanceof Error ? error.message : String(error)}`,
+          message: `验证失败: ${errorMessage(error)}`,
           severity: 'error',
         }],
         warnings: [],
@@ -206,7 +207,7 @@ export class SpecValidator {
       } catch (e) {
         errors.push({
           path: '',
-          message: `YAML 解析失败: ${e instanceof Error ? e.message : String(e)}`,
+          message: `YAML 解析失败: ${errorMessage(e)}`,
           severity: 'error' as const,
         });
       }
@@ -269,20 +270,21 @@ export class SpecValidator {
 
   /**
    * 获取 Spec 文件
+   *
+   * 逐模式仓内 glob 匹配（`**`/`*`/`?` 口径，walkMatches 正本）；
+   * node_modules/dist/.git 全层级跳过。返回绝对路径（与调用方读文件的锚定一致）。
    */
   private async getSpecFiles(cwd: string): Promise<string[]> {
-    const allFiles: string[] = [];
+    const matched: string[] = [];
 
     for (const pattern of this.config.files) {
-      const files = await glob.glob(pattern, {
-        cwd,
-        absolute: true,
-        ignore: ['node_modules/**', 'dist/**', '.git/**'],
-      });
-      allFiles.push(...files);
+      matched.push(
+        ...walkMatches(cwd, pattern, { skipDirs: ['node_modules', 'dist', '.git'] })
+          .map(rel => path.join(cwd, rel)),
+      );
     }
 
-    return [...new Set(allFiles)];
+    return [...new Set(matched)];
   }
 
   /**

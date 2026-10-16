@@ -3,7 +3,7 @@
  */
 
 export { CheckpointValidator } from './checkpoint';
-export { PassesGate, createPassesGate } from './passes-gate';
+export { PassesGate } from './passes-gate';
 export { CSOValidator, type CSOValidationResult, type CSOIssue } from './cso';
 
 // 重新导出类型

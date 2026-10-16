@@ -15,7 +15,9 @@
  * 口径与类型面闸一致：**公开面 = `exports` 映射，不是只有包根**，入口清单从 `exports` 派生
  * 而非硬编码，新增子路径未登记冻结清单即红。分工：
  * - `.` 的值面仍由 `public-exports.test.ts` 冻结（本闸刻意不重复钉——同一个入口两份清单
- *   必然漂移，且那条判定要逐字保留），本闸只管四个子路径；「两边都不漏」由登记闸与委派闸各钉一条。
+ *   必然漂移，且那条判定要逐字保留），本闸只管子路径；「两边都不漏」由登记闸与委派闸各钉一条。
+ *   （`./core` / `./presets` / `./context` 三个子路径入口已随班次 3 摘除——三仓零消费，
+ *   当前无已发布子路径，本闸留守防新增入口绕过登记。）
  * - 类型面归 `public-type-surface.test.ts`，含导出写法白名单（堵 `export *` 与入口内联类型
  *   声明）。值面按运行时事实枚举，无按名字扫描漏算之虞，故本闸不重复那道写法检查。
  *
@@ -45,42 +47,8 @@ const EXPORTS_MAP = JSON.parse(
 
 const ENTRY_SUBPATHS: string[] = Object.keys(EXPORTS_MAP);
 
-/** 每个已发布子路径入口的值面全量清单。增删任一项即公共面 breaking，见文件头。 */
-const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {
-  './core': [
-    'CONSTRAINTS',
-    'CSOValidator',
-    'CheckpointValidator',
-    'ConstraintChecker',
-    'ConstraintViolationError',
-    'PassesGate',
-    'ProjectConfigLoader',
-    'buildCheckEnv',
-    'checkConstraint',
-    'checkConstraints',
-    'constraintChecker',
-    'createPassesGate',
-    'findConstraintsByTrigger',
-    'formatEvidence',
-    'getAllConstraints',
-    'getCapabilitiesMode',
-    'getConstraint',
-    'getEffectiveConstraints',
-    'getGovernanceConfig',
-    'loadRawProjectConfig',
-    'normalizeCheckOutcome',
-    'resolveContextFiles',
-  ],
-  './presets': [
-    'PRESETS_BY_NAME',
-    'RELAXED_PRESET',
-    'STANDARD_PRESET',
-    'STRICT_PRESET',
-  ],
-  './context': [
-    'SessionManager',
-  ],
-};
+/** 每个已发布子路径入口的值面全量清单。增删任一项即公共面 breaking，见文件头。当前无已发布子路径（班次 3 摘除三个零消费入口）。 */
+const PUBLISHED_ENTRY_VALUES: Record<string, string[]> = {};
 
 /** exports 子路径 → 承载它的显式清单源文件。形态对不上返回 null，由映射闸 fail-loud。 */
 function sourceFileForSubpath(subpath: string): string | null {

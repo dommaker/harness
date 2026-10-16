@@ -35,6 +35,8 @@ jest.mock('fs', () => {
     ...actual,
     readFileSync: jest.fn((p: unknown, ...rest: unknown[]) => {
       bucket.push(Buffer.isBuffer(p) ? p.toString('utf8') : String(p));
+      // 记名失败注入：路径含 'unreadable' 的文件一律读失败（测 unreadableFiles 露出口径）
+      if (String(p).includes('unreadable')) throw new Error('EACCES: permission denied');
       return (actual.readFileSync as (...args: unknown[]) => unknown)(p, ...rest);
     }),
   };
@@ -127,5 +129,19 @@ describe('spec-baseline-check 共享索引的驻留上界（#162）', () => {
     const afterFirst = sourceReadCount(dir);
     expect(index.countFilesContaining('miss')).toBe(0);
     expect(sourceReadCount(dir) - afterFirst).toBe(4);
+  });
+
+  it('读失败的文件记名跳过：计数不含它，unreadableFiles 带出计数 + 文件名（harness#100 口径）', () => {
+    write(dir, 'src/unreadable.ts', 'export const u = "needleA";\n');
+
+    // 驻留路径
+    const index = createBaselineIndex(dir);
+    expect(index.countFilesContaining('needleA')).toBe(2); // unreadable.ts 未计入（真身也是 needleA）
+    expect(index.unreadableFiles()).toEqual([expect.stringContaining('unreadable.ts')]);
+
+    // 回落流式路径同口径
+    const fallback = createBaselineIndex(dir, { maxEntries: 1, maxBytes: SOURCE_INDEX_MAX_BYTES });
+    expect(fallback.countFilesContaining('needleA')).toBe(2);
+    expect(fallback.unreadableFiles()).toEqual([expect.stringContaining('unreadable.ts')]);
   });
 });

@@ -7,6 +7,7 @@
  */
 
 import type { KnowledgeEntry, KnowledgeSubsystem, MaturityLevel, QueryFilter } from '../../../knowledge/types';
+import { MATURITY_LEVELS } from '../../../knowledge/types';
 import { processIO, type CommandIO, type CommandResult } from '../../command-contract';
 import {
   blankLine,
@@ -24,6 +25,22 @@ function listFilter(options: KnowledgeListOptions): QueryFilter {
   if (options.maturity) filter.maturity = options.maturity.split(',') as MaturityLevel[];
   if (options.tag) filter.tags = options.tag.split(',');
   return filter;
+}
+
+/** KnowledgeSubsystem 白名单（types.ts 联合的运行时对应物；MATURITY_LEVELS 正本在 types.ts） */
+const KNOWLEDGE_SUBSYSTEMS: readonly KnowledgeSubsystem[] = ['model', 'decision', 'guideline', 'pitfall', 'process', 'architecture'];
+
+/** 逗号拆分值的枚举白名单校验；首个非法值即报（非法值不得静默进 filter） */
+function validateEnumFlag(
+  flag: string,
+  raw: string | undefined,
+  allowed: readonly string[]
+): { ok: true } | { ok: false; reason: string } {
+  if (raw === undefined) return { ok: true };
+  const bad = raw.split(',').filter(v => !allowed.includes(v));
+  return bad.length === 0
+    ? { ok: true }
+    : { ok: false, reason: `knowledge list ${flag} 非法值: ${bad.join(', ')}（可用: ${allowed.join(', ')}）` };
 }
 
 export interface KnowledgeListOptions extends KnowledgeOptions {
@@ -69,5 +86,9 @@ function listRows(entries: KnowledgeEntry[]): DisplayRow[] {
 }
 
 export async function knowledgeList(options: KnowledgeListOptions, io: CommandIO = processIO): Promise<CommandResult> {
+  const typeCheck = validateEnumFlag('--type', options.type, KNOWLEDGE_SUBSYSTEMS);
+  if (!typeCheck.ok) return { kind: 'usage-error', reason: typeCheck.reason };
+  const maturityCheck = validateEnumFlag('--maturity', options.maturity, MATURITY_LEVELS);
+  if (!maturityCheck.ok) return { kind: 'usage-error', reason: maturityCheck.reason };
   return emitKnowledgeView(io, options, knowledgeListView(options, io));
 }

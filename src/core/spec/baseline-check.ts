@@ -42,6 +42,11 @@ export interface BaselineIndex {
   dependencies(): DependencySnapshot;
   /** 绝对路径是否在世（同一落点一次运行内只 stat 一次） */
   exists(fullPath: string): boolean;
+  /**
+   * 读取失败被跳过的源文件（harness#100 同口径：读取失败不得静默低估
+   * countFilesContaining，计数 + 文件名必须能到达用户可见输出）
+   */
+  unreadableFiles(): string[];
 }
 
 /**

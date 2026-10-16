@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { readCapabilitiesEntries } from '../../../core/constraints/capabilities-parser';
+import { escapeRegExp } from '../../../utils/text';
 import type { CapabilitiesMode } from '../../../core/constraints/governance-accessors';
 import type { ModuleInfo, SyncResult } from './project-reader';
 
@@ -64,7 +65,7 @@ export async function updateCapabilitiesFile(
     // 从此每轮都报同一个已删文件且永远修不掉。豁免要生效得连登记面一起改。
     if (result.removed.length > 0) {
       const deadRowRegexes = result.removed.map((removed) => {
-        const escapedFile = removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedFile = escapeRegExp(removed);
         // 第二列存完整路径，basename 只在末尾出现，用 [^|]* 匹配路径前缀
         return new RegExp(`^\\|[^|]*\\|[^|]*\\b${escapedFile}\\s*\\|.*\\r?$`);
       });

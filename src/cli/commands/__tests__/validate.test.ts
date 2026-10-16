@@ -6,7 +6,7 @@ import { validate } from '../validate';
 import { captureIO, type CapturingIO } from '../../command-contract';
 import * as fs from 'fs/promises';
 import { CheckpointValidator } from '../../../core/validators/checkpoint';
-import * as yaml from 'js-yaml';
+import * as yaml from '../../../utils/yaml';
 
 // Mock fs/promises
 jest.mock('fs/promises', () => ({
@@ -16,13 +16,14 @@ jest.mock('fs/promises', () => ({
   mkdir: jest.fn(),
 }));
 
-// Mock CheckpointValidator
+// Mock CheckpointValidator（形状校验用真实现——本文件喂的 YAML 数据应过真校验）
 jest.mock('../../../core/validators/checkpoint', () => ({
+  ...jest.requireActual('../../../core/validators/checkpoint'),
   CheckpointValidator: jest.fn(),
 }));
 
-// Mock yaml
-jest.mock('js-yaml', () => ({
+// Mock yaml 收口（内部 wrapper，唯一 import 'yaml' 的模块）
+jest.mock('../../../utils/yaml', () => ({
   load: jest.fn(),
   dump: jest.fn(),
 }));
@@ -64,10 +65,10 @@ describe('validate command', () => {
     it('检查点文件 YAML 损坏 → 抛出（fail-fast：损坏 ≠ 缺失，不装「未找到」放行）', async () => {
       mockFs.readFile.mockResolvedValue('checkpoints: [broken');
       mockYaml.load.mockImplementation(() => {
-        throw new Error('YAMLException: unexpected end of stream');
+        throw new Error('YAMLParseError: unexpected end of stream');
       });
 
-      await expect(validate({}, io)).rejects.toThrow('YAMLException');
+      await expect(validate({}, io)).rejects.toThrow('YAMLParseError');
     });
 
     it('检查点文件读取失败（非 ENOENT，如权限） → 抛出', async () => {
@@ -80,7 +81,7 @@ describe('validate command', () => {
 
     it('应该通过所有检查点', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
       
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -99,7 +100,7 @@ describe('validate command', () => {
 
     it('应该显示失败的检查点', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
       
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -123,7 +124,7 @@ describe('validate command', () => {
 
     it('失败原因与 message 不同时一并打出来（真因不被 message 吞）', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
 
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -150,7 +151,7 @@ describe('validate command', () => {
 
     it('error 与 message 同文时不重复打', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
 
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -172,7 +173,7 @@ describe('validate command', () => {
 
     it('检查点失败一律 fail（门控语义）', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
 
       mockFs.readFile.mockResolvedValue('checkpoints content');

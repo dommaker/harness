@@ -25,7 +25,7 @@ jest.mock('../../../gates/contract', () => ({
   })),
 }));
 
-jest.mock('js-yaml', () => ({
+jest.mock('../../../utils/yaml', () => ({
   load: jest.fn(),
 }));
 
@@ -40,7 +40,7 @@ jest.mock('chalk', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockExistsSync = existsSync as jest.Mock;
 const MockGate = ContractGate as jest.MockedClass<typeof ContractGate>;
-const yaml = require('js-yaml');
+const yaml = require('../../../utils/yaml');
 
 describe('contract command', () => {
   let io: CapturingIO;

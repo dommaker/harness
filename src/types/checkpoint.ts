@@ -21,74 +21,128 @@ export type CheckType =
   | 'custom';
 
 /**
- * 检查配置
+ * 检查配置（判别联合成员的公共可选字段基座）
  */
-export interface CheckConfig {
-  /** 文件路径（用于文件检查） */
-  path?: string;
-  
-  /** 预期值（用于 contains 检查） */
-  expected?: string | number | boolean | object;
-  
-  /** 内容（用于 file_contains 检查） */
-  content?: string;
-  
-  /** 正则表达式（用于 matches 检查） */
-  pattern?: string;
-  
-  /** JSON 路径（用于 json_path 检查） */
-  jsonPath?: string;
-  
-  /** HTTP URL（用于 http 检查） */
-  url?: string;
-  
-  /** HTTP 方法 */
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  
-  /** HTTP 请求体（JSON 序列化后发送，形状由被测端点决定） */
-  body?: unknown;
-  
-  /** HTTP 请求头 */
-  headers?: Record<string, string>;
-  
-  /** 预期 HTTP 状态码 */
-  expectedStatus?: number;
-  
-  /** 命令（用于 command 检查） */
-  command?: string;
-  
+export interface CheckConfigBase {
   /** 工作目录 */
   workdir?: string;
-  
+
   /** 环境变量 */
   env?: Record<string, string>;
-  
+
   /** 超时时间（毫秒） */
   timeout?: number;
-  
-  /** 自定义检查函数名 */
-  customFunction?: string;
 }
 
+/** 预期值（contains / output / json_path / http 各族的期望值形状） */
+type CheckExpectation = string | number | boolean | object;
+
 /**
- * 检查项定义
+ * 检查项定义（判别联合，重构班次 3 Phase 5）
+ *
+ * 以 `type` 为判别子，每个成员的 `config` 收窄为该 CheckType 的必填形状——
+ * 取代原 13 可选字段服务 13 种 type 的宽 `CheckConfig`（下游 handler 全部
+ * `config.x || ''` 假值兜底）。加载路径（checkpoints.yml 解析）按 type 校验
+ * 必填字段，缺字段 fail-fast 指名（见 core/validators/checkpoint.ts 的
+ * `assertCheckpointShape`）。
  */
-export interface CheckpointCheck {
+interface CheckpointCheckBase {
   /** 检查 ID */
   id: string;
-  
-  /** 检查类型 */
-  type: CheckType;
-  
-  /** 检查配置 */
-  config: CheckConfig;
-  
+
   /** 错误消息 */
   message?: string;
-  
+
   /** 是否必须通过 */
   required?: boolean;
 }
+
+/** file_exists / file_not_empty：必填文件路径 */
+export interface FileExistsCheck extends CheckpointCheckBase {
+  type: 'file_exists' | 'file_not_empty';
+  config: CheckConfigBase & { path: string };
+}
+
+/** file_contains / file_not_contains：必填路径 + 内容 */
+export interface FileContentCheck extends CheckpointCheckBase {
+  type: 'file_contains' | 'file_not_contains';
+  config: CheckConfigBase & { path: string; content: string };
+}
+
+/** command_success：必填命令 */
+export interface CommandSuccessCheck extends CheckpointCheckBase {
+  type: 'command_success';
+  config: CheckConfigBase & { command: string };
+}
+
+/** command_output：必填命令 + 预期输出 */
+export interface CommandOutputCheck extends CheckpointCheckBase {
+  type: 'command_output';
+  config: CheckConfigBase & { command: string; expected: CheckExpectation };
+}
+
+/** output_contains / output_not_contains：content 优先、expected 兜底（空内容 = 「输出应为空」语义） */
+export interface OutputContentCheck extends CheckpointCheckBase {
+  type: 'output_contains' | 'output_not_contains';
+  config: CheckConfigBase & { content?: string; expected?: CheckExpectation; command?: string };
+}
+
+/** output_matches：必填正则 */
+export interface OutputMatchesCheck extends CheckpointCheckBase {
+  type: 'output_matches';
+  config: CheckConfigBase & { pattern: string; command?: string };
+}
+
+/** json_path：必填 JSON 路径 */
+export interface JsonPathCheck extends CheckpointCheckBase {
+  type: 'json_path';
+  config: CheckConfigBase & { jsonPath: string; expected?: CheckExpectation; command?: string };
+}
+
+/** http_status：必填 URL（expectedStatus 缺省 200） */
+export interface HttpStatusCheck extends CheckpointCheckBase {
+  type: 'http_status';
+  config: CheckConfigBase & { url: string; expectedStatus?: number; expected?: CheckExpectation };
+}
+
+/** http_body：必填 URL + 预期响应体片段 */
+export interface HttpBodyCheck extends CheckpointCheckBase {
+  type: 'http_body';
+  config: CheckConfigBase & {
+    url: string;
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    headers?: Record<string, string>;
+    /** HTTP 请求体（JSON 序列化后发送，形状由被测端点决定） */
+    body?: unknown;
+    expected: CheckExpectation;
+  };
+}
+
+/** custom：必填自定义检查函数名 */
+export interface CustomCheck extends CheckpointCheckBase {
+  type: 'custom';
+  config: CheckConfigBase & { customFunction: string };
+}
+
+/**
+ * 检查项（13 种 CheckType 的判别联合）
+ */
+export type CheckpointCheck =
+  | FileExistsCheck
+  | FileContentCheck
+  | CommandSuccessCheck
+  | CommandOutputCheck
+  | OutputContentCheck
+  | OutputMatchesCheck
+  | JsonPathCheck
+  | HttpStatusCheck
+  | HttpBodyCheck
+  | CustomCheck;
+
+/**
+ * 检查配置（联合别名：全体成员的 config 之并，兼容类型位引用）
+ */
+export type CheckConfig = CheckpointCheck['config'];
 
 /**
  * 检查点定义

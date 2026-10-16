@@ -16,7 +16,7 @@
  * 公共导出（ADR-0003）：显式清单，禁 export *。
  * 收录标准：属 harness 定位（约束数据 / 执行引擎 / 知识基建）、
  * 实现真实可用、无同名冲突。内部 seam
- * （ConstraintChecker / constraintChecker / ProjectConfigLoader）不进公共清单。
+ * （ConstraintChecker / ProjectConfigLoader）不进公共清单。
  */
 
 // ========================================
@@ -43,7 +43,6 @@ export {
   CONSTRAINTS,
   getAllConstraints,
   getConstraint,
-  findConstraintsByTrigger,
 } from './core/constraints/definitions';
 export {
   getEffectiveConstraints,
@@ -57,7 +56,7 @@ export type {
 } from './core/retired-constraints';
 
 // ========================================
-// 约束变更面（harness#198）：retire/reactivate/disable + 提案打包 + 元数据 + 配置铺放
+// 约束变更面（harness#198）：retire/reactivate/disable + 提案打包 + 元数据
 // 下游消费方经库面完成约束变更，不再偷看 `.harness/` 内部、免起子进程。
 // 知识沉淀写口是注入 seam（harness#88 分层纪律：core 不 value-import 知识层）——
 // retire/reactivate 缺省只落 config.yml，要沉淀经 options.openKnowledgeStore 注入；
@@ -84,7 +83,6 @@ export {
   packProposal,
   collectProposalMaterial,
   renderProposalMarkdown,
-  proposalMaterialPath,
 } from './core/constraints/pack-proposal';
 export type {
   ProposalMaterial,
@@ -94,17 +92,12 @@ export {
   getConstraintsMeta,
 } from './core/constraints/meta';
 export type { ConstraintsMeta } from './core/constraints/meta';
-export {
-  HARNESS_CONFIG_FILES,
-  propagateConfig,
-} from './core/config-files';
 
 // ========================================
 // 约束使用报告（退役候选诊断数据层，下游消费方进化链路消费）
 // ========================================
 export {
   buildConstraintsUsageReport,
-  diagnoseRetireCandidates,
   collectUsageByConstraint,
   readProjectTracesReport,
   CANDIDATE_KIND_LABEL,
@@ -165,7 +158,6 @@ export type {
 export {
   CheckpointValidator,
   PassesGate,
-  createPassesGate,
   CSOValidator,
 } from './core/validators';
 export type { CSOIssue, CSOValidationResult } from './core/validators';
@@ -198,7 +190,6 @@ export type {
 } from './types/trace';
 export {
   TraceCollector,
-  pruneTraceLogs,
   TraceAnalyzer,
 } from './monitoring';
 
@@ -288,12 +279,7 @@ export type {
 // 纯函数直接 export，不进 ConstraintCheck 闭环注册表。
 // ========================================
 export {
-  DEFAULT_TEST_GLOBS,
-  DEFAULT_NONCODE_GLOBS,
-  matchGlob,
-  matchAnyGlob,
   classifyCommitFiles,
-  resolveGlobs,
   verifyTddChain,
   TESTED_BY_RE,
   TESTS_NONE_RE,

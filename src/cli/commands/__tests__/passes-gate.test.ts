@@ -262,13 +262,13 @@ describe('passes-gate command', () => {
       expect(result).toEqual({ kind: 'ok' });
     });
 
-    it('应该处理 coverage.total 为 undefined', async () => {
+    it('报告字段缺失（coverage.total 为 undefined）：fail-loud——「没查到」不按 0% 判定（原 || 0 伪装消除，班次3 Phase3）', async () => {
       mockExecAsync.mockResolvedValue({ stdout: '', stderr: '' });
       mockFs.readFile.mockResolvedValue(JSON.stringify({}));
 
       const result = await checkCoverage('/project', 80);
 
-      expect(result).toEqual({ kind: 'fail', reason: '覆盖率不足: 0% < 80%' });
+      expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining('无法获取覆盖率信息') });
     });
   });
 

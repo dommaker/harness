@@ -12,6 +12,7 @@ import type {
   PerformanceThresholds,
 } from '../types/gate';
 import type { RunEnv } from '../core/constraints/run-env';
+import { errorMessage } from '../utils/error';
 
 export type {
   GateDecision,
@@ -77,7 +78,7 @@ export function fromError(
   startedAt: number,
   details?: Record<string, unknown>
 ): GateResult {
-  const reason = error instanceof Error ? error.message : String(error);
+  const reason = errorMessage(error);
   return fail(gate, `${label}: ${reason}`, startedAt, details);
 }
 

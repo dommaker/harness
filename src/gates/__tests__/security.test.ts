@@ -96,6 +96,27 @@ describe('SecurityGate', () => {
       expect(result.details?.high).toBe(1);
     });
 
+    it('畸形（非对象）漏洞条目跳过并计数：不伪装成低危漏洞计入 total', async () => {
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        callback(null, {
+          stdout: JSON.stringify({
+            vulnerabilities: {
+              good: { severity: 'moderate' },
+              'broken-string': 'not-an-object',
+              'broken-array': [1, 2],
+            },
+          }),
+        });
+      });
+
+      const result = await gate.scan(baseContext);
+
+      // 只有 good 一条入统计；两条畸形进 skippedMalformed 而非按 severity undefined 计 low
+      expect(result.details?.total).toBe(1);
+      expect(result.details?.low).toBe(0);
+      expect(result.details?.skippedMalformed).toBe(2);
+    });
+
     it('should pass with high threshold when only moderate found', async () => {
       const strictGate = new SecurityGate({ severityThreshold: 'high' });
 

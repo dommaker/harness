@@ -5,8 +5,146 @@
 
 import chalk from 'chalk';
 import * as path from 'path';
-import type { SyncDocsOptions, SyncState, SyncVerdict } from './sync-state';
+import type { SyncDocsOptions, SyncState, SyncVerdict, TableLayoutVerdict } from './sync-state';
+import type { ContextContentDrift, ModuleInfo } from './project-reader';
 import { log, type CommandIO } from '../../command-contract';
+
+/**
+ * --json 结构化报告形状（重构班次 3 Phase 4 具名化）
+ *
+ * 原 `Record<string, unknown>` 宽类型令每处 resolution push 都要重复
+ * `as Array<Record<string, unknown>>` 强转（6 处）；具名接口后字段直接定型。
+ * 键的赋值顺序 = 输出键序（JSON.stringify 按插入序），段落函数不得打乱。
+ */
+interface SyncJsonReport {
+  stale: boolean;
+  format: 'capability-listing' | 'file-table';
+  summary: {
+    added: number;
+    removed: number;
+    capCountMismatches: number;
+    contextMissing: number;
+    contextStale: number;
+    contextContentDrift: number;
+    tableLayoutDirty: boolean;
+  };
+  contextMissing: Array<{ dir: string; file: string }>;
+  contextStale: Array<{ dir: string; file: string }>;
+  contentDrift: Array<ContextContentDrift & { file: string }>;
+  resolution: Array<Record<string, unknown>>;
+  capCountMismatches?: Array<{ mismatch: string }>;
+  added?: Array<{ dir?: string; file?: string; module?: ModuleInfo }>;
+  removed?: Array<{ file: string }>;
+  tableLayout?: TableLayoutVerdict;
+  agentsMd?: { file: string; exists: boolean; stale: boolean };
+}
+
+/** CAPABILITIES 段：listing 计数不一致 / file-table 条目增删（含 resolution 指引） */
+function applyCapsSections(
+  report: SyncJsonReport,
+  state: SyncState,
+  verdict: SyncVerdict
+): void {
+  if (state.capsIsCapabilityListing && verdict.hasCapIssues) {
+    report.capCountMismatches = state.capCountMismatches.map(m => ({ mismatch: m }));
+    report.resolution.push({
+      action: 'sync-capability-counts',
+      command: 'harness sync-docs',
+      details: 'CAPABILITIES.md 计数与代码不一致，运行 harness sync-docs 自动更新',
+    });
+  }
+
+  if (!state.capsIsCapabilityListing && verdict.hasTableEntryIssues) {
+    if (state.capsMode === 'module') {
+      // module 模式：added 为聚合后的未覆盖目录，需人工登记目录条目
+      report.added = state.result.added.map(d => ({ dir: d }));
+      report.removed = state.result.removed.map(f => ({ file: f }));
+      report.resolution.push({
+        action: 'register-capability-dirs',
+        details:
+          '在 CAPABILITIES.md 中为这些目录登记一行目录条目（如 `| 模块名 | src/xxx/ | 说明 |`）',
+        dirs: state.result.added,
+      });
+    } else {
+      report.added = state.result.added.map(f => {
+        return {
+          file: f,
+          module: state.currentModules.find(m => path.basename(m.file) === f),
+        };
+      });
+      report.removed = state.result.removed.map(f => ({ file: f }));
+      report.resolution.push({
+        action: 'sync-capabilities',
+        command: 'harness sync-docs',
+      });
+    }
+  }
+}
+
+/** 表格排版段：空行切表 / 空表头 */
+function applyTableLayoutSection(
+  report: SyncJsonReport,
+  state: SyncState,
+  verdict: SyncVerdict
+): void {
+  if (verdict.hasTableLayoutIssues) {
+    report.tableLayout = {
+      blankLines: state.tableLayout.blankLines,
+      emptyTables: state.tableLayout.emptyTables,
+    };
+    report.resolution.push({
+      action: 'sync-capabilities-table-layout',
+      command: 'harness sync-docs',
+      details:
+        'CAPABILITIES.md 的表格被空行切断、或残留无数据行的空表头，运行 harness sync-docs 收拢',
+    });
+  }
+}
+
+/** CONTEXT.md 段：缺失 / 内容漂移 / mtime 提示（纯 resolution 指引，不加顶层键） */
+function applyContextSection(
+  report: SyncJsonReport,
+  state: SyncState,
+  verdict: SyncVerdict
+): void {
+  if (verdict.hasContextIssues) {
+    report.resolution.push(
+      ...(state.result.contextMissing.length > 0
+        ? [{ action: 'create-context-md', command: 'harness sync-docs', dirs: state.result.contextMissing }]
+        : []),
+      ...(state.result.contextContentDrift.length > 0
+        ? [{
+            action: 'fix-context-content-drift',
+            details:
+              'CONTEXT.md「核心导出」节与目录导出面不一致：要么按实现改文档，要么在票面记录'
+              + '「文档正确、代码待改」；散文不可机械生成，sync-docs 不改写 CONTEXT.md',
+            drift: state.result.contextContentDrift,
+          }]
+        : []),
+      ...(state.result.contextStale.length > 0
+        ? [{ action: 'update-context-md', command: 'harness sync-docs', dirs: state.result.contextStale }]
+        : []),
+    );
+  }
+}
+
+/** AGENTS.md 段：存在性 / 漂移 */
+function applyAgentsSection(
+  report: SyncJsonReport,
+  state: SyncState,
+  options: SyncDocsOptions
+): void {
+  if (options.agents) {
+    report.agentsMd = { file: 'AGENTS.md', exists: state.agentsMdExists, stale: state.agentsMdStale };
+    if (state.agentsMdStale) {
+      report.resolution.push({
+        action: 'sync-agents-md',
+        command: 'harness sync-docs --agents',
+        details: '生成/更新 AGENTS.md（agent 导读）',
+      });
+    }
+  }
+}
 
 /**
  * JSON 出口：结构化输出供 LLM 消费；返回是否 hasIssues（退出码由调用方译）
@@ -17,7 +155,7 @@ export function emitJsonReport(
   verdict: SyncVerdict,
   options: SyncDocsOptions
 ): void {
-  const jsonOutput: Record<string, unknown> = {
+  const jsonOutput: SyncJsonReport = {
     stale: verdict.hasIssues,
     format: state.capsIsCapabilityListing ? 'capability-listing' : 'file-table',
     summary: {
@@ -44,87 +182,13 @@ export function emitJsonReport(
       unlisted: d.unlisted,
       ...(d.constructionSites ? { constructionSites: d.constructionSites } : {}),
     })),
-    resolution: [] as Array<Record<string, unknown>>,
+    resolution: [],
   };
 
-  if (state.capsIsCapabilityListing && verdict.hasCapIssues) {
-    jsonOutput.capCountMismatches = state.capCountMismatches.map(m => ({ mismatch: m }));
-    (jsonOutput.resolution as Array<Record<string, unknown>>).push({
-      action: 'sync-capability-counts',
-      command: 'harness sync-docs',
-      details: 'CAPABILITIES.md 计数与代码不一致，运行 harness sync-docs 自动更新',
-    });
-  }
-
-  if (!state.capsIsCapabilityListing && verdict.hasTableEntryIssues) {
-    if (state.capsMode === 'module') {
-      // module 模式：added 为聚合后的未覆盖目录，需人工登记目录条目
-      jsonOutput.added = state.result.added.map(d => ({ dir: d }));
-      jsonOutput.removed = state.result.removed.map(f => ({ file: f }));
-      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
-        action: 'register-capability-dirs',
-        details:
-          '在 CAPABILITIES.md 中为这些目录登记一行目录条目（如 `| 模块名 | src/xxx/ | 说明 |`）',
-        dirs: state.result.added,
-      });
-    } else {
-      jsonOutput.added = state.result.added.map(f => {
-        return {
-          file: f,
-          module: state.currentModules.find(m => path.basename(m.file) === f),
-        };
-      });
-      jsonOutput.removed = state.result.removed.map(f => ({ file: f }));
-      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
-        action: 'sync-capabilities',
-        command: 'harness sync-docs',
-      });
-    }
-  }
-
-  if (verdict.hasTableLayoutIssues) {
-    jsonOutput.tableLayout = {
-      blankLines: state.tableLayout.blankLines,
-      emptyTables: state.tableLayout.emptyTables,
-    };
-    (jsonOutput.resolution as Array<Record<string, unknown>>).push({
-      action: 'sync-capabilities-table-layout',
-      command: 'harness sync-docs',
-      details:
-        'CAPABILITIES.md 的表格被空行切断、或残留无数据行的空表头，运行 harness sync-docs 收拢',
-    });
-  }
-
-  if (verdict.hasContextIssues) {
-    (jsonOutput.resolution as Array<Record<string, unknown>>).push(
-      ...(state.result.contextMissing.length > 0
-        ? [{ action: 'create-context-md', command: 'harness sync-docs', dirs: state.result.contextMissing }]
-        : []),
-      ...(state.result.contextContentDrift.length > 0
-        ? [{
-            action: 'fix-context-content-drift',
-            details:
-              'CONTEXT.md「核心导出」节与目录导出面不一致：要么按实现改文档，要么在票面记录'
-              + '「文档正确、代码待改」；散文不可机械生成，sync-docs 不改写 CONTEXT.md',
-            drift: state.result.contextContentDrift,
-          }]
-        : []),
-      ...(state.result.contextStale.length > 0
-        ? [{ action: 'update-context-md', command: 'harness sync-docs', dirs: state.result.contextStale }]
-        : []),
-    );
-  }
-
-  if (options.agents) {
-    jsonOutput.agentsMd = { file: 'AGENTS.md', exists: state.agentsMdExists, stale: state.agentsMdStale };
-    if (state.agentsMdStale) {
-      (jsonOutput.resolution as Array<Record<string, unknown>>).push({
-        action: 'sync-agents-md',
-        command: 'harness sync-docs --agents',
-        details: '生成/更新 AGENTS.md（agent 导读）',
-      });
-    }
-  }
+  applyCapsSections(jsonOutput, state, verdict);
+  applyTableLayoutSection(jsonOutput, state, verdict);
+  applyContextSection(jsonOutput, state, verdict);
+  applyAgentsSection(jsonOutput, state, options);
 
   log(io, JSON.stringify(jsonOutput, null, 2));
 }

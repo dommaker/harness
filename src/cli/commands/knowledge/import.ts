@@ -18,6 +18,9 @@ import {
 } from '../knowledge-view';
 import type { KnowledgeOptions } from './shared';
 
+/** 冷启动导入源白名单（cold-start ImportSource.type 联合的运行时对应物） */
+const IMPORT_SOURCES = ['code', 'git', 'docs', 'manual'] as const;
+
 export async function knowledgeImportView(
   options: KnowledgeOptions & { sources?: string; reset?: boolean },
   io: CommandIO,
@@ -78,5 +81,15 @@ export async function knowledgeImport(
   options: KnowledgeOptions & { sources?: string; reset?: boolean },
   io: CommandIO = processIO,
 ): Promise<CommandResult> {
+  // 白名单校验：非法 source 不得静默进导入面（原 split + as 强转不校验）
+  if (options.sources !== undefined) {
+    const bad = options.sources.split(',').filter(v => !(IMPORT_SOURCES as readonly string[]).includes(v));
+    if (bad.length > 0) {
+      return {
+        kind: 'usage-error',
+        reason: `knowledge import --sources 非法值: ${bad.join(', ')}（可用: ${IMPORT_SOURCES.join(', ')}）`,
+      };
+    }
+  }
   return emitKnowledgeView(io, options, await knowledgeImportView(options, io));
 }

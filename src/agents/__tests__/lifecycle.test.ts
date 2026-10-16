@@ -33,8 +33,7 @@ describe('AgentLifecycle', () => {
       const lc = new AgentLifecycle();
       lc.register(makeConfig());
       const state = lc.start('agent-1');
-      expect(state!.status).toBe('running');
-      expect(state!.startedAt).toBeTruthy();
+      expect(state).toMatchObject({ status: 'running', startedAt: expect.anything() });
     });
 
     it('启动未注册的 Agent 返回 undefined', () => {
@@ -49,9 +48,11 @@ describe('AgentLifecycle', () => {
       lc.register(makeConfig());
       lc.start('agent-1');
       const state = lc.complete('agent-1', { result: 'ok' });
-      expect(state!.status).toBe('completed');
-      expect(state!.completedAt).toBeTruthy();
-      expect(state!.metadata.result).toBe('ok');
+      expect(state).toMatchObject({
+        status: 'completed',
+        completedAt: expect.anything(),
+        metadata: { result: 'ok' },
+      });
     });
 
     it('完成未注册的 Agent 返回 undefined', () => {

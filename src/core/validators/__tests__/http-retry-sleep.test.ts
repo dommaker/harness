@@ -8,8 +8,7 @@
 import { describe, it, expect, afterEach, jest } from '@jest/globals';
 import { CheckpointValidator } from '../checkpoint';
 import { checkHttpBody, checkHttpStatus } from '../check-handlers/http';
-import type { CheckConfig, CheckType } from '../../../types/checkpoint';
-import type { CheckpointCheck, CheckpointContext } from '../../../types/checkpoint';
+import type { HttpStatusCheck, HttpBodyCheck, CheckpointCheck, CheckpointContext } from '../../../types/checkpoint';
 
 const realFetch = globalThis.fetch;
 
@@ -21,8 +20,10 @@ function makeContext(overrides: Partial<CheckpointContext> = {}): CheckpointCont
   return { projectPath: process.cwd(), workdir: process.cwd(), ...overrides };
 }
 
-function makeCheck(id: string, type: CheckType, config: CheckConfig): CheckpointCheck {
-  return { id, type, config };
+function makeCheck(id: string, type: 'http_status', config: HttpStatusCheck['config']): HttpStatusCheck;
+function makeCheck(id: string, type: 'http_body', config: HttpBodyCheck['config']): HttpBodyCheck;
+function makeCheck(id: string, type: 'http_status' | 'http_body', config: HttpStatusCheck['config'] | HttpBodyCheck['config']): CheckpointCheck {
+  return { id, type, config } as CheckpointCheck;
 }
 
 type InjectedSleep = NonNullable<CheckpointContext['sleep']>;

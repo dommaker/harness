@@ -16,8 +16,9 @@ jest.mock('fs/promises', () => ({
   mkdir: jest.fn(),
 }));
 
-// Mock CheckpointValidator
+// Mock CheckpointValidator（形状校验用真实现——本文件喂的 YAML 数据应过真校验）
 jest.mock('../../../core/validators/checkpoint', () => ({
+  ...jest.requireActual('../../../core/validators/checkpoint'),
   CheckpointValidator: jest.fn(),
 }));
 
@@ -80,7 +81,7 @@ describe('validate command', () => {
 
     it('应该通过所有检查点', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
       
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -99,7 +100,7 @@ describe('validate command', () => {
 
     it('应该显示失败的检查点', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
       
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -123,7 +124,7 @@ describe('validate command', () => {
 
     it('失败原因与 message 不同时一并打出来（真因不被 message 吞）', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
 
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -150,7 +151,7 @@ describe('validate command', () => {
 
     it('error 与 message 同文时不重复打', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
 
       mockFs.readFile.mockResolvedValue('checkpoints content');
@@ -172,7 +173,7 @@ describe('validate command', () => {
 
     it('检查点失败一律 fail（门控语义）', async () => {
       const mockCheckpoints = [
-        { id: 'test-1', checks: [{ id: 'check-1', type: 'test' }] },
+        { id: 'test-1', checks: [{ id: 'check-1', type: 'command_success', config: { command: 'true' } }] },
       ];
 
       mockFs.readFile.mockResolvedValue('checkpoints content');

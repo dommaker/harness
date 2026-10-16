@@ -4,7 +4,7 @@
 
 import { errorMessage } from '../../../utils/error';
 import { failResult } from './fail-result';
-import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
+import type { HttpStatusCheck, HttpBodyCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 /**
  * 缺省退避等待：真定时器，生产行为
@@ -39,8 +39,8 @@ async function fetchWithRetry(
   throw lastError;
 }
 
-export async function checkHttpStatus(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const url = check.config.url || '';
+export async function checkHttpStatus(check: HttpStatusCheck, context: CheckpointContext): Promise<CheckResult> {
+  const url = check.config.url;
   const expected = check.config.expectedStatus || check.config.expected || 200;
 
   try {
@@ -60,9 +60,9 @@ export async function checkHttpStatus(check: CheckpointCheck, context: Checkpoin
   }
 }
 
-export async function checkHttpBody(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const url = check.config.url || '';
-  const expected = String(check.config.expected || '');
+export async function checkHttpBody(check: HttpBodyCheck, context: CheckpointContext): Promise<CheckResult> {
+  const url = check.config.url;
+  const expected = String(check.config.expected);
 
   try {
     const response = await fetchWithRetry(url, {

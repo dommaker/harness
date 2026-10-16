@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { errorMessage } from '../../../utils/error';
 import { failResult } from './fail-result';
-import type { CheckpointCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
+import type { FileExistsCheck, FileContentCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 export function resolvePath(relativePath: string, workdir: string): string {
   if (path.isAbsolute(relativePath)) {
@@ -24,8 +24,8 @@ function readFileContent(filePath: string): { content: string } | { error: strin
   }
 }
 
-export async function checkFileExists(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const filePath = resolvePath(check.config.path || '', context.workdir);
+export async function checkFileExists(check: FileExistsCheck, context: CheckpointContext): Promise<CheckResult> {
+  const filePath = resolvePath(check.config.path, context.workdir);
   const exists = fs.existsSync(filePath);
 
   return {
@@ -37,8 +37,8 @@ export async function checkFileExists(check: CheckpointCheck, context: Checkpoin
   };
 }
 
-export async function checkFileNotEmpty(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const filePath = resolvePath(check.config.path || '', context.workdir);
+export async function checkFileNotEmpty(check: FileExistsCheck, context: CheckpointContext): Promise<CheckResult> {
+  const filePath = resolvePath(check.config.path, context.workdir);
 
   if (!fs.existsSync(filePath)) {
     return {
@@ -68,9 +68,9 @@ export async function checkFileNotEmpty(check: CheckpointCheck, context: Checkpo
   };
 }
 
-export async function checkFileContains(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const filePath = resolvePath(check.config.path || '', context.workdir);
-  const content = check.config.content || '';
+export async function checkFileContains(check: FileContentCheck, context: CheckpointContext): Promise<CheckResult> {
+  const filePath = resolvePath(check.config.path, context.workdir);
+  const content = check.config.content;
 
   if (!fs.existsSync(filePath)) {
     return {
@@ -97,9 +97,9 @@ export async function checkFileContains(check: CheckpointCheck, context: Checkpo
   };
 }
 
-export async function checkFileNotContains(check: CheckpointCheck, context: CheckpointContext): Promise<CheckResult> {
-  const filePath = resolvePath(check.config.path || '', context.workdir);
-  const content = check.config.content || '';
+export async function checkFileNotContains(check: FileContentCheck, context: CheckpointContext): Promise<CheckResult> {
+  const filePath = resolvePath(check.config.path, context.workdir);
+  const content = check.config.content;
 
   if (!fs.existsSync(filePath)) {
     return {

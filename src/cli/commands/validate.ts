@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from '../../utils/yaml';
-import { CheckpointValidator } from '../../core/validators/checkpoint';
+import { CheckpointValidator, assertCheckpointShape } from '../../core/validators/checkpoint';
 import type { Checkpoint, CheckpointContext } from '../../types/checkpoint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { DEFAULT_CHECKPOINT_FILE } from './scaffold-templates';
@@ -37,8 +37,11 @@ async function loadCheckpoints(filePath: string, io: CommandIO): Promise<Checkpo
     }
     throw error;
   }
-  const data = yaml.load(content) as { checkpoints?: Checkpoint[] } | null;
-  return data?.checkpoints || [];
+  const data = yaml.load(content) as { checkpoints?: unknown } | null;
+  const checkpoints = (data as { checkpoints?: unknown } | null)?.checkpoints ?? [];
+  // 逐条按 type 校验 config 必填字段（fail-fast 指名字段，不 as 强转蒙混）
+  assertCheckpointShape(checkpoints, filePath);
+  return checkpoints;
 }
 
 /**

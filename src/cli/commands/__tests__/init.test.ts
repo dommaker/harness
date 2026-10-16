@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 // Mock fs/promises
 const mockReaddir = jest.fn().mockResolvedValue([]);
 const existingFiles = new Set<string>();
+const enoent = (message = 'ENOENT') => Object.assign(new Error(message), { code: 'ENOENT' });
 
 // Mock fs (sync) for detectSourceRoots and setupClaudeMdConstraints
 const mockExistsSync = jest.fn().mockReturnValue(false);
@@ -24,10 +25,10 @@ jest.mock('fs', () => ({
 jest.mock('fs/promises', () => ({
   mkdir: jest.fn(),
   writeFile: jest.fn(),
-  readFile: jest.fn().mockRejectedValue(new Error('ENOENT')),
+  readFile: jest.fn(),
   access: jest.fn((path: string) => {
     if (existingFiles.has(path)) return Promise.resolve(undefined);
-    return Promise.reject(new Error(`ENOENT: ${path}`));
+    return Promise.reject(enoent(`ENOENT: ${path}`));
   }),
   chmod: jest.fn(),
   readdir: (...args: any[]) => mockReaddir(...args),
@@ -65,6 +66,7 @@ describe('init command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     existingFiles.clear();
+    mockFs.readFile.mockRejectedValue(enoent());
     mockExistsSync.mockImplementation((p: string) => existingFiles.has(p));
     mockReaddirSync.mockReturnValue([]);
   });
@@ -407,7 +409,7 @@ describe('init command', () => {
       mockFs.readFile.mockImplementation((p: any) =>
         String(p).includes('ci.yml')
           ? Promise.resolve('run: npx harness sync-docs --agents && npx harness check && npx harness sync-docs --check --agents')
-          : Promise.reject(new Error('ENOENT'))
+          : Promise.reject(enoent())
       );
 
       await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT }, io);
@@ -417,7 +419,7 @@ describe('init command', () => {
       expect(io.outText()).toContain('治理检查已由 ci.yml 覆盖');
 
       mockReaddir.mockResolvedValue([]);
-      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      mockFs.readFile.mockRejectedValue(enoent());
     });
 
     it('应该正常创建治理 CI workflow 当已有 workflow 不含治理命令', async () => {
@@ -428,7 +430,7 @@ describe('init command', () => {
       mockFs.readFile.mockImplementation((p: any) =>
         String(p).includes('ci.yml')
           ? Promise.resolve('run: npm test')
-          : Promise.reject(new Error('ENOENT'))
+          : Promise.reject(enoent())
       );
 
       await init({ preset: 'standard', governance: 'standard', projectPath: PROJECT }, io);
@@ -438,7 +440,7 @@ describe('init command', () => {
       expect(workflowCall![1]).toContain('Harness Governance');
 
       mockReaddir.mockResolvedValue([]);
-      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+      mockFs.readFile.mockRejectedValue(enoent());
     });
 
     it('strict 治理应在 CI 中包含 docs check', async () => {

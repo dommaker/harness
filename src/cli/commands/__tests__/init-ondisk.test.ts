@@ -291,6 +291,114 @@ describe('init 真落盘（无 IO mock）', () => {
   });
 });
 
+describe('init 重跑保留消费方配置（harness#210，真落盘）', () => {
+  const roots: string[] = [];
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => fs.rm(root, { recursive: true, force: true })));
+  });
+
+  it('旧 config.yml 的非受管键原样保留并逐名列出，preset 与版本戳照常更新', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    await fs.mkdir(path.join(root, '.harness'), { recursive: true });
+    await fs.writeFile(path.join(root, '.harness', 'config.yml'), `preset: relaxed
+governance:
+  level: standard
+  context_files:
+    enabled: true
+    # AUTO-GENERATED:required_dirs
+    required_dirs:
+      - apps/api/src
+      - packages/shared/src
+    # /AUTO-GENERATED:required_dirs
+    generated_by: pnpm gen:required-dirs
+consumer:
+  nested:
+    keep: true
+harness:
+  version: 0.0.0
+  consumer: keep
+`);
+
+    const io = captureIO();
+    expect(await init({ preset: 'standard', gitHooks: false, ci: 'none', projectPath: root }, io))
+      .toEqual({ kind: 'ok' });
+
+    const configText = await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8');
+    expect(configText).toContain('    # AUTO-GENERATED:required_dirs\n    required_dirs:');
+    expect(configText).toContain('    # /AUTO-GENERATED:required_dirs');
+    const config = yaml.load(configText) as {
+      preset: string;
+      governance: {
+        level: string;
+        context_files: {
+          enabled: boolean;
+          required_dirs: string[];
+          generated_by: string;
+        };
+      };
+      consumer: unknown;
+      harness: { version: string; consumer: string };
+    };
+    expect(config.preset).toBe('standard');
+    expect(config.governance).toEqual({
+      level: 'standard',
+      context_files: {
+        enabled: true,
+        required_dirs: ['apps/api/src', 'packages/shared/src'],
+        generated_by: 'pnpm gen:required-dirs',
+      },
+    });
+    expect(config.consumer).toEqual({ nested: { keep: true } });
+    expect(config.harness.version).not.toBe('0.0.0');
+    expect(config.harness.consumer).toBe('keep');
+    expect(io.outLines()).toContain('保留 3 个非受管键：governance、consumer、harness');
+  });
+
+  it('显式 -g 时 governance 整段按新档位覆盖，其余消费方键仍保留', async () => {
+    const root = await makeProject();
+    roots.push(root);
+    await fs.mkdir(path.join(root, '.harness'), { recursive: true });
+    await fs.writeFile(path.join(root, '.harness', 'config.yml'), `preset: standard
+governance:
+  level: strict
+  context_files:
+    enabled: true
+    required_dirs:
+      - old/consumer/path
+  consumer_only: remove-me
+consumer:
+  keep: true
+harness:
+  version: 0.0.0
+`);
+
+    const io = captureIO();
+    expect(await init({
+      preset: 'standard',
+      governance: 'minimal',
+      gitHooks: false,
+      ci: 'none',
+      projectPath: root,
+    }, io)).toEqual({ kind: 'ok' });
+
+    const config = yaml.load(await fs.readFile(path.join(root, '.harness', 'config.yml'), 'utf-8')) as {
+      governance: {
+        level: string;
+        context_files: { enabled: boolean; required_dirs: string[] };
+        consumer_only?: string;
+      };
+      consumer: unknown;
+    };
+    expect(config.governance.level).toBe('minimal');
+    expect(config.governance.context_files).toEqual({ enabled: false, required_dirs: [] });
+    expect(config.governance.consumer_only).toBeUndefined();
+    expect(config.consumer).toEqual({ keep: true });
+    expect(io.outLines()).toContain('保留 1 个非受管键：consumer');
+  });
+});
+
 // ── CI 平台维度（harness#143）：落盘正文的字节级正本 ─────────────────────
 
 const RULES = `  rules:
@@ -498,18 +606,37 @@ describe('init --ci 平台维度（harness#143，真落盘）', () => {
     expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
   });
 
-  it('config.yml 的 ci 段读不动（YAML 解析失败）时回落 github，不炸 init', async () => {
+  it('config.yml YAML 解析失败时 fail-loud，原配置与其他站点均不落盘', async () => {
     const root = await makeProject();
     roots.push(root);
-    await fs.mkdir(path.join(root, '.harness'), { recursive: true });
-    await fs.writeFile(path.join(root, '.harness', 'config.yml'), 'preset: standard\nci:\n  platform: [\n');
+    const configPath = path.join(root, '.harness', 'config.yml');
+    const dirty = 'preset: standard\nci:\n  platform: [\n';
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, dirty);
 
     const io = captureIO();
-    expect(await init({ ...CI_OPTIONS, projectPath: root }, io)).toEqual({ kind: 'ok' });
+    const result = await init({ ...CI_OPTIONS, projectPath: root }, io);
 
-    expect(io.outText()).not.toContain('CI 平台');
-    expect(await exists(path.join(root, '.github/workflows/harness-check.yml'))).toBe(true);
+    expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining(configPath) });
+    expect(io.errText()).toContain('无法读取旧配置');
+    expect(await fs.readFile(configPath, 'utf-8')).toBe(dirty);
+    expect(await exists(path.join(root, '.harness/checkpoints.yml'))).toBe(false);
+    expect(await exists(path.join(root, '.github/workflows/harness-check.yml'))).toBe(false);
     expect(await exists(path.join(root, '.gitlab-ci.yml'))).toBe(false);
+  });
+
+  it.each(['null\n', '[]\n', 'scalar\n'])('非 map 旧配置（%#）也返回 fail，且不覆盖原文件', async dirty => {
+    const root = await makeProject();
+    roots.push(root);
+    const configPath = path.join(root, '.harness', 'config.yml');
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, dirty);
+
+    const result = await init({ ...CI_OPTIONS, projectPath: root }, captureIO());
+
+    expect(result).toEqual({ kind: 'fail', reason: expect.stringContaining(configPath) });
+    expect(await fs.readFile(configPath, 'utf-8')).toBe(dirty);
+    expect(await exists(path.join(root, '.harness/checkpoints.yml'))).toBe(false);
   });
 });
 

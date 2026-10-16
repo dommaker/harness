@@ -58,9 +58,25 @@ export interface InitOptions {
  */
 export async function init(options: InitOptions, io: CommandIO = processIO): Promise<CommandResult> {
   const projectPath = options.projectPath || process.cwd();
+  const configPath = path.join(projectPath, '.harness', 'config.yml');
+  let existingDocument: yaml.YamlDocument | undefined;
+  let existingConfig: Record<string, unknown> = {};
+  let existingConfigError: unknown;
+  try {
+    const document = yaml.loadDocument(await fs.readFile(configPath, 'utf-8'));
+    if (document.errors.length > 0) throw document.errors[0];
+    const value: unknown = document.toJS();
+    if (document.contents !== null && (value === null || typeof value !== 'object' || Array.isArray(value))) {
+      throw new TypeError('旧 config.yml 根节点必须是 YAML map');
+    }
+    existingDocument = document;
+    existingConfig = (value ?? {}) as Record<string, unknown>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') existingConfigError = error;
+  }
 
   // CI 平台先解析：用法错误不落任何盘，且 `--print-snippets` 也要按解析出的平台出形
-  const ci = resolveCiPlatform(options, readConfiguredCiPlatform(projectPath));
+  const ci = resolveCiPlatform(options, readConfiguredCiPlatform(existingConfig));
   if (ci.kind === 'error') {
     logError(io, chalk.red(`❌ 用法错误: ${ci.reason}`));
     return { kind: 'usage-error', reason: ci.reason };
@@ -84,6 +100,14 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
     return { kind: 'ok' };
   }
 
+  // 共享所有权文件读不懂时禁止覆盖；--print-snippets 不落盘，仍可沿用 CI 缺省探测
+  if (existingConfigError) {
+    const detail = existingConfigError instanceof Error ? existingConfigError.message : String(existingConfigError);
+    const reason = `无法读取旧配置 ${configPath}: ${detail}`;
+    logError(io, chalk.red(`❌ ${reason}`));
+    return { kind: 'fail', reason };
+  }
+
   log(io, chalk.blue('🚀 初始化 harness 配置...'));
 
   const configDir = path.join(projectPath, '.harness');
@@ -96,29 +120,59 @@ export async function init(options: InitOptions, io: CommandIO = processIO): Pro
   const preset = PRESETS[options.preset];
   log(io, chalk.gray(`预设: ${options.preset}`));
 
-  // 合并治理配置
-  const configData: Record<string, unknown> = { ...preset };
+  // config.yml 是共享所有权文件：只覆盖本次受管键，消费方扩展原样保留并列名告知
+  const ciManaged = options.ci !== undefined || options.githubActions === false;
+  const managedKeys = new Set([...Object.keys(preset), 'harness']);
+  if (options.governance) managedKeys.add('governance');
+  if (ciManaged) managedKeys.add('ci');
+  const preservedKeys = Object.keys(existingConfig).filter(key => !managedKeys.has(key));
+  const configData: Record<string, unknown> = { ...existingConfig, ...preset };
   if (options.governance) {
     configData.governance = GOVERNANCE_PRESETS[options.governance];
     log(io, chalk.gray(`治理级别: ${options.governance}`));
   }
 
-  // 非默认平台才持久化：缺省即 github（旧配置零迁移），裸 init 重写 config.yml 时
-  // 也因此不会丢掉已选定的平台
+  // 非默认平台才持久化；只有显式 CI flag 才接管 ci 段，裸 init 保留消费方扩展
   if (ci.platform !== 'github') {
-    configData.ci = { platform: ci.platform };
     log(io, chalk.gray(`CI 平台: ${ci.platform}`));
   }
+  if (ciManaged) {
+    if (ci.platform === 'github') delete configData.ci;
+    else configData.ci = { platform: ci.platform };
+  }
 
-  // 写入 harness 版本
+  // 写入 harness 版本，保留 harness 段内的非受管扩展
   const pkgVersion = getHarnessPackageVersion();
-  configData.harness = { version: pkgVersion };
+  const existingHarness = existingConfig.harness;
+  const harnessConfig = existingHarness !== null && typeof existingHarness === 'object' && !Array.isArray(existingHarness)
+    ? existingHarness
+    : {};
+  configData.harness = { ...harnessConfig, version: pkgVersion };
+  if (Object.keys(harnessConfig).some(key => key !== 'version')) preservedKeys.push('harness');
 
-  // 写入配置文件（harness 管理的配置，始终重新生成）
-  const configPath = path.join(configDir, 'config.yml');
-  const configContent = yaml.dump(configData, { indent: 2 });
+  // 旧配置经 Document 原地更新受管键，非受管键与注释（含 AUTO-GENERATED 标记）不失真
+  let configContent: string;
+  if (existingDocument) {
+    for (const key of Object.keys(preset)) existingDocument.set(key, configData[key]);
+    if (options.governance) existingDocument.set('governance', configData.governance);
+    if (ciManaged) {
+      if (ci.platform === 'github') existingDocument.delete('ci');
+      else existingDocument.set('ci', configData.ci);
+    }
+    if (existingHarness !== null && typeof existingHarness === 'object' && !Array.isArray(existingHarness)) {
+      existingDocument.setIn(['harness', 'version'], pkgVersion);
+    } else {
+      existingDocument.set('harness', configData.harness);
+    }
+    configContent = yaml.dumpDocument(existingDocument, { indent: 2 });
+  } else {
+    configContent = yaml.dump(configData, { indent: 2 });
+  }
   await fs.writeFile(configPath, configContent, 'utf-8');
   log(io, chalk.green(`✅ 已创建配置文件: ${configPath} (v${pkgVersion})`));
+  if (preservedKeys.length > 0) {
+    log(io, chalk.gray(`保留 ${preservedKeys.length} 个非受管键：${preservedKeys.join('、')}`));
+  }
 
   // 受管示例文件：检查点 / Resolutions（RKB 狗粮）
   await runPlan(

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-10-17
+
+### Changes
+- fix: init 保留 config.yml 消费方扩展（#210）
+
 ## [4.0.0] - 2026-10-16
 
 ### Changes

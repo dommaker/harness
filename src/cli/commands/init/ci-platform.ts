@@ -4,8 +4,6 @@
  * 解析链 = flag > config.yml 的 `ci.platform` > `github`。
  */
 
-import { attempt } from '../../../utils/attempt';
-import { loadRawProjectConfig } from '../../../core/project-config-loader';
 import type { CiConfig, CiPlatform } from '../../../types/project-config';
 
 /** `--ci` 的可取值域（`none` = 不创建任何服务端 CI 文件，治理 CI 面亦不建，即旧 `--no-github-actions`） */
@@ -51,14 +49,13 @@ export function resolveCiPlatform(
 }
 
 /**
- * 读 config.yml 已持久化的 `ci.platform`（解析链第二级）
+ * 从本次 init 已读取的旧 config.yml 取 `ci.platform`（解析链第二级）
  *
- * 缺失 / 形状不符一律按未配置处理；config.yml 解析失败经 attempt 显式降级为未配置——
- * init 是用户首次上手入口，存量脏配置不该炸掉初始化（解析失败会真实抛到用户眼前的
- * 场景是 check/sync-docs 等执法面，那里不兜）。
+ * 缺失 / 形状不符一律按未配置处理；文件只由命令入口读取一次。
  */
-export function readConfiguredCiPlatform(projectPath: string): CiPlatform | 'none' | undefined {
-  const raw = attempt(() => loadRawProjectConfig(projectPath), () => undefined);
+export function readConfiguredCiPlatform(
+  raw: Record<string, unknown> | undefined,
+): CiPlatform | 'none' | undefined {
   const ci = raw?.ci;
   if (ci === null || typeof ci !== 'object') return undefined;
   const platform = (ci as CiConfig).platform;

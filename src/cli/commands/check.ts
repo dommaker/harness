@@ -10,13 +10,12 @@
 
 import chalk from 'chalk';
 import * as path from 'path';
-import { ConstraintChecker } from '../../core/constraints/checker';
+import { assembleConstraintChecker } from '../../bootstrap';
 import { CONSTRAINTS } from '../../core/constraints/definitions';
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
 import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
-import { TraceCollector } from '../../monitoring/traces';
 import { readJsonl } from '../../utils/jsonl';
 import { DEFAULT_TRACE_FILE, type ExecutionTrace } from '../../types/trace';
 import { ConstraintViolationError, type ConstraintResult, type ConstraintTrigger } from '../../types/constraint';
@@ -128,9 +127,9 @@ export async function check(
     log(io, chalk.gray(`触发条件: ${[context.operation, ...(context.extraTriggers ?? [])].join(', ')}`));
 
     // 执行约束检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
-    // trace 记录器经构造参数接线（harness#88）：一次命令一个 checker 实例
-    // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
-    const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
+    // checker 经唯一装配函数取（P1.1）：trace 接线只写一次，收集器锚根构造
+    // （#139：不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到）
+    const checker = assembleConstraintChecker(projectPath);
     const result = await checker.checkConstraints(context, merged, evidence, runEnv);
 
     // 输出结果

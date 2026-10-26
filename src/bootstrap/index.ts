@@ -7,5 +7,5 @@
  * harness 运行环境的组合根。
  */
 
-export { bootstrapHarness, bootstrapHarnessSync } from './bootstrap';
+export { bootstrapHarness, bootstrapHarnessSync, assembleConstraintChecker } from './bootstrap';
 export type { HarnessBootstrap } from './bootstrap';

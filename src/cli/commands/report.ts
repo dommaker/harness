@@ -6,9 +6,8 @@
 
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
-import { ConstraintChecker } from '../../core/constraints/checker';
+import { assembleConstraintChecker } from '../../bootstrap';
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
-import { TraceCollector } from '../../monitoring/traces';
 import type { ConstraintContext } from '../../types/constraint';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
@@ -46,9 +45,9 @@ export async function report(options: ReportOptions, io: CommandIO = processIO):
   log(io, chalk.blue('📊 生成检查报告...'));
 
   const projectPath = options.projectPath || process.cwd();
-  // trace 记录器经构造参数接线（harness#88）：本命令是组合根
-  // #139：收集器锚根构造——不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到
-  const checker = new ConstraintChecker(new TraceCollector({ projectPath }));
+  // checker 经唯一装配函数取（P1.1）：trace 接线只写一次，收集器锚根构造
+  // （#139：不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到）
+  const checker = assembleConstraintChecker(projectPath);
 
   // 生效集口径与 check.ts 同一入口（ADR-0033：应用层约束进 report 面的前提）——
   // 此前跑的是内置全集（CONSTRAINTS），config.yml 禁用与应用层条目都不进报告

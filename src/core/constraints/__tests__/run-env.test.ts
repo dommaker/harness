@@ -151,6 +151,7 @@ describe('context-builder 经注入的观察面取证据', () => {
       sourceRoots: () => { calls++; return ['src']; },
       rawConfig: () => undefined,
       capabilities: () => undefined,
+      srcScan: () => [],
     };
     const ctx = buildConstraintContext({
       projectPath: dir,

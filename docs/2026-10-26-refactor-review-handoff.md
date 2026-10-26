@@ -3,7 +3,7 @@
 > 日期：2026-10-26
 > 仓库：`@dommaker/harness`（本机 checkout）
 > 审查基线：`master@b82bf16e7449f4fd19ef873fefab4b3ee311bc88`（`@dommaker/harness` 4.0.1）
-> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。下一片 P1.1（唯一装配入口与生命周期）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
+> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 P1.2（运行级 ProjectSnapshot 收口文件读取）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
 
 ## 新会话从这里开始
 
@@ -127,6 +127,13 @@
 - 缓存归属按真实生命周期调整，不用更复杂 TTL 修补串 run 问题。
 
 完成标准：生产装配只有一处；同 run 复用、跨 run 隔离有行为测试；公共导出测试和分层测试同步更新。
+
+**已实施（2026-10-26，未提交）**
+
+- bootstrap 新增唯一装配函数 `assembleConstraintChecker(projectPath)`；CLI check/report 与 `bootstrapHarness(Sync)` 共用，trace 接线只写一次（架构闸 + 行为闸：`src/__tests__/unique-assembly.test.ts`）。
+- `srcScan` 缓存从 checker 实例的 CheckCache（TTL 1s + 手工 invalidate）迁到 `RunEnv`（一次 run 一份、跑完即弃）；`CheckCache` 实现及其测试已删除（自 #199 起本非公共导出）。`ConstraintChecker.getInstance()` 与 `checkConstraint`/`checkConstraints`/`collectConstraints` 便捷函数、`HarnessBootstrap` 返回字段全部保留，公共面零收缩。
+- 行为闸：`src/core/constraints/__tests__/run-cache-lifecycle.test.ts`（同 run 复用 / 跨 run 隔离 / 全链路相邻两次 checkConstraint 不串缓存）。
+- 未做（属其他切片）：HarnessRuntime 独立类型化（本切片以唯一装配函数收口，未新增 runtime 包装类型）、P1.2 文件快照、P1.3、P1.4、P2。
 
 ### P1.2 用运行级 ProjectSnapshot 收口文件读取
 

@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from '../../utils/yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { findTsSourceFiles } from '../../utils/file-walk';
 import { reconcileCapabilities, type CapabilityVerdict } from './capabilities-reconcile';
 
 /** config.yml 在项目根下的相对路径（读取口径唯一落点） */
@@ -49,6 +50,13 @@ export interface RunEnv {
    * 出现第三个消费方且清单不同，就必须改成按输入分列的缓存而不是静默复用。
    */
   capabilities(populationFiles: string[]): ProjectCapabilities | undefined;
+  /**
+   * 源码根（相对路径）下的源文件清单（一次运行内同一根源码根至多扫描一次）
+   *
+   * 缓存挂在本观察面上（P1.1）：一次 run 一份、跑完即弃，跨 run 天然隔离——
+   * 不再用 checker 实例上的 TTL 缓存 + 手工 invalidate 掩盖 run 边界。
+   */
+  srcScan(root: string): string[];
 }
 
 /**
@@ -77,6 +85,8 @@ export function createRunEnv(projectPath: string): RunEnv {
   let configRaw: Record<string, unknown> | undefined;
   /** 能力表 memo：undefined = 未算，null = 项目无 CAPABILITIES.md */
   let caps: ProjectCapabilities | null | undefined;
+  /** 源码根扫描 memo：root → 相对路径清单（同 run 复用，跑完即弃） */
+  const scans = new Map<string, string[]>();
 
   return {
     projectPath,
@@ -106,6 +116,16 @@ export function createRunEnv(projectPath: string): RunEnv {
             };
       }
       return caps ?? undefined;
+    },
+    srcScan(root: string) {
+      let cached = scans.get(root);
+      if (!cached) {
+        cached = findTsSourceFiles(path.join(projectPath, root), { skipIndex: true }).map((f) =>
+          path.relative(projectPath, f)
+        );
+        scans.set(root, cached);
+      }
+      return cached;
     },
   };
 

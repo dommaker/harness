@@ -320,11 +320,11 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
     it('同层/下层导入与上层目录名的字面量不误报', () => {
       const messages = probeCore(
         [
-          `import { CheckCache } from './check-cache';`,
+          `import { matchesTrigger } from './triggers';`,
           `import type { ExecutionTrace } from '../../types/trace';`,
           `import * as fs from 'fs';`,
           `const gateDocs = 'src/gates/definitions.ts';`,
-          `export const cache = new CheckCache({ ttlMs: 1 });`,
+          `export const triggerFn = matchesTrigger;`,
           `export const traceType: ExecutionTrace | null = null;`,
           `export const docs = gateDocs;`,
           `export const fsMod = fs;`,

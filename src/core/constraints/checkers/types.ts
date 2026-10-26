@@ -15,7 +15,7 @@ import { createRunEnv, type RunEnv } from '../run-env';
  *   + `context` + git/扫描证据。前者不含 context，故只能派生不能合并成一个对象。
  *
  * - stagedDiff/stagedDiffNames：run 内 git 命令至多一次（工单 18 / #87）
- * - srcScan：run 内同根源码扫描至多一次（CheckCache）
+ * - srcScan：run 内同根源码扫描至多一次（缓存挂在 RunEnv 上，P1.1）
  */
 export interface CheckEnv extends RunEnv {
   /** 约束上下文（operation/changedFiles/各类证据标志） */

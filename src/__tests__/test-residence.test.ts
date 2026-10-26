@@ -26,8 +26,8 @@ const ROOT_TESTS_DIR = path.join(SRC_ROOT, '__tests__');
 /** 共享层：被测模块判定时不计入「另一个模块」 */
 const SHARED_DIRS = new Set(['utils', 'types', 'test-setup']);
 
-/** 已执法的模块目录（P2.1 = trace/monitoring；P2.2 = gates；P2.3 = core） */
-const ENFORCED_MODULES = ['monitoring', 'gates', 'core'];
+/** 已执法的模块目录（P2.1 = trace/monitoring；P2.2 = gates；P2.3 = core；P2.4 = failure） */
+const ENFORCED_MODULES = ['monitoring', 'gates', 'core', 'failure'];
 
 const IMPORT_RE = /(?:from\s+|require\(\s*)['"](\.[^'"]+)['"]/g;
 

@@ -15,20 +15,20 @@
 
 import { describe, it, expect } from '@jest/globals';
 // @ts-expect-error isCommandAvailable 零生产消费者，随 harness#137 删除
-import { isCommandAvailable } from '../utils/exec';
+import { isCommandAvailable } from '../exec';
 // @ts-expect-error delay 零生产消费者，随 harness#137 删除
-import { delay } from '../utils/exec';
+import { delay } from '../exec';
 // @ts-expect-error normalizeTriggers 是约束域谓词，已迁 core/constraints/triggers（harness#137）
-import { normalizeTriggers } from '../utils/exec';
+import { normalizeTriggers } from '../exec';
 // @ts-expect-error matchesTrigger 是约束域谓词，已迁 core/constraints/triggers（harness#137）
-import { matchesTrigger } from '../utils/exec';
+import { matchesTrigger } from '../exec';
 // @ts-expect-error runCommand 零生产消费者且不在包公共面，随 harness#162 删除（判据见头注）
-import { runCommand } from '../utils/exec';
+import { runCommand } from '../exec';
 
 describe('exec utils', () => {
   describe('零消费者与跨 seam 收缩（harness#137 / #162）', () => {
     it('已删/已迁的五个名字在模块运行时键里都不存在', async () => {
-      const mod = await import('../utils/exec');
+      const mod = await import('../exec');
       expect(Object.keys(mod).sort()).toEqual(['execAsync', 'execFileAsync']);
       for (const gone of [
         'isCommandAvailable',

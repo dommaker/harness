@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { ErrorClassifier } from '../failure/classifier';
-import { ErrorType, FailureLevel } from '../failure/error-types';
+import { ErrorClassifier } from '../classifier';
+import { ErrorType, FailureLevel } from '../error-types';
 
 describe('ErrorClassifier', () => {
   const classifier = new ErrorClassifier();

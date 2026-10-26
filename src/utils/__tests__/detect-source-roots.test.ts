@@ -4,7 +4,7 @@
 
 import { existsSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { detectSourceRoots } from '../utils/detect-source-roots';
+import { detectSourceRoots } from '../detect-source-roots';
 
 const tempDir = join(__dirname, '__temp_detect_source_roots__');
 

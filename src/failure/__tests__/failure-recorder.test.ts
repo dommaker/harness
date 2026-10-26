@@ -3,12 +3,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { FailureRecorder } from '../failure/recorder';
-import { ErrorType, FailureLevel } from '../failure/error-types';
+import { FailureRecorder } from '../recorder';
+import { ErrorType, FailureLevel } from '../error-types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { FailureRecord } from '../failure/error-types';
+import type { FailureRecord } from '../error-types';
 
 describe('FailureRecorder', () => {
   let tempDir: string;
@@ -272,8 +272,8 @@ describe('FailureRecorder', () => {
 
 describe('DEFAULT_FAILURE_LOG_FILE', () => {
   it('锁口径：统一到 .harness/logs/（与 DEFAULT_TRACE_FILE 同目录约定），从 barrel 公开导出', async () => {
-    const { DEFAULT_FAILURE_LOG_FILE } = await import('../types/failure');
-    const barrel = await import('../index');
+    const { DEFAULT_FAILURE_LOG_FILE } = await import('../../types/failure');
+    const barrel = await import('../../index');
     expect(DEFAULT_FAILURE_LOG_FILE).toBe('.harness/logs/failures.log');
     expect(barrel.DEFAULT_FAILURE_LOG_FILE).toBe(DEFAULT_FAILURE_LOG_FILE);
   });

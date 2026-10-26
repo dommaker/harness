@@ -173,23 +173,25 @@ export class SecurityGate implements Gate {
       throw new Error('安全扫描输出不是 JSON 对象');
     }
 
-    if (isRecord(raw.vulnerabilities)) {
-      for (const [name, entry] of Object.entries(raw.vulnerabilities)) {
-        // 畸形条目（非对象）跳过并计数——不伪装成空漏洞对象（原 `as NpmVulnerability`
-        // 会把字符串/数组条目当成 {severity: undefined} 的低危漏洞计入 total）
-        if (!isRecord(entry)) {
-          skippedMalformed++;
-          continue;
-        }
-        const vuln = entry as NpmVulnerability;
-        const severity = vuln.severity?.toLowerCase() ?? 'low';
-        count(severity);
-        vulnerabilities.push({
-          name,
-          severity,
-          via: viaTitle(vuln.via) ?? vuln.name ?? 'Unknown',
-        });
+    if (!isRecord(raw.vulnerabilities)) {
+      throw new Error('安全扫描输出缺少有效的 vulnerabilities 对象');
+    }
+
+    for (const [name, entry] of Object.entries(raw.vulnerabilities)) {
+      // 畸形条目（非对象）跳过并计数——不伪装成空漏洞对象（原 `as NpmVulnerability`
+      // 会把字符串/数组条目当成 {severity: undefined} 的低危漏洞计入 total）
+      if (!isRecord(entry)) {
+        skippedMalformed++;
+        continue;
       }
+      const vuln = entry as NpmVulnerability;
+      const severity = vuln.severity?.toLowerCase() ?? 'low';
+      count(severity);
+      vulnerabilities.push({
+        name,
+        severity,
+        via: viaTitle(vuln.via) ?? vuln.name ?? 'Unknown',
+      });
     }
 
     return {

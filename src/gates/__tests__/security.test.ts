@@ -68,6 +68,20 @@ describe('SecurityGate', () => {
       expect(result.message).toContain('通过');
     });
 
+    it.each([
+      ['an empty object', '{}'],
+      ['a scanner error', JSON.stringify({ error: { code: 'EAUDIT', summary: 'scan failed' } })],
+    ])('should fail when scan output is %s', async (_description, stdout) => {
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        callback(null, { stdout });
+      });
+
+      const result = await gate.scan(baseContext);
+
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('安全扫描失败');
+    });
+
     it('should fail when critical vulnerabilities found', async () => {
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(
@@ -195,7 +209,8 @@ describe('SecurityGate', () => {
     });
   });
 
-  describe('analyzeResult() - npm audit format', () => {    it('npm 6 audit.advisories 旧形状已随其 EOL 删除 → 不计数', async () => {
+  describe('analyzeResult() - npm audit format', () => {
+    it('npm 6 audit.advisories 旧形状缺少 vulnerabilities → 判定失败', async () => {
       mockExec.mockImplementationOnce((cmd, opts, callback) => {
         callback(null, {
           stdout: JSON.stringify({
@@ -214,7 +229,8 @@ describe('SecurityGate', () => {
 
       const result = await gate.scan(baseContext);
 
-      expect(result.details?.total).toBe(0);
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('安全扫描失败');
     });
 
     it('should parse vulnerabilities format (new npm audit)', async () => {

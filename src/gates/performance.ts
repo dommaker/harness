@@ -173,7 +173,7 @@ export class PerformanceGate implements Gate {
     try {
       // 使用超时执行覆盖率测试
       await execAsync(
-        'npm test -- --coverage --coverageReporters=json-summary 2>/dev/null || true',
+        'npm test -- --coverage --coverageReporters=json-summary 2>/dev/null',
         {
           cwd: projectPath,
           maxBuffer: 10 * 1024 * 1024,

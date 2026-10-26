@@ -17,8 +17,9 @@
  */
 
 import { formatEvidence, type CheckDetail, type ConstraintCheck } from './types';
-import { parseUnifiedDiff } from '../../../utils/diff-parse';
+import type { ParsedDiffLine } from '../../../utils/diff-parse';
 import { errorMessage } from '../../../utils/error';
+import { projectSnapshotFor } from '../run-env';
 
 /** 测试文件判定：`.test.`/`.spec.` 后缀段或 `__tests__/` 目录段 */
 function isTestFile(path: string): boolean {
@@ -48,8 +49,9 @@ const UNATTRIBUTED = '(无文件归属的 diff 行)';
 /**
  * 按文件归集 diff 增删行：文件归属（含 `+++ /dev/null` 回落旧文件名）见
  * utils/diff-parse 正本；无归属行挂兜底键（fail-closed 照判），`\` 行正本已忽略。
+ * 入参 = 快照解析后的行（同 run 内多条解析类约束共享同一解析）。
  */
-function tallyDiff(diff: string): Map<string, FileTally> {
+function tallyDiff(lines: ParsedDiffLine[]): Map<string, FileTally> {
   const tallies = new Map<string, FileTally>();
 
   const tally = (file: string): FileTally => {
@@ -62,7 +64,7 @@ function tallyDiff(diff: string): Map<string, FileTally> {
     return t;
   };
 
-  for (const line of parseUnifiedDiff(diff)) {
+  for (const line of lines) {
     if (line.kind === 'context') continue;
     const t = tally(line.file);
     if (line.kind === 'added' && SKIP_ONLY_PATTERN.test(line.text)) t.skipOnlyLines.push(line.text.trim());
@@ -76,9 +78,9 @@ function tallyDiff(diff: string): Map<string, FileTally> {
 }
 
 /** 汇总违规证据；空数组 = 通过 */
-function violations(diff: string): string[] {
+function violations(lines: ParsedDiffLine[]): string[] {
   const out: string[] = [];
-  for (const [file, t] of tallyDiff(diff)) {
+  for (const [file, t] of tallyDiff(lines)) {
     if (file !== UNATTRIBUTED && !isTestFile(file)) continue;
     for (const line of t.skipOnlyLines) {
       out.push(`${file}: 新增跳过/独占测试 — ${line}`);
@@ -108,7 +110,8 @@ export const noTestSimplification: ConstraintCheck = {
   needs: { evidence: ['stagedDiff'] },
   async evaluate(env) {
     try {
-      const items = violations(await env.stagedDiff());
+      // diff 解析经 run 级快照：同 run 内多条解析类约束共享同一解析
+      const items = violations(projectSnapshotFor(env).parseDiff(await env.stagedDiff()));
       return items.length > 0 ? failDetail(items) : true;
     } catch (err) {
       // 输入不可得 = 未评估（fail-open 但不假 pass）：原因进结果面与 trace，可统计

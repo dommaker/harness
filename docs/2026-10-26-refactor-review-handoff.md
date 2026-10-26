@@ -3,7 +3,7 @@
 > 日期：2026-10-26
 > 仓库：`@dommaker/harness`（本机 checkout）
 > 审查基线：`master@b82bf16e7449f4fd19ef873fefab4b3ee311bc88`（`@dommaker/harness` 4.0.1）
-> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 P1.2（运行级 ProjectSnapshot 收口文件读取）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
+> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 P1.3（知识查询引用记账批量化）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
 
 ## 新会话从这里开始
 
@@ -153,6 +153,14 @@
 - 保留 `file-exists` 对文件与目录都可命中的现有契约。
 
 先补遍历行为和复用计数测试，再改实现。不要把所有 fs 访问机械塞进一个巨型对象。
+
+**已实施（2026-10-26，未提交）**
+
+- 新增 `src/core/constraints/project-snapshot.ts`：`createProjectSnapshot(projectPath)` 一次 run 一份，含文件/目录清单（一次遍历）、`content(rel)`（同文件至多读一次）、`parseDiff(diff)`（同一 diff 至多彩一次）。排除口径钉死：精确跳过 `.git`/`node_modules`，**不排除 dist/coverage**（构建产物是存在性约束的合法判定对象；源码清单的排除归 `srcScan`/`DEFAULT_SKIP_DIRS` 管，两边不互借名单），不设 skipHidden，`.harness` 等受管隐藏目录照常可匹配。
+- `RunEnv` 新增 `snapshot()` 观察口（**可选成员**；懒建 + run 内 memo，与 P1.1 `srcScan` 同一生命周期，不另起平行缓存）。`CheckEnv` 经包根公开导出且 extends RunEnv——必需化会让外部手写实现编译失败（破坏性变更），故 `createRunEnv` 生产路径恒提供并共享同一快照，内置 checker 一律经 `projectSnapshotFor()`（run-env.ts）取：提供 = 共享 env memo；未提供（旧式手写实现，兼容边界）= 一次性 fallback、保持旧读取行为，不为兼容路径引入跨调用缓存，也不要求外部消费者立刻改成员。`RunEnv`/`ProjectSnapshot`/`projectSnapshotFor` 均不进包根导出面，`EvidenceProviders` 不变。
+- 消费方收口（glob 均在 checker 创建时编译）：`file-exists` 匹配走快照清单（文件/目录都可命中契约不变，`.git` 不再下钻）；`regex-scan` 变更文件内容走 `snapshot().content()`、diff 走 `snapshot().parseDiff()`；`no_hardcoded_credentials` 的 readFileSync + parseUnifiedDiff、`no_test_simplification` 的 parseUnifiedDiff 同样迁到 `projectSnapshotFor()`（检测语义逐字未动，P0.4 占位符/纯标识符取舍原样）。零余留消费的 `templated/glob.ts`（matchGlob 包装）已删。
+- 行为闸：`src/core/constraints/__tests__/project-snapshot.test.ts`（17 用例：.git/node_modules 排除、dist/coverage 不排除、.harness 可匹配、文件/目录契约、两约束共享一次遍历/一次读取/一次解析、三内置 checker 共享同一 diff 解析与文件读取、glob 创建期编译、跨 run 隔离、legacy 手写 CheckEnv/RunEnv 不含 snapshot 仍可赋值编译且 checker 经 fallback 照常评估）。旧实现下兼容用例编译期红（snapshot 必需化阻断 legacy env）。
+- 未做（属其他切片）：P1.3、P1.4、P2。
 
 ### P1.3 知识查询引用记账批量化
 

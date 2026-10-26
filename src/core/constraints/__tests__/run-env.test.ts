@@ -146,6 +146,8 @@ describe('context-builder 经注入的观察面取证据', () => {
 
   it('源根探测经注入的 env 取数，不另开读', () => {
     let calls = 0;
+    // 旧式手写 RunEnv：刻意不提供 snapshot（P1.2 兼容边界——该成员是可选的，
+    // 外部手写实现不应被迫补成员；若变回必需，本文件编译即红）
     const env: RunEnv = {
       projectPath: dir,
       sourceRoots: () => { calls++; return ['src']; },

@@ -19,6 +19,7 @@ import * as yaml from '../../utils/yaml';
 import { detectSourceRoots } from '../../utils/detect-source-roots';
 import { findTsSourceFiles } from '../../utils/file-walk';
 import { reconcileCapabilities, type CapabilityVerdict } from './capabilities-reconcile';
+import { createProjectSnapshot, type ProjectSnapshot } from './project-snapshot';
 
 /** config.yml 在项目根下的相对路径（读取口径唯一落点） */
 const CONFIG_FILE_REL = path.join('.harness', 'config.yml');
@@ -57,6 +58,20 @@ export interface RunEnv {
    * 不再用 checker 实例上的 TTL 缓存 + 手工 invalidate 掩盖 run 边界。
    */
   srcScan(root: string): string[];
+  /**
+   * 运行级项目快照（P1.2）：文件清单 / 文件内容 / diff 解析的 run 内共享读取
+   *
+   * 懒建 + run 内 memo（createRunEnv 生产路径恒提供，多条约束靠它共享一次遍历）。
+   * 与 srcScan 分工：srcScan 给「源码根下的 TS 源文件清单」（排除 dist/__tests__），
+   * snapshot 给「项目级文件/目录清单 + 内容 + diff 解析」（精确排除 .git/node_modules，
+   * 不排除 dist/coverage——构建产物是存在性约束的合法判定对象）。
+   *
+   * **optional 是兼容边界**：`CheckEnv` 经包根公开导出，外部旧式手写实现
+   * 不含本成员也必须能编译——checker 一律经 `projectSnapshotFor()` 取快照
+   * （提供 = 共享 env 的 memo；未提供 = 一次性 fallback，保持旧读取行为），
+   * 不得把生产路径的快照切成每约束一份新缓存，也不要求外部实现方立刻补成员。
+   */
+  snapshot?(): ProjectSnapshot;
 }
 
 /**
@@ -87,6 +102,8 @@ export function createRunEnv(projectPath: string): RunEnv {
   let caps: ProjectCapabilities | null | undefined;
   /** 源码根扫描 memo：root → 相对路径清单（同 run 复用，跑完即弃） */
   const scans = new Map<string, string[]>();
+  /** 项目快照 memo：undefined = 未建（懒建：无消费方不遍历） */
+  let snap: ProjectSnapshot | undefined;
 
   return {
     projectPath,
@@ -126,6 +143,12 @@ export function createRunEnv(projectPath: string): RunEnv {
         scans.set(root, cached);
       }
       return cached;
+    },
+    snapshot() {
+      if (!snap) {
+        snap = createProjectSnapshot(projectPath);
+      }
+      return snap;
     },
   };
 
@@ -168,4 +191,20 @@ export type RunTarget = RunEnv | string;
 export function resolveRunEnv(target?: RunTarget): RunEnv {
   if (typeof target === 'object' && target !== null) return target;
   return createRunEnv(target || process.cwd());
+}
+
+/**
+ * 经 RunEnv 取项目快照——内置 checker 的唯一直达口（P1.2）
+ *
+ * - env 提供 `snapshot()`（生产路径，createRunEnv 恒提供）：共享其 run 级 memo——
+ *   多条约束一次遍历 / 同一文件读取 / 同一 diff 解析靠这个共享成立；
+ * - 未提供（外部旧式手写实现，兼容边界）：构造一枚**一次性**快照，
+ *   「每次调用读当下内容」，与 RunTarget 传路径形状同口径——
+ *   不为兼容路径引入跨调用缓存（env 复用跨 run 的旧式实现不会被悄悄钉住）。
+ *
+ * checker 不得绕过本 helper 各自 `createProjectSnapshot`——那会把生产路径的
+ * 共享快照切成每约束一份新缓存，「同一文件至多读一次」随之失效。
+ */
+export function projectSnapshotFor(run: RunEnv): ProjectSnapshot {
+  return run.snapshot?.() ?? createProjectSnapshot(run.projectPath);
 }

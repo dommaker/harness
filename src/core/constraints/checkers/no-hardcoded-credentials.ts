@@ -17,10 +17,9 @@
  * 不是口令字面量；带引号的值不受此豁免影响（CODE_EXPRESSION 记明残余漏报与取舍）。
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { formatEvidence, type CheckDetail, type ConstraintCheck } from './types';
-import { parseUnifiedDiff } from '../../../utils/diff-parse';
+import type { ParsedDiffLine } from '../../../utils/diff-parse';
+import { projectSnapshotFor } from '../run-env';
 
 /** 私钥/令牌指纹模式（命中即违规，无例外） */
 const FINGERPRINT_PATTERNS: RegExp[] = [
@@ -130,8 +129,8 @@ interface AddedLine {
 }
 
 /** 从 unified diff 中取新增行：文件归属与行号推算见 utils/diff-parse 正本 */
-function collectAddedLines(diff: string): AddedLine[] {
-  return parseUnifiedDiff(diff)
+function collectAddedLines(lines: ParsedDiffLine[]): AddedLine[] {
+  return lines
     .filter(l => l.kind === 'added' && l.file !== '' && l.newLineNo !== 0)
     .map(l => ({ file: l.file, lineNo: l.newLineNo, text: l.text }));
 }
@@ -153,7 +152,8 @@ export const noHardcodedCredentials: ConstraintCheck = {
     let scanned = false;
     try {
       const diff = await env.stagedDiff();
-      const added = collectAddedLines(diff).filter(a => scannableFile(a.file));
+      // diff 解析经 run 级快照：同 run 内多条解析类约束共享同一解析
+      const added = collectAddedLines(projectSnapshotFor(env).parseDiff(diff)).filter(a => scannableFile(a.file));
       if (added.length > 0) {
         scanned = true;
         const hits: Hit[] = [];
@@ -172,12 +172,10 @@ export const noHardcodedCredentials: ConstraintCheck = {
       const files = (env.context.changedFiles || []).filter(scannableFile);
       const hits: Hit[] = [];
       for (const file of files) {
-        try {
-          const content = readFileSync(join(env.projectPath, file), 'utf-8');
-          hits.push(...scanText(content, file));
-        } catch {
-          // 文件不可读（已删除/二进制）→ 跳过
-        }
+        // 经 run 级快照读内容：同 run 内多条约束共享同一文件读取；读不出 = 跳过（口径同旧 try/catch）
+        const content = projectSnapshotFor(env).content(file);
+        if (content === undefined) continue; // 文件不可读（已删除/二进制）→ 跳过
+        hits.push(...scanText(content, file));
       }
       if (hits.length > 0) return failDetail(hits);
     }

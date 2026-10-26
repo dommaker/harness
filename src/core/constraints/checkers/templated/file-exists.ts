@@ -17,7 +17,8 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { formatEvidence, type ConstraintCheck, type TemplatedCheckerFactory } from '../types';
-import { walkMatches } from '../../../../utils/file-walk';
+import { globToRegExp } from '../../../../utils/glob-match';
+import { projectSnapshotFor } from '../../run-env';
 
 export const fileExists: TemplatedCheckerFactory = {
   validateParams(params) {
@@ -48,14 +49,16 @@ export const fileExists: TemplatedCheckerFactory = {
     const rel = params.path as string | undefined;
     const globPattern = params.glob as string | undefined;
     const mustExist = params.mustExist !== false;
+    // glob 在创建时编译一次；匹配在 run 级项目快照的清单上做（同 run 多约束共享一次遍历）
+    const globRe = globPattern !== undefined ? globToRegExp(globPattern) : undefined;
 
     return {
       id,
       evaluate(env) {
         const pathHit = rel !== undefined && existsSync(join(env.projectPath, rel));
-        // 目录与文件都算命中；node_modules 全层级跳过防扫穿
-        const hits = globPattern !== undefined
-          ? walkMatches(env.projectPath, globPattern, { includeDirs: true, skipDirs: ['node_modules'] })
+        // 目录与文件都算命中（快照清单含目录）；.git/node_modules 由快照排除
+        const hits = globRe !== undefined
+          ? projectSnapshotFor(env).files().filter(f => globRe.test(f))
           : [];
 
         if (mustExist) {

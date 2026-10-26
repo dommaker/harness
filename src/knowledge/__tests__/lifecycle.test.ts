@@ -289,6 +289,131 @@ describe('KnowledgeLifecycle', () => {
     });
   });
 
+  describe('recordReferences（P1.3 批量形）', () => {
+    it('N 条引用一次 applyAll 落盘：只重写一次 index.json', () => {
+      for (const id of ['DEC-001', 'DEC-002', 'DEC-003']) {
+        store.save(makeEntry({ id, title: id }));
+      }
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        lifecycle.recordReferences(['DEC-001', 'DEC-002', 'DEC-003'], 'alice');
+        expect(stringifySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+
+      for (const id of ['DEC-001', 'DEC-002', 'DEC-003']) {
+        const entry = store.get(id)!;
+        expect(entry.referencedBy).toHaveLength(1);
+        expect(entry.referencedBy[0]).toMatch(/^alice:/);
+        expect(entry.lastReferenced).not.toBe('');
+        expect(entry.contributors).toEqual(['alice']);
+      }
+    });
+
+    it('空批与全未知 id 零读写', () => {
+      store.save(makeEntry());
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        lifecycle.recordReferences([], 'alice');
+        lifecycle.recordReferences(['NOPE-001', 'NOPE-002'], 'alice');
+        expect(stringifySpy).toHaveBeenCalledTimes(0);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(store.get('DEC-001')!.referencedBy).toHaveLength(0);
+    });
+
+    it('同日同贡献者去重：二次批量调用零写入且不触发回调', () => {
+      store.save(makeEntry());
+      const events: string[] = [];
+      lifecycle.onReference(e => events.push(e.entryId));
+
+      lifecycle.recordReferences(['DEC-001'], 'alice');
+      expect(events).toEqual(['DEC-001']);
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        lifecycle.recordReferences(['DEC-001'], 'alice');
+        expect(stringifySpy).toHaveBeenCalledTimes(0);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(events).toEqual(['DEC-001']); // 去重跳过不补触发
+      expect(store.get('DEC-001')!.referencedBy).toHaveLength(1);
+    });
+
+    it('去重批次带 success 时仍补记 executionResults（与逐条版一致）', () => {
+      store.save(makeEntry());
+      lifecycle.recordReferences(['DEC-001'], 'alice');
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        lifecycle.recordReferences(['DEC-001'], 'alice', true);
+        expect(stringifySpy).toHaveBeenCalledTimes(1); // 真有一次落盘，非空跑
+      } finally {
+        stringifySpy.mockRestore();
+      }
+
+      const entry = store.get('DEC-001')!;
+      expect(entry.referencedBy).toHaveLength(1); // 引用键不重复
+      expect(entry.executionResults).toHaveLength(1);
+      expect(entry.executionResults[0]).toMatchObject({ contributor: 'alice', success: true });
+    });
+
+    it('带 success 的新引用逐条触发回调（contributor 缺省 unknown）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      store.save(makeEntry({ id: 'DEC-002' }));
+      const events: Array<{ entryId: string; success?: boolean }> = [];
+      lifecycle.onReference(e => events.push({ entryId: e.entryId, success: e.success }));
+
+      lifecycle.recordReferences(['DEC-001', 'DEC-002'], undefined, false);
+      expect(events).toEqual([
+        { entryId: 'DEC-001', success: false },
+        { entryId: 'DEC-002', success: false },
+      ]);
+    });
+
+    it('回调在批量落盘成功后触发：回调执行时 store.get 已可见本次引用', () => {
+      store.save(makeEntry());
+      const observed: Array<{ refCount: number; lastReferenced: string }> = [];
+      lifecycle.onReference(e => {
+        const entry = store.get(e.entryId)!;
+        observed.push({ refCount: entry.referencedBy.length, lastReferenced: entry.lastReferenced });
+      });
+
+      lifecycle.recordReferences(['DEC-001'], 'alice');
+
+      expect(observed).toEqual([{ refCount: 1, lastReferenced: expect.any(String) }]);
+      expect(observed[0].lastReferenced).not.toBe('');
+    });
+
+    it('applyAll 抛错：回调不触发、异常向外抛（由调用方 fail-open 兜底）', () => {
+      store.save(makeEntry());
+      const events: string[] = [];
+      lifecycle.onReference(e => events.push(e.entryId));
+
+      const applyAllSpy = jest.spyOn(store, 'applyAll').mockImplementation(() => {
+        throw new Error('disk full');
+      });
+      try {
+        expect(() => lifecycle.recordReferences(['DEC-001'], 'alice')).toThrow('disk full');
+      } finally {
+        applyAllSpy.mockRestore();
+      }
+      expect(events).toEqual([]); // 未持久化成功，回调一条都不许触发
+    });
+
+    it('批内同 id 重复只记账一次（与逐条循环结果一致）', () => {
+      store.save(makeEntry());
+      lifecycle.recordReferences(['DEC-001', 'DEC-001', 'DEC-001'], 'alice');
+      const entry = store.get('DEC-001')!;
+      expect(entry.referencedBy).toHaveLength(1);
+      expect(entry.contributors).toEqual(['alice']);
+    });
+  });
+
   describe('checkPromotion', () => {
     it('should promote draft to verified when referenced', () => {
       store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(60) }));

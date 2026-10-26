@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeQuery } from '../query';
+import { KnowledgeLifecycle } from '../lifecycle';
 import type { KnowledgeEntry, QueryBudget } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -147,6 +148,129 @@ describe('KnowledgeQuery', () => {
 
       const second = query.query(budget);
       expect(second.fromCache).toBe(true);
+    });
+  });
+
+  describe('引用记账批量化（P1.3）', () => {
+    const budget = (): QueryBudget => ({
+      phase: 'test',
+      maxTokens: 100000,
+      maxEntries: 10,
+      focusTypes: ['decision'],
+    });
+
+    /**
+     * 接缝级闸：引用记账必须走 store 批量原语 applyAll 一次、
+     * 不得逐条 update（update = get→save→全量重写 index.json）。
+     * applyAll 内部「一次落盘」由 store/lifecycle 侧测试钉（同 harness#134 口径）。
+     */
+    const spyWritePath = () => {
+      const updateSpy = jest.spyOn(store, 'update');
+      const applyAllSpy = jest.spyOn(store, 'applyAll');
+      return {
+        updateSpy,
+        applyAllSpy,
+        restore: () => { updateSpy.mockRestore(); applyAllSpy.mockRestore(); },
+        assertSingleBatch: () => {
+          expect(updateSpy).not.toHaveBeenCalled();
+          expect(applyAllSpy).toHaveBeenCalledTimes(1);
+        },
+        /** 去重/空结果闸：不允许任何带真更新的批次 */
+        assertNoRealBatch: () => {
+          expect(updateSpy).not.toHaveBeenCalled();
+          expect(applyAllSpy.mock.calls.every(args => (args[0] as unknown[]).length === 0)).toBe(true);
+        },
+      };
+    };
+
+    it('N 条结果一次 query 只走一次批量落盘', () => {
+      for (let i = 1; i <= 4; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      const { restore, assertSingleBatch } = spyWritePath();
+      try {
+        const result = query.query(budget());
+        expect(result.entries).toHaveLength(4); // 正对照：真返回 4 条，「1 次批量」不是空跑出来的
+        assertSingleBatch();
+      } finally {
+        restore();
+      }
+    });
+
+    it('每条结果都记账并持久化（lastReferenced + referencedBy）', () => {
+      for (let i = 1; i <= 3; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      query.query(budget());
+
+      for (let i = 1; i <= 3; i++) {
+        const entry = store.get(`DEC-${String(i).padStart(3, '0')}`)!;
+        expect(entry.lastReferenced).not.toBe('');
+        expect(entry.referencedBy).toHaveLength(1);
+        expect(entry.referencedBy[0]).toMatch(/^unknown:/);
+      }
+    });
+
+    it('空结果不产生任何引用写入', () => {
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall' })); // focusTypes 过滤后不命中
+
+      const updateSpy = jest.spyOn(store, 'update');
+      const applyAllSpy = jest.spyOn(store, 'applyAll');
+      try {
+        const result = query.query(budget());
+        expect(result.entries).toHaveLength(0);
+        expect(updateSpy).not.toHaveBeenCalled();
+        // 允许一次空批 applyAll（契约即零读写），但不允许带真更新的批次
+        expect(applyAllSpy.mock.calls.every(args => (args[0] as unknown[]).length === 0)).toBe(true);
+      } finally {
+        updateSpy.mockRestore();
+        applyAllSpy.mockRestore();
+      }
+    });
+
+    it('同日重复 query（clearCache 后）去重：零写入、回调不重复触发', () => {
+      store.save(makeEntry());
+      const lifecycle = new KnowledgeLifecycle(store);
+      const events: string[] = [];
+      lifecycle.onReference(e => events.push(e.entryId));
+      query = new KnowledgeQuery(store, lifecycle);
+
+      query.query(budget());
+      expect(events).toEqual(['DEC-001']);
+
+      query.clearCache(); // 绕过缓存命中，让引用记账真实再跑一次
+      const { restore, assertNoRealBatch } = spyWritePath();
+      try {
+        const result = query.query(budget());
+        expect(result.entries).toHaveLength(1); // 正对照
+        // 同日去重：引用键已存在 → 空批，不触发任何写入
+        assertNoRealBatch();
+      } finally {
+        restore();
+      }
+      expect(events).toEqual(['DEC-001']);
+    });
+
+    it('引用驱动成熟度阶梯：被引用的草稿条目满足晋升条件', () => {
+      store.save(makeEntry({ id: 'DEC-001', content: 'x'.repeat(60), maturity: 'draft' }));
+
+      query.query(budget());
+
+      expect(new KnowledgeLifecycle(store).checkPromotion('DEC-001')).toBe('verified');
+    });
+
+    it('查询副作用仍 fail-open：记账抛错不影响查询结果返回', () => {
+      store.save(makeEntry({ id: 'DEC-001', maturity: 'draft' }));
+      // 让落盘在引用记账阶段必炸：条目文件在场但 maturity 枚举被外部改脏，
+      // applyAll 整批预校验拒写
+      const filePath = path.join(tempDir, 'decision-DEC-001.md');
+      fs.writeFileSync(filePath, fs.readFileSync(filePath, 'utf-8').replace('maturity: draft', 'maturity: bogus'));
+
+      const result = query.query(budget());
+      expect(result.entries).toHaveLength(1);
+      expect(result.entries[0].id).toBe('DEC-001');
     });
   });
 

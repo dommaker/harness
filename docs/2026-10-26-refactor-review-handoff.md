@@ -3,7 +3,7 @@
 > 日期：2026-10-26
 > 仓库：`@dommaker/harness`（本机 checkout）
 > 审查基线：`master@b82bf16e7449f4fd19ef873fefab4b3ee311bc88`（`@dommaker/harness` 4.0.1）
-> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 P1.3（知识查询引用记账批量化）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
+> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，已提交（976228d）。切片 P1.3（知识查询引用记账批量化）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 P1.4（收窄 GateContext）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
 
 ## 新会话从这里开始
 
@@ -133,7 +133,7 @@
 - bootstrap 新增唯一装配函数 `assembleConstraintChecker(projectPath)`；CLI check/report 与 `bootstrapHarness(Sync)` 共用，trace 接线只写一次（架构闸 + 行为闸：`src/__tests__/unique-assembly.test.ts`）。
 - `srcScan` 缓存从 checker 实例的 CheckCache（TTL 1s + 手工 invalidate）迁到 `RunEnv`（一次 run 一份、跑完即弃）；`CheckCache` 实现及其测试已删除（自 #199 起本非公共导出）。`ConstraintChecker.getInstance()` 与 `checkConstraint`/`checkConstraints`/`collectConstraints` 便捷函数、`HarnessBootstrap` 返回字段全部保留，公共面零收缩。
 - 行为闸：`src/core/constraints/__tests__/run-cache-lifecycle.test.ts`（同 run 复用 / 跨 run 隔离 / 全链路相邻两次 checkConstraint 不串缓存）。
-- 未做（属其他切片）：HarnessRuntime 独立类型化（本切片以唯一装配函数收口，未新增 runtime 包装类型）、P1.2 文件快照、P1.3、P1.4、P2。
+- 未做（属其他切片）：HarnessRuntime 独立类型化（本切片以唯一装配函数收口，未新增 runtime 包装类型）、P1.4、P2。
 
 ### P1.2 用运行级 ProjectSnapshot 收口文件读取
 
@@ -154,19 +154,26 @@
 
 先补遍历行为和复用计数测试，再改实现。不要把所有 fs 访问机械塞进一个巨型对象。
 
-**已实施（2026-10-26，未提交）**
+**已实施（2026-10-26，已提交 976228d）**
 
 - 新增 `src/core/constraints/project-snapshot.ts`：`createProjectSnapshot(projectPath)` 一次 run 一份，含文件/目录清单（一次遍历）、`content(rel)`（同文件至多读一次）、`parseDiff(diff)`（同一 diff 至多彩一次）。排除口径钉死：精确跳过 `.git`/`node_modules`，**不排除 dist/coverage**（构建产物是存在性约束的合法判定对象；源码清单的排除归 `srcScan`/`DEFAULT_SKIP_DIRS` 管，两边不互借名单），不设 skipHidden，`.harness` 等受管隐藏目录照常可匹配。
 - `RunEnv` 新增 `snapshot()` 观察口（**可选成员**；懒建 + run 内 memo，与 P1.1 `srcScan` 同一生命周期，不另起平行缓存）。`CheckEnv` 经包根公开导出且 extends RunEnv——必需化会让外部手写实现编译失败（破坏性变更），故 `createRunEnv` 生产路径恒提供并共享同一快照，内置 checker 一律经 `projectSnapshotFor()`（run-env.ts）取：提供 = 共享 env memo；未提供（旧式手写实现，兼容边界）= 一次性 fallback、保持旧读取行为，不为兼容路径引入跨调用缓存，也不要求外部消费者立刻改成员。`RunEnv`/`ProjectSnapshot`/`projectSnapshotFor` 均不进包根导出面，`EvidenceProviders` 不变。
 - 消费方收口（glob 均在 checker 创建时编译）：`file-exists` 匹配走快照清单（文件/目录都可命中契约不变，`.git` 不再下钻）；`regex-scan` 变更文件内容走 `snapshot().content()`、diff 走 `snapshot().parseDiff()`；`no_hardcoded_credentials` 的 readFileSync + parseUnifiedDiff、`no_test_simplification` 的 parseUnifiedDiff 同样迁到 `projectSnapshotFor()`（检测语义逐字未动，P0.4 占位符/纯标识符取舍原样）。零余留消费的 `templated/glob.ts`（matchGlob 包装）已删。
 - 行为闸：`src/core/constraints/__tests__/project-snapshot.test.ts`（17 用例：.git/node_modules 排除、dist/coverage 不排除、.harness 可匹配、文件/目录契约、两约束共享一次遍历/一次读取/一次解析、三内置 checker 共享同一 diff 解析与文件读取、glob 创建期编译、跨 run 隔离、legacy 手写 CheckEnv/RunEnv 不含 snapshot 仍可赋值编译且 checker 经 fallback 照常评估）。旧实现下兼容用例编译期红（snapshot 必需化阻断 legacy env）。
-- 未做（属其他切片）：P1.3、P1.4、P2。
+- 未做（属其他切片）：P1.4、P2。
 
 ### P1.3 知识查询引用记账批量化
 
 证据：`src/knowledge/query.ts:88-92` 对返回的每条知识调用 `recordReference`；`src/knowledge/lifecycle.ts:87-92` 进入 `store.update`；`src/knowledge/store.ts:482-491` 每次更新都全量重写 `index.json`。N 条结果意味着 N 次同步索引写入。
 
 短期：复用 store 已有批量原语，一次 query 收集引用更新后一次落盘，保持成熟度和回调语义。长期再评估追加消费事件、异步合并；异步化涉及持久性和失败语义，应单独裁决。
+
+**已实施（2026-10-26，未提交）**
+
+- `lifecycle.ts` 新增 `recordReferences(entryIds, contributor?, success?, source?)`：`recordReference` 的批量形——一次收集 N 条引用、结束一次 `store.applyAll()` 落盘（复用 #134 批量原语，循环内零逐条写）。逐项语义与逐条版逐字对齐：same-day refKey 去重（去重时 `success` 给定额补记 executionResults，不触发回调）、referencedBy 20 条上限、contributors 去重加项、回调在批量落盘成功后逐条触发（fail-open attempt 不变；保持的是「回调不早于持久化成功」，逐条版的部分失败时序不声称保留——批量本就改变落盘粒度）、未知 id 跳过、批内同 id 只记一次（与逐条循环结果一致）。`recordReference()` 单事件契约（返回更新后条目 + 触发回调）原样保留，生产无其他调用方。
+- `query.ts` `query()` 引用记账从「逐条 `recordReference`」改为单次 `recordReferences(entries.map(id))`，外罩 `attempt` fail-open 不变；缓存命中路径（不记账）、search()（searching is not citing，无引用副作用）语义未动。
+- 行为闸：`query.test.ts` 新增「引用记账批量化（P1.3）」块（N 条只走一次 applyAll 且 update 零调用[旧实现红]、每条持久化 lastReferenced/referencedBy、空结果零写入、同日重复 query 去重零写入且回调不重复触发、引用驱动成熟度晋升仍成立、记账抛错 fail-open 不影响结果返回）；`lifecycle.test.ts` 新增 `recordReferences` 块（一次落盘 stringify 1 次、空批/未知 id 零读写、去重零写入不触发回调、去重带 success 补记 executionResults、带 success 逐条触发回调、批内同 id 只记一次、回调执行时 store.get 已可见本次引用[旧实现红：回调先于落盘触发]、applyAll 抛错回调不触发且异常外抛[旧实现红]）。旧实现下 query 块 3 条写计数用例红灯（N=4 时 4 次 update / 全量重写）。
+- 未做（本切片范围外）：异步化/消费事件重构（留长期裁决）、`ingest.mergeEntries()` 逐条写点（另票）、`store.list()` O(N²) `findFile`（按 #134 裁决未动）。
 
 ### P1.4 收窄 GateContext
 

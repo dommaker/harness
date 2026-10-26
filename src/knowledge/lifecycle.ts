@@ -101,6 +101,69 @@ export class KnowledgeLifecycle {
   }
 
   /**
+   * 批量形 recordReference（P1.3）：一次 query 的 N 条引用收集进一次 applyAll 落盘，
+   * 消除 N 次「全量重写 index.json」。逐项语义与逐条 recordReference 一致：
+   * same-day refKey 去重（去重时 success 给定额补记 executionResults）、
+   * referencedBy 20 条上限、contributors 去重、未知 id 跳过；
+   * 回调保持「不早于持久化成功」语义——批量落盘成功后逐条触发，去重/未知 id 不触发
+   * （批量本就改变了落盘粒度，不声称逐条版的部分失败时序原样保留）。
+   * 单事件调用方仍用 recordReference()（其「返回更新后条目 + 触发回调」契约不变）。
+   */
+  recordReferences(entryIds: string[], contributor?: string, success?: boolean, source?: 'human' | 'auto'): void {
+    const now = new Date().toISOString();
+    const updates: StoreUpdate[] = [];
+    const events: ConsumptionEvent[] = [];
+    const seen = new Set<string>();
+
+    for (const entryId of entryIds) {
+      if (seen.has(entryId)) continue;
+      seen.add(entryId);
+      const entry = this.store.get(entryId);
+      if (!entry) continue;
+
+      const contributors = contributor && !entry.contributors.includes(contributor)
+        ? [...entry.contributors, contributor]
+        : entry.contributors;
+
+      const refKey = `${contributor || 'unknown'}:${now.slice(0, 10)}`;
+      const execSource = source || (contributor?.startsWith('auto-') ? 'auto' : undefined);
+
+      // B4: same-day, same-contributor 去重（与逐条版同口径）
+      if (entry.referencedBy.includes(refKey)) {
+        // 去重仍补记执行结果（若给了 success），但不触发回调
+        if (success !== undefined) {
+          const executionResults = [
+            ...(entry.executionResults),
+            { contributor: contributor || 'unknown', success, timestamp: now, source: execSource },
+          ].slice(-MAX_REFERENCED_BY);
+          updates.push({ id: entryId, partial: { executionResults } });
+        }
+        continue;
+      }
+
+      const referencedBy = [...entry.referencedBy, refKey].slice(-MAX_REFERENCED_BY);
+      const executionResults = success !== undefined
+        ? [...(entry.executionResults), { contributor: contributor || 'unknown', success, timestamp: now, source: execSource }].slice(-MAX_REFERENCED_BY)
+        : entry.executionResults;
+
+      updates.push({ id: entryId, partial: { lastReferenced: now, contributors, referencedBy, executionResults } });
+      events.push({ entryId, contributor: contributor || 'unknown', timestamp: now, success });
+    }
+
+    // 一次落盘：applyAll 循环内只更新内存索引、结束一次 writeIndex（空批零读写）。
+    // 落盘成功前不触发任何回调；抛错则整批中断上抛，由调用方 fail-open 兜底。
+    this.store.applyAll(updates);
+
+    // 批量落盘成功后才逐条触发消费回调（去重/未知 id 不在 events 内，天然不触发）
+    for (const event of events) {
+      for (const cb of this.onReferenceCallbacks) {
+        // 显式 fail-open（attempt）：消费回调是外挂监听，崩了不拖死引用记账主流程
+        attempt(() => cb(event), () => undefined);
+      }
+    }
+  }
+
+  /**
    * Check if an entry meets promotion criteria.
    * Returns the target maturity level if promotion is warranted, otherwise undefined.
    *

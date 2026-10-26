@@ -85,11 +85,10 @@ export class KnowledgeQuery {
     const result: QueryResult = { entries, tokensUsed, truncated, fromCache: false };
     this.cache.set(cacheKey, { result, timestamp: Date.now() });
 
-    // P2a: Record references for all returned entries (drives maturity ladder)
-    for (const entry of entries) {
-      // 显式 fail-open（attempt）：引用记账是查询的副作用，失败不影响查询结果返回
-      attempt(() => this.lifecycle.recordReference(entry.id), () => undefined);
-    }
+    // P1.3: 一次 query 的全部引用经生命周期批量记账、一次 applyAll 落盘
+    // （不再逐条 recordReference→update→全量重写 index.json）
+    // 显式 fail-open（attempt）：引用记账是查询的副作用，失败不影响查询结果返回
+    attempt(() => this.lifecycle.recordReferences(entries.map(e => e.id)), () => undefined);
 
     return result;
   }

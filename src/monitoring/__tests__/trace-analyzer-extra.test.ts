@@ -3,12 +3,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { TraceAnalyzer, summarizeTraces } from '../monitoring/trace-analyzer';
-import { TraceCollector } from '../monitoring/traces';
+import { TraceAnalyzer, summarizeTraces } from '../trace-analyzer';
+import { TraceCollector } from '../traces';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { ExecutionTrace } from '../types/trace';
+import type { ExecutionTrace } from '../../types/trace';
 
 describe('TraceAnalyzer - 补充覆盖', () => {
   let tempDir: string;

@@ -5,8 +5,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { TraceCollector } from '../monitoring/traces';
-import { summarizeTraces } from '../monitoring/trace-analyzer';
+import { TraceCollector } from '../traces';
+import { summarizeTraces } from '../trace-analyzer';
 
 describe('TraceCollector', () => {
   let tempDir: string;
@@ -177,7 +177,7 @@ describe('TraceCollector', () => {
     // Dir exists (created by constructor), so this won't hit line 259.
     // Create a collector with a path in non-existent dir to test that branch.
     const tmpRoot = path.join(os.tmpdir(), `harness-traces-nonexistent-${Date.now()}`);
-    const c = new (require('../monitoring/traces').TraceCollector)({
+    const c = new (require('../traces').TraceCollector)({
       traceFile: path.join(tmpRoot, 'deep', 'traces.log'),
     });
     // Delete the directory the collector just created

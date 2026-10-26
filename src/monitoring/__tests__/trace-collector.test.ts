@@ -3,11 +3,11 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { TraceCollector } from '../monitoring/traces';
+import { TraceCollector } from '../traces';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { ExecutionTrace } from '../types/trace';
+import type { ExecutionTrace } from '../../types/trace';
 
 describe('TraceCollector', () => {
   let tempDir: string;

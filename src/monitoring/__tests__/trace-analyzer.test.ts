@@ -7,12 +7,12 @@ import {
   TraceAnalyzer,
   summarizeTraces,
   detectTraceAnomalies,
-} from '../monitoring/trace-analyzer';
-import { TraceCollector } from '../monitoring/traces';
+} from '../trace-analyzer';
+import { TraceCollector } from '../traces';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { ExecutionTrace, TraceSummary } from '../types/trace';
+import type { ExecutionTrace, TraceSummary } from '../../types/trace';
 
 describe('TraceAnalyzer', () => {
   let tempDir: string;

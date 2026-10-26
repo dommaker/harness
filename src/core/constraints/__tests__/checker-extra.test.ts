@@ -11,9 +11,9 @@ import {
   ConstraintChecker,
   checkConstraint,
   checkConstraints,
-} from '../core/constraints/checker';
-import { buildCheckEnv } from '../core/constraints/checkers';
-import type { ConstraintContext } from '../types/constraint';
+} from '../checker';
+import { buildCheckEnv } from '../checkers';
+import type { ConstraintContext } from '../../../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -173,7 +173,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
 
   describe('checkConstraint 快捷函数', () => {
     it('未知约束直接抛错（注册表闭环口径：未注册即抛，不回假结果）', async () => {
-      const { checkConstraint } = await import('../core/constraints/checker');
+      const { checkConstraint } = await import('../checker');
 
       const context: ConstraintContext = {
         operation: 'commit',
@@ -183,7 +183,7 @@ describe('ConstraintChecker - 补充覆盖', () => {
     });
 
     it('已知约束应该正常检查', async () => {
-      const { checkConstraint } = await import('../core/constraints/checker');
+      const { checkConstraint } = await import('../checker');
 
       const context: ConstraintContext = {
         operation: 'code_implementation',

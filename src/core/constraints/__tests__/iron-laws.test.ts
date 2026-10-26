@@ -8,10 +8,10 @@ import {
   getAllConstraints,
   getConstraint,
   isGateConstraint
-} from '../core/constraints/definitions';
-import { ConstraintChecker } from '../core/constraints/checker';
-import { getConstraintCheck, registeredCheckCount } from '../core/constraints/checkers';
-import type { ConstraintContext } from '../types/constraint';
+} from '../definitions';
+import { ConstraintChecker } from '../checker';
+import { getConstraintCheck, registeredCheckCount } from '../checkers';
+import type { ConstraintContext } from '../../../types/constraint';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

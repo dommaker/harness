@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { PassesGate, detectTestCommand } from '../core/validators/passes-gate';
-import type { TaskTestResult } from '../types/passes-gate';
-import { createProjectFixture } from '../test-setup/project-fixture';
+import { PassesGate, detectTestCommand } from '../passes-gate';
+import type { TaskTestResult } from '../../../types/passes-gate';
+import { createProjectFixture } from '../../../test-setup/project-fixture';
 import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

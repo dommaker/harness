@@ -11,9 +11,9 @@ import {
   getEffectiveConstraints,
   getMergedConstraintsConfig,
   lintEffectiveConfig,
-} from '../core/effective-constraints';
-import { createProjectFixture } from '../test-setup/project-fixture';
-import { CONSTRAINTS } from '../core/constraints/definitions';
+} from '../effective-constraints';
+import { createProjectFixture } from '../../test-setup/project-fixture';
+import { CONSTRAINTS } from '../constraints/definitions';
 
 const BUILTIN_TOTAL = Object.keys(CONSTRAINTS).length;
 

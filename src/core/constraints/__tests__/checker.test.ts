@@ -5,8 +5,8 @@
  * prompt 面已删除，其短路用例随之移除。
  */
 
-import { ConstraintChecker, checkConstraint } from '../core/constraints/checker';
-import type { ConstraintContext } from '../types/constraint';
+import { ConstraintChecker, checkConstraint } from '../checker';
+import type { ConstraintContext } from '../../../types/constraint';
 import { rmSync, mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

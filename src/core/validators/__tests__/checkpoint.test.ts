@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { CheckpointValidator } from '../core/validators/checkpoint';
+import { CheckpointValidator } from '../checkpoint';
 import { rmSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

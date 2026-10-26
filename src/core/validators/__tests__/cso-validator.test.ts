@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { CSOValidator } from '../core/validators/cso';
-import type { WorkflowMeta, StepMeta, ToolMeta } from '../types/cso';
+import { CSOValidator } from '../cso';
+import type { WorkflowMeta, StepMeta, ToolMeta } from '../../../types/cso';
 
 describe('CSOValidator', () => {
   const validator = new CSOValidator();

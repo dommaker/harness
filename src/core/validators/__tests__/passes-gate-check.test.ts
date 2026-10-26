@@ -4,8 +4,8 @@
  * 验证纯约束接口：harness 只负责验证结果，不负责运行测试
  */
 
-import { PassesGate } from '../core/validators/passes-gate';
-import type { TestResult, PassesGateCheckResult } from '../types/passes-gate';
+import { PassesGate } from '../passes-gate';
+import type { TestResult, PassesGateCheckResult } from '../../../types/passes-gate';
 
 describe('PassesGate.check()', () => {
   /**

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
-import { ProjectConfigLoader } from '../core/project-config-loader';
+import { ProjectConfigLoader } from '../project-config-loader';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

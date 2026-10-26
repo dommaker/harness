@@ -11,13 +11,13 @@
 
 import { describe, it, expect } from '@jest/globals';
 import * as path from 'path';
-import { loadAppConstraints } from '../core/app-constraints-loader';
-import { ConstraintChecker } from '../core/constraints/checker';
-import { ConstraintViolationError, type ConstraintContext } from '../types/constraint';
-import { createProjectFixture } from '../test-setup/project-fixture';
+import { loadAppConstraints } from '../app-constraints-loader';
+import { ConstraintChecker } from '../constraints/checker';
+import { ConstraintViolationError, type ConstraintContext } from '../../types/constraint';
+import { createProjectFixture } from '../../test-setup/project-fixture';
 
 const SCRIPT = path.join(
-  __dirname, '..', 'core', 'constraints', 'checkers', '__tests__', 'fixtures',
+  __dirname, '..', 'constraints', 'checkers', '__tests__', 'fixtures',
   'public-repo-sanitization.mjs',
 );
 

@@ -18,12 +18,12 @@
 import { describe, it, expect, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadAppConstraints } from '../core/app-constraints-loader';
-import { getEffectiveConstraints, lintEffectiveConfig, getMergedConstraintsConfig } from '../core/effective-constraints';
-import { CONSTRAINTS } from '../core/constraints/definitions';
-import { createRunEnv } from '../core/constraints/run-env';
-import { TEMPLATES, type TemplatedCheckerFactory } from '../core/constraints/checkers';
-import { createProjectFixture } from '../test-setup/project-fixture';
+import { loadAppConstraints } from '../app-constraints-loader';
+import { getEffectiveConstraints, lintEffectiveConfig, getMergedConstraintsConfig } from '../effective-constraints';
+import { CONSTRAINTS } from '../constraints/definitions';
+import { createRunEnv } from '../constraints/run-env';
+import { TEMPLATES, type TemplatedCheckerFactory } from '../constraints/checkers';
+import { createProjectFixture } from '../../test-setup/project-fixture';
 
 const CONSTRAINTS_YML = path.join('.harness', 'constraints.yml');
 

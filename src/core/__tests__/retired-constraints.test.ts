@@ -7,8 +7,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
-import { listRetiredConstraints } from '../core/retired-constraints';
-import { createProjectFixture } from '../test-setup/project-fixture';
+import { listRetiredConstraints } from '../retired-constraints';
+import { createProjectFixture } from '../../test-setup/project-fixture';
 
 describe('listRetiredConstraints', () => {
   let tempDir: string;
@@ -93,7 +93,7 @@ constraints:
   });
 
   it('从包根导出（ADR-0003 公共面）', async () => {
-    const harness = await import('../index');
+    const harness = await import('../../index');
     expect(typeof (harness as Record<string, unknown>).listRetiredConstraints).toBe('function');
   });
 });

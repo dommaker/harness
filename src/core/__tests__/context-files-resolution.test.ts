@@ -10,10 +10,10 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadRawProjectConfig } from '../core/project-config-loader';
-import { resolveContextFiles } from '../core/constraints/governance-accessors';
-import { createRunEnv } from '../core/constraints/run-env';
-import { createProjectFixture, writeProjectConfig } from '../test-setup/project-fixture';
+import { loadRawProjectConfig } from '../project-config-loader';
+import { resolveContextFiles } from '../constraints/governance-accessors';
+import { createRunEnv } from '../constraints/run-env';
+import { createProjectFixture, writeProjectConfig } from '../../test-setup/project-fixture';
 
 // ts-jest 的 namespace 导入属性不可重定义（jest.spyOn 会抛），改为只包一层
 // readFileSync 的部分 mock——其余 fs 能力用真实实现，fixture 搭建不受影响。

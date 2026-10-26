@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { ProjectConfigLoader } from '../core/project-config-loader';
-import { getCapabilitiesMode } from '../core/constraints/governance-accessors';
+import { ProjectConfigLoader } from '../project-config-loader';
+import { getCapabilitiesMode } from '../constraints/governance-accessors';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

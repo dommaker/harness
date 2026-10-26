@@ -32,7 +32,6 @@ import * as path from 'path';
 import * as yaml from '../utils/yaml';
 import type {
   Gate,
-  GateContext,
   GateDecision,
   SpecAcceptanceGateConfig,
   AcceptanceGateContext,
@@ -110,13 +109,9 @@ export class SpecAcceptanceGate implements Gate {
    * AcceptanceGateResult 无 gate 字段，此处经 gateResult 构造器归一化为 GateResult
    * 报告结构（本层约定不手拼 GateResult 字面量）。
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
+  async evaluate(context: AcceptanceGateContext): Promise<GateDecision> {
     const startedAt = Date.now();
-    const result = await this.check({
-      projectPath: context.projectPath,
-      taskId: context.taskId,
-      tasksPath: context.tasksPath,
-    });
+    const result = await this.check(context);
     return decisionFromResult(
       gateResult('acceptance', result.passed, result.message, startedAt, result.details)
     );

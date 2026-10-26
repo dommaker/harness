@@ -87,6 +87,11 @@ export function fromError(
  *
  * 统一的是决策协议（id / 声明式 order / evaluate → 三态决策），
  * 各门禁执行细节（gh pr view / 正则黑名单 / OpenAPI diff / benchmark…）私有。
+ *
+ * 注意：各实现 evaluate 收窄使用专属输入类型（`ReviewGateContext` 等），
+ * 而当前没有经本接口多态调 evaluate 的生产消费者。TS 方法参数双变意味着
+ * 若未来新增这种调用，基础 `GateContext` 不会替你校验专属必填字段
+ * （如 `CommandGateContext.command`）——届时须先收紧接口形状/调用契约。
  */
 export interface Gate {
   /** 门禁 id（与 gates/definitions.ts 定义一致，注册表闭环校验） */
@@ -98,39 +103,60 @@ export interface Gate {
 }
 
 /**
- * 门禁上下文：只带「这次在哪跑、跑什么」这类运行信息
+ * 门禁上下文：只带全部门禁真正共享的运行信息（在哪跑 / 跑什么 / 本 run 观察面）
  *
- * 配置一律走构造器（`ReviewGateConfig` 等），不要往这里加字段——
- * 本类型曾有 6 个无人读取的配置型字段与构造器配置平行，填了不生效。
+ * P1.4 收窄：各门禁专属输入字段（prNumber / securityScanCommand /
+ * performanceThresholds / oldContractPath / newContractPath / command /
+ * tasksPath）已迁到各门禁自己的输入类型（`ReviewGateContext` 等），
+ * 不再混进共享上下文。配置一律走构造器（`ReviewGateConfig` 等），
+ * 不要往这里加字段——本类型曾有 6 个无人读取的配置型字段与构造器
+ * 配置平行，填了不生效。
  */
 export interface GateContext {
   projectPath: string;
   taskId?: string;
-
-  // Review Gate
-  prNumber?: number;
-
-  // Security Gate
-  securityScanCommand?: string;
-
-  // Performance Gate
-  performanceThresholds?: PerformanceThresholds;
-
-  // Contract Gate
-  oldContractPath?: string;
-  newContractPath?: string;
-
-  // Command Gate
-  command?: string;
-
-  // Acceptance Gate
-  tasksPath?: string;
 
   /**
    * 本 run 的运行级观察面（ADR-0023）。一条守卫链传同一枚 → 项目配置文件整链至多读一次；
    * 不传 = 各门禁自造一枚一次性观察面（判定不变，只是不共享读取）
    */
   runEnv?: RunEnv;
+}
+
+/**
+ * 审查门禁输入：PR 号存在时走 GitHub API，否则落本地 git 检查
+ */
+export interface ReviewGateContext extends GateContext {
+  prNumber?: number;
+}
+
+/**
+ * 安全门禁输入：本次扫描命令覆盖（优先级高于构造器 `scanCommand`，见 SecurityGate.scan）
+ */
+export interface SecurityGateContext extends GateContext {
+  securityScanCommand?: string;
+}
+
+/**
+ * 性能门禁输入：本次阈值覆盖（优先级高于构造器 `thresholds`，见 PerformanceGate.check）
+ */
+export interface PerformanceGateContext extends GateContext {
+  performanceThresholds?: PerformanceThresholds;
+}
+
+/**
+ * 契约门禁输入：新旧契约路径覆盖（缺省按构造器 `contractPath` 锚 projectPath）
+ */
+export interface ContractGateContext extends GateContext {
+  oldContractPath?: string;
+  newContractPath?: string;
+}
+
+/**
+ * 命令门禁输入：待检命令（必填——evaluate 的判定对象就是它）
+ */
+export interface CommandGateContext extends GateContext {
+  command: string;
 }
 
 /**
@@ -186,13 +212,9 @@ export interface SpecAcceptanceGateConfig {
 }
 
 /**
- * 验收标准门禁上下文
+ * 验收标准门禁输入
  */
-export interface AcceptanceGateContext {
-  /** 项目路径 */
-  projectPath: string;
-  /** 任务 ID */
-  taskId?: string;
+export interface AcceptanceGateContext extends GateContext {
   /** tasks.yml 路径；相对值按 projectPath 解析 */
   tasksPath?: string;
 }

@@ -14,7 +14,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { pass, fail, fromError } from './types';
 import { isRecord } from '../utils/guards';
-import type { GateResult, GateContext, ContractGateConfig, Gate, GateDecision } from './types';
+import type { GateResult, ContractGateContext, ContractGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
 /** 契约格式验证结果 */
@@ -51,14 +51,14 @@ export class ContractGate implements Gate {
   /**
    * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
+  async evaluate(context: ContractGateContext): Promise<GateDecision> {
     return decisionFromResult(await this.check(context));
   }
 
   /**
    * 检查契约
    */
-  async check(context: GateContext): Promise<GateResult> {
+  async check(context: ContractGateContext): Promise<GateResult> {
     const startTime = Date.now();
 
     try {

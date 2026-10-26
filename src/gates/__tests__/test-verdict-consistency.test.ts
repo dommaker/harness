@@ -19,7 +19,7 @@ import * as fs from 'fs/promises';
 import { PassesGate } from '../../core/validators/passes-gate';
 import { SpecAcceptanceGate } from '../acceptance';
 
-jest.mock('child_process', () => ({ exec: jest.fn() }));
+jest.mock('child_process', () => ({ exec: jest.fn(), execFile: jest.fn() }));
 jest.mock('fs/promises');
 
 const mockExec = exec as unknown as jest.Mock;

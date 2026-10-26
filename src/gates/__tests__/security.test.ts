@@ -8,6 +8,7 @@ import { exec } from 'child_process';
 // Mock exec
 jest.mock('child_process', () => ({
   exec: jest.fn(),
+  execFile: jest.fn(),
 }));
 
 const mockExec = exec as unknown as jest.Mock;

@@ -3,7 +3,7 @@
 > 日期：2026-10-26
 > 仓库：`@dommaker/harness`（本机 checkout）
 > 审查基线：`master@b82bf16e7449f4fd19ef873fefab4b3ee311bc88`（`@dommaker/harness` 4.0.1）
-> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，已提交（976228d）。切片 P1.3（知识查询引用记账批量化）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 P1.4（收窄 GateContext）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
+> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，已提交（976228d）。切片 P1.3（知识查询引用记账批量化）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。切片 P1.4（收窄 GateContext）已实现并通过相关测试与构建，**尚未提交**（等主会话复核；公共面核实为零破坏的包内私有类型收窄，细节见 P1.4 小节）。下一切片按 P2 取小切片。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
 
 ## 新会话从这里开始
 
@@ -180,6 +180,15 @@
 证据：`src/gates/types.ts:100-134` 注释要求配置走构造器，同一接口却包含六种门禁专属字段。
 
 目标：公共上下文保留真正共享的 `projectPath/taskId/runEnv`；各门禁声明自己的输入类型。统一 `evaluate → GateDecision` 协议，不用字段包统一异构参数。此改动影响公共类型，先查公共面测试和下游消费者。
+
+**已实施（2026-10-26，未提交）**
+
+- 公共面核实结论：`GateContext` / `AcceptanceGateContext` 均非包根可导入类型——`package.json` exports 只登记 `.`，`src/index.ts` 门禁相关导出仅 passes-gate 一族，`src/__tests__/public-exports.test.ts` 以 `@ts-expect-error` 编译期钉住「不可从包根导入」，`./gates` 子路径入口已随 #199 摘除。下游消费核实：studio 171 处 `@dommaker/harness` 引用无一是 gates 协议类型（仅 knowledge/constraint/passes-gate/bootstrap 与出厂 hook shim），deepseek-harness 零引用。**本次为包内私有类型收窄，零公共契约破坏**，无需 semver 破坏性变更流程。
+- `src/gates/types.ts`：`GateContext` 收窄为 `projectPath/taskId/runEnv` 三字段；新增专属输入类型 `ReviewGateContext.prNumber?` / `SecurityGateContext.securityScanCommand?` / `PerformanceGateContext.performanceThresholds?` / `ContractGateContext.oldContractPath?|newContractPath?` / `CommandGateContext.command`（必填）/ `AcceptanceGateContext extends GateContext`（原形状并入，多了继承的 `runEnv`）。六个门禁类的 `evaluate()`（及各自 `check()`/`scan()`）收窄收自己的输入类型；`Gate` 接口协议（id/order/evaluate → GateDecision）不动，TS 方法参数双变允许实现收窄。**未解决（本片不声称已解决，也不新增任务）**：各实现用专属输入类型而 `Gate` 抽象仍是宽 `GateContext`，当前又无经 `Gate` 多态调 `evaluate` 的生产消费者，故专属必填字段（如 `command`）在抽象层没有静态校验——若未来出现链式/多态调用方，须先收紧接口形状或调用契约。限制已写进 `Gate` 接口注释（types.ts）与 `src/gates/CONTEXT.md` 统一协议条目。
+- 行为与配置优先级逐字保留：SecurityGate 三级链（context 覆盖 > 构造器 > 探测）、PerformanceGate `context.performanceThresholds ?? config.thresholds`、ContractGate `context.newContractPath ?? 构造器 contractPath 锚 projectPath`、CommandGate `command` 改必填（调用方全部已传，删掉 `?? ''`）、SpecAcceptanceGate evaluate 不再 remap 直通 `check()`。CLI 六命令 evaluate 调用点原样编译通过，真实 CLI 冒烟（command/contract）行为不变。
+- 顺带修复基线已红的 6 个 gates 测试套件（非本切片引入，HEAD 即红）：P0.3 给 `src/utils/exec` 加 `execFileAsync`（promisify(execFile)）后，`__tests__` 里 6 处 `jest.mock('child_process', () => ({ exec: jest.fn() }))` 工厂不含 `execFile`，模块加载即 TypeError——补 `execFile: jest.fn()` 后全绿。
+- 机器可检：新增 `src/gates/__tests__/gate-context-narrowing.test.ts`（7 个专属字段的 `@ts-expect-error` 编译期钉 + 6 个专属输入类型正钉 + types.ts 源码闸 + 3 条行为钉：CommandGate 构造器 ignoreCategories 经 evaluate 生效、SecurityGate 构造器 scanCommand 生效、输入字段覆盖构造器）。旧实现下编译期钉全部红灯（unused @ts-expect-error + 符号不存在）。
+- 未做（属其他切片）：P0.5、P2。下一切片按 handoff P2 取小切片（建议 P2.3 CONTEXT/历史叙事清理，或 P2.2 测试双居所归位）。
 
 ## P2：目录、测试与文档
 

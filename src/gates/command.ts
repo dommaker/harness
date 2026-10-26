@@ -6,7 +6,7 @@
  */
 
 import { gateResult } from './types';
-import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, GateContext, GateDecision } from './types';
+import type { GateResult, CommandGateConfig, CommandBlacklistRule, Gate, CommandGateContext, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 import { DEFAULT_COMMAND_BLACKLIST } from './blacklist-rules';
 
@@ -48,10 +48,10 @@ export class CommandGate implements Gate {
 
   /**
    * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导。
-   * 待检命令经 GateContext.command 传入。
+   * 待检命令经 CommandGateContext.command 传入（必填）。
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
-    return decisionFromResult(await this.check(context.command ?? ''));
+  async evaluate(context: CommandGateContext): Promise<GateDecision> {
+    return decisionFromResult(await this.check(context.command));
   }
 
   /**

@@ -10,7 +10,7 @@
 import { execAsync } from '../utils/exec';
 import { errorMessage } from '../utils/error';
 import { gateResult, fromError } from './types';
-import type { GateResult, GateContext, ReviewGateConfig, Gate, GateDecision } from './types';
+import type { GateResult, ReviewGateContext, ReviewGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
 /**
@@ -80,14 +80,14 @@ export class ReviewGate implements Gate {
   /**
    * 统一门禁接口（G1）：执行细节私有，决策三态由 check() 报告推导
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
+  async evaluate(context: ReviewGateContext): Promise<GateDecision> {
     return decisionFromResult(await this.check(context));
   }
 
   /**
    * 检查审查状态（异常报告的单点包装：内层抛，这里统一 fromError）
    */
-  async check(context: GateContext): Promise<GateResult> {
+  async check(context: ReviewGateContext): Promise<GateResult> {
     const startTime = Date.now();
 
     try {
@@ -109,7 +109,7 @@ export class ReviewGate implements Gate {
   /**
    * 检查 GitHub PR 审查状态
    */
-  private async checkGitHubPR(context: GateContext): Promise<GateResult> {
+  private async checkGitHubPR(context: ReviewGateContext): Promise<GateResult> {
     const startTime = Date.now();
 
     try {
@@ -159,7 +159,7 @@ export class ReviewGate implements Gate {
   /**
    * 本地 Git 检查
    */
-  private async checkLocalGit(context: GateContext): Promise<GateResult> {
+  private async checkLocalGit(context: ReviewGateContext): Promise<GateResult> {
     const startTime = Date.now();
 
     try {

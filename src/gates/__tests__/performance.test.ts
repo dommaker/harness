@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 // Mock dependencies
 jest.mock('child_process', () => ({
   exec: jest.fn(),
+  execFile: jest.fn(),
 }));
 
 jest.mock('fs/promises', () => ({

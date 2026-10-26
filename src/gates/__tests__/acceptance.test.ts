@@ -14,6 +14,7 @@ import { exec } from 'child_process';
 jest.mock('fs/promises');
 jest.mock('child_process', () => ({
   exec: jest.fn(),
+  execFile: jest.fn(),
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;

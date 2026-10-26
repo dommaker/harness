@@ -13,7 +13,7 @@
 import { execAsync } from '../utils/exec';
 import { isRecord } from '../utils/guards';
 import { gateResult, fromError } from './types';
-import type { GateResult, GateContext, SecurityGateConfig, Gate, GateDecision } from './types';
+import type { GateResult, SecurityGateContext, SecurityGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
 
 /** 漏洞条目（报告 details 与 analyzeResult 共用形状） */
@@ -71,14 +71,14 @@ export class SecurityGate implements Gate {
   /**
    * 统一门禁接口（G1）：执行细节私有，决策三态由 scan() 报告推导
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
+  async evaluate(context: SecurityGateContext): Promise<GateDecision> {
     return decisionFromResult(await this.scan(context));
   }
 
   /**
    * 扫描安全漏洞
    */
-  async scan(context: GateContext): Promise<GateResult> {
+  async scan(context: SecurityGateContext): Promise<GateResult> {
     const startTime = Date.now();
 
     try {

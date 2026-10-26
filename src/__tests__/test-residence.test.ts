@@ -12,7 +12,8 @@
  * 非共享模块目录或 src 根文件，它就是该模块的测试放错了居所。
  *
  * 执法是分批的：`ENFORCED_MODULES` 从 monitoring（P2.1 trace 半）开始，
- * gates 等其余模块目录在各自切片（P2.2 gates 半）加入，不一次性搬全仓。
+ * gates 等其余模块目录在各自切片（P2.2 gates 半、P2.3 core 半）加入，
+ * 不一次性搬全仓。
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -25,8 +26,8 @@ const ROOT_TESTS_DIR = path.join(SRC_ROOT, '__tests__');
 /** 共享层：被测模块判定时不计入「另一个模块」 */
 const SHARED_DIRS = new Set(['utils', 'types', 'test-setup']);
 
-/** 已执法的模块目录（P2.1 = trace/monitoring；gates 半见 P2.2 切片） */
-const ENFORCED_MODULES = ['monitoring'];
+/** 已执法的模块目录（P2.1 = trace/monitoring；P2.2 = gates） */
+const ENFORCED_MODULES = ['monitoring', 'gates'];
 
 const IMPORT_RE = /(?:from\s+|require\(\s*)['"](\.[^'"]+)['"]/g;
 

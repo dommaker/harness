@@ -7,11 +7,11 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { SpecAcceptanceGate } from '../gates/acceptance';
+import { SpecAcceptanceGate } from '../acceptance';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as yaml from '../utils/yaml';
+import * as yaml from '../../utils/yaml';
 
 describe('SpecAcceptanceGate', () => {
   let tempDir: string;

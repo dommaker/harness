@@ -3,7 +3,7 @@
 > 日期：2026-10-26
 > 仓库：`@dommaker/harness`（本机 checkout）
 > 审查基线：`master@b82bf16e7449f4fd19ef873fefab4b3ee311bc88`（`@dommaker/harness` 4.0.1）
-> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，已提交（976228d）。切片 P1.3（知识查询引用记账批量化）已实现并通过相关测试与构建，已提交（7f697f7）。切片 P1.4（收窄 GateContext）已实现并通过相关测试与构建，已提交（f928797；公共面核实为零破坏的包内私有类型收窄，细节见 P1.4 小节）。切片 P2.1（测试归位 trace 半：根 `src/__tests__` 4 个 monitoring 单模块测试迁入 `src/monitoring/__tests__`，新增居所闸 `test-residence.test.ts`，gates/core 等其余模块目录未执法）已实现并通过相关测试与构建，**尚未提交**（等主会话复核）。下一切片 = P2.2（测试归位 gates 半：根 `src/__tests__` 5 个 `*-gate.test.ts` 迁入 `src/gates/__tests__` 并在居所闸 `ENFORCED_MODULES` 加入 `gates`）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
+> 状态：只读审查完成。切片 P0.1–P0.4 已实现并通过相关测试与构建，均已提交。P0.5（入库命令信任模型）已完成产品裁决，记录见 P0.5 小节"已裁决"块——**仅为文档裁决，未改任何代码或默认行为**。切片 P1.1（唯一装配入口与生命周期）已实现并通过相关测试与构建，已提交（d37b830）。切片 P1.2（运行级 ProjectSnapshot 收口文件读取）已实现并通过相关测试与构建，已提交（976228d）。切片 P1.3（知识查询引用记账批量化）已实现并通过相关测试与构建，已提交（7f697f7）。切片 P1.4（收窄 GateContext）已实现并通过相关测试与构建，已提交（f928797；公共面核实为零破坏的包内私有类型收窄，细节见 P1.4 小节）。切片 P2.1（测试归位 trace 半：根 `src/__tests__` 4 个 monitoring 单模块测试迁入 `src/monitoring/__tests__`，新增居所闸 `test-residence.test.ts`，gates/core 等其余模块目录未执法）已实现并通过相关测试与构建，已提交（5a8b959）。切片 P2.2（测试归位 gates 半：根 `src/__tests__` 5 个 `*-gate.test.ts` 迁入 `src/gates/__tests__`，居所闸 `ENFORCED_MODULES` 加入 `gates`）已实现并通过相关测试与构建，**尚未提交**（等主会话复核；红绿证据在 `.harness/evidence/p2.2-test-residence-red.txt` / `-green.txt`）。下一切片 = P2.3（测试归位 core 半：根 `src/__tests__` 下 core 单模块测试同型迁入 `src/core/**/__tests__`，同法先加 ENFORCED_MODULES 制造红灯再迁移变绿）。两阶段授权实施（Phase 1/2）按依赖另行排票，不属于 P0.5 本身。本文是开发入口，不代表所有长期方案已经裁决。
 
 ## 新会话从这里开始
 
@@ -188,12 +188,12 @@
 - 行为与配置优先级逐字保留：SecurityGate 三级链（context 覆盖 > 构造器 > 探测）、PerformanceGate `context.performanceThresholds ?? config.thresholds`、ContractGate `context.newContractPath ?? 构造器 contractPath 锚 projectPath`、CommandGate `command` 改必填（调用方全部已传，删掉 `?? ''`）、SpecAcceptanceGate evaluate 不再 remap 直通 `check()`。CLI 六命令 evaluate 调用点原样编译通过，真实 CLI 冒烟（command/contract）行为不变。
 - 顺带修复基线已红的 6 个 gates 测试套件（非本切片引入，HEAD 即红）：P0.3 给 `src/utils/exec` 加 `execFileAsync`（promisify(execFile)）后，`__tests__` 里 6 处 `jest.mock('child_process', () => ({ exec: jest.fn() }))` 工厂不含 `execFile`，模块加载即 TypeError——补 `execFile: jest.fn()` 后全绿。
 - 机器可检：新增 `src/gates/__tests__/gate-context-narrowing.test.ts`（7 个专属字段的 `@ts-expect-error` 编译期钉 + 6 个专属输入类型正钉 + types.ts 源码闸 + 3 条行为钉：CommandGate 构造器 ignoreCategories 经 evaluate 生效、SecurityGate 构造器 scanCommand 生效、输入字段覆盖构造器）。旧实现下编译期钉全部红灯（unused @ts-expect-error + 符号不存在）。
-- 未做（属其他切片）：P0.5 授权实施（两阶段 Phase 1/2 按依赖另行排票）、P2 剩余项（P2.1 测试归位 trace 半已实现未提交，P2.2 gates 半及 P2.3 CONTEXT/历史叙事清理未做）。
+- 未做（属其他切片）：P0.5 授权实施（两阶段 Phase 1/2 按依赖另行排票）、P2 剩余项（P2.1 测试归位 trace 半已提交 5a8b959，P2.2 gates 半未提交，P2.3 core 半及 CONTEXT/历史叙事清理未做）。
 
 ## P2：目录、测试与文档
 
 1. `bootstrap/` 应成为真实组合根；`cli/` 只负责参数、调用和展示。不要为了目录整齐再建一套 runtime 包装。
-2. 模块测试归对应目录 `__tests__`；根 `src/__tests__` 只留分层、公共导出等跨模块架构测试。当前 trace 和多个 gate 测试双居所并存。**进展（2026-10-26）：trace 半已完成**（P2.1，未提交）——`trace-analyzer` / `trace-analyzer-extra` / `trace-collector` / `traces`（改名 `traces-extra`）迁入 `src/monitoring/__tests__`，新增居所闸 `src/__tests__/test-residence.test.ts`（`ENFORCED_MODULES` 从 `monitoring` 起分批执法）。剩余：gates 半（5 个 `*-gate.test.ts`）及 core 等其余模块目录的同型归位。
+2. 模块测试归对应目录 `__tests__`；根 `src/__tests__` 只留分层、公共导出等跨模块架构测试。当前 trace 和多个 gate 测试双居所并存。**进展（2026-10-26）：trace 半已完成**（P2.1，已提交 5a8b959）——`trace-analyzer` / `trace-analyzer-extra` / `trace-collector` / `traces`（改名 `traces-extra`）迁入 `src/monitoring/__tests__`，新增居所闸 `src/__tests__/test-residence.test.ts`（`ENFORCED_MODULES` 从 `monitoring` 起分批执法）。**gates 半已完成**（P2.2，未提交）——5 个 `*-gate.test.ts` 迁入 `src/gates/__tests__`（只改 import 落点），`ENFORCED_MODULES` 加 `gates`；注意 `security-gate.test.ts` 全文件 `it.skip`（基线即如此）且与 `security.test.ts` 内容重叠，按「保留并存、去重另案」未动。剩余：core 半（P2.3，同型）及其余模块目录的同型归位。
 3. `CONTEXT.md` 只描述当前职责、契约和依赖；历史放 ADR/CHANGELOG。`src/CONTEXT.md:34`“core 被所有模块依赖”与实际依赖不符，应修正。
 4. `sync-docs` 的采集和判定目前分处 CLI/core，可逐步收成一个文档同步模块，CLI 保留输出。优先级低于 P0/P1。
 5. 不合并已明确分工的 `sdd/index-generator.ts` 与 `knowledge/index-generator.ts`；不要为少量重复引入通用框架。

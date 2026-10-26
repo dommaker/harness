@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { PerformanceGate } from '../gates/performance';
+import { PerformanceGate } from '../performance';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

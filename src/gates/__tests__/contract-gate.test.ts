@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { ContractGate } from '../gates/contract';
+import { ContractGate } from '../contract';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

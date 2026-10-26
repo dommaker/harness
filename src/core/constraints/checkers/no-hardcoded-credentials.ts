@@ -42,10 +42,12 @@ const FINGERPRINT_PATTERNS: RegExp[] = [
 /**
  * 通用赋值模式：口令类变量 = 字面量，键名两侧允许引号（JSON），值允许无引号
  * （.env 裸值 / 无引号 YAML）。捕获组 1 = 引号值，2 = 裸值。
- * 不要求前词边界，覆盖 dbPassword 等 camelCase。
+ * 不要求前词边界，覆盖 dbPassword 等 camelCase；
+ * secret 一族另带 secret[_-]?key / secret[_-]access[_-]key（_ 是单词字符，
+ * secret\b 抓不到 SECRET_KEY、secret-key、AWS_SECRET_ACCESS_KEY，P0.4）。
  */
 const ASSIGNMENT_PATTERN =
-  /["']?(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|credential|private[_-]?key|signing[_-]?key)\b["']?\s*[:=]\s*(?:['"]([^'"\n]{8,})['"]|([^\s'"]{8,}))/i;
+  /["']?(?:password|passwd|secret\b|secret(?:[_-]access)?[_-]?key|api[_-]?key|access[_-]?token|auth[_-]?token|token|credential|private[_-]?key|signing[_-]?key)\b["']?\s*[:=]\s*(?:['"]([^'"\n]{8,})['"]|([^\s'"]{8,}))/i;
 
 /** URL 内嵌凭证（userinfo 带口令的 URL） */
 const URL_CREDENTIAL_PATTERN = /\b[a-z][a-z0-9+.-]{1,20}:\/\/[^/\s:@'"]+:[^/\s@'"]+@/i;

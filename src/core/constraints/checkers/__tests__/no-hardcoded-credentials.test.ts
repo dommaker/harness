@@ -89,6 +89,35 @@ describe('文本命中判定（经生产入口 evaluate 的变更文件扫描路
     expect(await textHitsCredential('signing' + '_key: realvalue123')).toBe(true);
   });
 
+  it('命中 SECRET_KEY 键族（P0.4：_ 是单词字符，secret\\b 漏报 Django 命名）', async () => {
+    expect(await textHitsCredential('SECRET' + '_KEY = "hardcoded-' + 'value-123";')).toBe(true);
+    expect(await textHitsCredential('secret' + '_key: "hardcoded-' + 'value-123"')).toBe(true);
+  });
+
+  it('命中 secret-key 连字符与 camelCase secretKey', async () => {
+    expect(await textHitsCredential('secret' + '-key: "hardcoded-' + 'value-123"')).toBe(true);
+    expect(await textHitsCredential('secret' + 'Key = "hardcoded-' + 'value-123";')).toBe(true);
+  });
+
+  it('命中 AWS_SECRET_ACCESS_KEY 无引号值', async () => {
+    expect(
+      await textHitsCredential('AWS_SECRET_AC' + 'CESS_KEY=hardcodedvalue' + '123')
+    ).toBe(true);
+  });
+
+  it('SECRET_KEY 键族豁免占位符值', async () => {
+    expect(
+      await textHitsCredential('SECRET' + '_KEY = "your-secret-key-here";')
+    ).toBe(false);
+    expect(
+      await textHitsCredential('AWS_SECRET_AC' + 'CESS_KEY=process.env.AWS_SECRET_AC' + 'CESS_KEY')
+    ).toBe(false);
+  });
+
+  it('SECRET_KEY 键族豁免代码表达式右值（既有 CODE_EXPRESSION 取舍不因本族改动回退）', async () => {
+    expect(await textHitsCredential('secret' + '_key: getSecret(),')).toBe(false);
+  });
+
   it('命中 JWT', async () => {
     expect(await textHitsCredential(`const tok = "${JWT}";`)).toBe(true);
   });

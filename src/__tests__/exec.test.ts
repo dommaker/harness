@@ -29,7 +29,7 @@ describe('exec utils', () => {
   describe('零消费者与跨 seam 收缩（harness#137 / #162）', () => {
     it('已删/已迁的五个名字在模块运行时键里都不存在', async () => {
       const mod = await import('../utils/exec');
-      expect(Object.keys(mod).sort()).toEqual(['execAsync']);
+      expect(Object.keys(mod).sort()).toEqual(['execAsync', 'execFileAsync']);
       for (const gone of [
         'isCommandAvailable',
         'delay',

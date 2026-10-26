@@ -93,7 +93,7 @@ const CLI_CWD_EXEMPTIONS: Record<string, { lines: string[]; reason: string }> = 
     lines: ['const pkgPath = process.cwd();'],
     reason:
       'release 定义表里没有 -p/--project-path（只收 --bump/--dry-run），pkgPath 就是该命令唯一的根，' +
-      '且已逐个传给每条 run(cmd, pkgPath) 与 verifyReleaseArtifacts(pkgPath)——不构成 -p 半失效。' +
+      '且已逐个传给每条 run(file, args[], pkgPath) 与 verifyReleaseArtifacts(pkgPath)——不构成 -p 半失效。' +
       '给发布流水线新增 -p 属新能力（可指向任意目录做 push/publish），不在 #95 范围。',
   },
 };

@@ -18,11 +18,18 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { captureIO, type CapturingIO } from '../../../cli/command-contract';
+import { execFileAsync } from '../../../utils/exec';
 import { release } from '../release';
 
 jest.mock('child_process', () => ({
   ...jest.requireActual('child_process'),
+  // 旧实现走 execSync（shell 字符串）；新实现走 utils/exec 的 execFileAsync（argv）。
+  // 两者都 mock：红阶段旧调用落在 execSync 上，绿阶段断言 execSync 零调用。
   execSync: jest.fn(),
+}));
+
+jest.mock('../../../utils/exec', () => ({
+  execFileAsync: jest.fn(),
 }));
 
 jest.mock('fs', () => ({
@@ -56,6 +63,7 @@ jest.mock('chalk', () => {
 });
 
 const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+const mockExecFile = execFileAsync as unknown as jest.Mock;
 const mockFs = fs as jest.Mocked<typeof fs>;
 
 const PKG_JSON = JSON.stringify({
@@ -78,10 +86,10 @@ type Override = [prefix: string, handler: (cmd: string) => string];
 /**
  * 全闸门通过的默认流（master / 已同步 / 干净树 / tsc ok / dist ok /
  * npm version → v0.18.1 / npm view → 0.18.1），overrides 按前缀优先命中。
+ * 新旧两种执行形状都接同一个 dispatch：shell 字符串（execSync）或 argv（execFileAsync）。
  */
 function flow(overrides: Override[] = []): void {
-  mockExecSync.mockImplementation((cmd) => {
-    const c = String(cmd);
+  const dispatch = (c: string): string => {
     for (const [prefix, handler] of overrides) {
       if (c.startsWith(prefix)) return handler(c);
     }
@@ -93,11 +101,20 @@ function flow(overrides: Override[] = []): void {
     if (c.startsWith('npm version')) return 'v0.18.1';
     if (c.startsWith('npm view')) return '0.18.1';
     return '';
-  });
+  };
+  mockExecSync.mockImplementation((cmd) => dispatch(String(cmd)));
+  mockExecFile.mockImplementation(((file: string, args: unknown[]) =>
+    Promise.resolve({
+      stdout: dispatch([file, ...(Array.isArray(args) ? args : [])].join(' ')),
+      stderr: '',
+    })) as never);
 }
 
 function execCommands(): string[] {
-  return mockExecSync.mock.calls.map(c => String(c[0]));
+  return [
+    ...mockExecSync.mock.calls.map(c => String(c[0])),
+    ...mockExecFile.mock.calls.map(c => [c[0], ...(c[1] as unknown[])].join(' ')),
+  ];
 }
 
 /** 断言 fail 结果的 reason 定位到指定闸门 */
@@ -318,6 +335,41 @@ describe('release command', () => {
     expect(io.outText()).toContain('npm: published @dommaker/harness@0.18.1');
   });
 
+  test('P0.3：发布编排全经 argv 执行，零 shell 字符串 execSync 调用', async () => {
+    const result = await release({ bumpType: 'patch' }, io);
+
+    expect(result).toEqual({ kind: 'ok' });
+    expect(mockExecSync).not.toHaveBeenCalled();
+    expect(mockExecFile).toHaveBeenCalled();
+    for (const call of mockExecFile.mock.calls) {
+      expect(typeof call[0]).toBe('string');
+      expect(Array.isArray(call[1])).toBe(true);
+    }
+  });
+
+  test('P0.3：publish 前后不读写用户 npm 配置，registry 值不进入任何命令', async () => {
+    // 明显假值的 registry 形状（含命令替换形）：即使存在也不得被执行
+    flow([['npm config get registry', () => 'https://registry.example-fake.invalid/$(not-a-real-cmd);']]);
+
+    const result = await release({ bumpType: 'patch' }, io);
+
+    expect(result).toEqual({ kind: 'ok' });
+    const commands = execCommands();
+    expect(commands.some((c) => c.startsWith('npm config'))).toBe(false);
+    expect(commands.some((c) => c.includes('registry.example-fake.invalid'))).toBe(false);
+    // publish 自带 --registry 指向官方源
+    expect(commands.some((c) => c.startsWith('npm publish') && c.includes('--registry https://registry.npmjs.org/'))).toBe(true);
+  });
+
+  test('P0.3：dry-run 不触 npm publish / npm config', async () => {
+    const result = await release({ bumpType: 'patch', dryRun: true }, io);
+
+    expect(result).toEqual({ kind: 'ok' });
+    const commands = execCommands();
+    expect(commands.some((c) => c.startsWith('npm publish'))).toBe(false);
+    expect(commands.some((c) => c.startsWith('npm config'))).toBe(false);
+  });
+
   test('闸门标识唯一且覆盖全部前置闸门（失败原因可逐闸门断言）', () => {
     // 本文件 mock 了 fs，读源码要走真实 fs
     const source: string = jest.requireActual('fs').readFileSync(path.join(__dirname, '..', 'release.ts'), 'utf-8');
@@ -330,5 +382,8 @@ describe('release command', () => {
       'tag-conflict', 'version-bump', 'git-push', 'pr-create', 'private-flag', 'npm-publish-verify',
     ]));
     expect(source).not.toContain('process.exit');
+    // P0.3：子进程一律 argv 形状（execFileAsync），不经 shell 字符串
+    expect(source).not.toContain('execSync');
+    expect(source).not.toContain('npm config');
   });
 });

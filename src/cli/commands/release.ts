@@ -19,13 +19,15 @@
  * 判定经返回值外溢（架构评审候选7）：12 个前置闸门维持**首败即停**，每个闸门失败
  * 返回 `gate <id>: <原因>`；退出码映射在 bin/harness.js 唯一一处。输出经注入 io
  * 流式打印（分钟级子进程阶段不能静默）。
+ * 子进程一律 argv 形状（utils/exec 的 execFileAsync），不拼 shell 字符串；
+ * npm publish 自带 --registry，publish 前后不读写用户 npm 配置（P0.3）。
  */
 
-import { execSync } from 'child_process';
 import chalk from 'chalk';
 import { verifyReleaseArtifacts } from '../../release';
 import { readPackageJson } from '../../utils/package-json';
 import { errorMessage } from '../../utils/error';
+import { execFileAsync } from '../../utils/exec';
 import { log, logError, processIO, type CommandIO, type CommandResult } from '../command-contract';
 
 export interface ReleaseOptions {
@@ -33,12 +35,12 @@ export interface ReleaseOptions {
   dryRun?: boolean;
 }
 
-async function run(cmd: string, cwd: string, timeout = 60_000): Promise<{ stdout: string; stderr: string }> {
+async function run(file: string, args: string[], cwd: string, timeout = 60_000): Promise<{ stdout: string; stderr: string }> {
   try {
-    const stdout = execSync(cmd, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout });
+    const { stdout } = await execFileAsync(file, args, { cwd, encoding: 'utf-8', timeout });
     return { stdout: stdout.trim(), stderr: '' };
   } catch (e) {
-    // execSync 非零退出：rejection 形状 Error & { stdout?, stderr? }，逐字段窄化取数
+    // 非零退出：rejection 形状 Error & { stdout?, stderr? }，逐字段窄化取数
     const err = e as { stdout?: unknown; stderr?: unknown };
     const chunk = (v: unknown): string => (typeof v === 'string' ? v : v != null ? String(v) : '');
     const stderr = chunk(err.stderr);
@@ -81,7 +83,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   log(io, chalk.cyan(`   bump: ${bumpType}${dryRun ? ' (dry-run)' : ''}`));
 
   // ── 2. Check branch (must be on master/main) ──
-  const branchResult = await run('git rev-parse --abbrev-ref HEAD', pkgPath);
+  const branchResult = await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], pkgPath);
   const currentBranch = branchResult.stdout.trim();
   if (currentBranch !== 'master' && currentBranch !== 'main') {
     logError(io, chalk.red(`❌ Must be on master or main branch to release. Currently on: ${currentBranch}`));
@@ -91,8 +93,8 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   log(io, chalk.green(`✅ git: on ${currentBranch}`));
 
   // ── 2b. Check remote sync ──
-  await run('git fetch origin', pkgPath, 15_000);
-  const behind = await run(`git rev-list --count HEAD..origin/${currentBranch}`, pkgPath);
+  await run('git', ['fetch', 'origin'], pkgPath, 15_000);
+  const behind = await run('git', ['rev-list', '--count', `HEAD..origin/${currentBranch}`], pkgPath);
   if (behind.stdout.trim() !== '0') {
     logError(io, chalk.red(`❌ Local ${currentBranch} is ${behind.stdout.trim()} commits behind origin/${currentBranch}. Pull first.`));
     return gateFail('remote-sync', `local ${currentBranch} is ${behind.stdout.trim()} commits behind origin/${currentBranch}`);
@@ -100,7 +102,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   log(io, chalk.green('✅ git: synced with remote'));
 
   // ── 2c. Check clean working tree ──
-  const stat = await run('git status --porcelain -uno', pkgPath);
+  const stat = await run('git', ['status', '--porcelain', '-uno'], pkgPath);
   if (stat.stdout.length > 0) {
     logError(io, chalk.red('❌ Uncommitted changes. Commit or stash before releasing.'));
     logError(io, chalk.gray(stat.stdout.slice(0, 500)));
@@ -110,7 +112,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
 
   // ── 3. tsc build ──
   log(io, chalk.cyan('🔨 Building...'));
-  const build = await run('npx tsc', pkgPath, 60_000);
+  const build = await run('npx', ['tsc'], pkgPath, 60_000);
   if (build.stderr && !build.stdout) {
     logError(io, chalk.red('❌ tsc failed:'), build.stderr.slice(0, 800));
     return gateFail('build', `tsc failed: ${build.stderr.slice(0, 200)}`);
@@ -134,13 +136,13 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   log(io, chalk.cyan('🔢 Bumping version...'));
   const expectedNew = bumpedVersion(oldVersion, bumpType);
   const expectedTag = `v${expectedNew}`;
-  const tagExists = await run(`git tag -l "${expectedTag}"`, pkgPath);
+  const tagExists = await run('git', ['tag', '-l', expectedTag], pkgPath);
   if (tagExists.stdout.trim() === expectedTag) {
     logError(io, chalk.red(`❌ Tag ${expectedTag} already exists. Version may have been released already.`));
     return gateFail('tag-conflict', `tag ${expectedTag} already exists`);
   }
 
-  const bump = await run(`npm version ${bumpType} -m "release: %s"`, pkgPath);
+  const bump = await run('npm', ['version', bumpType, '-m', 'release: %s'], pkgPath);
   if (bump.stderr && !bump.stdout) {
     logError(io, chalk.red('❌ npm version failed:'), bump.stderr);
     return gateFail('version-bump', `npm version ${bumpType} failed: ${bump.stderr.slice(0, 200)}`);
@@ -151,7 +153,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
 
   // ── 6. Push (handle protected branch via PR) ──
   log(io, chalk.cyan('⬆️  Pushing...'));
-  const push = await run(`git push origin ${currentBranch}`, pkgPath, 30_000);
+  const push = await run('git', ['push', 'origin', currentBranch], pkgPath, 30_000);
   const isProtected = push.stderr.includes('GH006') || push.stderr.includes('protected branch');
 
   if (isProtected) {
@@ -159,12 +161,12 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
     const releaseBranch = `release/v${newVersion}`;
     log(io, chalk.yellow(`⚠️  ${currentBranch} is protected. Creating PR via ${releaseBranch}...`));
 
-    await run(`git checkout -b ${releaseBranch}`, pkgPath);
-    await run(`git push origin ${releaseBranch}`, pkgPath, 30_000);
+    await run('git', ['checkout', '-b', releaseBranch], pkgPath);
+    await run('git', ['push', 'origin', releaseBranch], pkgPath, 30_000);
 
     // Create PR
     const prBody = `## Release ${pkgName}@${newVersion}\n\n- Bump version: ${oldVersion} → ${newVersion}\n- Changelog updated\n\nAfter merge, push tag to trigger npm publish:\n\`\`\`\ngit push origin ${tag}\n\`\`\``;
-    const pr = await run(`gh pr create --title "release: ${pkgName}@${newVersion}" --body "${prBody}" --base ${currentBranch}`, pkgPath, 30_000);
+    const pr = await run('gh', ['pr', 'create', '--title', `release: ${pkgName}@${newVersion}`, '--body', prBody, '--base', currentBranch], pkgPath, 30_000);
     if (pr.stdout) {
       log(io, chalk.green(`✅ PR created: ${pr.stdout.trim()}`));
     } else {
@@ -173,7 +175,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
     }
 
     // Switch back to original branch
-    await run(`git checkout ${currentBranch}`, pkgPath);
+    await run('git', ['checkout', currentBranch], pkgPath);
 
     log(io, chalk.cyan('\n📋 Next steps:'));
     log(io, chalk.gray(`   1. Merge the PR: ${pr.stdout.trim()}`));
@@ -187,7 +189,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
     logError(io, chalk.red('❌ git push failed:'), push.stderr.slice(0, 500));
     return gateFail('git-push', `git push origin ${currentBranch} failed: ${push.stderr.slice(0, 200)}`);
   }
-  await run(`git push origin ${tag}`, pkgPath, 30_000);
+  await run('git', ['push', 'origin', tag], pkgPath, 30_000);
   log(io, chalk.green('✅ git: pushed'));
 
   // ── 7. Check private flag ──
@@ -198,13 +200,10 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   }
   log(io, chalk.green('✅ package: not private'));
 
-  // ── 8. npm publish ──
-  const origRegistry = await run('npm config get registry', pkgPath);
-  await run('npm config set registry https://registry.npmjs.org/', pkgPath);
+  // ── 8. npm publish（--registry 随命令携带，不读写用户 npm 配置）──
   log(io, chalk.cyan('📤 Publishing to npm...'));
-  await run('npm publish --registry https://registry.npmjs.org/', pkgPath, 180_000);
-  await run(`npm config set registry ${origRegistry.stdout}`, pkgPath);
-  const verify = await run(`npm view ${pkgName} version --registry https://registry.npmjs.org/`, pkgPath);
+  await run('npm', ['publish', '--registry', 'https://registry.npmjs.org/'], pkgPath, 180_000);
+  const verify = await run('npm', ['view', String(pkgName), 'version', '--registry', 'https://registry.npmjs.org/'], pkgPath);
   if (verify.stdout.trim() === newVersion) {
     log(io, chalk.green(`✅ npm: published ${pkgName}@${newVersion}`));
   } else {
@@ -214,7 +213,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
 
   // ── 9. GitHub Release ──
   log(io, chalk.cyan('🐙 Creating GitHub Release...'));
-  const gh = await run(`gh release create ${tag} --generate-notes`, pkgPath, 30_000);
+  const gh = await run('gh', ['release', 'create', tag, '--generate-notes'], pkgPath, 30_000);
   if (gh.stderr && gh.stderr.includes('already exists')) {
     log(io, chalk.yellow(`⚠️  gh: release ${tag} already exists`));
   } else if (gh.stderr) {
@@ -222,7 +221,7 @@ export async function release(options: ReleaseOptions, io: CommandIO = processIO
   } else {
     let repoUrl = '';
     try {
-      const remoteUrl = execSync('git remote get-url origin', { cwd: pkgPath, encoding: 'utf-8', stdio: 'pipe', timeout: 5_000 }).trim();
+      const remoteUrl = (await run('git', ['remote', 'get-url', 'origin'], pkgPath, 5_000)).stdout.trim();
       const m = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/\s.]+?)(?:\.git)?$/);
       if (m) repoUrl = `https://github.com/${m[1]}/${m[2]}/releases/tag/${tag}`;
     } catch { /* no remote */ }

@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { captureIO, type CapturingIO } from '../../command-contract';
-import { normalizeCapabilitiesTableLayout } from '../sync-docs/capabilities-syncer';
+import { normalizeCapabilitiesTableLayout } from '../../../core/docs-sync/capabilities-table';
 import { syncDocs } from '../sync-docs';
 
 let io: CapturingIO;

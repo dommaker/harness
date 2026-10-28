@@ -4,7 +4,8 @@
  * 此前 checker.parseCapabilitiesFiles 与 sync-docs.parseCapabilitiesFiles
  * 各持一份正则，收敛到此处。H2 起能力清单计数（checkCapabilityCounts /
  * updateCapabilityCounts）也从 sync-docs/capabilities-syncer 收敛到此，
- * 使本模块成为 CAPABILITIES.md 解析 + 计数唯一入口。
+ * 使本模块成为 CAPABILITIES.md 解析 + 计数唯一入口
+ * （file-table 文本判定正本见 core/docs-sync/capabilities-table.ts，P2.8 下沉）。
  *
  * 计数所需的命令/门禁定义由调用方注入（harness#88：core 不值导入上层定义表）。
  */

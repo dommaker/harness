@@ -1,17 +1,21 @@
 /**
  * 项目读取器（工单 22）：package.json / config.yml / 源码结构的项目信息提取
+ *
+ * P2.8 自 cli/commands/sync-docs/ 下沉 core/docs-sync/（采集与判定收口，
+ * handoff P2 第 4 项）：纯移位，职责与口径不变。判定本体仍在
+ * core/constraints/ 的 reconcile 族纯函数。
  */
 
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { loadRawProjectConfig } from '../../../core/project-config-loader';
-import { resolveContextFiles } from '../../../core/constraints/governance-accessors';
-import type { ConstructionSiteDrift } from '../../../core/constraints/construction-sites';
-import { detectSourceRoots } from '../../../utils/detect-source-roots';
-import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../../utils/file-walk';
-import { attemptAsync } from '../../../utils/attempt';
-import { readPackageJson } from '../../../utils/package-json';
+import { loadRawProjectConfig } from '../project-config-loader';
+import { resolveContextFiles } from '../constraints/governance-accessors';
+import type { ConstructionSiteDrift } from '../constraints/construction-sites';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { DEFAULT_SKIP_DIRS, findTsSourceFiles, isTsSourceFile } from '../../utils/file-walk';
+import { attemptAsync } from '../../utils/attempt';
+import { readPackageJson } from '../../utils/package-json';
 
 export interface ModuleInfo {
   name: string;

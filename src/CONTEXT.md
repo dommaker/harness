@@ -13,7 +13,7 @@
 ## 目录
 | 目录 | 职责 |
 |------|------|
-| core/ | 约束引擎、检查点验证器 |
+| core/ | 约束引擎、检查点验证器、文档同步采集/判定（docs-sync/，P2.8 自 cli 下沉） |
 | gates/ | 质量门 (acceptance, command, contract, performance, review, security) |
 | monitoring/ | Execution Trace 收集/分析 |
 | failure/ | 错误分类、失败记录 |

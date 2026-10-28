@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { createConstructionSiteCounter } from '../context-syncer';
+import { createConstructionSiteCounter } from '../context-collector';
 
 let tempDir: string;
 

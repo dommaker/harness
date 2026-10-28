@@ -9,7 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { collectContextExportSurface } from '../context-syncer';
+import { collectContextExportSurface } from '../context-collector';
 
 let tempDir: string;
 

@@ -1,46 +1,46 @@
 /**
- * sync-docs 主流程的「采集 → 判定」两段（ADR-0040 Phase 3 自 main-flow.ts 拆段，纯移位）
+ * sync-docs 的「采集 → 判定」主入口（ADR-0040 Phase 3 拆段；P2.8 自
+ * cli/commands/sync-docs/ 下沉 core/docs-sync/，handoff P2 第 4 项：
+ * 文档同步模块负责采集与判定，CLI 只保留输出）
  *
  * - collectSyncState：扫描源码模块 → CAPABILITIES.md 两种格式判定与对比 →
  *   CONTEXT.md 缺失/漂移/mtime → AGENTS.md 期望内容 → 表格排版，全部收成一枚 SyncState；
  * - judgeSyncState：SyncState → 问题旗标组（hasIssues 族）与可定位的漂移 reason。
- * 出口（JSON/人读输出、写入自愈、gate 判定）分别住 sync-output.ts / sync-writes.ts /
- * main-flow.ts 尾部。
+ * 出口（JSON/人读输出、写入自愈）住 cli/commands/sync-docs/ 的 sync-output.ts /
+ * sync-writes.ts；「未找到 srcDir」警告属输出职责，由输出侧从 missingSrcDirs 打印。
  */
 
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import chalk from 'chalk';
 import {
   isCapabilityListingFormat,
   checkCapabilityCounts,
   type CapabilityDefinitionSource,
-} from '../../../core/constraints/capabilities-parser';
-import { reconcileCapabilities } from '../../../core/constraints/capabilities-reconcile';
-import { reconcileContext } from '../../../core/constraints/context-reconcile';
+} from '../constraints/capabilities-parser';
+import { reconcileCapabilities } from '../constraints/capabilities-reconcile';
+import { reconcileContext } from '../constraints/context-reconcile';
 import {
   parseConstructionSiteMarkers,
   reconcileConstructionSites,
-} from '../../../core/constraints/construction-sites';
-import { detectSourceRoots } from '../../../utils/detect-source-roots';
-import { getCapabilitiesMode, type CapabilitiesMode } from '../../../core/constraints/governance-accessors';
+} from '../constraints/construction-sites';
+import { detectSourceRoots } from '../../utils/detect-source-roots';
+import { getCapabilitiesMode, type CapabilitiesMode } from '../constraints/governance-accessors';
 import { getSourceDirs, scanSourceModules, getRequiredContextDirs } from './project-reader';
 import type { ModuleInfo, SyncResult } from './project-reader';
 import {
   parseCapabilitiesFiles,
   normalizeCapabilitiesTableLayout,
-} from './capabilities-syncer';
+} from './capabilities-table';
 import {
   findExistingContextFiles,
   getLatestTsMtime,
   collectContextExportSurface,
   createConstructionSiteCounter,
   type ConstructionSiteCounter,
-} from './context-syncer';
+} from './context-collector';
 import { buildAgentsMd } from './agents-syncer';
 import { extractPreserveBlocks, composeAgentsMd } from './preserve-block';
-import { log, type CommandIO } from '../../command-contract';
 
 export interface SyncDocsOptions {
   /** 项目路径 */
@@ -80,18 +80,21 @@ export interface SyncState {
   agentsMdStale: boolean;
   agentsMdMalformedPreserve: string[];
   tableLayout: TableLayoutVerdict;
+  /**
+   * 配置要求但不在场的源码根（采集期跳过）。提示打印是输出职责，
+   * 由 cli 侧 sync-output.ts 从本字段打出（stdout 字节序与旧实现一致）。
+   */
+  missingSrcDirs: string[];
 }
 
 /**
- * 采集段：扫描与全部判定面数据收集（不写任何文件）
+ * 采集段：扫描与全部判定面数据收集（不写任何文件、不打印——纯采集+判定）
  */
 export async function collectSyncState(
   projectPath: string,
   options: SyncDocsOptions,
-  io: CommandIO,
   definitions: CapabilityDefinitionSource
 ): Promise<SyncState> {
-  const isJson = options.json === true;
   const capsMode = getCapabilitiesMode(projectPath);
 
   const result: SyncResult = {
@@ -124,13 +127,13 @@ export async function collectSyncState(
   // capability-listing 格式不做条目级比对（计数才是判定面），模块清单在本次运行里无人
   // 消费 → 整树一份 .ts 内容都不读（harness#147；改造前是无条件全树逐文件读首行注释）。
   const currentModules: ModuleInfo[] = [];
+  const missingSrcDirs: string[] = [];
   if (!capsIsCapabilityListing) {
     for (const srcDir of srcDirs) {
-      // 目录缺失 = 未配置该源码根（可见跳过）；目录在而扫描失败 = 真故障，抛出
+      // 目录缺失 = 未配置该源码根（采集跳过并记入 state，提示由输出侧打出）；
+      // 目录在而扫描失败 = 真故障，抛出
       if (!existsSync(path.join(projectPath, srcDir))) {
-        if (!isJson) {
-          log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
-        }
+        missingSrcDirs.push(srcDir);
         continue;
       }
       const modules = await scanSourceModules(path.join(projectPath, srcDir), projectPath);
@@ -273,6 +276,7 @@ export async function collectSyncState(
     agentsMdStale,
     agentsMdMalformedPreserve,
     tableLayout,
+    missingSrcDirs,
   };
 }
 

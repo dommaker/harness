@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { syncDocs } from '../sync-docs';
-import { scanSourceModules } from '../sync-docs/project-reader';
+import { scanSourceModules } from '../../../core/docs-sync/project-reader';
 import { captureIO } from '../../command-contract';
 import { DEFAULT_SKIP_DIRS, isTsSourceFile } from '../../../utils/file-walk';
 

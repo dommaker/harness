@@ -7,7 +7,7 @@
  * 声明「类 X 的仓内直构造点恰为 N 处」；无标记的散文维持现状不判。
  *
  * 纯判定 module：标记解析、`new X(` 计数口径、期望/实际对撞全在此，
- * 不吃 fs——文件遍历与正文读取在调用方（cli 侧 sync-docs/context-syncer），
+ * 不吃 fs——文件遍历与正文读取在调用方（P2.8 起 core/docs-sync/context-collector.ts），
  * 与 context-reconcile 同一套「判定不吃 fs、清单由调用方组装」形状。
  *
  * 计数口径：

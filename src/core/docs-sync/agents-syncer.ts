@@ -1,13 +1,15 @@
 /**
  * AGENTS.md 同步器（工单 22）：agent 导读生成（项目简介/目录结构/常用命令/约束治理/知识入口）
+ *
+ * P2.8 自 cli/commands/sync-docs/ 下沉 core/docs-sync/（采集与判定收口），纯移位。
  */
 
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import { loadRawProjectConfig } from '../../../core/project-config-loader';
-import { hasGovernanceContract } from '../../../core/constraints/injection-writer';
-import { DEFAULT_SKIP_DIRS } from '../../../utils/file-walk';
+import { loadRawProjectConfig } from '../project-config-loader';
+import { hasGovernanceContract } from '../constraints/injection-writer';
+import { DEFAULT_SKIP_DIRS } from '../../utils/file-walk';
 import {
   readPackageJsonLite,
   getConfigDescription,

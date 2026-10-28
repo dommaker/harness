@@ -378,6 +378,45 @@ describe('sync-docs command', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
     });
 
+    it('「未找到 srcDir」警告：人读模式打印、--json 不打印（历史行为钉）', async () => {
+      // required_dirs 配了 lib/ 但目录不在场 → 采集记入 SyncState.missingSrcDirs。
+      // 旧实现（自多目录扫描引入起，sync-state 内联 log 带 isJson 守卫）该警告
+      // 在 --json 下从来不打印；P2.8 移到 emitHumanReport（只走人读分支）后行为必须一致。
+      const testDir = path.join(tempDir, 'missing-srcdir-warning');
+      const harnessDir = path.join(testDir, '.harness');
+      const srcDir = path.join(testDir, 'src');
+      fs.mkdirSync(harnessDir, { recursive: true });
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, 'a.ts'), 'export const a = 1;');
+
+      const yaml = require('../../../utils/yaml');
+      fs.writeFileSync(
+        path.join(harnessDir, 'config.yml'),
+        yaml.dump({
+          governance: {
+            context_files: {
+              enabled: true,
+              required_dirs: ['src', 'lib'],
+            },
+          },
+        })
+      );
+
+      await syncDocs({ projectPath: testDir, json: true }, io);
+      expect(io.outText()).not.toContain('未找到 lib 目录，跳过');
+      // JSON 出口不受影响，仍打出结构化报告
+      const jsonCall = io.outRecords().map(chunk => [chunk] as string[]).find(
+        (call: unknown[]) => typeof call[0] === 'string' && call[0].startsWith('{')
+      );
+      expect(jsonCall).toBeDefined();
+
+      io = captureIO();
+      await syncDocs({ projectPath: testDir }, io);
+      expect(io.outText()).toContain('未找到 lib 目录，跳过');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+    });
+
     it('写入模式应移除已删除文件的行', async () => {
       const testDir = path.join(tempDir, 'remove-stale');
       const srcDir = path.join(testDir, 'src');

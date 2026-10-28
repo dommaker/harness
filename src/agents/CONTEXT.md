@@ -14,6 +14,3 @@ Agent 生命周期管理：Agent 状态机（5 状态：idle/running/completed/f
 ## 约定
 - Agent 状态机 5 状态: idle → running → completed / failed（terminated 为预留终态）
 - 生命周期管理不包含业务逻辑
-
-## 注意事项
-- Phase 2 实现的 Agent 状态管理

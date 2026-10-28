@@ -1,7 +1,7 @@
 # release/
 
 ## 职责
-发布物完整性自检：harness 自己声明并校验自己发布了什么。关键发布物清单的单一来源，替代外部（下游消费方发布流）与本仓 release 命令各自的 dist 文件硬编码（harness#77，#75 N4 收编）。
+发布物完整性自检：harness 自己声明并校验自己发布了什么。关键发布物清单的单一来源，替代发布流与 release 命令各自的 dist 文件硬编码。
 
 ## 核心导出
 下列符号都由 `integrity.ts` 就地导出；`index.ts` barrel 只再导出标「公开 API」的那一组，其余属模块内部 seam——仓内消费方直接 `from './integrity'`，导出面由 `__tests__/barrel.test.ts` 守卫（harness#92）。
@@ -11,12 +11,12 @@
 - `getCriticalArtifacts(pkgRoot?)` / `verifyReleaseArtifacts(pkgRoot?)`——公开 API；pkgRoot 缺省自动解析，外部消费者零参数即自检已安装的 harness
 
 ## 依赖关系
-- 内部依赖仅 `utils/package-json`（readPackageJson 正本，重构 Phase 5 收口）；其余只依赖 node fs/path
+- 内部依赖仅 `utils/package-json`（readPackageJson 正本）；其余只依赖 node fs/path
 
 ## 约定
 - 清单维护模型：声明面推导为主（目录重构动到 package.json 时清单自动跟随）+ extras 随源码维护；**不新增第三处硬编码清单**
-- 覆盖口径（有意裁决，#77）：深度内部文件（tsc 产出的 dist/knowledge/*、core/constraints/checker.js 等）**不在清单**——非公开契约，存在性由 tsc 构建成功保证；历史上外部硬编码它们正是重构误判（下游消费方 6cf3c329）的根因。旧外部清单 checker.js/doctor.js、旧 release 清单 13 项均被本清单取代，覆盖收窄是裁决而非遗漏
-- `__tests__/integrity.test.ts` 的「真实包根清单同步闸门」是重构同步闸门，对完整清单做显式期望 `toEqual` 精确对撞（#160 起双向成立）：声明面（`exports`/`main`/`bin`）增、删、改任一条目都变红并指名差额项，动声明面必须同步测试内的显式清单；extras 由同文件另一条 `toEqual` 精确冻结，闸门内展开引用保持单一来源
+- 覆盖口径（有意裁决）：深度内部文件（tsc 产出的 dist/knowledge/*、core/constraints/checker.js 等）**不在清单**——非公开契约，存在性由 tsc 构建成功保证；覆盖收窄是裁决而非遗漏
+- `__tests__/integrity.test.ts` 的「真实包根清单同步闸门」对完整清单做显式期望 `toEqual` 精确对撞：声明面（`exports`/`main`/`bin`）增、删、改任一条目都变红并指名差额项，动声明面必须同步测试内的显式清单；extras 由同文件另一条 `toEqual` 精确冻结，闸门内展开引用保持单一来源
 - bin 新增引导期 require 的 dist 文件 → extras 加一条 + 测试同步
 
 ## 注意事项

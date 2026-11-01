@@ -9,23 +9,97 @@
 
 **进展（2026-10-28，复审后修复切片，local master 单独提交）**：最终复审三条意见的处理——① `src/core/CONTEXT.md` 的 context-reconcile / construction-sites 两条「调用方」修正为 `core/docs-sync/context-collector.ts` 的 `collectContextExportSurface` / `createConstructionSiteCounter`（实际已随 P2.8 迁离 `cli/commands/sync-docs/context-syncer.ts`，该文件现只剩写侧 `createContextMd`）；② 复审疑「missing srcDir 警告移出采集后 --json 不再打印」——经 git 史取证**不成立**，不改行为：该警告自多目录扫描引入（旧 sync-docs 采集内联 log）起就带 `if (!isJson)` 守卫，`--json` 下旧实现也不打印，P2.8 移到 `emitHumanReport`（只走人读分支）后行为与顺序一致；按「补公共接缝回归测试」的要求在 `src/cli/commands/__tests__/sync-docs.test.ts` 钉住该行为（人读打印、--json 不打印、JSON 出口不受影响），新测试当前实现即绿；③ 上文 P2.8 块的 head-gate 措辞已改为准确口径（sync-docs CLI 自己的 git 取证与写流程收尾，不在 check 判定链内，不是 core/CONTEXT git-evidence 记名豁免面）。local-rag 本会话不可用，按交接规则仅记录。本片范围外的复审建议（knowledge/lifecycle 重复、middle man 等）不做。本切片证据在 `.harness/evidence/p2.8-review-fix-*`；提交 SHA 以 git log 为准，不预写。
 
-## 新会话从这里开始
+**进展（2026-10-29）：后续架构、性能与安全审查完成**——当前开发基线为 `master@fb6b733`（进入时重新核实）。下一轮不做大规模目录搬迁，优先统一副作用授权、进程结果与证据时效、tasks.yml 契约和 knowledge 批量读写。以下开发队列取代早期“首个开发切片”建议；此前已完成切片只作历史参考。
 
-首个开发切片：**修复“无效证据被判通过”**，顺序为 SecurityGate 缺键假绿、PerformanceGate 陈旧覆盖率。按 TDD 先补会失败的回归测试，再改实现，运行相关测试和构建。完成这个切片后再处理命令执行与凭证漏报，不要直接开始大规模目录迁移。
+**进展（2026-10-29）：D1 已实施并由主会话独立验收，未提交**——`SpecAcceptanceGate` 用模块内私有 `tokenizeCommand` 将可信 `e2eTestCommand` 解析为 argv 前缀，`tasks.yml` 的 `e2e_test` / `test_name` 只作为独立 argv 元素追加，经 `execFileAsync` 无 shell 执行；cwd、超时、退出码与 `judgeTestRun` 判定不变。TDD 红→绿及真实 `node` runner 端到端用例已落；主会话复跑 21 个相关套件、220 用例全绿（1 套件/4 用例按基线跳过），build、改动文件 ESLint、`sync-docs --check` 均通过。证据在 `.harness/evidence/d1-*`。local-rag 本会话不可用，按规则记录。遗留边界：可信命令只支持 CONTEXT 已记录的 shell 词法子集，不做变量或命令替换；Windows `.cmd` 未专项覆盖。**下一切片 = D2**。
+
+**进展（2026-10-29）：D2 已实施并经三轮主会话审查后独立验收，未提交**——release 私有 `run` 返回 `{ code, stdout, stderr }`，所有状态变更与证据命令按 `code !== 0` 首败即停（含 fetch/status/tag 证据、build/version、主分支/release 分支/tag push、PR checkout/create、npm publish/view）；仅 GitHub Release 非致命告警和成功后的 remote URL 装饰查询保留降级。构建改走 `<pkgPath>/node_modules/typescript/bin/tsc` + `process.execPath`，缺失即 build 失败，无 npx/隐式下载；stdout-only 错误、无数字退出码、陈旧 dist、成功 stderr 警告均有回归。主会话复跑 3 个相关套件、59 用例全绿，build、改动文件 ESLint、`sync-docs --check` 均通过。证据在 `.harness/evidence/d2-*`；`src/release/integrity.ts` 无需修改。**下一切片 = D3**。
+
+## 新会话从这里开始：主会话编排，子 agent 实现
 
 新会话可直接使用：
 
 ```text
-阅读 docs/2026-10-26-refactor-review-handoff.md，从“首个开发切片”开始实施。遵守根目录 AGENTS.md 的诊断→修复闸门、测试与文档同步要求；以本文基线为上下文，但先确认工作树和相关源码未发生漂移。
+阅读 harness/docs/2026-10-26-refactor-review-handoff.md 的“新会话从这里开始”和当前切片。主会话只负责编排、验收和状态记录；每个实现切片派一个全新的 coder 子 agent 完成。先确认工作树、依赖和源码未漂移，再派发第一张未完成的可用切片。
 ```
 
-开始修改前：
+### 主会话职责
 
-1. 阅读根入口 `AGENTS.md`、`harness/AGENTS.md` 和 `harness/src/CONTEXT.md`；改到具有本目录 `CONTEXT.md` 的模块时同步维护该文档。
-2. 执行 `git status --short`，确认是否已有他人改动；不要覆盖未提交工作。
-3. 阅读目标实现及其现有测试。本文行号来自上述基线，漂移后以实际代码为准。
-4. 根目录规则要求实现前查询 local-rag；当前审查会话没有该工具。新会话若工具可用，查询“安全门禁 假绿 覆盖率 缓存 生命周期 命令执行”。
-5. 单票直接在 local master 开发，不主动建分支、不 ship、不直推受保护 master。是否建 issue、提交或上线由用户另行要求。
+1. 阅读根入口 `AGENTS.md`、`harness/AGENTS.md`、`harness/src/CONTEXT.md` 及当前切片涉及的模块文档；执行 `git -C harness status --short --branch`，确认基线与未提交改动。
+2. 实现前按根目录规则查询 local-rag；工具不可用时记录，不伪造查询结果。
+3. 从下方队列选择第一张未完成且依赖已满足的切片，把**目标、范围、非目标、验收标准和相关文件**完整交给一个全新的 coder 子 agent。子 agent 没有本会话上下文，不能只发切片编号。
+4. 同一 checkout 同时只跑一个实现子 agent，切片串行。只读设计、审查可以并行；实现阶段不让多个 agent 交叉改同一工作树。
+5. 子 agent 返回后，主会话检查实际 diff、测试输出和文档同步情况，必要时运行独立验收。主会话不直接补实现；需要修改时，把具体 review 意见交回原实现子 agent 修复。
+6. 只有实际行为、相关测试、构建和文档全部验收后，才把切片标为完成并记录证据。子 agent 自述完成不等于主会话验收完成。
+7. 每张切片结束重新选择下一张，不机械执行整份清单。遇产品语义、公共接口或跨仓变更分歧时先请人裁决。
+
+### 子 agent 工作契约
+
+- 先读适用约束、目标实现和现有测试，以 TDD 先补能复现问题的测试，再改实现。
+- 只改本切片范围；同步相关 `CONTEXT.md`，改变既定架构决策时同步 ADR。新文件必须有测试。
+- 收尾运行改动文件及直接依赖它的相关测试，再运行 `npm run build`；返回修改文件、红→绿证据、最终测试/构建结果和遗留风险。
+- 单票直接在 local master 工作，不新建分支、不 ship、不直推受保护 master。是否建 issue 或提交由用户另行要求。
+
+### 开发队列
+
+状态初始均为 `pending`；主会话验收后改为 `done` 并附提交或证据位置。
+
+#### D1 `done`：E2E 参数与 shell 解耦
+
+- 范围：`src/gates/acceptance.ts` 及直接测试、`src/gates/CONTEXT.md`。
+- 目标：`e2eTestCommand` 仍是可信配置；`tasks.yml` 的 `e2e_test` / `test_name` 作为 argv 数据传递，不经过 shell 字符串插值。保留退出码、超时和 `judgeTestRun` 判定语义。
+- 验收：特殊字符测试文件与测试名只作为单个参数到达测试运行器；成功、失败、超时回归测试及 build 通过。
+- 依赖：无。
+
+#### D2 `done`：发布链统一按退出码判定
+
+- 范围：`src/cli/commands/release.ts`、release 直接测试、`src/release/integrity.ts` 仅在确有必要时调整。
+- 目标：进程 helper 返回 `{ code, stdout, stderr }`；build、version、push 等步骤统一以 `code !== 0` 判负。构建使用项目本地确定的 TypeScript 可执行文件，缺失即失败，不隐式下载。
+- 验收：错误只出现在 stdout 时构建仍失败；陈旧 dist 不能救活失败构建；成功路径与 dry-run 行为不变；相关测试及 build 通过。
+- 依赖：无。
+
+#### D3 `pending`：P0.5 Phase 1 副作用授权
+
+- 范围：check / validate / report 的命令执行链、CLI 参数与输出契约；按 P0.5 已裁决语义实施，不进入 Phase 2。
+- 目标：组合根形成统一执行策略；运行前列出将执行的命令，新增 `--read-only` 跳过命令执行并明确报告跳过结果。仓内 YAML 只声明命令，不作为授权来源；HTTP 是否纳入同一策略先在实现设计中说明。
+- 非目标：本切片不改变默认执行行为，不实现 Phase 2 默认拒绝或交互授权。
+- 验收：三条命令的人读/JSON 输出与退出码符合各自既有契约；read-only 下零命令副作用且没有“已检查”假象；普通模式行为兼容；相关测试及 build 通过。
+- 依赖：无；若与 D1 并行设计，最终仍串行落盘。
+
+#### D4 `pending`：外部证据来源与本次运行绑定
+
+- 范围：SecurityGate 默认审计命令、PerformanceGate 覆盖率采集及直接测试。
+- 目标：默认 npm audit 固定可信 registry；覆盖率报告必须能证明由本次测试执行产生，缺失或未刷新时 fail-loud。自定义扫描命令仍属于显式可信输入。
+- 验收：项目 npm 配置不能改变默认审计来源；旧覆盖率 + 本次未生成报告不能判为有效；合法零漏洞和本次有效覆盖率仍可通过；相关测试及 build 通过。
+- 依赖：无。
+
+#### D5 `pending`：tasks.yml 解析回到单一契约
+
+- 范围：`src/gates/tasks-file.ts`、`src/cli/commands/acceptance.ts`、acceptance 直接测试和两处 CONTEXT。
+- 目标：gate 与 `acceptance list` 共同消费 `parseTasksFile`；删除 CLI 旧形状解析和解析失败静默 skip。输出文案变化须由测试明确钉住。
+- 验收：gate 接受的文件能列出相同任务与验收条件；非法形状一致 fail-fast；相关测试及 build 通过。
+- 依赖：无；与 D1 触及同一 gate 文件时排在 D1 后。
+
+#### D6 `pending`：knowledge 路径构造收口
+
+- 范围：`src/knowledge/store.ts` 及 store/query/decay 直接测试、`src/knowledge/CONTEXT.md`。
+- 目标：index 驱动的读取、写入、删除共用同一受限路径构造；非法 id/type 在读 index 时明确报错并指向重建或修复方式。
+- 验收：索引中的非法路径分量不能逃出知识库目录；正常读取、重建、删除和索引漂移错误语义不回归；相关测试及 build 通过。
+- 依赖：无；必须先于 D7。
+
+#### D7 `pending`：knowledge 批量读写与按需物化
+
+- 范围：`src/knowledge/store.ts`、`ingest.ts`、`query.ts`、`lifecycle.ts` 及直接测试；不把全仓同步 IO 异步化。
+- 目标：普通 query 先按 index 元数据过滤、排序和截断，再读取返回条目全文；ingestBatch 每批共享一次磁盘去重视图并统一落盘；引用记账复用已加载条目，消除层间重复读取。保留全文搜索需要扫描全库的语义。
+- 编排：先派两个只读设计子 agent 各给一种 interface 方案，主会话按调用方收益、改动集中度和测试面选择后，再派一个实现子 agent；设计阶段不改代码。
+- 验收：用 IO 计数测试证明批量读取/索引写入不再随条目数重复放大；重复、merge、auto-fix、引用去重、回调和缓存语义不回归；相关测试及 build 通过。性能数字只作结果说明，不用单次耗时替代行为断言。
+- 依赖：D6。
+
+### 后续独立票，不阻塞上述队列
+
+- studio 约束变更从 CLI 子进程切到 harness 库接口，或经产品裁决收回休眠库面；这是跨仓票，需单独验收。
+- 清理零消费 barrel/公共导出、`ConstraintContext` 遗留字段和 utils 层直接输出。
+- 更新开发工具链 lockfile 并复核 npm audit；生产依赖本轮审计为零，开发依赖告警不等于运行时可利用。
 
 ## 审查结论
 

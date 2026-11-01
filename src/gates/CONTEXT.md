@@ -37,6 +37,7 @@
 
 ## 注意事项
 - 「门禁」仅指本层注册的 6 种；检查点（`core/validators/checkpoint.ts` + `harness validate` + checkpoints.yml）是独立机制，两者分工与术语裁决见 ADR-0036
+- **e2e 执行信任边界（D1）**：`e2eTestCommand` 是可信配置，只在门禁内经 `tokenizeCommand`（shell 词法子集：未引用空白分词、`'...'` 全字面、`"..."` 成组且仅 `\"`/`\\` 转义、其余位置 `\` 转义下一字符、引号未闭合即抛错）解析成 argv 前缀；tasks.yml 的 `e2e_test` / `test_name` 是**不可信数据**，只作为 argv 数组元素追加，经 `execFileAsync`（不经 shell）执行——特殊字符（空白、引号、`$`、反引号、`;`、命令替换形状）只可能成为对应单个参数的字面内容，不触发 shell 解释、不被拆词，也永不进入命令串。判定语义不变：cwd=projectPath、e2eTestTimeout 超时、非零退出/超时判负、退出码 0 时 stdout+stderr 经 `judgeTestRun` 文本交叉否决（只能否决）
 - 门禁系统不包含业务逻辑，只提供检查能力
 - `acceptance.ts` 的报告面是 `AcceptanceGateResult`（无 gate/duration 字段，`evaluate()` 归一化为 GateResult 报告——设计如此，见该方法注释），不是 GateResult 字面量，故不套 `pass`/`fail` 构造器；改成 GateResult 会动类型形状。tasks.yml 解析（`parseTasksFile` 与 AcceptanceCondition/TaskDefinition/TasksFile 类型）正本在 `tasks-file.ts`（仓内零外部消费不挂 re-export）。验收条件只认新契约 `acceptance`（旧逐条勾选格式已删）：`checked: true` → 满足；未勾选带 `e2e_test` → 跑 E2E 按测试结论判定；未勾选且无 `e2e_test` → 判负（不静默放过）
 - **fail-fast 口径（gates 层现代化）**：门禁不再吞错拼兜底——tasks.yml / gh / npm audit / 契约文件的解析或读取失败，要么直接抛出（CLI 侧由 `reportGateError` 收口为命令失败），要么走 `fromError` 的 deny 报告；`catch (error: any)` 与 `as any` 已清零。SecurityGate 的「JSON 解析失败用正则抠数字」文本兜底、ContractGate 的「读不到旧契约当零破坏性变更」吞错分支均已删除。SecurityGate 只把带 `vulnerabilities` 对象的 JSON 视为有效扫描报告（空对象才是有效零漏洞），缺键及扫描器错误报告均走 deny

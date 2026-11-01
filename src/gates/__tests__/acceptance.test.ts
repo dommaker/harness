@@ -4,11 +4,15 @@
  * 旧格式 `acceptance_criteria` 兼容分支已删（gates 层现代化）：本文件只喂
  * 新契约 `acceptance`。判定语义：checked:true → 满足；未勾选带 e2e_test →
  * 跑测试按结论判定；未勾选无 e2e_test → 不满足（判负）。
+ *
+ * e2e 执行形状（D1）：tasks.yml 的 e2e_test / test_name 是不可信数据，只作为
+ * execFile 的 argv 数组元素到达运行器（不经 shell）；本文件 mock execFile 精确
+ * 断言 file / argv / options。
  */
 
 import { SpecAcceptanceGate } from '../acceptance';
 import * as fs from 'fs/promises';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 
 // Mock dependencies
 jest.mock('fs/promises');
@@ -19,12 +23,20 @@ jest.mock('child_process', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockExec = exec as unknown as jest.Mock;
+const mockExecFile = execFile as unknown as jest.Mock;
 
 describe('SpecAcceptanceGate', () => {
   let gate: SpecAcceptanceGate;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // 缺省桩：任何未显式打桩的 exec/execFile 调用立即失败，防测试挂起在永不回调的 mock 上
+    const fail = (...args: unknown[]) => {
+      const callback = args[args.length - 1] as (err: unknown) => void;
+      callback(new Error('exec/execFile 未被本用例打桩'));
+    };
+    mockExec.mockImplementation(fail);
+    mockExecFile.mockImplementation(fail);
     gate = new SpecAcceptanceGate();
   });
 
@@ -315,7 +327,7 @@ tasks:
         test_name: "should work"
 `);
 
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+      mockExecFile.mockImplementationOnce((_file, _args, _opts, callback) => {
         callback(null, { stdout: '1 passed', stderr: '' });
       });
 
@@ -338,7 +350,7 @@ tasks:
         e2e_test: tests/failing.spec.ts
 `);
 
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+      mockExecFile.mockImplementationOnce((_file, _args, _opts, callback) => {
         callback(new Error('Test failed'), { stdout: '', stderr: 'Error' });
       });
 
@@ -363,7 +375,7 @@ tasks:
         e2e_test: test.spec.ts
 `);
 
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+      mockExecFile.mockImplementationOnce((_file, _args, _opts, callback) => {
         callback(null, { stdout: '3 passed', stderr: '' });
       });
 
@@ -384,7 +396,7 @@ tasks:
         e2e_test: test.spec.ts
 `);
 
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+      mockExecFile.mockImplementationOnce((_file, _args, _opts, callback) => {
         callback(null, { stdout: '1 failed, 2 passed', stderr: '' });
       });
 
@@ -398,7 +410,7 @@ tasks:
   });
 
   describe('E2E test configuration', () => {
-    it('should use custom e2eTestCommand', async () => {
+    it('should use custom e2eTestCommand（可信命令串解析为 file + argv 前缀）', async () => {
       const customGate = new SpecAcceptanceGate({
         e2eTestCommand: 'npm run test:e2e',
       });
@@ -411,8 +423,11 @@ tasks:
         e2e_test: test.spec.ts
 `);
 
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        expect(cmd).toContain('npm run test:e2e');
+      let seenFile: string | undefined;
+      let seenArgs: string[] | undefined;
+      mockExecFile.mockImplementationOnce((file, args, _opts, callback) => {
+        seenFile = file;
+        seenArgs = args;
         callback(null, { stdout: 'passed', stderr: '' });
       });
 
@@ -420,9 +435,12 @@ tasks:
         projectPath: '/test/project',
         taskId: 'TASK-001',
       });
+
+      expect(seenFile).toBe('npm');
+      expect(seenArgs).toEqual(['run', 'test:e2e', 'test.spec.ts']);
     });
 
-    it('should include test name with -g flag', async () => {
+    it('should include test name as -g 后的独立 argv 元素', async () => {
       mockFs.readFile.mockResolvedValueOnce(`
 tasks:
   - id: TASK-001
@@ -432,8 +450,9 @@ tasks:
         test_name: "should login"
 `);
 
-      mockExec.mockImplementationOnce((cmd, opts, callback) => {
-        expect(cmd).toContain('-g "should login"');
+      let seenArgs: string[] | undefined;
+      mockExecFile.mockImplementationOnce((_file, args, _opts, callback) => {
+        seenArgs = args;
         callback(null, { stdout: 'passed', stderr: '' });
       });
 
@@ -441,6 +460,142 @@ tasks:
         projectPath: '/test/project',
         taskId: 'TASK-001',
       });
+
+      expect(seenArgs).toEqual(['playwright', 'test', 'test.spec.ts', '-g', 'should login']);
+    });
+  });
+
+  describe('E2E argv 直通（不经 shell，D1）', () => {
+    const SPECIAL_FILE = 'tests/evil file$(touch /tmp/pwned);`id`&&echo "quoted".spec.ts';
+    const SPECIAL_NAME = 'should run $(whoami) and `id`; "quoted" name';
+
+    it('e2e_test 含特殊字符 → 整个字符串作为单个 argv 元素到达运行器', async () => {
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - id: TASK-001
+    acceptance:
+      - description: Test
+        e2e_test: ${JSON.stringify(SPECIAL_FILE)}
+`);
+
+      let seenFile: string | undefined;
+      let seenArgs: string[] | undefined;
+      mockExecFile.mockImplementationOnce((file, args, _opts, callback) => {
+        seenFile = file;
+        seenArgs = args;
+        callback(null, { stdout: '1 passed', stderr: '' });
+      });
+
+      const result = await gate.check({
+        projectPath: '/test/project',
+        taskId: 'TASK-001',
+      });
+
+      expect(result.passed).toBe(true);
+      expect(seenFile).toBe('npx');
+      // 钉住：特殊字符不被拆词、不进命令串，整个字符串是 args 的最后一个元素
+      expect(seenArgs).toEqual(['playwright', 'test', SPECIAL_FILE]);
+    });
+
+    it('test_name 含特殊字符 → -g 后整个字符串作为单个 argv 元素到达运行器', async () => {
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - id: TASK-001
+    acceptance:
+      - description: Test
+        e2e_test: test.spec.ts
+        test_name: ${JSON.stringify(SPECIAL_NAME)}
+`);
+
+      let seenArgs: string[] | undefined;
+      mockExecFile.mockImplementationOnce((_file, args, _opts, callback) => {
+        seenArgs = args;
+        callback(null, { stdout: '1 passed', stderr: '' });
+      });
+
+      const result = await gate.check({
+        projectPath: '/test/project',
+        taskId: 'TASK-001',
+      });
+
+      expect(result.passed).toBe(true);
+      expect(seenArgs).toEqual(['playwright', 'test', 'test.spec.ts', '-g', SPECIAL_NAME]);
+    });
+
+    it('options 携带 cwd=projectPath 与 e2eTestTimeout', async () => {
+      const timeoutGate = new SpecAcceptanceGate({ e2eTestTimeout: 60000 });
+
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - id: TASK-001
+    acceptance:
+      - description: Test
+        e2e_test: test.spec.ts
+`);
+
+      let seenOpts: unknown;
+      mockExecFile.mockImplementationOnce((_file, _args, opts, callback) => {
+        seenOpts = opts;
+        callback(null, { stdout: '1 passed', stderr: '' });
+      });
+
+      await timeoutGate.check({
+        projectPath: '/test/project',
+        taskId: 'TASK-001',
+      });
+
+      expect(seenOpts).toEqual({ cwd: '/test/project', timeout: 60000 });
+    });
+
+    it('超时被杀（无数字退出码）→ 判负', async () => {
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - id: TASK-001
+    acceptance:
+      - description: Test
+        e2e_test: test.spec.ts
+`);
+
+      mockExecFile.mockImplementationOnce((_file, _args, _opts, callback) => {
+        callback(new Error('Command timed out after 120000ms'));
+      });
+
+      const result = await gate.check({
+        projectPath: '/test/project',
+        taskId: 'TASK-001',
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.details?.e2eTestResults?.[0]?.passed).toBe(false);
+    });
+
+    it('可信命令串的引号与转义按 shell 词法解析进 argv（数据不经过同一入口）', async () => {
+      const quotedGate = new SpecAcceptanceGate({
+        e2eTestCommand: `npm run test:e2e -- --project "chromium x" --grep='a b'`,
+      });
+
+      mockFs.readFile.mockResolvedValueOnce(`
+tasks:
+  - id: TASK-001
+    acceptance:
+      - description: Test
+        e2e_test: test.spec.ts
+`);
+
+      let seenArgs: string[] | undefined;
+      mockExecFile.mockImplementationOnce((_file, args, _opts, callback) => {
+        seenArgs = args;
+        callback(null, { stdout: '1 passed', stderr: '' });
+      });
+
+      await quotedGate.check({
+        projectPath: '/test/project',
+        taskId: 'TASK-001',
+      });
+
+      expect(seenArgs).toEqual([
+        'run', 'test:e2e', '--', '--project', 'chromium x', '--grep=a b', 'test.spec.ts',
+      ]);
     });
   });
 

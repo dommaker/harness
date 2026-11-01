@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import * as fs from 'fs/promises';
 import { PassesGate } from '../../core/validators/passes-gate';
 import { SpecAcceptanceGate } from '../acceptance';
@@ -23,6 +23,7 @@ jest.mock('child_process', () => ({ exec: jest.fn(), execFile: jest.fn() }));
 jest.mock('fs/promises');
 
 const mockExec = exec as unknown as jest.Mock;
+const mockExecFile = execFile as unknown as jest.Mock;
 const mockFs = fs as unknown as jest.Mocked<typeof fs>;
 
 // ========================================
@@ -77,10 +78,14 @@ const SAMPLES: Sample[] = [
 type ExitResult = number | 'killed';
 type VerdictSample = { exitCode: ExitResult; output: string };
 
-/** 同一份样本 + 同一退出结果喂给 exec mock：0 → resolve，其余 → reject */
-function stubRunner(exitCode: ExitResult, stdout: string): void {
-  mockExec.mockImplementationOnce((...args: unknown[]) => {
-    const callback = args[2] as (err: unknown, res?: unknown) => void;
+/**
+ * 同一份样本 + 同一退出结果的 mock 桩：0 → resolve，其余 → reject。
+ * PassesGate 走 exec（shell 串），SpecAcceptanceGate 走 execFile（argv），
+ * 两个 helper 各挂各的 mock，保持 once 队列逐测试收支平衡。
+ */
+function runnerStub(exitCode: ExitResult, stdout: string): (...args: unknown[]) => void {
+  return (...args: unknown[]) => {
+    const callback = args[args.length - 1] as (err: unknown, res?: unknown) => void;
     if (exitCode === 0) {
       callback(null, { stdout, stderr: '' });
       return;
@@ -90,11 +95,11 @@ function stubRunner(exitCode: ExitResult, stdout: string): void {
       { stdout, stderr: '', ...(exitCode === 'killed' ? {} : { code: exitCode }) },
     );
     callback(error);
-  });
+  };
 }
 
 async function verdictFromPassesGate(sample: VerdictSample): Promise<boolean> {
-  stubRunner(sample.exitCode, sample.output);
+  mockExec.mockImplementationOnce(runnerStub(sample.exitCode, sample.output));
   const gate = new PassesGate({ testCommand: 'npm test', requireEvidence: false });
   return (await gate.runTests('/test/project')).passed;
 }
@@ -107,7 +112,7 @@ tasks:
       - description: 验收条件
         e2e_test: tests/example.spec.ts
 `);
-  stubRunner(sample.exitCode, sample.output);
+  mockExecFile.mockImplementationOnce(runnerStub(sample.exitCode, sample.output));
   const gate = new SpecAcceptanceGate();
   const result = await gate.check({ projectPath: '/test/project', taskId: 'TASK-001' });
   return result.passed;
@@ -116,6 +121,13 @@ tasks:
 describe('两门禁对同一份 runner 输出给出同一结论', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 缺省桩：未显式打桩的 exec/execFile 调用立即失败，防挂起在永不回调的 mock 上
+    const fail = (...args: unknown[]) => {
+      const callback = args[args.length - 1] as (err: unknown) => void;
+      callback(new Error('exec/execFile 未被本用例打桩'));
+    };
+    mockExec.mockImplementation(fail);
+    mockExecFile.mockImplementation(fail);
   });
 
   for (const sample of SAMPLES) {

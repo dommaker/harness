@@ -329,6 +329,50 @@ describe('SpecAcceptanceGate', () => {
     });
   });
 
+  describe('E2E argv 直通真实运行器（不经 shell 端到端）', () => {
+    it('特殊字符的 e2e_test / test_name 各自作为单个参数到达运行器，且不被 shell 解释', async () => {
+      const marker = path.join(tempDir, 'pwned');
+      fs.rmSync(marker, { force: true });
+      const specialFile = `tests/evil file$(touch ${marker});` + '`id`' + `&&echo "quoted".spec.ts`;
+      const specialName = 'should run $(whoami) and `id`; "quoted" name';
+
+      fs.writeFileSync(tasksFile, yaml.dump({
+        tasks: [
+          {
+            id: 'TASK-001',
+            acceptance: [
+              {
+                description: 'E2E 直通',
+                checked: false,
+                e2e_test: specialFile,
+                test_name: specialName,
+              },
+            ],
+          },
+        ],
+      }));
+
+      // 可信命令串（node runner）原样打印收到的 argv；不可信数据若在命令串里会被 shell 解释
+      const gate = new SpecAcceptanceGate({
+        tasksPath: tasksFile,
+        e2eTestCommand:
+          `node -e "console.log(JSON.stringify(process.argv.slice(1)));console.log('1 passed')"`,
+      });
+
+      // taskId 路径直接返回 per-task 明细（聚合路径不带 e2eTestResults）
+      const result = await gate.check({ projectPath: tempDir, taskId: 'TASK-001' });
+
+      expect(result.passed).toBe(true);
+      const output = result.details?.e2eTestResults?.[0]?.output ?? '';
+      const argv = JSON.parse(output.trim().split('\n')[0] as string) as string[];
+      expect(argv).toContain(specialFile);
+      const gIndex = argv.indexOf('-g');
+      expect(argv[gIndex + 1]).toBe(specialName);
+      // shell 解释 $(touch ...) 的铁证：标记文件不存在
+      expect(fs.existsSync(marker)).toBe(false);
+    });
+  });
+
   describe('createSpecAcceptanceGate（内联工厂已随 #199 入口清空删除，等价构造直走类）', () => {
     it('便捷函数应该创建 gate', () => {
       const gate = new SpecAcceptanceGate({ tasksPath: tasksFile });

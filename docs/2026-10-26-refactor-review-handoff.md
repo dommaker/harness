@@ -15,6 +15,12 @@
 
 **进展（2026-10-29）：D2 已实施并经三轮主会话审查后独立验收，未提交**——release 私有 `run` 返回 `{ code, stdout, stderr }`，所有状态变更与证据命令按 `code !== 0` 首败即停（含 fetch/status/tag 证据、build/version、主分支/release 分支/tag push、PR checkout/create、npm publish/view）；仅 GitHub Release 非致命告警和成功后的 remote URL 装饰查询保留降级。构建改走 `<pkgPath>/node_modules/typescript/bin/tsc` + `process.execPath`，缺失即 build 失败，无 npx/隐式下载；stdout-only 错误、无数字退出码、陈旧 dist、成功 stderr 警告均有回归。主会话复跑 3 个相关套件、59 用例全绿，build、改动文件 ESLint、`sync-docs --check` 均通过。证据在 `.harness/evidence/d2-*`；`src/release/integrity.ts` 无需修改。**下一切片 = D3**。
 
+**进展（2026-11-02）：D3 已实施并经主会话实际 diff 审查、回修与独立验收，未提交**——check/validate/report 共用 `CommandExecutionPolicy`，普通模式先列本次触发域内的项目声明命令且默认仍执行；`--read-only` 零命令副作用，三态 skipped 在各自人读/既有 JSON 面明确可见，无实际失败但有策略跳过时返回 `kind:'skip'`（退出 0），不产生完整通过假象。普通 report 字段、Markdown 行和 passed 数值不变；HTTP/custom handler/内部 git 取证不纳入本子进程命令策略。主会话复跑 25 个相关套件、278 用例全绿，build、`sync-docs --check`、真实 bin 的 read-only 与普通模式端到端冒烟均通过。证据在 `.harness/evidence/d3-*`，设计含 HTTP 取舍；local-rag 不可用已记录。**下一切片 = D4**。
+
+**进展（2026-11-03）：D4 已实施并经主会话实际 diff 审查与独立验收，未提交**——SecurityGate 默认 `npm audit` 固定 `--registry https://registry.npmjs.org/`，项目 `.npmrc` 不能改变默认来源，context/构造器自定义扫描命令仍原样下发；PerformanceGate 运行前隔离既有覆盖率报告，只接受本次测试重新生成的 json-summary，失败、超时、成功未生成或损坏均不拿旧报告充数，首次生成与同内容重写有效，失败路径恢复旧文件。主会话复跑 25 个相关套件、262 用例全绿（1 套件/4 用例按基线跳过），build、改动文件 ESLint、`sync-docs --check` 与真实 bin 的 registry/覆盖率端到端场景均通过。证据在 `.harness/evidence/d4-*`；local-rag 工具不可用，按规则记录。**下一切片 = D5**。
+
+**进展（2026-11-03）：D5 已实施并经主会话实际 diff 审查、回修与独立验收，未提交**——`acceptance list` 删除旧 `acceptanceCriteria`/`Object.entries` 形状解析，与 SpecAcceptanceGate 共同消费包内私有 `parseTasksFile`；相对 tasksPath 同锚 projectPath。非法 YAML、顶层形状、任务和验收条件在 list 侧返回既有 `kind:'fail'`（退出 1），不再静默 skip；ENOENT 保留与 gate 一致的跳过语义，D1 argv 边界与三种 checked/e2e 判定不变。主会话复跑 13 个相关套件、152 用例全绿（1 用例按基线跳过），build、改动文件 ESLint、`sync-docs --check` 均通过；真实 bin 验证合法文件两入口同为两任务三条件，四类非法输入在两入口均明确失败且退出 1。严格 TDD 红→绿与主验证据在 `.harness/evidence/d5-*`；local-rag 工具不可用，按规则记录。**下一切片 = D6**。
+
 ## 新会话从这里开始：主会话编排，子 agent 实现
 
 新会话可直接使用：
@@ -58,42 +64,47 @@
 - 验收：错误只出现在 stdout 时构建仍失败；陈旧 dist 不能救活失败构建；成功路径与 dry-run 行为不变；相关测试及 build 通过。
 - 依赖：无。
 
-#### D3 `pending`：P0.5 Phase 1 副作用授权
+#### D3 `done`：P0.5 Phase 1 副作用授权
 
 - 范围：check / validate / report 的命令执行链、CLI 参数与输出契约；按 P0.5 已裁决语义实施，不进入 Phase 2。
 - 目标：组合根形成统一执行策略；运行前列出将执行的命令，新增 `--read-only` 跳过命令执行并明确报告跳过结果。仓内 YAML 只声明命令，不作为授权来源；HTTP 是否纳入同一策略先在实现设计中说明。
 - 非目标：本切片不改变默认执行行为，不实现 Phase 2 默认拒绝或交互授权。
 - 验收：三条命令的人读/JSON 输出与退出码符合各自既有契约；read-only 下零命令副作用且没有“已检查”假象；普通模式行为兼容；相关测试及 build 通过。
 - 依赖：无；若与 D1 并行设计，最终仍串行落盘。
+- 完成记录（2026-11-02，未提交）：统一 `CommandExecutionPolicy` 与命令发现/清单，三命令共用 `--read-only` 跳过语义；清单按触发域过滤，read-only 无实际失败但有策略跳过时返回 `kind:'skip'`（既有 bin 映射退出 0），report 仅 read-only 增加 skipped 字段/文案且普通模式形状与数值不变。HTTP/custom handler/内部 git 取证不纳入本子进程命令策略，HTTP 行为未改。严格 TDD 红证据与主审回修红证据分别在 `.harness/evidence/d3-red.txt`、`d3-review-red.txt`；设计（含 HTTP 边界）在 `d3-design.md`。主会话实际 diff 审查后独立复跑 25 个相关套件、278 用例全绿，build、`sync-docs --check` 与真实 bin 端到端冒烟均通过；证据在 `.harness/evidence/d3-main-{tests,build,sync-docs,smoke}.txt`（子 agent 全量相关面证据为 `d3-related-tests.txt`：51 套件、586 用例）。local-rag 工具不可用，已在设计证据中记录。
 
-#### D4 `pending`：外部证据来源与本次运行绑定
+#### D4 `done`：外部证据来源与本次运行绑定
 
 - 范围：SecurityGate 默认审计命令、PerformanceGate 覆盖率采集及直接测试。
 - 目标：默认 npm audit 固定可信 registry；覆盖率报告必须能证明由本次测试执行产生，缺失或未刷新时 fail-loud。自定义扫描命令仍属于显式可信输入。
 - 验收：项目 npm 配置不能改变默认审计来源；旧覆盖率 + 本次未生成报告不能判为有效；合法零漏洞和本次有效覆盖率仍可通过；相关测试及 build 通过。
 - 依赖：无。
+- 完成记录（2026-11-03，未提交）：默认审计命令固定官方 registry，显式自定义命令不追加旗标；覆盖率通过运行前备份旧报告、成功后只读取本次重新出现的报告建立运行身份，失败/超时/未生成/损坏不采用旧报告并恢复备份，同内容重写与首次生成均有效。新增 `security-registry-pin.test.ts` 与 `performance-coverage-freshness.test.ts`，严格 TDD 红证据在 `.harness/evidence/d4-red.txt`。主会话独立复跑 25 套件、262 用例全绿（1 套件/4 用例按基线跳过），build、改动文件 ESLint、`sync-docs --check` 与真实 bin 端到端均通过；主验证据为 `d4-main-{tests,build-lint-syncdocs,e2e}.txt`，完整实现证据为其余 `d4-*`。local-rag 工具不可用，已记录。
 
-#### D5 `pending`：tasks.yml 解析回到单一契约
+#### D5 `done`：tasks.yml 解析回到单一契约
 
 - 范围：`src/gates/tasks-file.ts`、`src/cli/commands/acceptance.ts`、acceptance 直接测试和两处 CONTEXT。
 - 目标：gate 与 `acceptance list` 共同消费 `parseTasksFile`；删除 CLI 旧形状解析和解析失败静默 skip。输出文案变化须由测试明确钉住。
 - 验收：gate 接受的文件能列出相同任务与验收条件；非法形状一致 fail-fast；相关测试及 build 通过。
 - 依赖：无；与 D1 触及同一 gate 文件时排在 D1 后。
+- 完成记录（2026-11-03，未提交）：CLI list 直引包内私有 `parseTasksFile`，与 gate 共用新契约 `tasks`/`acceptance` 的解析和形状校验；非法 YAML/形状/任务/条件返回 `kind:'fail'`，ENOENT 保留 skip，普通合法输出列出任务 id、条件描述、勾选状态与 e2e 元数据并由测试钉住。新增 `acceptance-list-tasks-file.test.ts` 以真实每轮唯一 mkdtemp 夹具对拍两个公开入口；严格 TDD 红证据为 `d5-red-1-list-contract.txt`，转绿与回修证据为 `d5-green-*` / `d5-review-*`。主会话独立复跑 13 套件、152 用例全绿（1 用例按基线跳过），build、改动文件 ESLint、`sync-docs --check` 与真实 bin 两入口合法/四类非法场景均通过；主验证据为 `d5-main-{tests,build,eslint,sync-docs,e2e}.txt`。未提交、未建分支、未推送；local-rag 工具不可用，已记录。
 
-#### D6 `pending`：knowledge 路径构造收口
+#### D6 `done`：knowledge 路径构造收口
 
 - 范围：`src/knowledge/store.ts` 及 store/query/decay 直接测试、`src/knowledge/CONTEXT.md`。
 - 目标：index 驱动的读取、写入、删除共用同一受限路径构造；非法 id/type 在读 index 时明确报错并指向重建或修复方式。
 - 验收：索引中的非法路径分量不能逃出知识库目录；正常读取、重建、删除和索引漂移错误语义不回归；相关测试及 build 通过。
 - 依赖：无；必须先于 D7。
+- 完成记录（2026-11-03，未提交）：私有 `entryPath()` 统一 index 驱动读删与全部写入的文件路径，`isUnsafePathComponent()` 统一非法 id/type 判定；空分量、父目录分量、路径分隔符（含反斜杠）与 NUL 均 fail-fast，不再 basename 静默修正。`readIndex()` 在缓存前校验全部在册条目，错误含条目序号/字段/值及手工修复、`harness knowledge index`（rebuildIndex）提示；正常读取/写入/重建/删除和索引缺失、损坏、漂移语义不变。严格 TDD 红证据为 `d6-red-a-write-path.txt` / `d6-red-b-index.txt`，转绿与主审回修证据为 `d6-green-*` / `d6-review-*`。主会话实际 diff 审查后独立复跑 22 套件、599 用例全绿，build、改动文件 ESLint、`sync-docs --check` 均通过；包根公开入口验证正常 CRUD/重建、16 组非法写入及恶意 index 的 get/list/delete 越界防护与修复提示均通过，主验证据为 `d6-main-{tests,build,eslint,sync-docs,e2e}.txt`。未提交、未建分支、未推送；local-rag 工具不可用，已记录。**下一切片 = D7**。
 
-#### D7 `pending`：knowledge 批量读写与按需物化
+#### D7 `done`：knowledge 批量读写与按需物化
 
 - 范围：`src/knowledge/store.ts`、`ingest.ts`、`query.ts`、`lifecycle.ts` 及直接测试；不把全仓同步 IO 异步化。
 - 目标：普通 query 先按 index 元数据过滤、排序和截断，再读取返回条目全文；ingestBatch 每批共享一次磁盘去重视图并统一落盘；引用记账复用已加载条目，消除层间重复读取。保留全文搜索需要扫描全库的语义。
 - 编排：先派两个只读设计子 agent 各给一种 interface 方案，主会话按调用方收益、改动集中度和测试面选择后，再派一个实现子 agent；设计阶段不改代码。
 - 验收：用 IO 计数测试证明批量读取/索引写入不再随条目数重复放大；重复、merge、auto-fix、引用去重、回调和缓存语义不回归；相关测试及 build 通过。性能数字只作结果说明，不用单次耗时替代行为断言。
 - 依赖：D6。
+- 完成记录（2026-11-07，未提交）：两份只读设计后选择复用现有 store 原语的收敛方案；普通 query 经共享 index 过滤正本完成过滤/排序/双预算截断，只物化返回集，search 仍扫描全语料。新写与重建的 index 带内部 `tokenCount`（标题、正文分别估算的既有口径），缺该字段的旧索引按用户裁决临时回退旧路径并提示 rebuildIndex，未改公共 `IndexEntry`。ingestBatch 共享一次磁盘视图和虚拟 index，新建/merge/auto-fix 终态批尾一次 `saveAll`；query 引用经预载条目贯穿 lifecycle 与 applyAll，保留去重、executionResults、回调和缓存时序。主审发现同批连续 merge 使用旧基线及虚拟 index 同 id 多计，原 coder 先红后绿修复为按 id 最新状态。严格 TDD 与回修证据为 `d7-{red,green}-*` / `d7-review-{red,green}.txt`；主会话在隔离 HEAD worktree 装入新测试，旧实现 8 项 IO/复用断言按预期失败（`d7-main-old-implementation-red.txt`），计数均包装真实 fs。主会话复跑 25 套件、698 用例全绿，build、改动文件 ESLint、`sync-docs --check` 和包根公开入口 18 项 E2E 全过；证据为 `d7-main-{tests,build,eslint,sync-docs,e2e}.txt`，设计与遗留边界见 `d7-design.md`。D6 路径闸及 index 错误语义未回归；未提交、未建分支、未推送；local-rag 工具不可用，已记录。**D 队列无下一切片；后续独立票另行裁决与排期。**
 
 ### 后续独立票，不阻塞上述队列
 

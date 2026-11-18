@@ -165,11 +165,41 @@ export class PerformanceGate implements Gate {
 
   /**
    * 收集测试覆盖率（带超时）
+   *
+   * 报告与本次运行的绑定（D4）：运行前把既有 coverage-summary.json 挪作备份，
+   * 成功后只认「本次重新出现」的报告——首次生成、同内容重写、内容刷新都由
+   * 「重新出现」获得本次运行身份，不依赖内容比较（同内容新报告不会被误判）
+   * 也不依赖单次耗时断言。测试失败/超时/成功但未生成时恢复备份，既不读取
+   * 旧报告也不销毁用户既有文件；报告损坏/字段缺失照旧由 readCoverageSummaryPct
+   * 抛出，归既有 warnings 口径。
    */
   private async collectCoverage(projectPath: string): Promise<{
     coverage?: number;
     error?: string;
   }> {
+    const coveragePath = path.join(projectPath, 'coverage', 'coverage-summary.json');
+    const backupPath = `${coveragePath}.harness-stale-backup`;
+    let backedUp = false;
+
+    // 隔离旧报告：rename 与报告同目录（同文件系统，原子）。ENOENT = 首次生成场景
+    try {
+      await fs.rename(coveragePath, backupPath);
+      backedUp = true;
+    } catch (error: unknown) {
+      if (execErrorField(error, 'code') !== 'ENOENT') {
+        return { error: `无法隔离既有覆盖率报告: ${errorMessage(error)}` };
+      }
+    }
+
+    const restoreBackup = async (): Promise<void> => {
+      if (!backedUp) return;
+      try {
+        await fs.rename(backupPath, coveragePath);
+      } catch {
+        // 恢复失败不遮蔽原始错误（原报告丢失仅为卫生问题，判定已按不可用处理）
+      }
+    };
+
     try {
       // 使用超时执行覆盖率测试
       await execAsync(
@@ -181,14 +211,28 @@ export class PerformanceGate implements Gate {
           killSignal: 'SIGTERM',
         }
       );
-
-      // 读取覆盖率报告（取数正本：缺失/损坏/字段缺失抛出，由下方 catch 归 warnings 口径）
-      return { coverage: await readCoverageSummaryPct(projectPath) };
     } catch (error: unknown) {
-      // 区分超时和其他错误
+      // 非零/超时：不读取任何报告，恢复旧报告后按既有口径报错
+      await restoreBackup();
       if (execErrorField(error, 'killed')) {
         return { error: `覆盖率测试超时 (${this.config.coverageTimeout}ms)` };
       }
+      if (execErrorField(error, 'code') === 'ENOENT') {
+        return { error: '未找到覆盖率报告文件' };
+      }
+      return { error: errorMessage(error) };
+    }
+
+    try {
+      // 报告必须是本次执行重新产出（含同内容重写）的那份
+      const coverage = await readCoverageSummaryPct(projectPath);
+      if (backedUp) {
+        await fs.rm(backupPath, { force: true }); // 新报告已确立身份，旧报告完成使命
+      }
+      return { coverage };
+    } catch (error: unknown) {
+      // 成功却未生成/损坏/字段缺失：不拿备份冒充，恢复后按既有口径报错
+      await restoreBackup();
       if (execErrorField(error, 'code') === 'ENOENT') {
         return { error: '未找到覆盖率报告文件' };
       }

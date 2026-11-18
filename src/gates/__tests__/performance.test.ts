@@ -16,6 +16,8 @@ jest.mock('fs/promises', () => ({
   readFile: jest.fn(),
   readdir: jest.fn(),
   stat: jest.fn(),
+  rename: jest.fn(),
+  rm: jest.fn(),
 }));
 
 const mockExec = exec as unknown as jest.Mock;

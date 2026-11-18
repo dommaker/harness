@@ -24,8 +24,8 @@ jest.mock('../../utils/exec', () => {
 
 const mockExecAsync = execAsync as unknown as jest.Mock;
 
-/** detectScanCommand() 现返回值——链落到第三级的唯一判据 */
-const DETECTED = 'npm audit --json';
+/** detectScanCommand() 现返回值（D4 起固定可信 registry）——链落到第三级的唯一判据 */
+const DETECTED = 'npm audit --json --registry https://registry.npmjs.org/';
 const projectPath = '/probe/project';
 
 describe('SecurityGate 缺省扫描命令（#138 断链）', () => {

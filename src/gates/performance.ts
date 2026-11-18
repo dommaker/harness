@@ -178,7 +178,7 @@ export class PerformanceGate implements Gate {
     error?: string;
   }> {
     const coveragePath = path.join(projectPath, 'coverage', 'coverage-summary.json');
-    const backupPath = `${coveragePath}.harness-stale-backup`;
+    const backupPath = coveragePath + '.harness-stale-backup';
     let backedUp = false;
 
     // 隔离旧报告：rename 与报告同目录（同文件系统，原子）。ENOENT = 首次生成场景

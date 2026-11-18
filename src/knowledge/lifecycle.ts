@@ -108,8 +108,19 @@ export class KnowledgeLifecycle {
    * 回调保持「不早于持久化成功」语义——批量落盘成功后逐条触发，去重/未知 id 不触发
    * （批量本就改变了落盘粒度，不声称逐条版的部分失败时序原样保留）。
    * 单事件调用方仍用 recordReference()（其「返回更新后条目 + 触发回调」契约不变）。
+   *
+   * D7 引用复用：可选 `preloaded` 传 query 本次已物化的条目（id → 完整条目）——
+   * 条目查线不再 store.get，applyAll 以预载为合并基线（层间零重复读取）；
+   * 缺省走原取盘路径，原四参公共调用兼容。preloaded 缺项的 id 回退 store.get 取盘，
+   * 取不到才按未知 id 跳过。
    */
-  recordReferences(entryIds: string[], contributor?: string, success?: boolean, source?: 'human' | 'auto'): void {
+  recordReferences(
+    entryIds: string[],
+    contributor?: string,
+    success?: boolean,
+    source?: 'human' | 'auto',
+    preloaded?: ReadonlyMap<string, KnowledgeEntry>,
+  ): void {
     const now = new Date().toISOString();
     const updates: StoreUpdate[] = [];
     const events: ConsumptionEvent[] = [];
@@ -118,7 +129,7 @@ export class KnowledgeLifecycle {
     for (const entryId of entryIds) {
       if (seen.has(entryId)) continue;
       seen.add(entryId);
-      const entry = this.store.get(entryId);
+      const entry = preloaded?.get(entryId) ?? this.store.get(entryId);
       if (!entry) continue;
 
       const contributors = contributor && !entry.contributors.includes(contributor)
@@ -152,7 +163,8 @@ export class KnowledgeLifecycle {
 
     // 一次落盘：applyAll 循环内只更新内存索引、结束一次 writeIndex（空批零读写）。
     // 落盘成功前不触发任何回调；抛错则整批中断上抛，由调用方 fail-open 兜底。
-    this.store.applyAll(updates);
+    // preloaded 作为合并基线传入：批内条目零重复 get（D7 引用复用）。
+    this.store.applyAll(updates, preloaded);
 
     // 批量落盘成功后才逐条触发消费回调（去重/未知 id 不在 events 内，天然不触发）
     for (const event of events) {

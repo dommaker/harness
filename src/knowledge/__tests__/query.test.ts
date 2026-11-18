@@ -7,9 +7,31 @@ import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeQuery } from '../query';
 import { KnowledgeLifecycle } from '../lifecycle';
 import type { KnowledgeEntry, QueryBudget } from '../types';
+import { estimateTokens } from '../token-estimate';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+
+// D7 IO 计数：包装真实 fs（照 audit-write-count 手法），只数知识条目 .md 的 readFileSync。
+// fs 属性不可 spyOn，工厂内不引闭包外变量，计数挂 globalThis。
+jest.mock('fs', () => {
+  const actual = jest.requireActual<typeof import('fs')>('fs');
+  const g = globalThis as unknown as { __D7_MD_READS__?: string[] };
+  if (!g.__D7_MD_READS__) g.__D7_MD_READS__ = [];
+  const bucket = g.__D7_MD_READS__;
+  const name = (p: unknown): string => (Buffer.isBuffer(p) ? p.toString('utf8') : String(p));
+  return {
+    ...actual,
+    readFileSync: jest.fn((p: unknown, ...rest: unknown[]) => {
+      const file = name(p);
+      if (file.endsWith('.md')) bucket.push(file);
+      return (actual.readFileSync as (...args: unknown[]) => unknown)(p, ...rest);
+    }),
+  };
+});
+
+const mdReads = (): string[] =>
+  ((globalThis as unknown as { __D7_MD_READS__?: string[] }).__D7_MD_READS__ ||= []);
 
 describe('KnowledgeQuery', () => {
   let tempDir: string;
@@ -271,6 +293,139 @@ describe('KnowledgeQuery', () => {
       const result = query.query(budget());
       expect(result.entries).toHaveLength(1);
       expect(result.entries[0].id).toBe('DEC-001');
+    });
+  });
+
+  describe('按需物化（D7）：过滤与截断的条目全文零读取', () => {
+    // 夹具纪律（回修）：每轮独立 mkdtemp + afterEach 清理，内层 let 遮蔽外层共享夹具
+    let tempDir: string;
+    let store: KnowledgeStore;
+    let query: KnowledgeQuery;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-query-mat-'));
+      store = new KnowledgeStore({ baseDir: tempDir });
+      query = new KnowledgeQuery(store);
+      mdReads().length = 0;
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const budget = (overrides?: Partial<QueryBudget>): QueryBudget => ({
+      phase: 'test',
+      maxTokens: 100000,
+      maxEntries: 10,
+      focusTypes: ['decision'],
+      ...overrides,
+    });
+
+    it('被 focusTypes 过滤的条目全文零读取', () => {
+      store.save(makeEntry({ id: 'DEC-001', type: 'decision' }));
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall', title: 'Pitfall' }));
+
+      mdReads().length = 0;
+      const result = query.query(budget());
+      expect(result.entries.map(e => e.id)).toEqual(['DEC-001']);
+      expect(mdReads()).not.toContain(path.join(tempDir, 'pitfall-PIT-001.md'));
+    });
+
+    it('maxEntries 截断的溢出候选全文零读取', () => {
+      for (let i = 1; i <= 5; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      mdReads().length = 0;
+      const result = query.query(budget({ maxEntries: 2 }));
+      expect(result.entries).toHaveLength(2);
+      expect(result.truncated).toBe(true);
+      for (let i = 3; i <= 5; i++) {
+        expect(mdReads()).not.toContain(path.join(tempDir, `decision-DEC-00${i}.md`));
+      }
+    });
+
+    it('maxTokens 截断的溢出候选全文零读取', () => {
+      store.save(makeEntry({ id: 'DEC-001', content: 'A'.repeat(1000) })); // ~250 tokens
+      store.save(makeEntry({ id: 'DEC-002', content: 'B'.repeat(1000), title: 'Second' }));
+
+      mdReads().length = 0;
+      const result = query.query(budget({ maxTokens: 300 }));
+      expect(result.entries.map(e => e.id)).toEqual(['DEC-001']);
+      expect(result.truncated).toBe(true);
+      expect(mdReads()).not.toContain(path.join(tempDir, 'decision-DEC-002.md'));
+    });
+
+    it('过滤后零命中：全文零读取', () => {
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall', title: 'Pitfall' }));
+
+      mdReads().length = 0;
+      const result = query.query(budget());
+      expect(result.entries).toHaveLength(0);
+      expect(mdReads()).toHaveLength(0);
+    });
+
+    it('query 全程每条结果只读一次全文：物化 + 引用记账 + applyAll 零重复读取', () => {
+      for (let i = 1; i <= 4; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      mdReads().length = 0;
+      const result = query.query(budget({ maxEntries: 2 }));
+      expect(result.entries).toHaveLength(2); // 正对照：真返回 2 条，「只读一次」不是空跑出来的
+      expect(mdReads().sort()).toEqual([
+        path.join(tempDir, 'decision-DEC-001.md'),
+        path.join(tempDir, 'decision-DEC-002.md'),
+      ]);
+    });
+
+    it('search 命中仅正文含关键词、被普通 query 排序/预算排除的条目（且无引用副作用）', () => {
+      // proven 高排名 + 巨大正文占满 budget；目标条目 draft、零引用、关键词只在正文
+      store.save(makeEntry({
+        id: 'BIG-001', title: 'Filler', content: '填'.repeat(2000),
+        maturity: 'proven', lastReferenced: '2026-08-01',
+      }));
+      store.save(makeEntry({
+        id: 'TGT-001', title: '边缘条目', content: '正文里藏着 needle-keyword 的说明',
+        maturity: 'draft', lastReferenced: '',
+      }));
+
+      const qResult = query.query(budget({ maxTokens: 500, maxEntries: 1 }));
+      expect(qResult.entries.map(e => e.id)).not.toContain('TGT-001'); // 普通 query 排除
+      expect(qResult.truncated).toBe(true);
+
+      const found = query.search('needle-keyword');
+      expect(found.map(e => e.id)).toEqual(['TGT-001']); // search 先匹配全语料再排序/limit
+      expect(store.get('TGT-001')!.referencedBy).toHaveLength(0); // searching is not citing
+    });
+
+    it('旧索引（无 tokenCount）走兼容路径：过滤/排序/截断/tokensUsed 与新索引一致', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'A', maturity: 'draft', content: 'x'.repeat(60) }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'B', maturity: 'proven', content: 'y'.repeat(1000) }));
+      store.save(makeEntry({ id: 'DEC-003', title: 'C', maturity: 'draft', content: 'z'.repeat(60), lastReferenced: '2026-06-01' }));
+
+      // 新索引基线（DEC-003 lastReferenced 晚于 DEC-001，同成熟度下排前）
+      const fresh = query.query(budget({ maxEntries: 2 }));
+      expect(fresh.entries.map(e => e.id)).toEqual(['DEC-002', 'DEC-003']);
+      expect(fresh.truncated).toBe(true);
+
+      // 剥成旧格式（外部旧库现场）
+      const indexPath = path.join(tempDir, 'index.json');
+      const raw = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+      fs.writeFileSync(indexPath, JSON.stringify(raw.map((e: Record<string, unknown>) => {
+        const rest = { ...e };
+        delete rest.tokenCount;
+        return rest;
+      }), null, 2), 'utf-8');
+
+      const fallback = query.query(budget({ maxEntries: 2 }));
+      expect(fallback.entries.map(e => e.id)).toEqual(fresh.entries.map(e => e.id));
+      expect(fallback.truncated).toBe(fresh.truncated);
+      expect(fallback.tokensUsed).toBe(fresh.tokensUsed);
+      expect(fallback.tokensUsed).toBe(
+        estimateTokens('y'.repeat(1000)) + estimateTokens('B') +
+        estimateTokens('x'.repeat(60)) + estimateTokens('A'),
+      );
     });
   });
 

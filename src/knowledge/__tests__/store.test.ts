@@ -2,9 +2,10 @@
  * KnowledgeStore 测试
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 import { FileKnowledgeStore as KnowledgeStore } from '../store';
-import type { KnowledgeEntry } from '../types';
+import type { KnowledgeEntry, IndexEntry } from '../types';
+import { estimateTokens } from '../token-estimate';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -797,6 +798,168 @@ describe('KnowledgeStore', () => {
     });
   });
 
+  describe('index tokenCount 元数据（D7）', () => {
+    // 夹具纪律（回修）：每轮独立 mkdtemp + afterEach 清理，内层 let 遮蔽外层共享夹具
+    let tempDir: string;
+    let store: KnowledgeStore;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-store-tokens-'));
+      store = new KnowledgeStore({ baseDir: tempDir });
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const readRawIndex = (): Array<IndexEntry & { tokenCount?: number }> =>
+      JSON.parse(fs.readFileSync(path.join(tempDir, 'index.json'), 'utf-8'));
+
+    it('save 写入的 index 条目带 tokenCount = estimateTokens(content)+estimateTokens(title)（两次 ceil 口径）', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'Hi', content: '你好世界' }));
+      const raw = readRawIndex();
+      expect(raw[0].tokenCount).toBe(estimateTokens('你好世界') + estimateTokens('Hi'));
+    });
+
+    it('rebuildIndex 重建的 index 条目带 tokenCount', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      // 先剥成旧格式，rebuild 后必须恢复 tokenCount
+      const raw = readRawIndex().map((e) => {
+        const rest = { ...e };
+        delete rest.tokenCount;
+        return rest;
+      });
+      fs.writeFileSync(path.join(tempDir, 'index.json'), JSON.stringify(raw, null, 2), 'utf-8');
+      store.rebuildIndex();
+      const rebuilt = readRawIndex();
+      expect(rebuilt[0].tokenCount).toBe(
+        estimateTokens('This is a test decision.') + estimateTokens('Test Decision'),
+      );
+    });
+
+    it('saveAll/applyAll 维护的 index 条目带 tokenCount', () => {
+      store.saveAll([makeEntry({ id: 'DEC-001', title: 'Alpha', content: 'aaa' })]);
+      store.applyAll([{ id: 'DEC-001', partial: { title: 'Beta', content: 'bbbbbbbb' } }]);
+      const raw = readRawIndex();
+      expect(raw).toHaveLength(1);
+      expect(raw[0].tokenCount).toBe(estimateTokens('bbbbbbbb') + estimateTokens('Beta'));
+    });
+  });
+
+  describe('旧格式 index 兼容提示（D7）', () => {
+    // 夹具纪律（回修）：每轮独立 mkdtemp + afterEach 清理，内层 let 遮蔽外层共享夹具
+    let tempDir: string;
+    let store: KnowledgeStore;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-store-hint-'));
+      store = new KnowledgeStore({ baseDir: tempDir });
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const stripTokenCounts = (): void => {
+      const indexPath = path.join(tempDir, 'index.json');
+      const raw = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+      fs.writeFileSync(
+        indexPath,
+        JSON.stringify(raw.map((e: Record<string, unknown>) => {
+          const rest = { ...e };
+          delete rest.tokenCount;
+          return rest;
+        }), null, 2),
+        'utf-8',
+      );
+    };
+
+    it('缺 tokenCount 的旧 index：readIndex 经 console.error 打一行 rebuildIndex 提示', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      stripTokenCounts();
+
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        store.list();
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy.mock.calls[0][0]).toMatch(/tokenCount/);
+        expect(errorSpy.mock.calls[0][0]).toMatch(/rebuildIndex|knowledge index/);
+      } finally {
+        errorSpy.mockRestore();
+      }
+      // 读路径行为不变
+      expect(store.list()).toHaveLength(1);
+    });
+
+    it('提示是实例级一次：同库新实例仍会提示一次', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      stripTokenCounts();
+
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        new KnowledgeStore({ baseDir: tempDir }).list();
+        new KnowledgeStore({ baseDir: tempDir }).list();
+        expect(errorSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('新格式 index 零提示（不污染新索引路径）', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        store.list();
+        expect(errorSpy).not.toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('按需物化能力 materializeByIndex（D7）', () => {
+    // 夹具纪律（回修）：每轮独立 mkdtemp + afterEach 清理，内层 let 遮蔽外层共享夹具
+    let tempDir: string;
+    let store: KnowledgeStore;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-store-mat-'));
+      store = new KnowledgeStore({ baseDir: tempDir });
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    // 经 KnowledgeStore 接口的可选成员访问：旧实现下编译通过、运行期 undefined 真红
+    const materialize = (entries: import('../types').IndexEntry[]): import('../types').KnowledgeEntry[] => {
+      const fn = (store as import('../store').KnowledgeStore).materializeByIndex;
+      if (!fn) throw new Error('materializeByIndex 未实现');
+      return fn.call(store, entries);
+    };
+
+    it('只物化给定 index 子集，内容与 get 一致', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'One' }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'Two' }));
+
+      const subset = store.readIndex().filter(e => e.id === 'DEC-002');
+      const materialized = materialize(subset);
+      expect(materialized).toHaveLength(1);
+      expect(materialized[0].id).toBe('DEC-002');
+      expect(materialized[0].title).toBe('Two');
+      expect(materialized[0].content).toBe(store.get('DEC-002')!.content);
+    });
+
+    it('索引在册但文件缺失：与 list 同一索引漂移错误（单一正本）', () => {
+      store.save(makeEntry());
+      const mdFiles = fs.readdirSync(tempDir).filter(f => f.endsWith('.md'));
+      for (const f of mdFiles) fs.unlinkSync(path.join(tempDir, f));
+
+      expect(() => materialize(store.readIndex())).toThrow('索引漂移');
+      expect(() => materialize(store.readIndex())).toThrow(/rebuildIndex/);
+    });
+  });
+
   describe('frontmatter 收口（harness#89）', () => {
     const entryPath = (id: string): string => path.join(tempDir, `decision-${id}.md`);
     let errorSpy: jest.SpyInstance;
@@ -860,5 +1023,291 @@ describe('KnowledgeStore', () => {
       expect(store.get('FM-006')).toBeUndefined();
       expect(errorSpy).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('KnowledgeStore 路径构造收口（D6）', () => {
+  // 夹具纪律：每轮独立 mkdtemp + afterEach 清理，不沿用顶层共享 tempDir
+  let fixtureRoot: string;
+  let baseDir: string;
+  let store: KnowledgeStore;
+
+  const makeEntry = (overrides?: Partial<KnowledgeEntry>): KnowledgeEntry => ({
+    id: 'DEC-001',
+    type: 'decision',
+    title: 'Test Decision',
+    content: 'content',
+    maturity: 'draft',
+    layer: 'project',
+    created: '2026-05-01T00:00:00.000Z',
+    lastReferenced: '',
+    contributors: [],
+    projects: ['p'],
+    tags: [],
+    applicablePhases: [],
+    sourceReferences: [],
+    referencedBy: [],
+    executionResults: [],
+    consumptionMode: 'reference',
+    origin: 'agent',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-store-'));
+    baseDir = path.join(fixtureRoot, 'knowledge');
+    store = new KnowledgeStore({ baseDir });
+  });
+
+  afterEach(() => {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  });
+
+  const writeSentinel = (): string => {
+    const p = path.join(fixtureRoot, 'sentinel.md');
+    fs.writeFileSync(p, 'SENTINEL', 'utf-8');
+    return p;
+  };
+
+  const entryFiles = (): string[] =>
+    fs.existsSync(baseDir) ? fs.readdirSync(baseDir).filter(f => f.endsWith('.md')) : [];
+
+  describe('非法 id/type fail-fast（写入不做 basename 静默修正）', () => {
+    it.each([
+      ['空串', ''],
+      ['点分量', '.'],
+      ['父目录分量', '..'],
+      ['路径分隔', 'a/b'],
+      ['父目录穿越', '../../evil'],
+      ['绝对路径', '/tmp/evil'],
+      ['Windows 分隔', 'a\\b'],
+      ['NUL 字符', 'a\0b'],
+    ])('save 拒绝非法 id（%s）：抛错、零写入、哨兵不动', (_label, id) => {
+      const sentinel = writeSentinel();
+      expect(() => store.save(makeEntry({ id }))).toThrow(/id 值 .*非法/);
+      expect(entryFiles()).toHaveLength(0);
+      expect(fs.existsSync(path.join(baseDir, 'index.json'))).toBe(false);
+      expect(fs.readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+    });
+
+    it.each([
+      ['空串', ''],
+      ['点分量', '.'],
+      ['父目录分量', '..'],
+      ['路径分隔', 'a/b'],
+      ['Windows 分隔', 'a\\b'],
+    ])('save 拒绝非法 type（%s）：抛错、零写入', (_label, type) => {
+      writeSentinel();
+      expect(() => store.save(makeEntry({ type: type as KnowledgeEntry['type'] })))
+        .toThrow(/type 值 .*非法/);
+      expect(entryFiles()).toHaveLength(0);
+      expect(fs.existsSync(path.join(baseDir, 'index.json'))).toBe(false);
+    });
+
+    it('saveAll 批内含非法 id：整批拒写，不落成半个批次', () => {
+      const sentinel = writeSentinel();
+      expect(() => store.saveAll([
+        makeEntry({ id: 'DEC-LEGIT', title: 'Legit' }),
+        makeEntry({ id: '../../evil', title: 'Bad' }),
+      ])).toThrow(/id 值 .*非法/);
+      expect(entryFiles()).toHaveLength(0);
+      expect(fs.existsSync(path.join(baseDir, 'index.json'))).toBe(false);
+      expect(fs.readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+    });
+
+    it('update/delete 对非法查询 id fail-fast：不触碰任何条目文件', () => {
+      store.save(makeEntry());
+      const sentinel = writeSentinel();
+      expect(() => store.update('../DEC-001', { title: 'x' })).toThrow(/id 值 .*非法/);
+      expect(() => store.delete('../DEC-001')).toThrow(/id 值 .*非法/);
+      expect(entryFiles()).toEqual(['decision-DEC-001.md']);
+      expect(fs.readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+    });
+  });
+
+  describe('index 非法 id/type 读取 fail-fast（含定位与修复提示）', () => {
+    const indexEntry = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+      id: 'DEC-001',
+      type: 'decision',
+      title: 'T',
+      maturity: 'draft',
+      layer: 'project',
+      tags: [],
+      applicablePhases: [],
+      lastReferenced: '',
+      created: '2026-05-01T00:00:00.000Z',
+      consumptionMode: 'reference',
+      origin: 'agent',
+      ...overrides,
+    });
+
+    const writeIndex = (entries: unknown[]): void => {
+      fs.writeFileSync(path.join(baseDir, 'index.json'), JSON.stringify(entries, null, 2), 'utf-8');
+    };
+
+    it('readIndex 对非法 id 明确抛错：定位条目序号/字段/值 + rebuild 与手工修复提示', () => {
+      writeSentinel();
+      writeIndex([indexEntry({ id: '../../sentinel' })]);
+      expect(() => store.readIndex()).toThrow(/index\.json 第 1 条目的 id 值 "\.\.\/\.\.\/sentinel" 非法/);
+      expect(() => store.readIndex()).toThrow(/harness knowledge index（rebuildIndex）/);
+      expect(() => store.readIndex()).toThrow(/手工修正 index\.json/);
+    });
+
+    it('错误定位到第 N 条目与 type 字段', () => {
+      writeIndex([
+        indexEntry(),
+        indexEntry({ id: 'DEC-002', type: '..\\evil' }),
+      ]);
+      expect(() => store.readIndex()).toThrow(/index\.json 第 2 条目的 type 值 "\.\.\\\\evil" 非法/);
+    });
+
+    it.each([
+      ['空串', ''],
+      ['点分量', '.'],
+      ['父目录分量', '..'],
+      ['路径分隔', 'a/b'],
+      ['父目录穿越', '../../sentinel'],
+      ['Windows 分隔', 'a\\b'],
+    ])('get/list/delete 经含非法 id（%s）的 index fail-fast 且哨兵不动', (_label, id) => {
+      const sentinel = writeSentinel();
+      writeIndex([indexEntry({ id })]);
+      expect(() => store.get('DEC-001')).toThrow(/index\.json 第 1 条目的 id 值/);
+      expect(() => store.list()).toThrow(/harness knowledge index（rebuildIndex）/);
+      expect(() => store.delete('DEC-001')).toThrow(/index\.json 第 1 条目的 id 值/);
+      expect(fs.readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+      expect(entryFiles()).toHaveLength(0);
+    });
+
+    it('get/list/delete 经含非法 type 的 index fail-fast 且哨兵不动', () => {
+      const sentinel = writeSentinel();
+      writeIndex([indexEntry({ type: '../../sentinel' })]);
+      expect(() => store.get('DEC-001')).toThrow(/index\.json 第 1 条目的 type 值/);
+      expect(() => store.list()).toThrow(/index\.json 第 1 条目的 type 值/);
+      expect(() => store.delete('DEC-001')).toThrow(/index\.json 第 1 条目的 type 值/);
+      expect(fs.readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+      expect(entryFiles()).toHaveLength(0);
+    });
+  });
+
+  describe('统一路径构造正钉（合法条目，契约不收紧）', () => {
+    it('index 驱动的 get/list/delete 与写入共用同一路径且都在 baseDir 内', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      const expected = path.join(baseDir, 'decision-DEC-001.md');
+      expect(path.dirname(expected)).toBe(baseDir);
+      expect(fs.existsSync(expected)).toBe(true);
+
+      // 经 rebuildIndex 重建 index 后，读/列/删仍走同一 index 驱动路径
+      store.rebuildIndex();
+      expect(store.get('DEC-001')!.title).toBe('Test Decision');
+      expect(store.list()).toHaveLength(1);
+
+      expect(store.delete('DEC-001')).toBe(true);
+      expect(fs.existsSync(expected)).toBe(false);
+      expect(store.readIndex()).toHaveLength(0);
+    });
+
+    it('合法但未收紧的 id 字符（点号、空格）照常落盘、可读可删', () => {
+      store.save(makeEntry({ id: 'DEC.001', title: 'Dots' }));
+      store.save(makeEntry({ id: 'HAS SPACE', title: 'Space' }));
+      expect(fs.existsSync(path.join(baseDir, 'decision-DEC.001.md'))).toBe(true);
+      expect(fs.existsSync(path.join(baseDir, 'decision-HAS SPACE.md'))).toBe(true);
+      expect(store.get('DEC.001')!.title).toBe('Dots');
+      expect(store.get('HAS SPACE')!.title).toBe('Space');
+      expect(store.delete('HAS SPACE')).toBe(true);
+    });
+
+    it('index fast path 精确构造：文件名与 index 精确匹配的条目可读可删', () => {
+      fs.writeFileSync(
+        path.join(baseDir, 'decision-HAND-001.md'),
+        '---\nid: HAND-001\ntype: decision\n---\n\nhand body\n',
+        'utf-8'
+      );
+      fs.writeFileSync(
+        path.join(baseDir, 'index.json'),
+        JSON.stringify([{
+          id: 'HAND-001', type: 'decision', title: 'Hand', maturity: 'draft', layer: 'project',
+          tags: [], applicablePhases: [], lastReferenced: '', created: '2026-05-01T00:00:00.000Z',
+          consumptionMode: 'reference', origin: 'agent',
+        }], null, 2),
+        'utf-8'
+      );
+      expect(store.get('HAND-001')).toBeDefined();
+      expect(store.delete('HAND-001')).toBe(true);
+      expect(fs.existsSync(path.join(baseDir, 'decision-HAND-001.md'))).toBe(false);
+    });
+  });
+});
+
+describe('applyAll 预载基线（D7，独立夹具）', () => {
+  // 夹具纪律：从共享 tempDir 的 harness#134 块移出，每轮独立 mkdtemp + afterEach 清理
+  let tempDir: string;
+  let store: KnowledgeStore;
+
+  const makeEntry = (overrides?: Partial<KnowledgeEntry>): KnowledgeEntry => ({
+    id: 'DEC-001',
+    type: 'decision',
+    title: 'Test Decision',
+    content: 'This is a test decision.',
+    maturity: 'draft',
+    layer: 'project',
+    created: '2026-05-01T00:00:00.000Z',
+    lastReferenced: '',
+    contributors: [],
+    projects: [],
+    tags: [],
+    applicablePhases: [],
+    sourceReferences: [],
+    referencedBy: [],
+    executionResults: [],
+    consumptionMode: 'reference',
+    origin: 'agent',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-store-bases-'));
+    store = new KnowledgeStore({ baseDir: tempDir });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('D7 预载基线：applyAll 带 bases 时不 get 预载条目，落盘结果与取盘一致', () => {
+    store.save(makeEntry({ id: 'DEC-001', title: 'Keep', contributors: ['a'] }));
+    const base = store.get('DEC-001')!;
+
+    const getSpy = jest.spyOn(store, 'get');
+    try {
+      // 宽松函数类型：旧实现下多余实参被忽略 → get 照常调用 → 行为真红
+      (store.applyAll as (u: unknown[], bases?: ReadonlyMap<string, KnowledgeEntry>) => void)(
+        [{ id: 'DEC-001', partial: { maturity: 'archived' } }],
+        new Map([['DEC-001', base]]),
+      );
+      expect(getSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+    }
+
+    const after = store.get('DEC-001')!;
+    expect(after.maturity).toBe('archived');
+    expect(after.title).toBe('Keep');
+    expect(after.contributors).toEqual(['a']);
+  });
+
+  it('D7 预载基线缺项时回退 get（部分预载安全）', () => {
+    store.save(makeEntry({ id: 'DEC-001' }));
+    store.save(makeEntry({ id: 'DEC-002', title: 'Two' }));
+
+    (store.applyAll as (u: unknown[], bases?: ReadonlyMap<string, KnowledgeEntry>) => void)(
+      [
+        { id: 'DEC-001', partial: { maturity: 'archived' } },
+        { id: 'DEC-002', partial: { maturity: 'archived' } },
+      ],
+      new Map([['DEC-001', store.get('DEC-001')!]]),
+    );
+
+    expect(store.get('DEC-001')!.maturity).toBe('archived');
+    expect(store.get('DEC-002')!.maturity).toBe('archived');
   });
 });

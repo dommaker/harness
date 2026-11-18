@@ -414,6 +414,105 @@ describe('KnowledgeLifecycle', () => {
     });
   });
 
+  describe('recordReferences 引用复用（D7 preloaded）', () => {
+    // 夹具纪律（回修）：每轮独立 mkdtemp + afterEach 清理，内层 let 遮蔽外层共享夹具
+    let tempDir: string;
+    let store: KnowledgeStore;
+    let lifecycle: KnowledgeLifecycle;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-lifecycle-preload-'));
+      store = new KnowledgeStore({ baseDir: tempDir });
+      lifecycle = new KnowledgeLifecycle(store);
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    // 宽松函数类型：旧实现下编译通过、多余实参被忽略 → get 照常调用 → 行为真红
+    const recordRefs = (
+      ids: string[],
+      contributor?: string,
+      success?: boolean,
+      preloaded?: ReadonlyMap<string, KnowledgeEntry>,
+    ): void => {
+      (lifecycle.recordReferences as (...args: unknown[]) => void)(
+        ids, contributor, success, undefined, preloaded);
+    };
+
+    it('preloaded 全链路零 store.get：lifecycle 不再取盘、applyAll 用预载基线，记账语义与取盘一致', () => {
+      store.save(makeEntry({ id: 'DEC-001' }));
+      store.save(makeEntry({ id: 'DEC-002' }));
+      const preloaded = new Map([
+        ['DEC-001', store.get('DEC-001')!],
+        ['DEC-002', store.get('DEC-002')!],
+      ]);
+
+      const getSpy = jest.spyOn(store, 'get');
+      try {
+        recordRefs(['DEC-001', 'DEC-002'], 'alice', true, preloaded);
+        expect(getSpy).not.toHaveBeenCalled();
+      } finally {
+        getSpy.mockRestore();
+      }
+
+      for (const id of ['DEC-001', 'DEC-002']) {
+        const entry = store.get(id)!;
+        expect(entry.referencedBy).toHaveLength(1);
+        expect(entry.referencedBy[0]).toMatch(/^alice:/);
+        expect(entry.contributors).toEqual(['alice']);
+        expect(entry.executionResults).toHaveLength(1);
+        expect(entry.executionResults[0]).toMatchObject({ contributor: 'alice', success: true });
+      }
+    });
+
+    it('preloaded 未覆盖的未知 id 仍跳过（原四参公共调用兼容）', () => {
+      store.save(makeEntry());
+      const preloaded = new Map([['DEC-001', store.get('DEC-001')!]]);
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        recordRefs(['DEC-001', 'GHOST-001'], 'alice', undefined, preloaded);
+        // 只有 DEC-001 一条真更新落盘
+        expect(stringifySpy.mock.calls.filter(args => args[2] === 2)).toHaveLength(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      expect(store.get('DEC-001')!.referencedBy).toHaveLength(1);
+    });
+
+    it('preloaded 条目带当日 refKey 仍走去重：零写入、去重带 success 补记 executionResults', () => {
+      store.save(makeEntry());
+      lifecycle.recordReferences(['DEC-001'], 'alice');
+      const entry = store.get('DEC-001')!;
+      expect(entry.referencedBy).toHaveLength(1);
+
+      const stringifySpy = jest.spyOn(JSON, 'stringify');
+      try {
+        recordRefs(['DEC-001'], 'alice', true, new Map([['DEC-001', store.get('DEC-001')!]]));
+        expect(stringifySpy).toHaveBeenCalledTimes(1); // 真有一次落盘（补记），非空跑
+      } finally {
+        stringifySpy.mockRestore();
+      }
+      const after = store.get('DEC-001')!;
+      expect(after.referencedBy).toHaveLength(1); // 引用键不重复
+      expect(after.executionResults).toHaveLength(1);
+    });
+
+    it('回调不早于持久化成功：preloaded 路径回调执行时 store.get 已可见本次引用', () => {
+      store.save(makeEntry());
+      const observed: Array<{ refCount: number }> = [];
+      lifecycle.onReference(e => {
+        observed.push({ refCount: store.get(e.entryId)!.referencedBy.length });
+      });
+
+      recordRefs(['DEC-001'], 'alice', undefined, new Map([['DEC-001', store.get('DEC-001')!]]));
+
+      expect(observed).toEqual([{ refCount: 1 }]);
+    });
+  });
+
   describe('checkPromotion', () => {
     it('should promote draft to verified when referenced', () => {
       store.save(makeEntry({ maturity: 'draft', lastReferenced: '2026-05-01', content: 'a'.repeat(60) }));

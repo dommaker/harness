@@ -6,6 +6,7 @@
  */
 
 import type { ConstraintContext } from '../../../types/constraint';
+import type { CommandExecutionPolicy } from '../../../types/command-execution-policy';
 import { createRunEnv, type RunEnv } from '../run-env';
 
 /**
@@ -33,6 +34,15 @@ export interface CheckEnv extends RunEnv {
    * 对空证据做出「假合规」判定。必传：buildCheckEnv 恒填充，手写 env 一律显式给。
    */
   evidenceAvailable(input: CheckEvidenceInput): boolean;
+
+  /**
+   * 命令执行策略（D3 P0.5 Phase 1；可选成员，缺省 = 默认执行）
+   *
+   * 由编排层（ConstraintChecker 构造注入）挂上：readOnly = true 时 exec 模板
+   * checker 不执行 params.command，返回三态 skipped（skipReason 策略统一措辞）。
+   * 手写 env 不携带 = 默认执行（库调用兼容）。
+   */
+  commandPolicy?: CommandExecutionPolicy;
 }
 
 /**
@@ -63,13 +73,16 @@ export type CheckEvidenceInput = 'stagedDiff' | 'stagedDiffNames';
  *   checker 由编排层按 needs 契约降级 skip
  * - runEnv = 本 run 的运行级观察面（ADR-0023）：传入即与 context-builder 及
  *   其余 checker 共用同一份上行数据读取；不传则自造一枚，只服务本次调用
+ * - commandPolicy = 本 run 的命令执行策略（D3）：传入即挂上 env，exec 模板
+ *   checker 在 read-only 下三态跳过；不传 = 默认执行
  *
  * 下游消费方若需 git 证据，传真实 providers 即可。
  */
 export function buildCheckEnv(
   context: ConstraintContext,
   evidence: EvidenceProviders | 'none',
-  runEnv?: RunEnv
+  runEnv?: RunEnv,
+  commandPolicy?: CommandExecutionPolicy
 ): CheckEnv {
   const projectPath = context.projectPath || process.cwd();
   const run = runEnv ?? createRunEnv(projectPath);
@@ -81,10 +94,11 @@ export function buildCheckEnv(
       stagedDiffNames: async () => '',
       srcScan: () => [],
       evidenceAvailable: () => false,
+      commandPolicy,
     };
   }
   const { available, ...providers } = evidence;
-  return { ...run, context, ...providers, evidenceAvailable: available };
+  return { ...run, context, ...providers, evidenceAvailable: available, commandPolicy };
 }
 
 /**

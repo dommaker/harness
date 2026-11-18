@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import * as fs from 'fs';
 import * as path from 'path';
 import { loadAppConstraints } from '../app-constraints-loader';
 import { ConstraintChecker } from '../constraints/checker';
@@ -112,6 +113,108 @@ describe('exec 业务检查器全链（编写 → 名册登记 → 执行 → �
     const context: ConstraintContext = { operation: 'commit', projectPath: root };
 
     const result = await new ConstraintChecker().check(constraint, context);
+    expect(result.satisfied).toBe(true);
+    expect(result.skipped).not.toBe(true);
+  });
+});
+
+describe('exec 全链 × read-only 策略（D3 P0.5 Phase 1）', () => {
+  /** 结构化策略字面量：与 CommandExecutionPolicy 同形（不经工厂，红阶段也能编译运行） */
+  interface InlinePolicy {
+    readOnly: boolean;
+    skipReason: (command: string) => string;
+    execute: (command: string, cwd: string, timeoutMs: number) => Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      timedOut: boolean;
+      stdout: string;
+      stderr: string;
+      truncated: boolean;
+    }>;
+  }
+  /** 构造器第二参注入策略（红阶段旧构造器忽略第二参，行为断言照样跑） */
+  const checkerWithPolicy = (policy: InlinePolicy): ConstraintChecker =>
+    new (ConstraintChecker as unknown as new (recorder?: unknown, policy?: InlinePolicy) => ConstraintChecker)(
+      undefined,
+      policy,
+    );
+  const roPolicy = (execute?: InlinePolicy['execute']): InlinePolicy => ({
+    readOnly: true,
+    skipReason: (command) => `--read-only：跳过命令执行（未执行）：${command}`,
+    execute: execute ?? (async () => ({ code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false })),
+  });
+
+  const markerCommand = (marker: string): string =>
+    `node -e "require('fs').writeFileSync('${marker}','x')"`;
+
+  function markerProject(command: string): string {
+    return createProjectFixture({
+      name: 'exec-ro-chain',
+      files: {
+        [path.join('.harness', 'constraints.yml')]: [
+          'constraints:',
+          '  - id: app_marker',
+          '    rule: 写标记文件',
+          '    checker: exec',
+          '    params:',
+          `      command: "${command.replace(/"/g, '\\"')}"`,
+          '    severity: error',
+          '',
+        ].join('\n'),
+      },
+    });
+  }
+
+  it('read-only：checker 构造注入策略 → 三态 skipped、执行缝零调用', async () => {
+    const dir = markerProject('npm test');
+    const [constraint] = loadAppConstraints(dir);
+    let executeCalls = 0;
+    const context: ConstraintContext = { operation: 'commit', projectPath: dir };
+
+    const report = await checkerWithPolicy(roPolicy(async () => {
+      executeCalls++;
+      return { code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false };
+    })).collectConstraints(context, {
+      constraints: { [constraint.id]: constraint },
+      disabled: [],
+    });
+
+    expect(executeCalls).toBe(0);
+    expect(report.errors).toHaveLength(1);
+    expect(report.errors[0].skipped).toBe(true);
+    expect(report.errors[0].skipReason).toContain('--read-only');
+    expect(report.errors[0].satisfied).toBe(true); // fail-open 三态语义，不计 pass/fail
+  });
+
+  it('read-only：真实执行路径零副作用（marker 文件不产生）', async () => {
+    // 命令写相对路径 MARKER（执行 cwd = 项目根）
+    const dir = markerProject(markerCommand('MARKER'));
+    const marker = path.join(dir, 'MARKER');
+    const [constraint] = loadAppConstraints(dir);
+    const context: ConstraintContext = { operation: 'commit', projectPath: dir };
+
+    const result = await checkerWithPolicy(roPolicy()).check(constraint, context);
+
+    expect(result.skipped).toBe(true);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('普通模式 + 注入策略：全链经策略执行缝真实执行一次', async () => {
+    const dir = markerProject('npm test');
+    const [constraint] = loadAppConstraints(dir);
+    const calls: string[] = [];
+    const context: ConstraintContext = { operation: 'commit', projectPath: dir };
+
+    const result = await checkerWithPolicy({
+      readOnly: false,
+      skipReason: (command) => `--read-only：跳过命令执行（未执行）：${command}`,
+      execute: async (command) => {
+        calls.push(command);
+        return { code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false };
+      },
+    }).check(constraint, context);
+
+    expect(calls).toEqual(['npm test']);
     expect(result.satisfied).toBe(true);
     expect(result.skipped).not.toBe(true);
   });

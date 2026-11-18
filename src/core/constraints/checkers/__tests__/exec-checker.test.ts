@@ -8,6 +8,8 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import * as fs from 'fs';
+import * as path from 'path';
 import { execScript } from '../templated/exec';
 import { TEMPLATES } from '../index';
 import { buildCheckEnv, normalizeCheckOutcome, type CheckEnv, type CheckOutcome } from '../types';
@@ -95,5 +97,82 @@ describe('exec evaluate', () => {
       .evaluate(makeEnv(dir));
     expect(passed(outcome)).toBe(false);
     expect(evidenceText(outcome)).toContain('退出码 127');
+  });
+});
+
+describe('exec evaluate × read-only 策略（D3 P0.5 Phase 1）', () => {
+  const markerCommand = (marker: string): string =>
+    `node -e "require('fs').writeFileSync('${marker}','x')"`;
+
+  /** 结构化策略字面量：与 CommandExecutionPolicy 同形（不经工厂，红阶段也能编译运行） */
+  interface InlinePolicy {
+    readOnly: boolean;
+    skipReason: (command: string) => string;
+    execute: (command: string, cwd: string, timeoutMs: number) => Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      timedOut: boolean;
+      stdout: string;
+      stderr: string;
+      truncated: boolean;
+    }>;
+  }
+  const withPolicy = (dir: string, policy: InlinePolicy): CheckEnv => {
+    const env = makeEnv(dir) as CheckEnv & { commandPolicy: InlinePolicy };
+    env.commandPolicy = policy;
+    return env;
+  };
+  const roPolicy = (execute?: InlinePolicy['execute']): InlinePolicy => ({
+    readOnly: true,
+    skipReason: (command) => `--read-only：跳过命令执行（未执行）：${command}`,
+    execute: execute ?? (async () => ({ code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false })),
+  });
+
+  it('read-only：注入执行缝零调用，结果为三态 skipped + 统一原因', async () => {
+    const dir = createProjectFixture({ name: 'exec-ro-skip' });
+    let executeCalls = 0;
+    const env = withPolicy(dir, roPolicy(async () => {
+      executeCalls++;
+      return { code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false };
+    }));
+    const outcome = await execScript.create('app_x', { command: 'npm test' }).evaluate(env);
+    const normalized = normalizeCheckOutcome(outcome);
+    expect(normalized.skipped).toBe(true);
+    expect(normalized.skipReason).toContain('--read-only');
+    expect(normalized.skipReason).toContain('npm test');
+    expect(executeCalls).toBe(0);
+  });
+
+  it('read-only：执行缝零调用且零副作用（marker 文件不产生）', async () => {
+    const dir = createProjectFixture({ name: 'exec-ro-marker' });
+    const marker = path.join(dir, 'should-not-exist');
+    const env = withPolicy(dir, roPolicy());
+    const outcome = await execScript.create('app_x', { command: markerCommand(marker) }).evaluate(env);
+    expect(normalizeCheckOutcome(outcome).skipped).toBe(true);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('普通模式 + 注入策略：经策略执行缝真实执行一次', async () => {
+    const dir = createProjectFixture({ name: 'exec-policy-run' });
+    const calls: string[] = [];
+    const env = withPolicy(dir, {
+      readOnly: false,
+      skipReason: (command) => `--read-only：跳过命令执行（未执行）：${command}`,
+      execute: async (command) => {
+        calls.push(command);
+        return { code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false };
+      },
+    });
+    const outcome = await execScript.create('app_x', { command: 'npm test' }).evaluate(env);
+    expect(normalizeCheckOutcome(outcome).satisfied).toBe(true);
+    expect(calls).toEqual(['npm test']);
+  });
+
+  it('无策略（库直调默认）：行为与旧实现一致（默认执行）', async () => {
+    const dir = createProjectFixture({ name: 'exec-no-policy' });
+    const marker = path.join(dir, 'legacy-default');
+    const outcome = await execScript.create('app_x', { command: markerCommand(marker) }).evaluate(makeEnv(dir));
+    expect(normalizeCheckOutcome(outcome).satisfied).toBe(true);
+    expect(fs.existsSync(marker)).toBe(true);
   });
 });

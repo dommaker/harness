@@ -13,6 +13,11 @@ import * as path from 'path';
 import { assembleConstraintChecker } from '../../bootstrap';
 import { CONSTRAINTS } from '../../core/constraints/definitions';
 import { getMergedConstraintsConfig } from '../../core/effective-constraints';
+import {
+  createCommandExecutionPolicy,
+  formatCommandPlan,
+  planCommandsFromConstraints,
+} from '../../core/command-execution-policy';
 import { buildConstraintContext } from '../../core/constraints/context-builder';
 import { createGitEvidence, type GitEvidence } from '../../core/constraints/git-evidence';
 import { createRunEnv, type RunEnv } from '../../core/constraints/run-env';
@@ -78,6 +83,8 @@ export interface CheckOptions {
    * 走替身，测试据此不碰真文件系统。
    */
   stateIO?: StateIO;
+  /** 只读模式（CLI --read-only；D3 P0.5 Phase 1）：跳过项目 YAML 声明的命令执行 */
+  readOnly?: boolean;
 }
 
 /**
@@ -113,6 +120,8 @@ export async function check(
     // 构建上下文（工单 23：触发条件与证据检测收敛至 core/constraints/context-builder）
     // #87：一次 run 一份 git 证据——context-builder 与 checker 层共用同一实例
     // ADR-0023：一次 run 一份运行级观察面——配置、源根探测全部共用同一份读取
+    // 必须先于运行前清单构造：清单按 context 的 operation/extraTriggers 过滤
+    // （与 checker 分发同口径，trigger 不匹配的约束不进清单）
     const context = buildConstraintContext({
       projectPath: options.projectPath,
       staged: options.staged,
@@ -120,6 +129,19 @@ export async function check(
       evidence,
       runEnv,
     });
+
+    // 运行前清单（D3 P0.5 Phase 1）：列出本次将执行的项目声明命令；--read-only 下列出被跳过的。
+    // 授权只来自 CLI flag——仓内 YAML 只声明命令，不作为授权来源。
+    const commandPlan = planCommandsFromConstraints(merged.constraints, context);
+    if (commandPlan.length > 0) {
+      if (options.readOnly) {
+        log(io, chalk.gray(`⏭️ --read-only：跳过 ${commandPlan.length} 条项目声明命令（未执行）:`));
+      } else {
+        log(io, chalk.yellow(`⚠️ 本次将执行 ${commandPlan.length} 条项目声明命令:`));
+      }
+      formatCommandPlan(commandPlan).forEach(line => log(io, chalk.gray(line)));
+    }
+
     const changedFiles = context.changedFiles ?? [];
     if (changedFiles.length > 0) {
       log(io, chalk.gray(`变更文件: ${changedFiles.length} 个`));
@@ -129,7 +151,10 @@ export async function check(
     // 执行约束检查（per-request 传 customConfig，避免单例状态污染；证据同 run 同源）
     // checker 经唯一装配函数取（P1.1）：trace 接线只写一次，收集器锚根构造
     // （#139：不传 projectPath 时 trace 会落进调用方 cwd，B 侧读不到）
-    const checker = assembleConstraintChecker(projectPath);
+    // commandPolicy（D3）：本 run 的统一执行策略，read-only 下 exec 模板 checker
+    // 三态跳过声明命令；缺省 = 默认执行
+    const policy = createCommandExecutionPolicy({ readOnly: options.readOnly });
+    const checker = assembleConstraintChecker(projectPath, policy);
     const result = await checker.checkConstraints(context, merged, evidence, runEnv);
 
     // 输出结果
@@ -194,6 +219,21 @@ export async function check(
       skippedResults.forEach(r => {
         log(io, chalk.gray(`   - ${r.id}${r.skipReason ? `：${r.skipReason}` : ''}`));
       });
+    }
+
+    // read-only 且本 run 有声明命令被策略跳过：不产出「已检查」结论（假绿防线）。
+    // 只认策略跳过（清单来源 ∩ 跳过结果）——其他原因（证据未接线等）的跳过维持原 ok 语义。
+    if (options.readOnly) {
+      const planSources = new Set(commandPlan.map(p => p.source));
+      const policySkipped = skippedResults.filter(r => planSources.has(r.id));
+      if (policySkipped.length > 0) {
+        log(io);
+        log(io, chalk.gray(`⏭️ read-only：${policySkipped.length} 条约束未评估（命令未执行），不产出「已检查」结论`));
+        return {
+          kind: 'skip',
+          reason: `--read-only: ${policySkipped.length} constraints not evaluated (commands not executed)`,
+        };
+      }
     }
 
     log(io);

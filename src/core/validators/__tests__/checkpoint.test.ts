@@ -698,3 +698,115 @@ describe('CheckpointValidator', () => {
     });
   });
 });
+describe('CheckpointValidator × read-only 三态聚合（D3 P0.5 Phase 1）', () => {
+  /** 结构化策略字面量：与 CommandExecutionPolicy 同形（不经工厂，红阶段也能编译运行） */
+  interface InlinePolicy {
+    readOnly: boolean;
+    skipReason: (command: string) => string;
+    execute: (command: string, cwd: string, timeoutMs: number) => Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      timedOut: boolean;
+      stdout: string;
+      stderr: string;
+      truncated: boolean;
+    }>;
+  }
+  const roPolicy = (): InlinePolicy => ({
+    readOnly: true,
+    skipReason: (command) => `--read-only：跳过命令执行（未执行）：${command}`,
+    execute: async () => ({ code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false }),
+  });
+
+  it('命令检查被跳过 → 检查点不算通过：passed=false + skipped=true', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'harness-cp-ro-'));
+    try {
+      const ctx = { workdir: dir, projectPath: dir } as Parameters<CheckpointValidator['validate']>[1] & { commandPolicy: InlinePolicy };
+      ctx.commandPolicy = roPolicy();
+      const result = await new CheckpointValidator().validate(
+        {
+          id: 'cp-ro',
+          checks: [{ id: 'c-1', type: 'command_success', config: { command: 'npm test' } }],
+        },
+        ctx,
+      );
+
+      expect(result.passed).toBe(false);
+      expect((result as { skipped?: boolean }).skipped).toBe(true);
+      expect(result.message).toContain('跳过');
+      expect((result.checks[0] as { skipped?: boolean }).skipped).toBe(true);
+      expect((result.checks[0] as { skipReason?: string }).skipReason).toContain('--read-only');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('混合：非命令检查通过 + 命令检查跳过 → 检查点 skipped（不算验证通过）', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'harness-cp-ro-mix-'));
+    try {
+      writeFileSync(join(dir, 'a.txt'), 'x');
+      const ctx = { workdir: dir, projectPath: dir } as Parameters<CheckpointValidator['validate']>[1] & { commandPolicy: InlinePolicy };
+      ctx.commandPolicy = roPolicy();
+      const result = await new CheckpointValidator().validate(
+        {
+          id: 'cp-ro-mix',
+          checks: [
+            { id: 'c-1', type: 'file_exists', config: { path: 'a.txt' } },
+            { id: 'c-2', type: 'command_success', config: { command: 'npm test' } },
+          ],
+        },
+        ctx,
+      );
+
+      expect(result.passed).toBe(false);
+      expect((result as { skipped?: boolean }).skipped).toBe(true);
+      expect(result.checks[0].passed).toBe(true);
+      expect((result.checks[1] as { skipped?: boolean }).skipped).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('失败 + 跳过并存 → 失败优先：passed=false、skipped 不置位', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'harness-cp-ro-fail-'));
+    try {
+      const ctx = { workdir: dir, projectPath: dir } as Parameters<CheckpointValidator['validate']>[1] & { commandPolicy: InlinePolicy };
+      ctx.commandPolicy = roPolicy();
+      const result = await new CheckpointValidator().validate(
+        {
+          id: 'cp-ro-fail',
+          checks: [
+            { id: 'c-1', type: 'file_exists', config: { path: 'not-there.txt' } },
+            { id: 'c-2', type: 'command_success', config: { command: 'npm test' } },
+          ],
+        },
+        ctx,
+      );
+
+      expect(result.passed).toBe(false);
+      expect((result as { skipped?: boolean }).skipped).not.toBe(true);
+      expect(result.message).toContain('失败');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('无策略：一切通过 → passed=true，无 skipped 字段（默认执行，行为不变）', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'harness-cp-ro-none-'));
+    try {
+      writeFileSync(join(dir, 'b.txt'), 'x');
+      const result = await new CheckpointValidator().validate(
+        {
+          id: 'cp-none',
+          checks: [{ id: 'c-1', type: 'file_exists', config: { path: 'b.txt' } }],
+        },
+        { workdir: dir, projectPath: dir },
+      );
+
+      expect(result.passed).toBe(true);
+      expect((result as { skipped?: boolean }).skipped).not.toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

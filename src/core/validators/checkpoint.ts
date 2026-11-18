@@ -94,6 +94,10 @@ export function assertCheckpointShape(data: unknown, source: string): asserts da
 export class CheckpointValidator {
   /**
    * 验证检查点
+   *
+   * 三态聚合（D3）：失败优先——有任何失败项 → passed=false（原有语义）；
+   * 无失败但有未评估项（read-only 下命令未执行）→ passed=false + skipped=true
+   * （「未完整验证」，不把跳过当通过）；全部通过 → passed=true。
    */
   async validate(checkpoint: Checkpoint, context: CheckpointContext): Promise<CheckpointResult> {
     if (!checkpoint.checks || checkpoint.checks.length === 0) {
@@ -113,13 +117,17 @@ export class CheckpointValidator {
       results.push(result);
     }
 
-    const allPassed = results.every(r => r.passed);
+    const anyFailed = results.some(r => !r.passed && !r.skipped);
+    const anySkipped = results.some(r => r.skipped);
+    const allPassed = !anyFailed && !anySkipped;
 
     return {
       checkpointId: checkpoint.id,
       passed: allPassed,
+      skipped: anySkipped && !anyFailed ? true : undefined,
+      skipReason: anySkipped && !anyFailed ? '存在未执行的检查（--read-only，命令未执行）' : undefined,
       checks: results,
-      message: allPassed ? '检查点验证通过' : '检查点验证失败',
+      message: anyFailed ? '检查点验证失败' : anySkipped ? '检查点跳过评估（存在未执行的检查）' : '检查点验证通过',
       validatedAt: new Date(),
     };
   }

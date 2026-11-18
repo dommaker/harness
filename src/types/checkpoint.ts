@@ -2,6 +2,8 @@
  * 检查点类型定义
  */
 
+import type { CommandExecutionPolicy } from './command-execution-policy';
+
 /**
  * 检查类型
  */
@@ -173,6 +175,17 @@ export interface CheckResult {
   
   /** 是否通过 */
   passed: boolean;
+
+  /**
+   * 是否未评估（D3 read-only：项目声明的命令被跳过、未执行）
+   *
+   * skipped 时 passed 恒为 false（未通过——根本没查），但不计失败；
+   * 跳过原因随 skipReason。除 read-only 策略外不产生 skipped。
+   */
+  skipped?: boolean;
+
+  /** 未评估原因（D3；仅 skipped=true 时携带，进 CLI 跳过清单） */
+  skipReason?: string;
   
   /** 消息 */
   message?: string;
@@ -194,9 +207,20 @@ export interface CheckpointResult {
   /** 检查点 ID */
   checkpointId: string;
   
-  /** 是否全部通过 */
+  /** 是否全部通过（存在未评估项时不算通过，见 skipped） */
   passed: boolean;
-  
+
+  /**
+   * 是否含未评估项（D3 read-only：声明命令未执行）
+   *
+   * 无失败但有跳过时置位：passed=false 且不判失败——「未完整验证」三态，
+   * 不把跳过当验证通过（假绿防线）；与失败并存时失败优先，不置位。
+   */
+  skipped?: boolean;
+
+  /** 未评估说明（D3；仅 skipped=true 时携带） */
+  skipReason?: string;
+
   /** 各项检查结果 */
   checks: CheckResult[];
   
@@ -231,4 +255,13 @@ export interface CheckpointContext {
    * 缺省 = 真定时器；测试可注入零等待替身，据此断言重试语义而不必真等
    */
   sleep?: (ms: number) => Promise<void>;
+
+  /**
+   * 命令执行策略（D3 P0.5 Phase 1；缺省 = 默认执行，库调用兼容）
+   *
+   * readOnly = true 时 command_* / 带 command 的 output_* 族不执行声明命令，
+   * 返回三态 skipped（skipReason 由策略统一措辞）。http_* 的 fetch 是网络请求，
+   * 不属于本策略的命令执行通道，不受影响。
+   */
+  commandPolicy?: CommandExecutionPolicy;
 }

@@ -6,7 +6,7 @@ Harness 运行环境的组合根：一次调用装配起约束检查器、会话
 ## 核心导出
 - `bootstrapHarness` — 异步组合根（async 仅为公共签名兼容：配置读取是同步 fs，原假 async 已改同步 `loadConfig`）；经唯一装配函数 `assembleConstraintChecker(projectPath)` 接线 trace 记录器：`new ConstraintChecker(new TraceCollector({ projectPath }))`（core 不上行依赖 monitoring，故由本层接线；落点锚根。原 cwd 锚定的 `getTraceCollector()` 单例已随 #199 删除）
 - `bootstrapHarnessSync` — 同形状的同步版，供不支持 top-level await 的环境与 `bootstrapHarness` 失败时的回落路径；两入口的装配共用一枚 `assembleHarness`
-- `assembleConstraintChecker` — 生产侧唯一 checker 装配点：trace 接线只写一次，CLI check/report 与 bootstrapHarness 共用；源形状闸 + 行为闸见 `src/__tests__/unique-assembly.test.ts`（豁免白名单同文件：checker.ts 的 getInstance 自构造、monitoring 本体、pretool-use-hook 独立组合根）
+- `assembleConstraintChecker` — 生产侧唯一 checker 装配点：trace 接线只写一次，CLI check/report 与 bootstrapHarness 共用；第二可选参 `commandPolicy`（D3，P0.5 Phase 1）透传一次运行的统一命令执行策略（read-only 下 exec 模板 checker 三态跳过项目声明命令），缺省 = 默认执行；源形状闸 + 行为闸见 `src/__tests__/unique-assembly.test.ts`（豁免白名单同文件：checker.ts 的 getInstance 自构造、monitoring 本体、pretool-use-hook 独立组合根）
 - `HarnessBootstrap`（type）— 返回值形状 `{ checker, sessions, projectPath, mergedConstraints }`；生产调用方无参调用、只以类型持有，从不读字段（纯为副作用调用），形状由编译期钉与 `__tests__/bootstrap.test.ts` 冻结
 
 ## 依赖关系

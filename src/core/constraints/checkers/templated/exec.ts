@@ -10,82 +10,29 @@
  * - 超时：到点杀整个进程组（含 shell 的子孙进程）并判违规
  * - 截断：stdout/stderr 各至多留 MAX_STREAM_CHARS，超出只记「已截断」标记
  *
+ * 命令执行策略（D3 P0.5 Phase 1）：env.commandPolicy.readOnly = true 时不执行
+ * 命令，返回三态 CheckSkip（原因由策略统一措辞）；普通模式经策略执行缝执行
+ * （缺省真实 spawn 执行，语义如上；无策略 = 默认执行，库调用兼容）。
+ *
  * 参数：
  * - command（必填）：命令行（经 shell 执行，cwd = 项目根）
  * - timeoutMs（可选）：超时毫秒数，缺省 DEFAULT_TIMEOUT_MS，上限 MAX_TIMEOUT_MS
  */
 
-import { spawn } from 'child_process';
 import {
   formatEvidence,
   type CheckDetail,
   type ConstraintCheck,
   type TemplatedCheckerFactory,
 } from '../types';
+import { runShellCommand } from '../../../command-execution-policy';
 import { clip } from '../../../../utils/clip';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 600_000;
-/** stdout/stderr 各自保留的字符上限（超出只记截断标记，不拖垮证据面与 trace） */
-const MAX_STREAM_CHARS = 8_192;
-
-interface CommandResult {
-  code: number | null;
-  signal: NodeJS.Signals | null;
-  timedOut: boolean;
-  spawnError?: string;
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
-}
-
-function runCommand(command: string, cwd: string, timeoutMs: number): Promise<CommandResult> {
-  return new Promise((resolve) => {
-    // detached 成组：超时整组 SIGKILL，shell 的子孙进程一并终止，不留孤儿拖住机器
-    const child = spawn(command, { cwd, shell: true, detached: true });
-    let stdout = '';
-    let stderr = '';
-    let truncated = false;
-    let timedOut = false;
-    let settled = false;
-
-    const collect = (chunk: Buffer, current: string): string => {
-      if (current.length >= MAX_STREAM_CHARS) {
-        truncated = true;
-        return current;
-      }
-      const next = current + chunk.toString('utf-8');
-      if (next.length > MAX_STREAM_CHARS) truncated = true;
-      return next.slice(0, MAX_STREAM_CHARS);
-    };
-
-    const finish = (partial: { code: number | null; signal: NodeJS.Signals | null; spawnError?: string }): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ ...partial, timedOut, stdout, stderr, truncated });
-    };
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        // 进程组 kill 失败（竞态：子进程已退，ESRCH）→ 退化单进程 kill，best-effort 收尾
-        child.kill('SIGKILL');
-      }
-    }, timeoutMs);
-    timer.unref();
-
-    child.stdout.on('data', (chunk: Buffer) => { stdout = collect(chunk, stdout); });
-    child.stderr.on('data', (chunk: Buffer) => { stderr = collect(chunk, stderr); });
-    child.on('error', (err) => finish({ code: null, signal: null, spawnError: err.message }));
-    child.on('close', (code, signal) => finish({ code, signal }));
-  });
-}
 
 /** 失败原因一行话（自描述，进证据首行） */
-function failureReason(command: string, result: CommandResult, timeoutMs: number): string {
+function failureReason(command: string, result: Awaited<ReturnType<typeof runShellCommand>>, timeoutMs: number): string {
   if (result.spawnError) return `命令启动失败（${result.spawnError}）：${command}`;
   if (result.timedOut) return `命令超时（>${timeoutMs}ms）已终止：${command}`;
   if (result.signal) return `命令被信号 ${result.signal} 终止：${command}`;
@@ -114,7 +61,12 @@ export const execScript: TemplatedCheckerFactory = {
     return {
       id,
       async evaluate(env) {
-        const result = await runCommand(command, env.projectPath, timeoutMs);
+        // read-only：不执行项目声明命令，三态 skipped（不计 pass/fail，不假绿）
+        const policy = env.commandPolicy;
+        if (policy?.readOnly) {
+          return { skip: true, reason: policy.skipReason(command) };
+        }
+        const result = await (policy ? policy.execute : runShellCommand)(command, env.projectPath, timeoutMs);
         if (!result.timedOut && !result.spawnError && result.code === 0) return true;
 
         const lines: string[] = [];

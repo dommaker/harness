@@ -31,6 +31,7 @@ import { SessionManager } from '../context/session-manager';
 import { ProjectConfigLoader } from '../core/project-config-loader';
 import { TraceCollector } from '../monitoring/traces';
 import type { MergedConstraintsConfig } from '../types/project-config';
+import type { CommandExecutionPolicy } from '../types/command-execution-policy';
 
 /**
  * 加载项目配置与合并约束（同步：readFileSync；原 loadConfigAsync 是 async 壳包纯同步调用）
@@ -75,9 +76,15 @@ export interface HarnessBootstrap {
  * harness#88：core 不上行依赖 monitoring，故接线住组合根本层；
  * #139：落点跟根走，不落调用方 cwd。CLI check/report 与 bootstrapHarness
  * 全部经本函数取接线好的 checker——源形状闸见 src/__tests__/unique-assembly.test.ts。
+ *
+ * commandPolicy（D3 P0.5 Phase 1）：一次运行的统一命令执行策略，透传 checker
+ * （read-only 下 exec 模板 checker 三态跳过项目声明命令）；缺省 = 默认执行。
  */
-export function assembleConstraintChecker(projectPath: string): ConstraintChecker {
-  return new ConstraintChecker(new TraceCollector({ projectPath }));
+export function assembleConstraintChecker(
+  projectPath: string,
+  commandPolicy?: CommandExecutionPolicy
+): ConstraintChecker {
+  return new ConstraintChecker(new TraceCollector({ projectPath }), commandPolicy);
 }
 
 /**

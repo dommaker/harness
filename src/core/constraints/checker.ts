@@ -15,6 +15,7 @@ import {
   ConstraintCheckResult,
   ConstraintViolationError,
 } from '../../types/constraint';
+import type { CommandExecutionPolicy } from '../../types/command-execution-policy';
 import type { ExecutionTrace } from '../../types/trace';
 import { CONSTRAINTS, isGateConstraint } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
@@ -47,8 +48,18 @@ export class ConstraintChecker {
   /** trace 记录器（构造注入；缺省 no-op） */
   private readonly traceRecorder: TraceRecorder;
 
-  constructor(traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER) {
+  /**
+   * 命令执行策略（D3 P0.5 Phase 1；构造注入，缺省 = 默认执行）
+   *
+   * 一次运行一份，经 checkPrecondition 挂上本次 CheckEnv.commandPolicy：
+   * read-only 下 exec 模板 checker 三态跳过项目声明命令。库直调不注入 =
+   * 行为兼容（默认执行）。
+   */
+  private readonly commandPolicy?: CommandExecutionPolicy;
+
+  constructor(traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER, commandPolicy?: CommandExecutionPolicy) {
     this.traceRecorder = traceRecorder;
+    this.commandPolicy = commandPolicy;
   }
 
   /**
@@ -189,7 +200,7 @@ export class ConstraintChecker {
           case 'stagedDiffNames': return git.changedFileNamesAvailable(true);
         }
       },
-    }, run);
+    }, run, this.commandPolicy);
 
     // 输入契约（harness#182）：checker 声明的输入环境给不了 → 带原因的 skipped，
     // 不进入 evaluate（「检查器失效 ≠ 对象合规」，不再对空证据假 pass / 无声 skip）

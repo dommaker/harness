@@ -165,10 +165,14 @@ describe('security command', () => {
     /**
      * 假执行器（测试不依赖真 gitleaks 二进制）：按 exitCode 抛错，
      * 需要时把 report/rawReport 落到命令行里解析出的 --report-path。
+     * 兼容两种调用形状：argv（file, args[]）或旧 shell 字符串（file = 整条命令）。
      */
     function fakeExec(behavior: { exitCode: number; report?: unknown; rawReport?: string }) {
-      return (async (cmd: string) => {
-        const reportPath = cmd.match(/--report-path "([^"]+)"/)![1];
+      return (async (file: string, args?: unknown) => {
+        const joined = Array.isArray(args) ? (args as string[]).join(' ') : String(file);
+        const reportPath =
+          joined.match(/--report-path "([^"]+)"/)?.[1] ??
+          joined.match(/--report-path(?:=| )"?([^"\s]+)"?/)![1];
         if (behavior.rawReport !== undefined) {
           fs.writeFileSync(reportPath, behavior.rawReport);
         } else if (behavior.report !== undefined) {
@@ -237,6 +241,41 @@ describe('security command', () => {
       const result = await secretsScan({ projectPath: repoRoot }, io, fakeExec({ exitCode: 0 }));
 
       expect(result).toEqual({ kind: 'ok' });
+    });
+
+    it('P0.3：repoRoot 含特殊字符时以独立 argv 元素传递，不进 shell 字符串', async () => {
+      // 明显假值：含空格、命令替换形、引号的目录名
+      const weirdRoot = path.join(repoRoot, 'dir with space$(not-a-real-cmd)";');
+      const calls: Array<[unknown, unknown]> = [];
+      const probe = (async (file: unknown, args: unknown) => {
+        calls.push([file, args]);
+        return { stdout: '', stderr: '' };
+      }) as any;
+
+      const result = await secretsScan({ projectPath: weirdRoot }, io, probe);
+
+      expect(result).toEqual({ kind: 'ok' });
+      expect(calls).toHaveLength(1);
+      const [file, args] = calls[0];
+      expect(file).toBe('gitleaks');
+      expect(Array.isArray(args)).toBe(true);
+      const argv = args as string[];
+      // repoRoot 是且只是一个 argv 元素
+      expect(argv.filter((a) => a === weirdRoot)).toHaveLength(1);
+      // 命令与路径分体：没有单个元素混入子命令串
+      expect(argv).toContain('git');
+      expect(argv).toContain('--report-format');
+      expect(argv).toContain('json');
+    });
+
+    it('P0.3：特殊字符 repoRoot 下泄露判定不变（报告按 argv 路径落盘）', async () => {
+      const weirdRoot = path.join(repoRoot, 'weird"root;$');
+      const report = [{ File: 'a.txt', RuleID: 'generic-api-key' }];
+
+      const result = await secretsScan({ projectPath: weirdRoot }, io, fakeExec({ exitCode: 1, report }));
+
+      expect(result.kind).toBe('fail');
+      expect(result.kind === 'fail' && result.reason).toContain('1 potential leaks in 1 files');
     });
   });
 });

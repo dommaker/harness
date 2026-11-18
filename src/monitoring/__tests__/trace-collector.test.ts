@@ -1,0 +1,206 @@
+/**
+ * TraceCollector 测试
+ */
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
+import { TraceCollector } from '../traces';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import type { ExecutionTrace } from '../../types/trace';
+
+describe('TraceCollector', () => {
+  let tempDir: string;
+  let traceFile: string;
+  let collector: TraceCollector;
+
+  beforeAll(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-test-traces-'));
+    traceFile = path.join(tempDir, 'traces.log');
+  });
+
+  afterAll(() => {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  beforeEach(() => {
+    // 清空 trace 文件
+    fs.writeFileSync(traceFile, '');
+    collector = new TraceCollector({ traceFile, enabled: true });
+  });
+
+  describe('record', () => {
+    it('应该记录 trace', () => {
+      const trace: ExecutionTrace = {
+        constraintId: 'no_test_simplification',
+        severity: 'error',
+        timestamp: Date.now(),
+        result: 'pass',
+      };
+
+      collector.record(trace);
+
+      const content = fs.readFileSync(traceFile, 'utf-8');
+      expect(content).toContain('no_test_simplification');
+      expect(content).toContain('pass');
+    });
+
+    it('禁用时应该不记录', () => {
+      const disabledCollector = new TraceCollector({
+        traceFile,
+        enabled: false,
+      });
+
+      disabledCollector.record({
+        constraintId: 'test',
+        severity: 'error',
+        timestamp: Date.now(),
+        result: 'pass',
+      });
+
+      const content = fs.readFileSync(traceFile, 'utf-8');
+      expect(content).toBe('');
+    });
+
+    it('应该追加多条记录', () => {
+      collector.record({
+        constraintId: 'test1',
+        severity: 'error',
+        timestamp: Date.now(),
+        result: 'pass',
+      });
+      collector.record({
+        constraintId: 'test2',
+        severity: 'warning',
+        timestamp: Date.now(),
+        result: 'fail',
+      });
+
+      const content = fs.readFileSync(traceFile, 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines.length).toBe(2);
+    });
+  });
+
+  describe('recordPass', () => {
+    it('应该记录通过 trace', () => {
+      collector.recordPass('no_test_simplification', 'error');
+
+      const traces = collector.read();
+      expect(traces.length).toBe(1);
+      expect(traces[0].result).toBe('pass');
+    });
+  });
+
+  describe('recordFail', () => {
+    it('应该记录失败 trace', () => {
+      collector.recordFail('no_test_simplification', 'error');
+
+      const traces = collector.read();
+      expect(traces.length).toBe(1);
+      expect(traces[0].result).toBe('fail');
+    });
+  });
+
+  describe('read', () => {
+    it('应该返回所有 traces', () => {
+      collector.record({
+        constraintId: 'test1',
+        severity: 'error',
+        timestamp: 1000,
+        result: 'pass',
+      });
+      collector.record({
+        constraintId: 'test2',
+        severity: 'warning',
+        timestamp: 2000,
+        result: 'fail',
+      });
+
+      const traces = collector.read();
+      expect(traces.length).toBe(2);
+    });
+
+    it('应该按时间范围过滤', () => {
+      collector.record({
+        constraintId: 'test1',
+        severity: 'error',
+        timestamp: 1000,
+        result: 'pass',
+      });
+      collector.record({
+        constraintId: 'test2',
+        severity: 'error',
+        timestamp: 2000,
+        result: 'pass',
+      });
+      collector.record({
+        constraintId: 'test3',
+        severity: 'error',
+        timestamp: 3000,
+        result: 'pass',
+      });
+
+      const traces = collector.read({
+        timeRange: { start: 1500, end: 2500 },
+      });
+      expect(traces.length).toBe(1);
+      expect(traces[0].constraintId).toBe('test2');
+    });
+
+    it('应该按约束层级过滤', () => {
+      collector.record({
+        constraintId: 'test1',
+        severity: 'error',
+        timestamp: 1000,
+        result: 'pass',
+      });
+      collector.record({
+        constraintId: 'test2',
+        severity: 'warning',
+        timestamp: 2000,
+        result: 'pass',
+      });
+
+      const traces = collector.read({ severity: 'error' });
+      expect(traces.length).toBe(1);
+    });
+  });
+
+  describe('getStats', () => {
+    it('应该返回统计信息', () => {
+      collector.record({
+        constraintId: 'test1',
+        severity: 'error',
+        timestamp: 1000,
+        result: 'pass',
+      });
+      collector.record({
+        constraintId: 'test2',
+        severity: 'error',
+        timestamp: 2000,
+        result: 'fail',
+      });
+
+      const stats = collector.getStats();
+
+      expect(stats.fileExists).toBe(true);
+      expect(stats.totalLines).toBe(2);
+    });
+
+    it('空文件应该返回正确信息', () => {
+      const emptyCollector = new TraceCollector({
+        traceFile: path.join(tempDir, 'empty.log'),
+      });
+
+      const stats = emptyCollector.getStats();
+
+      expect(stats.fileExists).toBe(false);
+      expect(stats.totalLines).toBe(0);
+    });
+  });
+});

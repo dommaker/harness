@@ -8,8 +8,11 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { checkCommandSuccess } from '../check-handlers/command';
-import type { CommandSuccessCheck, CheckpointContext } from '../../../types/checkpoint';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { checkCommandSuccess, checkCommandOutput } from '../check-handlers/command';
+import type { CommandSuccessCheck, CommandOutputCheck, CheckpointContext } from '../../../types/checkpoint';
 
 function check(command: string): CommandSuccessCheck {
   return { id: 'c-1', type: 'command_success', config: { command } };
@@ -52,5 +55,87 @@ describe('command_success 不被输出体量左右', () => {
     const result = await checkCommandSuccess(check('definitely-not-a-command-xyzzy'), context);
 
     expect(result.passed).toBe(false);
+  });
+});
+
+describe('command_* 处理器 × read-only 策略（D3 P0.5 Phase 1）', () => {
+  const markerCommand = (marker: string): string =>
+    `node -e "require('fs').writeFileSync('${marker}','x')"`;
+
+  /** 结构化策略字面量：与 CommandExecutionPolicy 同形（不经工厂，红阶段也能编译运行） */
+  interface InlinePolicy {
+    readOnly: boolean;
+    skipReason: (command: string) => string;
+    execute: (command: string, cwd: string, timeoutMs: number) => Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      timedOut: boolean;
+      stdout: string;
+      stderr: string;
+      truncated: boolean;
+    }>;
+  }
+  const roPolicy = (): InlinePolicy => ({
+    readOnly: true,
+    skipReason: (command) => `--read-only：跳过命令执行（未执行）：${command}`,
+    execute: async () => ({ code: 0, signal: null, timedOut: false, stdout: '', stderr: '', truncated: false }),
+  });
+  const withPolicy = (policy: InlinePolicy): CheckpointContext => {
+    const ctx = { workdir: process.cwd(), projectPath: process.cwd() } as CheckpointContext & { commandPolicy: InlinePolicy };
+    ctx.commandPolicy = policy;
+    return ctx;
+  };
+
+  it('command_success read-only：三态 skipped（passed=false + skipReason），不执行零副作用', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-ro-cmd-'));
+    try {
+      const marker = path.join(dir, 'marker');
+      const result = await checkCommandSuccess(check(markerCommand(marker)), withPolicy(roPolicy()));
+
+      expect(result.passed).toBe(false);
+      // 双转：旧 CheckResult 无 skipped/skipReason 字段，红阶段编译护栏下跑到运行时断言红
+      expect((result as { skipped?: boolean }).skipped).toBe(true);
+      expect((result as { skipReason?: string }).skipReason).toContain('--read-only');
+      expect((result as { skipReason?: string }).skipReason).toContain('writeFileSync');
+      expect(result.message).toContain('未执行');
+      expect(fs.existsSync(marker)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('command_output read-only：三态 skipped，不执行零副作用', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-ro-out-'));
+    try {
+      const marker = path.join(dir, 'marker');
+      const outputCheck: CommandOutputCheck = {
+        id: 'c-2',
+        type: 'command_output',
+        config: { command: markerCommand(marker), expected: 'x' },
+      };
+      const result = await checkCommandOutput(outputCheck, withPolicy(roPolicy()));
+
+      expect(result.passed).toBe(false);
+      expect((result as { skipped?: boolean }).skipped).toBe(true);
+      expect((result as { skipReason?: string }).skipReason).toContain('--read-only');
+      expect(fs.existsSync(marker)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('无策略（库直调默认）：command_success 默认执行，行为不变', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-ro-default-'));
+    try {
+      const marker = path.join(dir, 'marker');
+      const result = await checkCommandSuccess(check(markerCommand(marker)), {
+        workdir: dir,
+        projectPath: dir,
+      });
+      expect(result.passed).toBe(true);
+      expect(fs.existsSync(marker)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

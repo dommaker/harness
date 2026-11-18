@@ -34,16 +34,23 @@ export function stringifyOutput(output: unknown): string {
 /**
  * 取得待检查的输出：context.output 优先；未提供且配置了 command 时执行之。
  * 返回 [输出文本, 命令执行错误（若有）]
+ *
+ * read-only 策略（D3）：context.output 未提供且需执行 command 时，不执行，
+ * 返回 skipped 原因（三态），由各 output_* 族译成 skipped 的 CheckResult。
  */
 async function resolveOutput(
   check: OutputCheck,
   context: CheckpointContext
-): Promise<{ output: string; commandError?: string }> {
+): Promise<{ output: string; commandError?: string; skipReason?: string }> {
   if (context.output !== undefined && context.output !== null) {
     return { output: stringifyOutput(context.output) };
   }
   const command = check.config.command;
   if (typeof command === 'string' && command.length > 0) {
+    const policy = context.commandPolicy;
+    if (policy?.readOnly) {
+      return { output: '', skipReason: policy.skipReason(command) };
+    }
     try {
       const { stdout } = await execAsync(command, { cwd: context.workdir });
       return { output: stdout };
@@ -55,8 +62,20 @@ async function resolveOutput(
   return { output: '' };
 }
 
+/** output_* 族共用的 read-only 跳过结果（resolveOutput 报出 skipReason 时） */
+function skippedFromResolve(checkId: string, command: string | undefined, skipReason: string): CheckResult {
+  return {
+    checkId,
+    passed: false,
+    skipped: true,
+    skipReason,
+    message: `跳过检查（命令未执行）: ${command ?? ''}`,
+  };
+}
+
 export async function checkOutputContains(check: OutputContentCheck, context: CheckpointContext): Promise<CheckResult> {
-  const { output, commandError } = await resolveOutput(check, context);
+  const { output, commandError, skipReason } = await resolveOutput(check, context);
+  if (skipReason) return skippedFromResolve(check.id, check.config.command, skipReason);
   if (commandError) {
     return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
@@ -75,7 +94,8 @@ export async function checkOutputContains(check: OutputContentCheck, context: Ch
 }
 
 export async function checkOutputNotContains(check: OutputContentCheck, context: CheckpointContext): Promise<CheckResult> {
-  const { output, commandError } = await resolveOutput(check, context);
+  const { output, commandError, skipReason } = await resolveOutput(check, context);
+  if (skipReason) return skippedFromResolve(check.id, check.config.command, skipReason);
   if (commandError) {
     return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }
@@ -94,7 +114,8 @@ export async function checkOutputNotContains(check: OutputContentCheck, context:
 }
 
 export async function checkOutputMatches(check: OutputMatchesCheck, context: CheckpointContext): Promise<CheckResult> {
-  const { output, commandError } = await resolveOutput(check, context);
+  const { output, commandError, skipReason } = await resolveOutput(check, context);
+  if (skipReason) return skippedFromResolve(check.id, check.config.command, skipReason);
   if (commandError) {
     return failResult(check.id, `命令执行失败: ${check.config.command}`, commandError, 'exit code 0');
   }

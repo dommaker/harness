@@ -12,6 +12,7 @@ import { splitFrontmatter, joinFrontmatter } from '../utils/frontmatter';
 import { readJsonDocIfExists } from '../utils/json-doc';
 import { isoDate } from '../utils/date';
 import { isEntryFile, SNAPSHOTS_DIR } from './tree-walker';
+import { estimateTokens } from './token-estimate';
 import type {
   KnowledgeEntry,
   IndexEntry,
@@ -25,6 +26,38 @@ import { MATURITY_LEVELS, STORAGE_LAYERS } from './types';
 const DEFAULT_DIR = '.harness/knowledge';
 const INDEX_FILE = 'index.json';
 const CONSUMPTION_STATS_FILE = '.consumption-stats.json';
+
+/**
+ * D7：运行时 index.json 的内部扩展条目——公共 IndexEntry 不变，tokenCount 仅经
+ * store 的写路径（toIndexEntry）落盘、读路径窄化取用，属包内私有交叉类型。
+ * tokenCount = estimateTokens(content) + estimateTokens(title)（两次 ceil 的现有口径，
+ * 写入时算好，普通 query 截断就不必为被排除条目回读全文）。
+ */
+export type IndexEntryTokens = IndexEntry & { tokenCount?: number };
+
+/** 从 index 条目窄化取 tokenCount：非数字（旧格式/手改坏值）一律 undefined → 调用方走兼容路径 */
+export function indexEntryTokenCount(entry: IndexEntry): number | undefined {
+  const tokenCount = (entry as IndexEntryTokens).tokenCount;
+  return typeof tokenCount === 'number' && Number.isFinite(tokenCount) ? tokenCount : undefined;
+}
+
+/**
+ * D7：index 元数据过滤的唯一实现（QueryFilter 全字段）。
+ * store.list 与 KnowledgeQuery.query 共用，不各写一套过滤正本。
+ */
+export function filterIndexEntries(entries: IndexEntry[], filter: QueryFilter): IndexEntry[] {
+  return entries.filter(entry => {
+    if (filter.types && filter.types.length > 0 && !filter.types.includes(entry.type)) return false;
+    if (filter.maturity && filter.maturity.length > 0 && !filter.maturity.includes(entry.maturity)) return false;
+    if (filter.layers && filter.layers.length > 0 && !filter.layers.includes(entry.layer)) return false;
+    if (filter.tags && filter.tags.length > 0 && !filter.tags.some(t => (entry.tags ?? []).includes(t))) return false;
+    if (filter.applicablePhases && filter.applicablePhases.length > 0 && !filter.applicablePhases.some(p => (entry.applicablePhases ?? []).includes(p))) return false;
+    if (filter.excludeArchived !== false && (entry.maturity === 'archived' || entry.maturity === 'deprecated')) return false;
+    if (filter.consumptionModes && filter.consumptionModes.length > 0 && !filter.consumptionModes.includes(entry.consumptionMode ?? 'reference')) return false;
+    if (filter.origins && filter.origins.length > 0 && !filter.origins.includes(entry.origin ?? 'agent')) return false;
+    return true;
+  });
+}
 
 /**
  * KnowledgeStore interface — abstract contract for knowledge storage.
@@ -42,8 +75,12 @@ export interface KnowledgeStore {
   /**
    * 按 id 批量部分更新（harness#134）：`update(id, partial)` 的批量形，语义与逐条一致
    * （读不到该 id 即跳过），循环内只更新内存索引、结束一次 writeIndex。空批零读写。
+   *
+   * D7 可选第二参 `bases`：调用方已持有的 id → 完整条目预载基线（引用记账复用
+   * query 已物化条目时经此消除层间重复 get）。缺省/缺项走原 `get(id)` 读盘；
+   * 外部自定义 store 的一参实现编译与运行均兼容（多余实参被忽略）。
    */
-  applyAll(updates: StoreUpdate[]): void;
+  applyAll(updates: StoreUpdate[], bases?: ReadonlyMap<string, KnowledgeEntry>): void;
   delete(id: string): boolean;
   update(id: string, partial: Partial<KnowledgeEntry>): KnowledgeEntry | undefined;
   rebuildIndex(): void;
@@ -57,6 +94,14 @@ export interface KnowledgeStore {
    * 文件缺失或损坏 = undefined（无数据，不是零消费）
    */
   getConsumptionStats(): ConsumptionStats | undefined;
+  /**
+   * D7 按需物化可选能力：把 index 元数据条目回读为完整条目。
+   * 普通 query 先经 `readIndex()` + `filterIndexEntries` 过滤/排序/截断，
+   * 只对本方法传入最终返回子集——被过滤/截断排除的条目全文零读取。
+   * 「索引在册但条目文件缺失」的漂移错误在此实现（与 list 同一正本）。
+   * 外部自定义 store 未实现时，KnowledgeQuery 走 list+applyBudget 兼容路径。
+   */
+  materializeByIndex?(indexEntries: IndexEntry[]): KnowledgeEntry[];
 }
 
 /**
@@ -74,6 +119,8 @@ export class FileKnowledgeStore implements KnowledgeStore {
    * 文件变更（含外部进程改写、删除）自动失效。
    */
   private indexCache: { mtimeMs: number; size: number; entries: IndexEntry[] } | undefined;
+  /** 旧格式 index（无 tokenCount）提示的实例级 once 闸（D7）：不重复刷屏 */
+  private oldIndexHintShown = false;
 
   constructor(config?: { baseDir?: string }) {
     this.baseDir = config?.baseDir || DEFAULT_DIR;
@@ -93,11 +140,17 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   list(filter?: QueryFilter): KnowledgeEntry[] {
-    const index = this.readIndex();
     const effectiveFilter: QueryFilter = { excludeArchived: true, ...filter };
-    const entries = index.filter(e => this.matchesFilter(e, effectiveFilter));
+    return this.materializeByIndex(filterIndexEntries(this.readIndex(), effectiveFilter));
+  }
 
-    return entries.map(idx => {
+  /**
+   * D7 按需物化：把 index 子集回读为完整条目（普通 query 截断后只物化最终返回集）。
+   * 「索引在册但条目文件缺失/不可解析」的漂移错误只在此实现一份，list() 与本方法共用；
+   * get 继续走 D6 entryPath（findFile → entryPath），不另起路径构造。
+   */
+  materializeByIndex(indexEntries: IndexEntry[]): KnowledgeEntry[] {
+    return indexEntries.map(idx => {
       const full = this.get(idx.id);
       if (!full) {
         // 索引在册但条目文件缺失/不可解析 = 索引漂移：抛出让它暴露，
@@ -141,7 +194,10 @@ export class FileKnowledgeStore implements KnowledgeStore {
   saveAll(entries: KnowledgeEntry[]): void {
     if (entries.length === 0) return;
     // 整批预校验（写入闸）：任一脏值全批拒写，不落半个批次
-    for (const entry of entries) this.assertEnumFields(entry);
+    for (const entry of entries) {
+      this.assertEnumFields(entry);
+      this.assertEntryPathSafe(entry);
+    }
     const index = this.readIndex();
     const position = new Map(index.map((e, i) => [e.id, i]));
     for (const entry of entries) {
@@ -158,7 +214,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     this.writeIndex(index);
   }
 
-  applyAll(updates: StoreUpdate[]): void {
+  applyAll(updates: StoreUpdate[], bases?: ReadonlyMap<string, KnowledgeEntry>): void {
     if (updates.length === 0) return;
     // 先合并再整批预校验（写入闸）：任一合并结果脏值全批拒写，不落半个批次。
     // 批内同 id 多条按序累积合并（后者基于前者的合并结果，与逐条 update 同语义）。
@@ -166,7 +222,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     const pending = new Map<string, number>(); // id → merged 下标
     for (const { id, partial } of updates) {
       const idx = pending.get(id);
-      const base = idx !== undefined ? merged[idx] : this.get(id);
+      const base = idx !== undefined ? merged[idx] : bases?.get(id) ?? this.get(id);
       if (!base) continue;
       const next: KnowledgeEntry = { ...base, ...partial, id };
       if (idx !== undefined) {
@@ -177,7 +233,10 @@ export class FileKnowledgeStore implements KnowledgeStore {
       }
     }
     if (merged.length === 0) return;
-    for (const entry of merged) this.assertEnumFields(entry);
+    for (const entry of merged) {
+      this.assertEnumFields(entry);
+      this.assertEntryPathSafe(entry);
+    }
     const index = this.readIndex();
     const position = new Map(index.map((e, i) => [e.id, i]));
     for (const entry of merged) {
@@ -248,10 +307,37 @@ export class FileKnowledgeStore implements KnowledgeStore {
     }
   }
 
-  private entryPath(entry: KnowledgeEntry): string {
-    const safeType = path.basename(entry.type);
-    const safeId = path.basename(entry.id);
-    return path.join(this.baseDir, `${safeType}-${safeId}.md`);
+  private entryPath(entry: { id: string; type: string }): string {
+    this.assertEntryPathSafe(entry);
+    return path.join(this.baseDir, `${entry.type}-${entry.id}.md`);
+  }
+
+  /** 条目 id/type 的路径分量预校验（saveAll/applyAll 整批预校验用；落盘时 entryPath 仍会复检） */
+  private assertEntryPathSafe(entry: { id: string; type: string }): void {
+    this.assertSafePathComponent('id', entry.id, '知识条目');
+    this.assertSafePathComponent('type', entry.type, '知识条目');
+  }
+
+  /**
+   * 非法路径分量判定（D6 唯一实现）：id/type 只允许 baseDir 内的单文件名分量——
+   * 非空、非 '.'/'..'、不含路径分隔符（含 Windows 反斜杠）与 NUL。
+   * entryPath/findFile/save 批量预校验与 readIndex 在册校验共用此规则，不各写一套。
+   * 命中即 fail-fast 抛错，不做 basename 静默修正
+   * （旧行为会把 "../../x" 修正成 "x" 写到库内另一位置，读删路径对不上）。
+   */
+  private isUnsafePathComponent(value: unknown): boolean {
+    const s = String(value);
+    return s === '' || s === '.' || s === '..' || s.includes('/') || s.includes('\\') || s.includes('\0');
+  }
+
+  /** 路径分量闸（写入/查询入口）：命中非法分量按条目错误风格 fail-fast 抛错 */
+  private assertSafePathComponent(field: 'id' | 'type', value: unknown, where: string): void {
+    if (this.isUnsafePathComponent(value)) {
+      throw new Error(
+        `[harness] ${where} ${field} 值 ${JSON.stringify(String(value))} 非法：` +
+        `不允许为空、'.'、'..' 或含路径分隔符与 NUL 字符，拒绝构造文件路径`
+      );
+    }
   }
 
   /** 条目文件正文的唯一落盘写法（save / saveAll / applyAll 三条路径共用，#134） */
@@ -264,11 +350,13 @@ export class FileKnowledgeStore implements KnowledgeStore {
   }
 
   private findFile(id: string): string | undefined {
+    // 0. 入参闸：查询 id 先过路径分量闸，非法值 fail-fast，不落入扫描/构造
+    this.assertSafePathComponent('id', id, '知识条目');
     // 1. Fast path: index has id→type mapping, construct exact filename
     const index = this.readIndex();
     const idx = index.find(e => e.id === id);
     if (idx) {
-      const exact = path.join(this.baseDir, `${idx.type}-${idx.id}.md`);
+      const exact = this.entryPath(idx);
       if (fs.existsSync(exact)) return exact;
     }
     // 2. Fallback: scan files, verify id from frontmatter
@@ -357,7 +445,7 @@ export class FileKnowledgeStore implements KnowledgeStore {
     return meta;
   }
 
-  private toIndexEntry(entry: KnowledgeEntry): IndexEntry {
+  private toIndexEntry(entry: KnowledgeEntry): IndexEntryTokens {
     return {
       id: entry.id,
       type: entry.type,
@@ -370,19 +458,9 @@ export class FileKnowledgeStore implements KnowledgeStore {
       created: entry.created,
       consumptionMode: entry.consumptionMode,
       origin: entry.origin,
+      // D7：写入时算好正文+标题 token（现有两次 ceil 口径），普通 query 截断零回读
+      tokenCount: estimateTokens(entry.content) + estimateTokens(entry.title),
     };
-  }
-
-  private matchesFilter(entry: IndexEntry, filter: QueryFilter): boolean {
-    if (filter.types && filter.types.length > 0 && !filter.types.includes(entry.type)) return false;
-    if (filter.maturity && filter.maturity.length > 0 && !filter.maturity.includes(entry.maturity)) return false;
-    if (filter.layers && filter.layers.length > 0 && !filter.layers.includes(entry.layer)) return false;
-    if (filter.tags && filter.tags.length > 0 && !filter.tags.some(t => (entry.tags ?? []).includes(t))) return false;
-    if (filter.applicablePhases && filter.applicablePhases.length > 0 && !filter.applicablePhases.some(p => (entry.applicablePhases ?? []).includes(p))) return false;
-    if (filter.excludeArchived !== false && (entry.maturity === 'archived' || entry.maturity === 'deprecated')) return false;
-    if (filter.consumptionModes && filter.consumptionModes.length > 0 && !filter.consumptionModes.includes(entry.consumptionMode ?? 'reference')) return false;
-    if (filter.origins && filter.origins.length > 0 && !filter.origins.includes(entry.origin ?? 'agent')) return false;
-    return true;
   }
 
   // ── Snapshots ────────────────────────────────────────────
@@ -470,8 +548,39 @@ export class FileKnowledgeStore implements KnowledgeStore {
       this.indexCache = undefined;
       return [];
     }
+    // fail-fast（D6）：index 在册条目的 id/type 必须先过路径分量闸——
+    // 非法值会在 get/list/delete 的 index 驱动路径上被拼进文件路径，越出 baseDir
+    this.assertIndexEntriesValid(entries);
+    // D7：旧格式 index（任一条目无数字 tokenCount）——普通 query 将回退全量读取。
+    // 与 query 回退判定同一份检测；实例内只提示一次，新索引路径零输出。
+    if (!this.oldIndexHintShown && entries.some(e => indexEntryTokenCount(e) === undefined)) {
+      this.oldIndexHintShown = true;
+      console.error(
+        '[harness] 知识库索引 index.json 为旧格式（无 tokenCount 元数据），普通 query 将回退全量读取；' +
+        '运行 harness knowledge index（rebuildIndex）可恢复按需物化'
+      );
+    }
     this.indexCache = { mtimeMs: stat.mtimeMs, size: stat.size, entries };
     return entries;
+  }
+
+  /**
+   * index.json 条目校验（D6）：任何非法 id/type 明确抛错，定位条目序号/字段/值，
+   * 提示手工修正 index.json 或核对条目文件后 rebuildIndex。校验通过才进缓存。
+   * 判定规则复用 isUnsafePathComponent，与写入/查询同一套。
+   */
+  private assertIndexEntriesValid(entries: IndexEntry[]): void {
+    entries.forEach((entry, i) => {
+      for (const field of ['id', 'type'] as const) {
+        if (this.isUnsafePathComponent(entry[field])) {
+          throw new Error(
+            `[harness] 知识库索引 index.json 第 ${i + 1} 条目的 ${field} 值 ${JSON.stringify(String(entry[field]))} 非法` +
+            `（不允许为空、'.'、'..' 或含路径分隔符与 NUL 字符）；` +
+            `修复：手工修正 index.json 该字段，或核对对应条目文件后运行 harness knowledge index（rebuildIndex）`
+          );
+        }
+      }
+    });
   }
 
   private writeIndex(entries: IndexEntry[]): void {

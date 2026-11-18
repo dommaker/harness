@@ -134,23 +134,35 @@ describe('acceptance command', () => {
   });
 
   describe('listAcceptanceCriteria', () => {
-    it('should list tasks and their criteria', async () => {
+    it('should list tasks and their criteria（新契约 acceptance 数组，含勾选标记与 e2e 标注）', async () => {
       mockFs.readFile.mockResolvedValue('yaml-content');
       yaml.load.mockReturnValue({
-        'task-1': { acceptanceCriteria: ['Criteria 1', 'Criteria 2'] },
-        'task-2': { acceptanceCriteria: ['Criteria A'] },
+        tasks: [
+          {
+            id: 'task-1',
+            acceptance: [
+              { description: 'Criteria 1', checked: true },
+              { description: 'Criteria 2', checked: false, e2e_test: 'tests/c2.spec.ts' },
+            ],
+          },
+          { id: 'task-2', acceptance: [{ description: 'Criteria A', checked: true }] },
+        ],
       });
 
-      await listAcceptanceCriteria({}, io);
+      const result = await listAcceptanceCriteria({}, io);
 
-      expect(io.outText()).toContain('task-1');
-      expect(io.outText()).toContain('Criteria 1');
+      expect(result).toEqual({ kind: 'ok' });
+      expect(io.outText()).toContain('task-1:');
+      expect(io.outText()).toContain('[✓] Criteria 1');
+      expect(io.outText()).toContain('[ ] Criteria 2 (e2e: tests/c2.spec.ts)');
+      expect(io.outText()).toContain('task-2:');
+      expect(io.outText()).toContain('Criteria A');
     });
 
     it('should handle task with no criteria', async () => {
       mockFs.readFile.mockResolvedValue('yaml-content');
       yaml.load.mockReturnValue({
-        'task-1': {},
+        tasks: [{ id: 'task-1' }],
       });
 
       await listAcceptanceCriteria({}, io);
@@ -158,29 +170,45 @@ describe('acceptance command', () => {
       expect(io.outText()).toContain('无验收标准');
     });
 
-    it('should handle empty tasks object', async () => {
+    it('非法形状（旧逐条勾选/任意 map）→ fail-fast 且输出解析错误，不再静默 ok/skip', async () => {
+      mockFs.readFile.mockResolvedValue('yaml-content');
+      yaml.load.mockReturnValue({
+        'task-1': { acceptanceCriteria: ['Criteria 1'] },
+      });
+
+      const result = await listAcceptanceCriteria({}, io);
+
+      expect(result.kind).toBe('fail');
+      expect(result).toHaveProperty('reason', expect.stringContaining('tasks.yml 解析失败'));
+      expect(io.outText()).toContain('tasks.yml 解析失败');
+    });
+
+    it('yaml.load 返回 null（空文档）→ fail，不当作「未找到任务定义」skip', async () => {
       mockFs.readFile.mockResolvedValue('yaml-content');
       yaml.load.mockReturnValue(null);
 
       const result = await listAcceptanceCriteria({}, io);
 
-      expect(io.outText()).toContain('未找到任务定义');
-      expect(result).toEqual({
-        kind: 'skip',
-        reason: expect.stringContaining('未找到任务定义'),
-      });
+      expect(result.kind).toBe('fail');
+      expect(io.outText()).toContain('tasks.yml 解析失败');
     });
 
-    it('should handle file read error', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+    it('tasks.yml 不在场（ENOENT）→ skip，与门禁「无文件即跳过」语义一致', async () => {
+      mockFs.readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       const result = await listAcceptanceCriteria({}, io);
 
+      expect(result.kind).toBe('skip');
+      expect(result).toHaveProperty('reason', expect.stringContaining('未找到 tasks.yml'));
+    });
+
+    it('读取失败（非 ENOENT）→ fail，不再静默 skip', async () => {
+      mockFs.readFile.mockRejectedValue(new Error('EACCES'));
+
+      const result = await listAcceptanceCriteria({}, io);
+
+      expect(result.kind).toBe('fail');
       expect(io.outText()).toContain('读取 tasks.yml 失败');
-      expect(result).toEqual({
-        kind: 'skip',
-        reason: expect.stringContaining('读取 tasks.yml 失败'),
-      });
     });
   });
 });

@@ -3,8 +3,9 @@
  *
  * 默认形态：扫描源码模块 → CAPABILITIES.md 两种格式判定 → CONTEXT.md 缺失/漂移
  * → AGENTS.md（--agents）→ json/人读报告 → 写入模式自愈。本文件只剩编排：
- * 采集与判定住 sync-state.ts，JSON/人读出口住 sync-output.ts，写入自愈住
- * sync-writes.ts；--gate 的收尾判定经 `gate.ts` 的 runHeadGateVerdict；
+ * 采集与判定住 core/docs-sync/sync-state.ts（P2.8 收口），JSON/人读出口住
+ * sync-output.ts，写入自愈住 sync-writes.ts（含 capabilities-syncer/context-syncer
+ * 两个写侧残余）；--gate 的收尾判定经 `gate.ts` 的 runHeadGateVerdict；
  * --compact 形态不经过本文件（见 compact.ts）。
  */
 
@@ -16,13 +17,13 @@ import {
   collectSyncState,
   judgeSyncState,
   type SyncDocsOptions,
-} from './sync-state';
+} from '../../../core/docs-sync/sync-state';
 import { emitJsonReport, emitHumanReport } from './sync-output';
 import { applySyncWrites } from './sync-writes';
 import { runHeadGateVerdict } from './gate';
 import { log, processIO, type CommandIO, type CommandResult } from '../../command-contract';
 
-export type { SyncDocsOptions } from './sync-state';
+export type { SyncDocsOptions } from '../../../core/docs-sync/sync-state';
 
 /**
  * 能力清单计数源（harness#88）
@@ -62,8 +63,8 @@ export async function runMainSyncFlow(
     }
   }
 
-  // 采集 → 判定
-  const state = await collectSyncState(projectPath, options, io, CAPABILITY_DEFINITIONS);
+  // 采集 → 判定（住 core/docs-sync/sync-state.ts；本文件只剩编排与出口）
+  const state = await collectSyncState(projectPath, options, CAPABILITY_DEFINITIONS);
   const verdict = judgeSyncState(state, options);
 
   // JSON 出口：结构化输出供 LLM 消费

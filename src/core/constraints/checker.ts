@@ -15,13 +15,11 @@ import {
   ConstraintCheckResult,
   ConstraintViolationError,
 } from '../../types/constraint';
+import type { CommandExecutionPolicy } from '../../types/command-execution-policy';
 import type { ExecutionTrace } from '../../types/trace';
 import { CONSTRAINTS, isGateConstraint } from './definitions';
 import type { MergedConstraintsConfig } from '../../types/project-config';
 import { matchesTrigger } from './triggers';
-import { join, relative } from 'path';
-import { CheckCache } from './check-cache';
-import { findTsSourceFiles } from '../../utils/file-walk';
 import { getConstraintCheck, buildCheckEnv, normalizeCheckOutcome, degradeForMissingInputs, type CheckOutcome } from './checkers';
 import { createGitEvidence, type GitEvidence } from './git-evidence';
 import { createRunEnv, type RunEnv } from './run-env';
@@ -30,8 +28,9 @@ import { createRunEnv, type RunEnv } from './run-env';
  * trace 记录器最小接口（工单 15 decycle 收尾，harness#88）
  *
  * core 不上行依赖 monitoring：记录器经**构造参数**注入，未注入 = no-op
- * （默认无副作用）。真实收集器由组合根接线——CLI check/report 与 bootstrap
- * 各自 `new ConstraintChecker(new TraceCollector({ projectPath }))`。
+ * （默认无副作用）。真实收集器由组合根接线——生产侧唯一装配函数
+ * `assembleConstraintChecker(projectPath)`（src/bootstrap/，P1.1），
+ * CLI check/report 与 bootstrapHarness 共用。
  */
 export interface TraceRecorder {
   record(trace: ExecutionTrace): void;
@@ -46,18 +45,29 @@ const NOOP_TRACE_RECORDER: TraceRecorder = { record: () => undefined };
 export class ConstraintChecker {
   private static instance: ConstraintChecker;
 
-  /** 检查结果缓存（S7：src 扫描等重复 I/O，TTL=1s 防跨测试污染） */
-  private cache: CheckCache = new CheckCache({ ttlMs: 1000 });
-
   /** trace 记录器（构造注入；缺省 no-op） */
   private readonly traceRecorder: TraceRecorder;
 
-  constructor(traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER) {
+  /**
+   * 命令执行策略（D3 P0.5 Phase 1；构造注入，缺省 = 默认执行）
+   *
+   * 一次运行一份，经 checkPrecondition 挂上本次 CheckEnv.commandPolicy：
+   * read-only 下 exec 模板 checker 三态跳过项目声明命令。库直调不注入 =
+   * 行为兼容（默认执行）。
+   */
+  private readonly commandPolicy?: CommandExecutionPolicy;
+
+  constructor(traceRecorder: TraceRecorder = NOOP_TRACE_RECORDER, commandPolicy?: CommandExecutionPolicy) {
     this.traceRecorder = traceRecorder;
+    this.commandPolicy = commandPolicy;
   }
 
   /**
    * 获取单例实例（未接线记录器的默认实例：不写 trace）
+   *
+   * 本实例不再持有任何 run 级缓存（srcScan 缓存已归属 RunEnv，P1.1）——
+   * 单例只剩「免构造的默认评估器」职责，跨调用隔离由调用链上的
+   * RunEnv（一次 run 一份）保证。
    */
   static getInstance(): ConstraintChecker {
     if (!ConstraintChecker.instance) {
@@ -177,22 +187,20 @@ export class ConstraintChecker {
 
     const projectPath = context.projectPath || process.cwd();
     const git = evidence ?? createGitEvidence(projectPath);
+    // 本 run 的观察面：srcScan 缓存挂在它上面（一次 run 一份、跑完即弃，P1.1），
+    // 不再用本实例上的 TTL 缓存 + 手工 invalidate 掩盖 run 边界
+    const run = runEnv ?? createRunEnv(projectPath);
     const env = buildCheckEnv(context, {
       stagedDiff: async () => git.stagedDiff(),
       stagedDiffNames: async () => git.changedFileNames(true),
-      srcScan: (root: string) =>
-        this.cache.getSync(`src_scan_${root}`, projectPath, () =>
-          findTsSourceFiles(join(projectPath, root), { skipIndex: true }).map((f) =>
-            relative(projectPath, f)
-          )
-        ),
+      srcScan: (root: string) => run.srcScan(root),
       available: (input) => {
         switch (input) {
           case 'stagedDiff': return git.stagedDiffAvailable();
           case 'stagedDiffNames': return git.changedFileNamesAvailable(true);
         }
       },
-    }, runEnv);
+    }, run, this.commandPolicy);
 
     // 输入契约（harness#182）：checker 声明的输入环境给不了 → 带原因的 skipped，
     // 不进入 evaluate（「检查器失效 ≠ 对象合规」，不再对空证据假 pass / 无声 skip）
@@ -279,8 +287,7 @@ export class ConstraintChecker {
     runEnv: RunEnv | undefined,
     mode: 'block' | 'collect'
   ): Promise<ConstraintCheckResult> {
-    // run 起始：重置 src 扫描缓存（S7）；git 证据 = 本 run 独占的 adapter 实例（工单 18 → #87）
-    this.cache.invalidate();
+    // git 证据 = 本 run 独占的 adapter 实例（工单 18 → #87）
     const projectPath = context.projectPath || process.cwd();
     const run = evidence ?? createGitEvidence(projectPath);
     // 观察面同一形状（ADR-0023）：调用方传了就共用，没传也只造一枚——逐条 checker 不再各读一遍配置

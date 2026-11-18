@@ -13,8 +13,16 @@
 import { execAsync } from '../utils/exec';
 import { isRecord } from '../utils/guards';
 import { gateResult, fromError } from './types';
-import type { GateResult, GateContext, SecurityGateConfig, Gate, GateDecision } from './types';
+import type { GateResult, SecurityGateContext, SecurityGateConfig, Gate, GateDecision } from './types';
 import { decisionFromResult } from './decision';
+
+/**
+ * 默认审计固定可信 registry（D4）：npm 命令行 `--registry` 旗标优先于项目
+ * .npmrc 的 registry 配置，项目 npm 配置不能改变默认审计来源。
+ * 仅缺省探测路径（detectScanCommand 第三级）使用；显式可信输入
+ * （context.securityScanCommand / 构造器 scanCommand）原样下发，不追加。
+ */
+const TRUSTED_NPM_REGISTRY = 'https://registry.npmjs.org/';
 
 /** 漏洞条目（报告 details 与 analyzeResult 共用形状） */
 interface VulnerabilityEntry {
@@ -71,14 +79,14 @@ export class SecurityGate implements Gate {
   /**
    * 统一门禁接口（G1）：执行细节私有，决策三态由 scan() 报告推导
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
+  async evaluate(context: SecurityGateContext): Promise<GateDecision> {
     return decisionFromResult(await this.scan(context));
   }
 
   /**
    * 扫描安全漏洞
    */
-  async scan(context: GateContext): Promise<GateResult> {
+  async scan(context: SecurityGateContext): Promise<GateResult> {
     const startTime = Date.now();
 
     try {
@@ -122,8 +130,8 @@ export class SecurityGate implements Gate {
    * 检测扫描命令
    */
   private detectScanCommand(_projectPath: string): string {
-    // 默认使用 npm audit
-    return 'npm audit --json';
+    // 默认使用 npm audit，固定可信 registry（D4，见 TRUSTED_NPM_REGISTRY）
+    return `npm audit --json --registry ${TRUSTED_NPM_REGISTRY}`;
   }
 
   /**
@@ -173,23 +181,25 @@ export class SecurityGate implements Gate {
       throw new Error('安全扫描输出不是 JSON 对象');
     }
 
-    if (isRecord(raw.vulnerabilities)) {
-      for (const [name, entry] of Object.entries(raw.vulnerabilities)) {
-        // 畸形条目（非对象）跳过并计数——不伪装成空漏洞对象（原 `as NpmVulnerability`
-        // 会把字符串/数组条目当成 {severity: undefined} 的低危漏洞计入 total）
-        if (!isRecord(entry)) {
-          skippedMalformed++;
-          continue;
-        }
-        const vuln = entry as NpmVulnerability;
-        const severity = vuln.severity?.toLowerCase() ?? 'low';
-        count(severity);
-        vulnerabilities.push({
-          name,
-          severity,
-          via: viaTitle(vuln.via) ?? vuln.name ?? 'Unknown',
-        });
+    if (!isRecord(raw.vulnerabilities)) {
+      throw new Error('安全扫描输出缺少有效的 vulnerabilities 对象');
+    }
+
+    for (const [name, entry] of Object.entries(raw.vulnerabilities)) {
+      // 畸形条目（非对象）跳过并计数——不伪装成空漏洞对象（原 `as NpmVulnerability`
+      // 会把字符串/数组条目当成 {severity: undefined} 的低危漏洞计入 total）
+      if (!isRecord(entry)) {
+        skippedMalformed++;
+        continue;
       }
+      const vuln = entry as NpmVulnerability;
+      const severity = vuln.severity?.toLowerCase() ?? 'low';
+      count(severity);
+      vulnerabilities.push({
+        name,
+        severity,
+        via: viaTitle(vuln.via) ?? vuln.name ?? 'Unknown',
+      });
     }
 
     return {

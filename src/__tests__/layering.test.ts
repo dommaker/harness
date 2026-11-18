@@ -296,6 +296,57 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
     });
   });
 
+  describe('文档对照：src/CONTEXT.md 依赖关系节与登记一致（P2.5）', () => {
+    const contextMd = fs.readFileSync(path.join(SRC_DIR, 'CONTEXT.md'), 'utf-8');
+    const depsSection =
+      contextMd.split(/^## /m).find(s => s.startsWith('依赖关系'))?.slice('依赖关系'.length) ?? '';
+
+    /** 生产面（排 __tests__）是否真有值 import 指向某单元 */
+    function productionValueImports(unit: string, target: string): boolean {
+      const root = path.join(SRC_DIR, unit);
+      for (const file of listTsFiles(root)) {
+        if (isTestFile(path.relative(SRC_DIR, file))) continue;
+        const code = stripComments(fs.readFileSync(file, 'utf-8'));
+        MODULE_SOURCE_REGEX.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = MODULE_SOURCE_REGEX.exec(code)) !== null) {
+          if (m[1] && isTypeOnlyClause(m[1])) continue;
+          if (unitOfImport(file, m[2] ?? m[3]) === target) return true;
+        }
+      }
+      return false;
+    }
+
+    /** 登记 + 实扫共同认定的 core 生产依赖者（__tests__ 是测试面，不进文档声明） */
+    function actualCoreDependents(): string[] {
+      return Object.keys(DOWNSTREAM)
+        .filter(unit => unit !== '__tests__' && unit !== 'core')
+        .filter(unit => fs.statSync(path.join(SRC_DIR, unit)).isDirectory())
+        .filter(
+          unit => DOWNSTREAM[unit].includes(ANY) || DOWNSTREAM[unit].includes('core')
+        )
+        .filter(unit => productionValueImports(unit, 'core'))
+        .sort();
+    }
+
+    /** 「依赖 `src/core/`」声明行点名的目录（去掉 core 自身与非目录的 barrel） */
+    function declaredCoreDependents(): string[] {
+      const line = depsSection.split('\n').find(l => /^- .*依赖 `src\/core\//.test(l)) ?? '';
+      return [...line.matchAll(/`src\/([a-z0-9-]+)\//g)]
+        .map(m => m[1])
+        .filter(unit => unit !== 'core' && unit in DOWNSTREAM && fs.statSync(path.join(SRC_DIR, unit)).isDirectory())
+        .sort();
+    }
+
+    it('文档声明的 core 生产依赖者 = 登记允许且实扫真有值导入的集合', () => {
+      expect(declaredCoreDependents()).toEqual(actualCoreDependents());
+    });
+
+    it('依赖关系节不得再出现「被所有模块依赖」式全称声称（agents/context 等实不依赖 core）', () => {
+      expect(depsSection).not.toContain('被所有模块依赖');
+    });
+  });
+
   describe('真规则：eslint 上行值导入报 error', () => {
     it.each([
       ['monitoring', '../../monitoring/traces'],
@@ -320,11 +371,11 @@ describe('逐目录单向分层（harness#88 / #137）', () => {
     it('同层/下层导入与上层目录名的字面量不误报', () => {
       const messages = probeCore(
         [
-          `import { CheckCache } from './check-cache';`,
+          `import { matchesTrigger } from './triggers';`,
           `import type { ExecutionTrace } from '../../types/trace';`,
           `import * as fs from 'fs';`,
           `const gateDocs = 'src/gates/definitions.ts';`,
-          `export const cache = new CheckCache({ ttlMs: 1 });`,
+          `export const triggerFn = matchesTrigger;`,
           `export const traceType: ExecutionTrace | null = null;`,
           `export const docs = gateDocs;`,
           `export const fsMod = fs;`,

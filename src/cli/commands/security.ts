@@ -10,7 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SecurityGate } from '../../gates/security';
 import { errorMessage } from '../../utils/error';
-import { execAsync } from '../../utils/exec';
+import { execFileAsync } from '../../utils/exec';
 import { log, processIO, type CommandIO, type CommandResult } from '../command-contract';
 import { reportGateDecision, reportGateError } from '../gate-command';
 
@@ -102,8 +102,8 @@ export interface SecretsOptions {
   projectPath?: string;
 }
 
-/** 执行器注入缝（测试不依赖真 gitleaks 二进制） */
-type ExecFn = typeof execAsync;
+/** 执行器注入缝（测试不依赖真 gitleaks 二进制）：argv 形状，路径不经 shell 字符串 */
+type ExecFn = typeof execFileAsync;
 
 /** gitleaks 报告条目中允许外显的字段（Secret/Match/Entropy 等一律不读不打印） */
 interface GitleaksFinding {
@@ -125,7 +125,7 @@ interface GitleaksFinding {
 export async function secretsScan(
   options: SecretsOptions,
   io: CommandIO = processIO,
-  execFn: ExecFn = execAsync,
+  execFn: ExecFn = execFileAsync,
 ): Promise<CommandResult> {
   log(io, chalk.blue('🔒 全历史机密扫描（gitleaks）...'));
 
@@ -136,8 +136,10 @@ export async function secretsScan(
   try {
     let exitCode = 0;
     try {
+      // repoRoot/reportPath 一律走 argv 元素，不经 shell 字符串（P0.3）
       await execFn(
-        `gitleaks git --report-format json --report-path "${reportPath}" "${repoRoot}"`,
+        'gitleaks',
+        ['git', '--report-format', 'json', '--report-path', reportPath, repoRoot],
         { cwd: repoRoot, maxBuffer: 10 * 1024 * 1024 },
       );
     } catch (error: unknown) {

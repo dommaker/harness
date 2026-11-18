@@ -27,7 +27,7 @@ jest.mock('chalk', () => ({
 }));
 
 const mockExecAsync = execAsync as unknown as jest.Mock;
-const DETECTED = 'npm audit --json';
+const DETECTED = 'npm audit --json --registry https://registry.npmjs.org/';
 
 describe('harness security 缺省扫描命令（#138 断链 · CLI 级）', () => {
   const issued = (): string[] => mockExecAsync.mock.calls.map((c) => String(c[0]));

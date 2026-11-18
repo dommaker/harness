@@ -9,6 +9,22 @@ import { failResult } from './fail-result';
 import type { CommandSuccessCheck, CommandOutputCheck, CheckResult, CheckpointContext } from '../../../types/checkpoint';
 
 /**
+ * read-only 策略跳过：声明命令未执行，三态 skipped（passed=false + skipReason）。
+ * 跳过原因由策略统一措辞，handler 只透传。
+ */
+function skippedForReadOnly(checkId: string, command: string, context: CheckpointContext): CheckResult | null {
+  const policy = context.commandPolicy;
+  if (!policy?.readOnly) return null;
+  return {
+    checkId,
+    passed: false,
+    skipped: true,
+    skipReason: policy.skipReason(command),
+    message: `跳过检查（命令未执行）: ${command}`,
+  };
+}
+
+/**
  * 失败时回带的输出末段字节数。
  *
  * 判成败只需要退出码，所以这里刻意不缓冲全量输出：旧写法走 exec（缺省 maxBuffer 1MiB），
@@ -40,6 +56,9 @@ function runForExitCode(command: string, cwd?: string): Promise<{ code: number; 
 export async function checkCommandSuccess(check: CommandSuccessCheck, context: CheckpointContext): Promise<CheckResult> {
   const command = check.config.command;
 
+  const skipped = skippedForReadOnly(check.id, command, context);
+  if (skipped) return skipped;
+
   try {
     const { code, tail } = await runForExitCode(command, context.workdir);
     if (code === 0) {
@@ -68,6 +87,9 @@ export async function checkCommandSuccess(check: CommandSuccessCheck, context: C
 export async function checkCommandOutput(check: CommandOutputCheck, context: CheckpointContext): Promise<CheckResult> {
   const command = check.config.command;
   const expected = String(check.config.expected);
+
+  const skipped = skippedForReadOnly(check.id, command, context);
+  if (skipped) return skipped;
 
   try {
     const { stdout } = await execAsync(command, { cwd: context.workdir });

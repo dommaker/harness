@@ -68,7 +68,7 @@ export async function executeCommand(
   }
 
   const gate = createCommandGate();
-  // 命令门禁只判命令串、不读项目根；GateContext 仍要求项目根——本命令无 -p 旗帜，取真实 cwd
+  // 命令门禁只判命令串、不读项目根；CommandGateContext 仍要求项目根——本命令无 -p 旗帜，取真实 cwd
   const decision = await gate.evaluate({ projectPath: process.cwd(), command: cmd });
   const result = decision.result;
 

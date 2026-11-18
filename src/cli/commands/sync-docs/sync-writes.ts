@@ -9,7 +9,7 @@ import * as path from 'path';
 import { updateCapabilityCounts, type CapabilityDefinitionSource } from '../../../core/constraints/capabilities-parser';
 import { updateCapabilitiesFile } from './capabilities-syncer';
 import { createContextMd } from './context-syncer';
-import type { SyncState, SyncVerdict } from './sync-state';
+import type { SyncState, SyncVerdict } from '../../../core/docs-sync/sync-state';
 import { log, type CommandIO } from '../../command-contract';
 
 /**

@@ -5,7 +5,8 @@
  * 1. 验证任务是否满足验收标准
  * 2. 解析 tasks.yml 中的验收条件（只认新契约 `acceptance`；旧的逐条勾选
  *    格式已随 gates 层现代化删除，不再兼容）
- * 3. 运行关联的 E2E 测试
+ * 3. 运行关联的 E2E 测试（可信命令串解析为 argv 前缀 + 不可信数据作 argv
+ *    元素，execFile 不经 shell——信任边界见 tokenizeCommand）
  *
  * 验收条件判定（唯一契约）：`checked: true` → 满足；未勾选且带 `e2e_test`
  * → 跑 E2E 按测试结论判定；未勾选且无 `e2e_test` → 不满足（判负，不静默放过）。
@@ -23,7 +24,7 @@
  * ```
  */
 
-import { execAsync } from '../utils/exec';
+import { execFileAsync } from '../utils/exec';
 import { isRecord } from '../utils/guards';
 import { errorMessage } from '../utils/error';
 import { judgeTestRun } from '../core/validators/test-output';
@@ -32,7 +33,6 @@ import * as path from 'path';
 import * as yaml from '../utils/yaml';
 import type {
   Gate,
-  GateContext,
   GateDecision,
   SpecAcceptanceGateConfig,
   AcceptanceGateContext,
@@ -89,6 +89,65 @@ export interface E2ETestResult {
 // ==================== SpecAcceptanceGate 类 ====================
 
 /**
+ * 解析可信命令配置串为 argv token（shell 词法子集，仅服务 e2eTestCommand）
+ *
+ * 信任边界（D1）：e2eTestCommand 是可信配置（与 tasks.yml 数据不同源），允许
+ * 持有 shell 风格的引号/转义形态（如 `npm run test:e2e -- --project "chromium x"`）。
+ * 这里把整串按 shell 词法子集拆成 token：未引用空白分词；'...' 全字面；
+ * "..." 成组、仅 \" 与 \\ 转义；其余位置 \ 转义下一字符；引号未闭合即抛错。
+ * 拆出的 token 只作 argv 前缀，后续不可信数据（e2e_test / test_name）作为
+ * argv 数组元素追加——execFile 不经 shell，任何字符都只可能成为单个参数的
+ * 字面内容，不会触发 shell 解释、也不会被拆成多个参数。
+ */
+function tokenizeCommand(command: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let hasContent = false;
+  let quote: "'" | '"' | null = null;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      else current += ch;
+    } else if (quote === '"') {
+      if (ch === '"') quote = null;
+      else if (ch === '\\' && (command[i + 1] === '"' || command[i + 1] === '\\')) {
+        current += command[i + 1];
+        i++;
+      } else {
+        current += ch;
+      }
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      hasContent = true;
+    } else if (ch === '\\') {
+      hasContent = true;
+      current += command[i + 1] ?? '';
+      i++;
+    } else if (/\s/.test(ch)) {
+      if (hasContent) {
+        tokens.push(current);
+        current = '';
+        hasContent = false;
+      }
+    } else {
+      current += ch;
+      hasContent = true;
+    }
+  }
+
+  if (quote !== null) {
+    throw new Error(`e2eTestCommand 引号未闭合（配置非法）: ${command}`);
+  }
+  if (hasContent) tokens.push(current);
+  if (tokens.length === 0) {
+    throw new Error('e2eTestCommand 为空（配置非法）');
+  }
+  return tokens;
+}
+
+/**
  * 验收标准门禁
  */
 export class SpecAcceptanceGate implements Gate {
@@ -110,13 +169,9 @@ export class SpecAcceptanceGate implements Gate {
    * AcceptanceGateResult 无 gate 字段，此处经 gateResult 构造器归一化为 GateResult
    * 报告结构（本层约定不手拼 GateResult 字面量）。
    */
-  async evaluate(context: GateContext): Promise<GateDecision> {
+  async evaluate(context: AcceptanceGateContext): Promise<GateDecision> {
     const startedAt = Date.now();
-    const result = await this.check({
-      projectPath: context.projectPath,
-      taskId: context.taskId,
-      tasksPath: context.tasksPath,
-    });
+    const result = await this.check(context);
     return decisionFromResult(
       gateResult('acceptance', result.passed, result.message, startedAt, result.details)
     );
@@ -349,6 +404,10 @@ export class SpecAcceptanceGate implements Gate {
   /**
    * 运行 E2E 测试
    *
+   * 信任边界（D1）：e2eTestCommand（可信配置）经 tokenizeCommand 拆成 argv 前缀；
+   * tasks.yml 的 testFile / testName（不可信数据）只作为 argv 数组元素追加，经
+   * execFileAsync（不经 shell）执行——特殊字符只能是单个参数的字面内容。
+   *
    * 退出码非零 / 超时 = 测试判负（报告层 fail，不是门禁异常）；
    * 文本只能否决不能反向加分（与 passes-gate 同一判定入口，ADR-0014）。
    */
@@ -359,16 +418,13 @@ export class SpecAcceptanceGate implements Gate {
   ): Promise<E2ETestResult> {
     const timeout = this.config.e2eTestTimeout ?? 120000;
 
-    // 构建测试命令
-    let command = this.config.e2eTestCommand ?? 'npx playwright test';
-    command += ` ${testFile}`;
-
-    if (testName) {
-      command += ` -g "${testName}"`;
-    }
+    const [file, ...baseArgs] = tokenizeCommand(
+      this.config.e2eTestCommand ?? 'npx playwright test'
+    );
+    const args = [...baseArgs, testFile, ...(testName ? ['-g', testName] : [])];
 
     try {
-      const { stdout, stderr } = await execAsync(command, {
+      const { stdout, stderr } = await execFileAsync(file, args, {
         cwd: projectPath,
         timeout,
       });

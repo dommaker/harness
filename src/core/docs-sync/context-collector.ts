@@ -1,0 +1,218 @@
+/**
+ * CONTEXT.md 采集器（harness#142 / #202；P2.8 自 cli/commands/sync-docs/context-syncer.ts
+ * 下沉 core/docs-sync/，纯移位）：既有文件发现 + mtime 采集 + 目录导出面采集
+ * （供 context-reconcile 的内容判定喂数）+ 构造点计数采集（供 construction-sites
+ * 的标记判定喂数）。判定本体都是 core/constraints/ 的纯函数，本文件不做判定。
+ * 写侧 createContextMd 留在 cli（scaffold 模板正本在 cli 层）。
+ */
+
+import * as fs from 'fs/promises';
+import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
+import { DEFAULT_SKIP_DIRS, findTsSourceFiles } from '../../utils/file-walk';
+import { parseExportStatements } from '../constraints/context-reconcile';
+import { tallyConstructionSites } from '../constraints/construction-sites';
+
+/**
+ * 自动发现已有 CONTEXT.md 文件的目录（相对于 projectPath）
+ */
+export async function findExistingContextFiles(projectPath: string, srcDirs: string[]): Promise<string[]> {
+  const dirs: string[] = [];
+
+  async function scan(dir: string): Promise<void> {
+    // fail-fast：目录不可读直接抛，不静默漏掉整棵子树的 CONTEXT.md
+    const entries = await fs.readdir(dir);
+    for (const entry of entries) {
+      if (DEFAULT_SKIP_DIRS.includes(entry)) continue;
+      const entryPath = path.join(dir, entry);
+      const stat = await fs.stat(entryPath);
+      if (stat.isDirectory()) {
+        // 检查该目录是否有 CONTEXT.md
+        if (existsSync(path.join(entryPath, 'CONTEXT.md'))) {
+          dirs.push(path.relative(projectPath, entryPath));
+        }
+        await scan(entryPath);
+      }
+    }
+  }
+
+  for (const srcDir of srcDirs) {
+    // 源码根不在场 = 无可发现（缺失判定归调用方 4a 的 contextMissing），不扫
+    const root = path.join(projectPath, srcDir);
+    if (existsSync(root)) await scan(root);
+  }
+  return dirs;
+}
+
+/**
+ * 获取目录下最新 .ts 文件的修改时间
+ * 返回 null 如果目录不存在或没有 .ts 文件
+ */
+export async function getLatestTsMtime(dirPath: string): Promise<number | null> {
+  let latest: number | null = null;
+
+  async function scan(dir: string): Promise<void> {
+    // fail-fast：目录不可读直接抛（理由同 findExistingContextFiles）
+    const entries = await fs.readdir(dir);
+    for (const entry of entries) {
+      if (DEFAULT_SKIP_DIRS.includes(entry)) continue;
+      const entryPath = path.join(dir, entry);
+      const stat = await fs.stat(entryPath);
+      if (stat.isDirectory()) {
+        await scan(entryPath);
+      } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
+        if (latest === null || stat.mtimeMs > latest) {
+          latest = stat.mtimeMs;
+        }
+      }
+    }
+  }
+
+  // 目录不存在 → null（函数契约）；存在但扫不出 → 抛（fail-fast）
+  if (!existsSync(dirPath)) return null;
+  await scan(dirPath);
+  return latest;
+}
+
+/** 目录导出面采集结果（harness#142） */
+export interface ContextExportSurface {
+  /** 目录内所有 .ts 导出的符号名（值 + 类型，含 barrel 再导出） */
+  surface: string[];
+  /** `index.ts` barrel 再导出的**值**符号（类型-only 已剔除）；无 index.ts → 空 */
+  barrelExports: string[];
+}
+
+/** 文件名的导出表：name → typeOnly（口径正本是 context-reconcile 的语句解析） */
+type ExportMap = Map<string, boolean>;
+
+/**
+ * 把相对 spec 解析为仓内可读的 .ts 文件（`./x` → `x.ts` 或 `x/index.ts`）；
+ * 非相对 spec、越出项目根、命中 `.d.ts`/`node_modules`/跳过目录一律 null（不并入导出面）。
+ */
+function resolveTsTarget(fromFile: string, spec: string, projectPath: string): string | null {
+  if (!spec.startsWith('.')) return null;
+  const base = path.resolve(path.dirname(fromFile), spec);
+  for (const candidate of [`${base}.ts`, path.join(base, 'index.ts')]) {
+    if (candidate.endsWith('.d.ts')) continue;
+    const rel = path.relative(projectPath, candidate);
+    if (!rel || rel.startsWith('..') || rel.includes('node_modules')) continue;
+    if (rel.split(path.sep).some((segment) => DEFAULT_SKIP_DIRS.includes(segment))) continue;
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * 单文件导出表（含再导出与 `export *` 展开），memo 化 + 在途集合破环。
+ *
+ * 递归只沿 `export *` 与具名再导出的来源走，读到的都是仓内 .ts；
+ * 环上（A `export * from './b'`、B `export * from './a'`）在途文件交空表，
+ * 与 tsc 的星号环语义一致（不因此丢名字——真实名字总有非环上的一条声明路径）。
+ */
+async function collectFileExports(
+  file: string,
+  projectPath: string,
+  cache: Map<string, ExportMap>,
+  inProgress: Set<string>
+): Promise<ExportMap> {
+  const cached = cache.get(file);
+  if (cached) return cached;
+  if (inProgress.has(file)) return new Map();
+  inProgress.add(file);
+
+  const out: ExportMap = new Map();
+  // fail-fast：文件来自导出面扫描/相对导入解析，读失败 = 真 IO 故障。
+  // 曾经 catch 成空表并写进 cache——把「读不了」伪装成「没有导出」，幽灵判定就此失真
+  const source = await fs.readFile(file, 'utf-8');
+
+  const { symbols, starFrom } = parseExportStatements(source);
+  for (const symbol of symbols) {
+    let typeOnly = symbol.typeOnly;
+    if (symbol.from) {
+      const origin = resolveTsTarget(file, symbol.from, projectPath);
+      // 环上（origin 在途）时交回的是空表，那是「不知道」不是「没有」→ 不做虚判
+      if (origin && !inProgress.has(origin)) {
+        const originExports = await collectFileExports(origin, projectPath, cache, inProgress);
+        // 正本没有这个本名 → 这条再导出是虚的（改名未跟上的 barrel），不计入导出面，
+        // 否则文档里的幽灵会被 barrel 自己洗白（harness#142 反证撞出的口径漏洞）
+        if (!originExports.has(symbol.localName)) continue;
+        if (!typeOnly && originExports.get(symbol.localName) === true) typeOnly = true;
+      }
+    }
+    out.set(symbol.name, typeOnly);
+  }
+
+  for (const spec of starFrom) {
+    const target = resolveTsTarget(file, spec, projectPath);
+    if (!target) continue;
+    const targetExports = await collectFileExports(target, projectPath, cache, inProgress);
+    for (const [name, typeOnly] of targetExports) if (!out.has(name)) out.set(name, typeOnly);
+  }
+
+  inProgress.delete(file);
+  cache.set(file, out);
+  return out;
+}
+
+/**
+ * 采集目录导出面（内容判定的代码侧）：目录内 .ts（排 `__tests__/`、`.d.ts`）的导出符号全集，
+ * 以及 barrel（`index.ts`）再导出的值符号清单。fs IO 全在此，判定不在（ADR-0025）。
+ */
+export async function collectContextExportSurface(
+  dirPath: string,
+  projectPath: string
+): Promise<ContextExportSurface> {
+  const files = findTsSourceFiles(dirPath);
+  const cache = new Map<string, ExportMap>();
+  const surface = new Set<string>();
+
+  for (const file of files) {
+    const fileExports = await collectFileExports(file, projectPath, cache, new Set());
+    for (const name of fileExports.keys()) surface.add(name);
+  }
+
+  const barrelExports: string[] = [];
+  const barrelFile = path.join(dirPath, 'index.ts');
+  if (files.includes(barrelFile)) {
+    const barrel = await collectFileExports(barrelFile, projectPath, cache, new Set());
+    for (const [name, typeOnly] of barrel) if (!typeOnly) barrelExports.push(name);
+  }
+
+  return { surface: [...surface], barrelExports };
+}
+
+/**
+ * 构造点计数器（harness#202 / ADR-0039）：(类名, 是否计测试目录) → 全仓
+ * `new X(` 直构造出现次数。fs 采集全在此，计数口径正本是 core 侧
+ * `tallyConstructionSites`（逐文件调用后累加）。
+ *
+ * 排除口径沿用 DEFAULT_SKIP_DIRS（node_modules/__tests__/dist）；
+ * includeTests 时把 `__tests__` 从跳过名单放出。两种口径各自懒采集一次
+ * （全仓走一遍不便宜），结果按口径 memo——一次 sync-docs 运行里同口径
+ * 的多个标记共用同一份计数。
+ */
+export type ConstructionSiteCounter = (className: string, includeTests: boolean) => number;
+
+export function createConstructionSiteCounter(projectPath: string): ConstructionSiteCounter {
+  const tallies = new Map<boolean, Map<string, number>>();
+
+  const tallyFor = (includeTests: boolean): Map<string, number> => {
+    let tally = tallies.get(includeTests);
+    if (tally) return tally;
+    tally = new Map();
+    const skipDirs = includeTests
+      ? DEFAULT_SKIP_DIRS.filter((d) => d !== '__tests__')
+      : DEFAULT_SKIP_DIRS;
+    for (const file of findTsSourceFiles(projectPath, { skipDirs })) {
+      // fail-fast：文件来自 walk 结果，读失败直接抛，不静默漏计构造点
+      const source = readFileSync(file, 'utf-8');
+      for (const [name, count] of tallyConstructionSites(source)) {
+        tally.set(name, (tally.get(name) ?? 0) + count);
+      }
+    }
+    tallies.set(includeTests, tally);
+    return tally;
+  };
+
+  return (className, includeTests) => tallyFor(includeTests).get(className) ?? 0;
+}

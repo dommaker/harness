@@ -42,6 +42,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-s, --staged', description: '只检查暂存文件', defaultValue: false },
       { flags: '-t, --trigger <trigger>', description: '触发条件' },
       { flags: '--project-path <path>', description: '项目路径' },
+      { flags: '--read-only', description: '跳过项目 YAML 声明的命令执行（未评估条目明确列出，不产生「已检查」结论；D3）', defaultValue: false },
       { flags: '--list', description: '列出所有约束' },
     ],
     action: { module: 'check', export: 'check' },
@@ -55,6 +56,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     options: [
       { flags: '-f, --file <path>', description: '检查点文件路径' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
+      { flags: '--read-only', description: '跳过检查点声明的命令执行（未评估条目明确列出，不把跳过当验证通过；D3）', defaultValue: false },
     ],
     action: { module: 'validate', export: 'validate' },
   },
@@ -96,6 +98,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
       { flags: '-o, --output <path>', description: '输出文件路径' },
       { flags: '-f, --format <format>', description: '输出格式 (json/markdown)', defaultValue: 'markdown' },
       { flags: '-p, --project-path <path>', description: '项目路径' },
+      { flags: '--read-only', description: '跳过项目 YAML 声明的命令执行（报告明确标记 skipped/未执行；D3）', defaultValue: false },
     ],
     action: { module: 'report', export: 'report' },
   },

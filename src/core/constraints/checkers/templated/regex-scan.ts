@@ -11,13 +11,12 @@
  * - scope（可选）：'diff' | 'content'，缺省 'diff'
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { formatEvidence, type CheckDetail, type CheckEnv, type ConstraintCheck, type TemplatedCheckerFactory } from '../types';
-import { matchGlob } from './glob';
-import { parseUnifiedDiff } from '../../../../utils/diff-parse';
+import { globToRegExp } from '../../../../utils/glob-match';
+import type { ParsedDiffLine } from '../../../../utils/diff-parse';
 import { clip } from '../../../../utils/clip';
 import { errorMessage } from '../../../../utils/error';
+import { projectSnapshotFor } from '../../run-env';
 
 interface AddedLine {
   file: string;
@@ -25,8 +24,8 @@ interface AddedLine {
 }
 
 /** 从 unified diff 中取新增行（文件归属见 utils/diff-parse 正本，glob 过滤文件集） */
-function collectAddedLines(diff: string, inScope: (file: string) => boolean): AddedLine[] {
-  return parseUnifiedDiff(diff)
+function collectAddedLines(lines: ParsedDiffLine[], inScope: (file: string) => boolean): AddedLine[] {
+  return lines
     .filter(l => l.kind === 'added' && l.file !== '' && inScope(l.file))
     .map(l => ({ file: l.file, line: l.text }));
 }
@@ -62,19 +61,17 @@ export const regexScan: TemplatedCheckerFactory = {
 
   create(id, params): ConstraintCheck {
     const pattern = new RegExp(params.pattern as string);
-    const glob = params.glob as string | undefined;
+    // glob 在创建时编译一次，不在扫描期间逐文件重复编译
+    const globRe = typeof params.glob === 'string' ? globToRegExp(params.glob) : undefined;
     const scope = (params.scope as 'diff' | 'content' | undefined) ?? 'diff';
-    const inScope = (file: string) => !glob || matchGlob(file, glob);
+    const inScope = (file: string) => !globRe || globRe.test(file);
 
     const scanChangedFiles = (env: CheckEnv): string[] => {
       const hits: string[] = [];
       for (const file of (env.context.changedFiles ?? []).filter(inScope)) {
-        let content: string;
-        try {
-          content = readFileSync(join(env.projectPath, file), 'utf-8');
-        } catch {
-          continue; // 文件不可读（已删除/二进制）→ 跳过
-        }
+        // 经 run 级快照读内容：同 run 内多条约束共享同一文件读取
+        const content = projectSnapshotFor(env).content(file);
+        if (content === undefined) continue; // 文件不可读（已删除/二进制）→ 跳过
         for (const line of content.split('\n')) {
           if (pattern.test(line)) hits.push(`${file}: ${clip(line)}`);
         }
@@ -94,7 +91,7 @@ export const regexScan: TemplatedCheckerFactory = {
         let scanned = false;
         try {
           const diff = await env.stagedDiff();
-          const added = collectAddedLines(diff, inScope);
+          const added = collectAddedLines(projectSnapshotFor(env).parseDiff(diff), inScope);
           if (added.length > 0) {
             scanned = true;
             const hits = added.filter(a => pattern.test(a.line)).map(a => `${a.file}: ${clip(a.line)}`);

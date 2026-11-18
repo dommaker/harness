@@ -118,7 +118,7 @@ export function countGovernanceHeadings(content: string): number {
 
 /**
  * PRESERVE 标记块存在性判定：块存在且块体非空（governance_presence 在场
- * 守护消费，#83 收编其手写切片）。标记契约与 sync-docs/preserve-block 一致：
+ * 守护消费，#83 收编其手写切片）。标记契约与 core/docs-sync/preserve-block 一致：
  * 首尾标记均须独占一行——开始标记行首锚定（行尾仅空白），结束标记行 trim
  * 后等于标记文本。结束标记嵌在行中 / 缺失 / 乱序均为畸形块 → false，在场
  * 守护按契约丢失报警（原 presence「行中结束标记也算在场」显式收紧，#83）。

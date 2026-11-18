@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { compactCapabilitiesContent } from './capabilities-syncer';
+import { compactCapabilitiesContent } from '../../../core/docs-sync/capabilities-table';
 import { log, type CommandIO, type CommandResult } from '../../command-contract';
 
 export async function runCompactSync(

@@ -6,7 +6,7 @@
 ## 核心导出
 - `ErrorClassifier` — 错误分类器(可配置规则)
 - `FailureRecorder` — 失败记录器(文件存储)
-- `index.ts` 的类型/数据正本在 `./error-types.ts`（ErrorType/FailureLevel/FailureRecord/ErrorClassificationRule/ClassificationResult 与分类规则数据；班次 3 Phase 4 自 `src/types/failure.ts` 下移，断 types/ ↔ failure/ type 级互引环）
+- `index.ts` 的类型/数据正本在 `./error-types.ts`（ErrorType/FailureLevel/FailureRecord/ErrorClassificationRule/ClassificationResult 与分类规则数据；类型正本自 `src/types/failure.ts` 归位本目录，ADR-0042）
 - 路径常量 `DEFAULT_FAILURE_LOG_FILE`（`.harness/logs/failures.log`）正本在 `src/types/failure.ts`（types 层只剩这枚零依赖常量）；`DEFAULT_CLASSIFICATION_RULES`、`DEFAULT_LEVEL_MAPPING` 正本在 `./error-types.ts`
 
 ## 依赖关系
@@ -21,7 +21,7 @@
 ## 注意事项
 - 分类器基于规则匹配，不调用 LLM
 - S4 约束违规处理策略模块（ConstraintViolationHandler / executeWithBlock /
-  executeWithCollect / executeWithSafeBoolean）已删除（架构评审候选1）：
+  executeWithCollect / executeWithSafeBoolean）已删除（ADR-0017）：
   COLLECT 对真实 checker 结构上不可交付（checker 首个 error 级违规即 throw，
   handler 的 catch 只能吞证据造假绿）。语义归宿——阻断 = `checkConstraints` 本体，
   收集 = `checker.collectConstraints`（report 直调）；BLOCK/SAFE_BOOLEAN 零生产消费者随迁

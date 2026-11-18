@@ -10,6 +10,7 @@ import type {
   KnowledgeSubsystem,
   IngestOptions,
   SourceRef,
+  IndexEntry,
 } from './types';
 import { MATURITY_LEVELS, STORAGE_LAYERS } from './types';
 import type { KnowledgeStore } from './store';
@@ -75,6 +76,65 @@ export function sanitizeExternalContent(content: string): string {
 
 // ── Ingest ─────────────────────────────────────────────────
 
+/**
+ * D7 ingest 批内上下文（包内私有）：磁盘去重基线与虚拟序号起点惰性各读一次，
+ * 本批已接受条目（新建/merge 的终态）即时进 overlay——
+ * 去重视图 = 磁盘基线 + overlay；虚拟 index = 起点 + overlay 终态序号记录
+ * （auto-fix 后的 maturity 即时生效，复刻旧逐条路径的序号口径）。
+ * reject 不入 overlay。
+ */
+class IngestContext {
+  private diskCache: KnowledgeEntry[] | undefined;
+  private indexCache: IndexEntry[] | undefined;
+  private readonly overlay: KnowledgeEntry[] = [];
+  private readonly overlayIndex: Array<{ id: string; type: string; maturity: string }> = [];
+
+  constructor(private readonly store: KnowledgeStore) {}
+
+  /** 共享磁盘去重基线（readEntriesFromDisk 每批至多一次） */
+  disk(): KnowledgeEntry[] {
+    return (this.diskCache ??= this.store.readEntriesFromDisk());
+  }
+
+  /** 虚拟序号/索引状态起点（readIndex 每批至多一次） */
+  index(): IndexEntry[] {
+    return (this.indexCache ??= this.store.readIndex());
+  }
+
+  /** 本批已接受条目的最新状态入列；同 id 替换而非追加（stale 旧态不得残留） */
+  accept(entry: KnowledgeEntry): void {
+    const at = this.overlay.findIndex(e => e.id === entry.id);
+    if (at >= 0) {
+      this.overlay[at] = entry;
+    } else {
+      this.overlay.push(entry);
+    }
+    const record = { id: entry.id, type: entry.type, maturity: entry.maturity };
+    const recAt = this.overlayIndex.findIndex(r => r.id === entry.id);
+    if (recAt >= 0) {
+      this.overlayIndex[recAt] = record;
+    } else {
+      this.overlayIndex.push(record);
+    }
+  }
+
+  /**
+   * 去重视图：磁盘基线中被本批更新过的 id 以 overlay 最新状态为准——
+   * stale 磁盘条目不得抢在更新态前命中（同批连续 merge 第二次须基于第一次终态）；
+   * 顺序语义保持盘序在前、本批接受序在后。
+   */
+  view(): KnowledgeEntry[] {
+    const updatedIds = new Set(this.overlay.map(e => e.id));
+    return [...this.disk().filter(e => !updatedIds.has(e.id)), ...this.overlay];
+  }
+
+  /** 虚拟 index：起点中被本批更新过的 id 按 overlay 终态替换（每 id 至多计一次序号） */
+  virtualIndex(): Array<{ id: string; type: string; maturity: string }> {
+    const updatedIds = new Set(this.overlayIndex.map(r => r.id));
+    return [...this.index().filter(r => !updatedIds.has(r.id)), ...this.overlayIndex];
+  }
+}
+
 export class KnowledgeIngest {
   private store: KnowledgeStore;
 
@@ -91,61 +151,33 @@ export class KnowledgeIngest {
     partial: Partial<KnowledgeEntry>,
     options: IngestOptions,
   ): IngestResult {
-    const entry = this.buildEntry(partial, options);
-
-    // Quality gate: audit before saving
-    const audit = new KnowledgeAudit(this.store);
-    let issues = audit.validate(entry);
-    const critical = issues.filter(i => i.action === 'reject');
-    if (critical.length > 0) {
-      // Reject: return without saving; caller branches on status / reasons
-      return { status: 'rejected', entry, reasons: critical.map(i => i.detail) };
-    }
-
-    // If caller explicitly set maturity, skip demote actions from audit.
-    // Demote is for auto-inferred maturity that's too high; explicit is a user decision.
-    if (options.maturity) {
-      issues = issues.filter(i => i.action !== 'demote');
-    }
-
-    // Dedup check: same title + same type
-    const existing = this.findDuplicate(entry.title, entry.content, entry.type);
-    if (existing) {
-      // Merge: update existing entry with new content and metadata
-      return { status: 'accepted', entry: this.mergeEntries(existing, entry, options) };
-    }
-
-    this.store.save(entry);
-
-    // Post-save: apply auto-fixes (archive/demote/flag)
-    const fixable = issues.filter(i => i.action !== 'reject');
-    if (fixable.length > 0) {
-      for (const issue of fixable) {
-        if (issue.action === 'archive') {
-          this.store.update(entry.id, { maturity: 'archived' });
-        } else if (issue.action === 'demote') {
-          this.store.update(entry.id, { maturity: 'draft' });
-        } else if (issue.action === 'flag') {
-          const saved = this.store.get(entry.id);
-          if (saved && !saved.tags.includes('low_quality')) {
-            this.store.update(entry.id, { tags: [...saved.tags, 'low_quality'] });
-          }
-        }
-      }
-    }
-
-    return { status: 'accepted', entry };
+    return this.ingestOne(partial, options, new IngestContext(this.store));
   }
 
   /**
    * Ingest multiple entries in batch.
    * Returns one result per input (accepted/rejected).
+   *
+   * D7：批内共享一次磁盘去重视图与虚拟 index 起点（IngestContext，惰性各读一次），
+   * 本批已接受的新建/merge 即时纳入视图，保留批内重复语义；逐条 ingestEntry 行为不变。
+   *
+   * 统一落盘：新建与 merge 的完整终态（含 auto-fix 折好）收入写计划，
+   * 批尾一次 saveAll——全批只重写一次 index.json，整批预校验
+   * （任一脏枚举全批拒写，不制造已落盘假象）；批内同 id 按 saveAll 后写覆盖语义。
+   * 空批零读写。单条路径（ingestEntry）写时序不变。
    */
   ingestBatch(
     partials: Partial<KnowledgeEntry>[],
     options: IngestOptions,
   ): IngestResult[] {
-    return partials.map(p => this.ingestEntry(p, options));
+    if (partials.length === 0) return [];
+    const ctx = new IngestContext(this.store);
+    const plan: KnowledgeEntry[] = [];
+    const results = partials.map(p => this.ingestOne(p, options, ctx, plan));
+    if (plan.length > 0) {
+      this.store.saveAll(plan);
+    }
+    return results;
   }
 
   /**
@@ -264,13 +296,120 @@ export class KnowledgeIngest {
 
   // ── Internal ───────────────────────────────────────────────
 
+  /**
+   * 单条的批内共用执行体（D7）：build → audit.validate → reject 或
+   * 视图去重 → merge / 新建 + auto-fix。ingestEntry 每调新建上下文（= 原单条行为）；
+   * ingestBatch 全批共享一个上下文。
+   *
+   * `plan` 存在 = 批次写计划模式：新建与 merge 的完整终态收进 plan（不逐条落盘，
+   * 由批尾一次 saveAll 统一写入）；缺省 = 单条即时写路径（save + 逐 fix update），
+   * 写时序与旧实现逐字一致。返回值契约两种模式相同（新建返回 pre-fix entry，
+   * merge 返回合并终态）。
+   */
+  private ingestOne(
+    partial: Partial<KnowledgeEntry>,
+    options: IngestOptions,
+    ctx: IngestContext,
+    plan?: KnowledgeEntry[],
+  ): IngestResult {
+    const entry = this.buildEntry(partial, options, ctx);
+
+    // Quality gate: audit before saving
+    const audit = new KnowledgeAudit(this.store);
+    let issues = audit.validate(entry);
+    const critical = issues.filter(i => i.action === 'reject');
+    if (critical.length > 0) {
+      // Reject: return without saving; caller branches on status / reasons
+      return { status: 'rejected', entry, reasons: critical.map(i => i.detail) };
+    }
+
+    // If caller explicitly set maturity, skip demote actions from audit.
+    // Demote is for auto-inferred maturity that's too high; explicit is a user decision.
+    if (options.maturity) {
+      issues = issues.filter(i => i.action !== 'demote');
+    }
+
+    // Dedup check: same title + same type（共享视图 = 磁盘基线 + 本批已接受终态）
+    const existing = this.findDuplicate(entry.title, entry.content, entry.type, ctx.view());
+    if (existing) {
+      // Merge: update existing entry with new content and metadata（merge 分支不做新条目 auto-fix）
+      if (plan) {
+        const merged = this.computeMerge(existing, entry, options);
+        plan.push(merged);
+        ctx.accept(merged);
+        return { status: 'accepted', entry: merged };
+      }
+      const merged = this.mergeEntries(existing, entry, options);
+      ctx.accept(merged);
+      return { status: 'accepted', entry: merged };
+    }
+
+    if (plan) {
+      // 批次模式：auto-fix 折进终态收写计划，批尾一次落盘；返回值仍是 pre-fix entry
+      const finalEntry = this.foldAutoFixes(entry, issues);
+      plan.push(finalEntry);
+      ctx.accept(finalEntry);
+      return { status: 'accepted', entry };
+    }
+
+    this.store.save(entry);
+
+    // Post-save: apply auto-fixes (archive/demote/flag)
+    const finalEntry = this.persistAutoFixes(entry, issues);
+    ctx.accept(finalEntry);
+
+    return { status: 'accepted', entry };
+  }
+
+  /**
+   * auto-fix 折叠（纯，D7 批次模式用）：archive/demote/flag 依 issues 顺序折进条目副本，
+   * 与单条路径逐步 update 的终态一致。merge 分支不调用（既有语义）。
+   */
+  private foldAutoFixes(entry: KnowledgeEntry, issues: import('./audit-rules').AuditIssue[]): KnowledgeEntry {
+    let current = entry;
+    for (const issue of issues) {
+      if (issue.action === 'archive') {
+        current = { ...current, maturity: 'archived' };
+      } else if (issue.action === 'demote') {
+        current = { ...current, maturity: 'draft' };
+      } else if (issue.action === 'flag') {
+        if (!current.tags.includes('low_quality')) {
+          current = { ...current, tags: [...current.tags, 'low_quality'] };
+        }
+      }
+    }
+    return current;
+  }
+
+  /** 单条即时写路径的 auto-fix：逐步 store.update（写时序与旧实现一致），返回折好终态供 overlay */
+  private persistAutoFixes(entry: KnowledgeEntry, issues: import('./audit-rules').AuditIssue[]): KnowledgeEntry {
+    let current = entry;
+    for (const issue of issues) {
+      if (issue.action === 'archive') {
+        this.store.update(entry.id, { maturity: 'archived' });
+        current = { ...current, maturity: 'archived' };
+      } else if (issue.action === 'demote') {
+        this.store.update(entry.id, { maturity: 'draft' });
+        current = { ...current, maturity: 'draft' };
+      } else if (issue.action === 'flag') {
+        if (!current.tags.includes('low_quality')) {
+          const tags = [...current.tags, 'low_quality'];
+          this.store.update(entry.id, { tags });
+          current = { ...current, tags };
+        }
+      }
+    }
+    return current;
+  }
+
   private buildEntry(
     partial: Partial<KnowledgeEntry>,
     options: IngestOptions,
+    ctx: IngestContext,
   ): KnowledgeEntry {
     const now = new Date().toISOString();
     const type = partial.type || 'guideline';
-    const id = partial.id || this.generateId(type);
+    const id = partial.id || this.generateId(type, ctx);
 
     return {
       id,
@@ -295,19 +434,27 @@ export class KnowledgeIngest {
     };
   }
 
-  private generateId(type: KnowledgeSubsystem): string {
+  private generateId(type: KnowledgeSubsystem, ctx: IngestContext): string {
     const prefix = type.toUpperCase().slice(0, 3);
-    // 序号取自索引计数（harness#107）：不再走 list() 逐条读条目文件；
-    // 与 list() 默认过滤口径一致，archived/deprecated 不计入序号
-    const existing = this.store.readIndex()
+    // 序号取自虚拟 index 计数（harness#107 + D7）：不再走 list() 逐条读条目文件；
+    // 与 list() 默认过滤口径一致，archived/deprecated 不计入序号。
+    // 批内起点 = 批首一次 readIndex，叠加本批已接受条目的终态 maturity——
+    // 旧逐条路径里前一条 save 后 auto-fix 的 archived 会立即影响下一条序号，此处同口径复刻。
+    const existing = ctx.virtualIndex()
       .filter(e => e.type === type && e.maturity !== 'archived' && e.maturity !== 'deprecated');
     const seq = String(existing.length + 1).padStart(3, '0');
     return `${prefix}-${seq}`;
   }
 
-  private findDuplicate(title: string, content: string, type: KnowledgeSubsystem): KnowledgeEntry | undefined {
-    // A1: Read from disk directly to avoid stale index causing dedup failure
-    const all = this.store.readEntriesFromDisk().filter(e => e.type === type);
+  private findDuplicate(
+    title: string,
+    content: string,
+    type: KnowledgeSubsystem,
+    candidates: KnowledgeEntry[],
+  ): KnowledgeEntry | undefined {
+    // A1: 共享视图来自盘驱动枚举（readEntriesFromDisk），stale index 不造成去重失效；
+    // D7：批内视图含本批已接受终态，重复语义与旧逐条路径一致
+    const all = candidates.filter(e => e.type === type);
 
     // Exact match (case-insensitive)
     const exact = all.find(e => (e.title || '').toLowerCase() === title.toLowerCase());
@@ -381,12 +528,17 @@ export class KnowledgeIngest {
     return overlap / Math.max(tokensA.length, tokensB.length);
   }
 
-  private mergeEntries(
+  /**
+   * 合并终态（纯，D7 两种写模式共用）：merge 字段口径与来源上限（MAX_SOURCE_REFS）
+   * 只此一份。merge 分支不做新条目 auto-fix（既有语义）。
+   */
+  private computeMerge(
     existing: KnowledgeEntry,
     incoming: KnowledgeEntry,
     options: IngestOptions,
   ): KnowledgeEntry {
-    const merged: Partial<KnowledgeEntry> = {
+    return {
+      ...existing,
       content: incoming.content || existing.content,
       maturity: options.maturity || existing.maturity,
       lastReferenced: new Date().toISOString(),
@@ -395,6 +547,14 @@ export class KnowledgeIngest {
       tags: [...new Set([...existing.tags, ...incoming.tags])],
       sourceReferences: [...existing.sourceReferences, ...incoming.sourceReferences].slice(-MAX_SOURCE_REFS),
     };
+  }
+
+  private mergeEntries(
+    existing: KnowledgeEntry,
+    incoming: KnowledgeEntry,
+    options: IngestOptions,
+  ): KnowledgeEntry {
+    const merged = this.computeMerge(existing, incoming, options);
     // fail-fast：刚经 readEntriesFromDisk 读到的条目 update 不到 = 并发删除/索引漂移，不静默吞
     const updated = this.store.update(existing.id, merged);
     if (!updated) {

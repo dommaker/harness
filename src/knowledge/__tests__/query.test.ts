@@ -5,10 +5,33 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { FileKnowledgeStore as KnowledgeStore } from '../store';
 import { KnowledgeQuery } from '../query';
+import { KnowledgeLifecycle } from '../lifecycle';
 import type { KnowledgeEntry, QueryBudget } from '../types';
+import { estimateTokens } from '../token-estimate';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+
+// D7 IO 计数：包装真实 fs（照 audit-write-count 手法），只数知识条目 .md 的 readFileSync。
+// fs 属性不可 spyOn，工厂内不引闭包外变量，计数挂 globalThis。
+jest.mock('fs', () => {
+  const actual = jest.requireActual<typeof import('fs')>('fs');
+  const g = globalThis as unknown as { __D7_MD_READS__?: string[] };
+  if (!g.__D7_MD_READS__) g.__D7_MD_READS__ = [];
+  const bucket = g.__D7_MD_READS__;
+  const name = (p: unknown): string => (Buffer.isBuffer(p) ? p.toString('utf8') : String(p));
+  return {
+    ...actual,
+    readFileSync: jest.fn((p: unknown, ...rest: unknown[]) => {
+      const file = name(p);
+      if (file.endsWith('.md')) bucket.push(file);
+      return (actual.readFileSync as (...args: unknown[]) => unknown)(p, ...rest);
+    }),
+  };
+});
+
+const mdReads = (): string[] =>
+  ((globalThis as unknown as { __D7_MD_READS__?: string[] }).__D7_MD_READS__ ||= []);
 
 describe('KnowledgeQuery', () => {
   let tempDir: string;
@@ -147,6 +170,262 @@ describe('KnowledgeQuery', () => {
 
       const second = query.query(budget);
       expect(second.fromCache).toBe(true);
+    });
+  });
+
+  describe('引用记账批量化（P1.3）', () => {
+    const budget = (): QueryBudget => ({
+      phase: 'test',
+      maxTokens: 100000,
+      maxEntries: 10,
+      focusTypes: ['decision'],
+    });
+
+    /**
+     * 接缝级闸：引用记账必须走 store 批量原语 applyAll 一次、
+     * 不得逐条 update（update = get→save→全量重写 index.json）。
+     * applyAll 内部「一次落盘」由 store/lifecycle 侧测试钉（同 harness#134 口径）。
+     */
+    const spyWritePath = () => {
+      const updateSpy = jest.spyOn(store, 'update');
+      const applyAllSpy = jest.spyOn(store, 'applyAll');
+      return {
+        updateSpy,
+        applyAllSpy,
+        restore: () => { updateSpy.mockRestore(); applyAllSpy.mockRestore(); },
+        assertSingleBatch: () => {
+          expect(updateSpy).not.toHaveBeenCalled();
+          expect(applyAllSpy).toHaveBeenCalledTimes(1);
+        },
+        /** 去重/空结果闸：不允许任何带真更新的批次 */
+        assertNoRealBatch: () => {
+          expect(updateSpy).not.toHaveBeenCalled();
+          expect(applyAllSpy.mock.calls.every(args => (args[0] as unknown[]).length === 0)).toBe(true);
+        },
+      };
+    };
+
+    it('N 条结果一次 query 只走一次批量落盘', () => {
+      for (let i = 1; i <= 4; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      const { restore, assertSingleBatch } = spyWritePath();
+      try {
+        const result = query.query(budget());
+        expect(result.entries).toHaveLength(4); // 正对照：真返回 4 条，「1 次批量」不是空跑出来的
+        assertSingleBatch();
+      } finally {
+        restore();
+      }
+    });
+
+    it('每条结果都记账并持久化（lastReferenced + referencedBy）', () => {
+      for (let i = 1; i <= 3; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      query.query(budget());
+
+      for (let i = 1; i <= 3; i++) {
+        const entry = store.get(`DEC-${String(i).padStart(3, '0')}`)!;
+        expect(entry.lastReferenced).not.toBe('');
+        expect(entry.referencedBy).toHaveLength(1);
+        expect(entry.referencedBy[0]).toMatch(/^unknown:/);
+      }
+    });
+
+    it('空结果不产生任何引用写入', () => {
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall' })); // focusTypes 过滤后不命中
+
+      const updateSpy = jest.spyOn(store, 'update');
+      const applyAllSpy = jest.spyOn(store, 'applyAll');
+      try {
+        const result = query.query(budget());
+        expect(result.entries).toHaveLength(0);
+        expect(updateSpy).not.toHaveBeenCalled();
+        // 允许一次空批 applyAll（契约即零读写），但不允许带真更新的批次
+        expect(applyAllSpy.mock.calls.every(args => (args[0] as unknown[]).length === 0)).toBe(true);
+      } finally {
+        updateSpy.mockRestore();
+        applyAllSpy.mockRestore();
+      }
+    });
+
+    it('同日重复 query（clearCache 后）去重：零写入、回调不重复触发', () => {
+      store.save(makeEntry());
+      const lifecycle = new KnowledgeLifecycle(store);
+      const events: string[] = [];
+      lifecycle.onReference(e => events.push(e.entryId));
+      query = new KnowledgeQuery(store, lifecycle);
+
+      query.query(budget());
+      expect(events).toEqual(['DEC-001']);
+
+      query.clearCache(); // 绕过缓存命中，让引用记账真实再跑一次
+      const { restore, assertNoRealBatch } = spyWritePath();
+      try {
+        const result = query.query(budget());
+        expect(result.entries).toHaveLength(1); // 正对照
+        // 同日去重：引用键已存在 → 空批，不触发任何写入
+        assertNoRealBatch();
+      } finally {
+        restore();
+      }
+      expect(events).toEqual(['DEC-001']);
+    });
+
+    it('引用驱动成熟度阶梯：被引用的草稿条目满足晋升条件', () => {
+      store.save(makeEntry({ id: 'DEC-001', content: 'x'.repeat(60), maturity: 'draft' }));
+
+      query.query(budget());
+
+      expect(new KnowledgeLifecycle(store).checkPromotion('DEC-001')).toBe('verified');
+    });
+
+    it('查询副作用仍 fail-open：记账抛错不影响查询结果返回', () => {
+      store.save(makeEntry({ id: 'DEC-001', maturity: 'draft' }));
+      // 让落盘在引用记账阶段必炸：条目文件在场但 maturity 枚举被外部改脏，
+      // applyAll 整批预校验拒写
+      const filePath = path.join(tempDir, 'decision-DEC-001.md');
+      fs.writeFileSync(filePath, fs.readFileSync(filePath, 'utf-8').replace('maturity: draft', 'maturity: bogus'));
+
+      const result = query.query(budget());
+      expect(result.entries).toHaveLength(1);
+      expect(result.entries[0].id).toBe('DEC-001');
+    });
+  });
+
+  describe('按需物化（D7）：过滤与截断的条目全文零读取', () => {
+    // 夹具纪律（回修）：每轮独立 mkdtemp + afterEach 清理，内层 let 遮蔽外层共享夹具
+    let tempDir: string;
+    let store: KnowledgeStore;
+    let query: KnowledgeQuery;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd7-query-mat-'));
+      store = new KnowledgeStore({ baseDir: tempDir });
+      query = new KnowledgeQuery(store);
+      mdReads().length = 0;
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const budget = (overrides?: Partial<QueryBudget>): QueryBudget => ({
+      phase: 'test',
+      maxTokens: 100000,
+      maxEntries: 10,
+      focusTypes: ['decision'],
+      ...overrides,
+    });
+
+    it('被 focusTypes 过滤的条目全文零读取', () => {
+      store.save(makeEntry({ id: 'DEC-001', type: 'decision' }));
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall', title: 'Pitfall' }));
+
+      mdReads().length = 0;
+      const result = query.query(budget());
+      expect(result.entries.map(e => e.id)).toEqual(['DEC-001']);
+      expect(mdReads()).not.toContain(path.join(tempDir, 'pitfall-PIT-001.md'));
+    });
+
+    it('maxEntries 截断的溢出候选全文零读取', () => {
+      for (let i = 1; i <= 5; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      mdReads().length = 0;
+      const result = query.query(budget({ maxEntries: 2 }));
+      expect(result.entries).toHaveLength(2);
+      expect(result.truncated).toBe(true);
+      for (let i = 3; i <= 5; i++) {
+        expect(mdReads()).not.toContain(path.join(tempDir, `decision-DEC-00${i}.md`));
+      }
+    });
+
+    it('maxTokens 截断的溢出候选全文零读取', () => {
+      store.save(makeEntry({ id: 'DEC-001', content: 'A'.repeat(1000) })); // ~250 tokens
+      store.save(makeEntry({ id: 'DEC-002', content: 'B'.repeat(1000), title: 'Second' }));
+
+      mdReads().length = 0;
+      const result = query.query(budget({ maxTokens: 300 }));
+      expect(result.entries.map(e => e.id)).toEqual(['DEC-001']);
+      expect(result.truncated).toBe(true);
+      expect(mdReads()).not.toContain(path.join(tempDir, 'decision-DEC-002.md'));
+    });
+
+    it('过滤后零命中：全文零读取', () => {
+      store.save(makeEntry({ id: 'PIT-001', type: 'pitfall', title: 'Pitfall' }));
+
+      mdReads().length = 0;
+      const result = query.query(budget());
+      expect(result.entries).toHaveLength(0);
+      expect(mdReads()).toHaveLength(0);
+    });
+
+    it('query 全程每条结果只读一次全文：物化 + 引用记账 + applyAll 零重复读取', () => {
+      for (let i = 1; i <= 4; i++) {
+        store.save(makeEntry({ id: `DEC-${String(i).padStart(3, '0')}`, title: `D${i}` }));
+      }
+
+      mdReads().length = 0;
+      const result = query.query(budget({ maxEntries: 2 }));
+      expect(result.entries).toHaveLength(2); // 正对照：真返回 2 条，「只读一次」不是空跑出来的
+      expect(mdReads().sort()).toEqual([
+        path.join(tempDir, 'decision-DEC-001.md'),
+        path.join(tempDir, 'decision-DEC-002.md'),
+      ]);
+    });
+
+    it('search 命中仅正文含关键词、被普通 query 排序/预算排除的条目（且无引用副作用）', () => {
+      // proven 高排名 + 巨大正文占满 budget；目标条目 draft、零引用、关键词只在正文
+      store.save(makeEntry({
+        id: 'BIG-001', title: 'Filler', content: '填'.repeat(2000),
+        maturity: 'proven', lastReferenced: '2026-08-01',
+      }));
+      store.save(makeEntry({
+        id: 'TGT-001', title: '边缘条目', content: '正文里藏着 needle-keyword 的说明',
+        maturity: 'draft', lastReferenced: '',
+      }));
+
+      const qResult = query.query(budget({ maxTokens: 500, maxEntries: 1 }));
+      expect(qResult.entries.map(e => e.id)).not.toContain('TGT-001'); // 普通 query 排除
+      expect(qResult.truncated).toBe(true);
+
+      const found = query.search('needle-keyword');
+      expect(found.map(e => e.id)).toEqual(['TGT-001']); // search 先匹配全语料再排序/limit
+      expect(store.get('TGT-001')!.referencedBy).toHaveLength(0); // searching is not citing
+    });
+
+    it('旧索引（无 tokenCount）走兼容路径：过滤/排序/截断/tokensUsed 与新索引一致', () => {
+      store.save(makeEntry({ id: 'DEC-001', title: 'A', maturity: 'draft', content: 'x'.repeat(60) }));
+      store.save(makeEntry({ id: 'DEC-002', title: 'B', maturity: 'proven', content: 'y'.repeat(1000) }));
+      store.save(makeEntry({ id: 'DEC-003', title: 'C', maturity: 'draft', content: 'z'.repeat(60), lastReferenced: '2026-06-01' }));
+
+      // 新索引基线（DEC-003 lastReferenced 晚于 DEC-001，同成熟度下排前）
+      const fresh = query.query(budget({ maxEntries: 2 }));
+      expect(fresh.entries.map(e => e.id)).toEqual(['DEC-002', 'DEC-003']);
+      expect(fresh.truncated).toBe(true);
+
+      // 剥成旧格式（外部旧库现场）
+      const indexPath = path.join(tempDir, 'index.json');
+      const raw = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+      fs.writeFileSync(indexPath, JSON.stringify(raw.map((e: Record<string, unknown>) => {
+        const rest = { ...e };
+        delete rest.tokenCount;
+        return rest;
+      }), null, 2), 'utf-8');
+
+      const fallback = query.query(budget({ maxEntries: 2 }));
+      expect(fallback.entries.map(e => e.id)).toEqual(fresh.entries.map(e => e.id));
+      expect(fallback.truncated).toBe(fresh.truncated);
+      expect(fallback.tokensUsed).toBe(fresh.tokensUsed);
+      expect(fallback.tokensUsed).toBe(
+        estimateTokens('y'.repeat(1000)) + estimateTokens('B') +
+        estimateTokens('x'.repeat(60)) + estimateTokens('A'),
+      );
     });
   });
 

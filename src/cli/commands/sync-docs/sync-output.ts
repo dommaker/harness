@@ -5,8 +5,8 @@
 
 import chalk from 'chalk';
 import * as path from 'path';
-import type { SyncDocsOptions, SyncState, SyncVerdict, TableLayoutVerdict } from './sync-state';
-import type { ContextContentDrift, ModuleInfo } from './project-reader';
+import type { SyncDocsOptions, SyncState, SyncVerdict, TableLayoutVerdict } from '../../../core/docs-sync/sync-state';
+import type { ContextContentDrift, ModuleInfo } from '../../../core/docs-sync/project-reader';
 import { log, type CommandIO } from '../../command-contract';
 
 /**
@@ -201,6 +201,11 @@ export function emitHumanReport(
   state: SyncState,
   verdict: SyncVerdict
 ): void {
+  // 采集期跳过的源码根：提示属输出职责（原 collectSyncState 内联 log 移到此，stdout 序不变）
+  for (const srcDir of state.missingSrcDirs) {
+    log(io, chalk.yellow(`⚠️  未找到 ${srcDir} 目录，跳过`));
+  }
+
   if (state.capsIsCapabilityListing && verdict.hasCapIssues) {
     log(io, chalk.yellow(`\n📊 CAPABILITIES.md 计数不一致:`));
     state.capCountMismatches.forEach(m => log(io, chalk.gray(`  - ${m}`)));

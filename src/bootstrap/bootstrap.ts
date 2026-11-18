@@ -21,6 +21,9 @@
  * ADR-0040 Phase 3：目录正名 `hooks/` → `bootstrap/`（职责是组合根，目录名不再沿用
  * 历史）；`loadConfigAsync` 假 async（async 壳包纯同步调用）改同步 `loadConfig`，
  * 两个入口的逐字重复装配并为一枚 `assembleHarness`。
+ *
+ * P1.1：checker 的 trace 接线收进唯一装配函数 `assembleConstraintChecker`——
+ * CLI check/report 与 bootstrapHarness 共用，接线只写一次。
  */
 
 import { ConstraintChecker } from '../core/constraints/checker';
@@ -28,6 +31,7 @@ import { SessionManager } from '../context/session-manager';
 import { ProjectConfigLoader } from '../core/project-config-loader';
 import { TraceCollector } from '../monitoring/traces';
 import type { MergedConstraintsConfig } from '../types/project-config';
+import type { CommandExecutionPolicy } from '../types/command-execution-policy';
 
 /**
  * 加载项目配置与合并约束（同步：readFileSync；原 loadConfigAsync 是 async 壳包纯同步调用）
@@ -67,12 +71,29 @@ export interface HarnessBootstrap {
 }
 
 /**
+ * 生产侧唯一 checker 装配点（P1.1）：trace 记录器锚根接线只写一次
+ *
+ * harness#88：core 不上行依赖 monitoring，故接线住组合根本层；
+ * #139：落点跟根走，不落调用方 cwd。CLI check/report 与 bootstrapHarness
+ * 全部经本函数取接线好的 checker——源形状闸见 src/__tests__/unique-assembly.test.ts。
+ *
+ * commandPolicy（D3 P0.5 Phase 1）：一次运行的统一命令执行策略，透传 checker
+ * （read-only 下 exec 模板 checker 三态跳过项目声明命令）；缺省 = 默认执行。
+ */
+export function assembleConstraintChecker(
+  projectPath: string,
+  commandPolicy?: CommandExecutionPolicy
+): ConstraintChecker {
+  return new ConstraintChecker(new TraceCollector({ projectPath }), commandPolicy);
+}
+
+/**
  * 装配 harness 运行环境（两个入口共用的一段）：
  * trace 记录器锚根构造（#139）：入口本就收 projectPath，落点必须跟着根走
  */
 function assembleHarness(resolvedPath: string, mergedConstraints: MergedConstraintsConfig): HarnessBootstrap {
   return {
-    checker: new ConstraintChecker(new TraceCollector({ projectPath: resolvedPath })),
+    checker: assembleConstraintChecker(resolvedPath),
     sessions: new SessionManager(resolvedPath),
     projectPath: resolvedPath,
     mergedConstraints,

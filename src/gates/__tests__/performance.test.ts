@@ -9,12 +9,15 @@ import * as fs from 'fs/promises';
 // Mock dependencies
 jest.mock('child_process', () => ({
   exec: jest.fn(),
+  execFile: jest.fn(),
 }));
 
 jest.mock('fs/promises', () => ({
   readFile: jest.fn(),
   readdir: jest.fn(),
   stat: jest.fn(),
+  rename: jest.fn(),
+  rm: jest.fn(),
 }));
 
 const mockExec = exec as unknown as jest.Mock;
@@ -27,7 +30,7 @@ describe('PerformanceGate', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     gate = new PerformanceGate();
   });
 
@@ -141,6 +144,30 @@ describe('PerformanceGate', () => {
       const result = await strictGate.check(baseContext);
 
       expect(result.message).toContain('警告');
+    });
+
+    it('should not read a stale coverage report when the coverage test fails', async () => {
+      const strictGate = new PerformanceGate({
+        thresholds: { minCoverage: 80 },
+      });
+
+      mockExec.mockImplementationOnce((cmd, opts, callback) => {
+        if (cmd.includes('|| true')) {
+          callback(null, { stdout: '', stderr: '' });
+          return;
+        }
+        const error = Object.assign(new Error('Test failed'), { code: 1 });
+        callback(error, { stdout: '', stderr: '' });
+      });
+      mockFs.readFile.mockResolvedValueOnce(
+        JSON.stringify({ total: { lines: { pct: 100 } } })
+      );
+
+      const result = await strictGate.check(baseContext);
+
+      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect((result.details?.metrics as { coverage?: number }).coverage).toBeUndefined();
+      expect(result.message).toContain('Test failed');
     });
 
     it('should include metrics in result', async () => {

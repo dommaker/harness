@@ -19,6 +19,7 @@ import { CommandGate } from '../command';
 // Mock exec（ReviewGate/SecurityGate 走 execAsync）
 jest.mock('child_process', () => ({
   exec: jest.fn(),
+  execFile: jest.fn(),
 }));
 
 const mockExec = exec as unknown as jest.Mock;

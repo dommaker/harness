@@ -1,7 +1,7 @@
 /**
  * 约束 trigger 归一与匹配谓词测试（harness#105 语义单点）
  *
- * 用例自 `src/__tests__/exec.test.ts` 随迁（harness#137）：二者是约束域谓词，
+ * 用例自 `src/utils/__tests__/exec.test.ts` 随迁（harness#137；exec 测试后随 P2.4 归位 utils）：二者是约束域谓词，
  * 归位到 core/constraints 后测试跟着正本走。
  */
 

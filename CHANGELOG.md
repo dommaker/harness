@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-11-18
+
+### Changes
+- fix: keep coverage backup path out of relative-default shape
+- docs: record D2-D7 implementation status in refactor handoff
+- feat: batch knowledge IO and harden entry paths (D6+D7)
+- fix: unify tasks.yml parsing in acceptance (D5)
+- fix: bind gate evidence to the current run (D4)
+- feat: add read-only command execution policy (D3)
+- fix: honor release process exit codes
+- fix: pass acceptance e2e data as argv
+- fix: preserve sync-docs json warnings
+- refactor: consolidate sync-docs decisions
+- docs: clean remaining module context narratives
+- docs: clean core module context narratives
+- docs: align source context with current dependencies
+- test: colocate failure and utility tests
+- test: colocate core tests with their modules
+- test: colocate gate tests with their modules
+- test: colocate monitoring tests with their modules
+- refactor: narrow gate execution contexts
+- perf: batch knowledge reference accounting
+- refactor: share project reads within each run
+- refactor: unify checker assembly and run cache lifecycle
+- docs: decide repository command trust model
+- fix: detect secret key credential assignments
+- fix: pass process arguments without shell interpolation
+- fix: reject invalid gate evidence
+
 ## [4.0.1] - 2026-10-17
 
 ### Changes

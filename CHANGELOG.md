@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changes
+- refactor!: 删除 `ConstraintContext` 的六个无生产读写字段：`workflowId`、`stepId`、`commitMessage`、`branch`、`worktreePath`、`hasPlanApproval`（#214）。**迁移**：构造或透传方删除这些键即可，无行为变化；`taskDescription`、`operation`、`extraTriggers`、`projectPath`、`changedFiles`、`sessionId` 保持不变
 - refactor(gates): 删除无生产消费者的 `Gate.order` / `GateDefinition.order` 及六个定义、六个实现中的排序字段，保留 `Gate{id,evaluate}`、`GateDecision` 与定义↔实现测试闭环；删除全跳过的重复 security 测试。同步修正 README、CONTEXT、源码注释与 `constraints report` 帮助中的旧约束模型和文本注入描述；包根公共导出与门禁判定不变（#213）
 
 ## [4.0.2] - 2026-11-18

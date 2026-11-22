@@ -239,14 +239,13 @@ export {
   KnowledgeQuery,
   KnowledgeLifecycle,
   KnowledgeIngest,
-  sanitizeExternalContent,
   ColdStartImporter,
   KnowledgeAudit,
   DEFAULT_DECAY_CONFIG,
   estimateTokens,
 } from './knowledge';
 /**
- * 外部来源条目的 prompt 标记标准（harness#161 三层防御第二层 marking 的唯一正本，
+ * 外部来源条目的 prompt 标记标准（harness#161 retrieval marking 的唯一正本，
  * 定义在 `knowledge/query.ts`）。知识注入编排已归下游编排消费方（定位文档裁决），
  * 本标记作为标准/家具保留公开导出：消费方自行格式化注入内容时以此常量对齐标记，
  * 不得另存字面量。

@@ -3,11 +3,9 @@
 ## 职责
 通用工程约束框架的 TypeScript 核心代码。定义约束系统、检查点验证、质量门控、知识基础设施。
 
-## 核心导出 (dist/)
-- `index.ts`: 显式公共导出清单（ADR-0003，禁 `export *`；禁令范围 = src 下全部目录 barrel，闸 = `src/__tests__/sub-barrels-explicit.test.ts`，豁免逐文件记名）
-- `core/index.ts`: 核心约束引擎
-- `presets/index.ts`: 预设纯数据（strict/standard/relaxed；筛选逻辑统一在 core mergeConstraints）
-- `context/index.ts`: 上下文管理
+## 入口与内部 barrel
+- `index.ts`: 包根显式公共导出清单（ADR-0003，禁 `export *`；禁令范围 = src 下全部目录 barrel，闸 = `src/__tests__/sub-barrels-explicit.test.ts`，豁免逐文件记名）
+- `presets/index.ts` / `context/index.ts`: 仍有生产消费者的内部 barrel；package 的 `./core` / `./presets` / `./context` 子路径入口已随 ADR-0042 删除，公共编程入口只有包根（`core/index.ts` 同轮删除）
 - `pretool-use-hook.ts`: provider PreToolUse 执法脚本（stdin JSON → CommandGate block 级 exit 2，fail-open），编译产物 dist/pretool-use-hook.js 随包出厂，provider hook 配置直接指向包内路径；命中（block/warn/audit）写审计 trace 到 traces.log（汇总 constraintId `command-gate`，evidence 只记规则 id + 命令首 token，留痕失败 fail-open）；非 Bash 工具事件（Edit/Write/apply_patch/MCP）只留痕不拦截（constraintId `tool-event:<tool>`，拦截归 codex 沙箱）。裁决与历史见 ADR-0031
 
 ## 目录
@@ -42,7 +40,7 @@
 | 术语 | 定义 |
 |------|------|
 | 插件 | harness 扩展点统称 = checker / 门禁(Gate) / 命令(CLI)；非运行时插件容器——harness 是文件驱动 CLI、无常驻进程。hook 一族已退出扩展点统称（ADR-0027/#170 删 hooks 管线面，组合根目录后正名 `src/bootstrap/`） |
-| Gate（门禁） | 统一守卫接口 `Gate{id, order, evaluate(ctx)}` → `GateDecision`；统一的是决策协议（id/order/三态），执行细节私有 |
+| Gate（门禁） | 统一守卫接口 `Gate{id, evaluate(ctx)}` → `GateDecision`；统一的是决策协议（id/三态），执行细节私有 |
 | GateDecision | 三态决策 `deny \| abstain \| ask`；deny 单调（下游不可改回 allow）、ask 枚举预留 fail-closed = deny |
 | GateResult | 报告结构（gate/passed/message/details/timestamp/duration），保留为报告层，不作决策 |
 | 守卫 guard | 仅 dsh 借鉴语境（工具管线单调守卫），不进入 harness 命名 |

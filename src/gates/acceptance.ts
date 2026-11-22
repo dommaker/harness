@@ -152,7 +152,6 @@ function tokenizeCommand(command: string): string[] {
  */
 export class SpecAcceptanceGate implements Gate {
   readonly id = 'acceptance';
-  order = 0;
   private config: SpecAcceptanceGateConfig;
 
   constructor(config?: Partial<SpecAcceptanceGateConfig>) {

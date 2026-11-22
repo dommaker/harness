@@ -34,7 +34,6 @@ interface CommandVerdict {
  */
 export class CommandGate implements Gate {
   readonly id = 'command';
-  order = 0;
   private config: Required<CommandGateConfig>;
   private blacklist: CommandBlacklistRule[];
 

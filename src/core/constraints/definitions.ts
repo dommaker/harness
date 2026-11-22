@@ -2,7 +2,7 @@
  * 约束定义（薄聚合层）
  *
  * severity 显式模型（ADR-0029，取代 ADR-0001 三层命名）：
- * 全部内置约束 kind='check'，severity 写死在定义上（error / warning），
+ * severity 写死在定义上（error / warning），
  * 纯文本提示层（prompts.ts）已随文本注入层关停整体删除。
  *
  * 工单 20：字面量定义按 severity 分组放 ./definitions/{errors,warnings}.ts
@@ -25,7 +25,7 @@ export const CONSTRAINTS: Record<string, Constraint> = {
 // ========================================
 
 /**
- * 获取所有约束（check 全量，带 kind/severity）
+ * 获取所有约束（check 全量，带 severity/channel）
  */
 export function getAllConstraints(): Constraint[] {
   return Object.values(CONSTRAINTS);

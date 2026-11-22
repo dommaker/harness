@@ -62,7 +62,6 @@ function viaTitle(via: NpmVulnerability['via']): string | undefined {
  */
 export class SecurityGate implements Gate {
   readonly id = 'security';
-  order = 0;
   private config: SecurityGateConfig;
 
   constructor(config: Partial<SecurityGateConfig> = {}) {

@@ -4,7 +4,7 @@
  * 通用工程约束框架
  *
  * 约束体系（ADR-0029 severity 显式模型）：
- * - 全部约束 kind='check'：可执行检查（error 阻断 / warning 告警）
+ * - 约束按 channel 分发：gate 通道执行检查（error 阻断 / warning 告警）
  * - 纯文本提示层已整体关停（ADR-0029）
  *
  * 门禁系统：

@@ -32,3 +32,7 @@
 
 - 「该用哪套」有权威答案：studio#644 的收敛目标为 checkpoint 机制。
 - 术语正本在根 `CONTEXT.md`，后续文档与注释用词以其为准；README「门禁」字样仅指 gates。
+
+## 后续变更（2026-11-22，harness#213）
+
+ADR-0038 已删除 `runGates`，harness#213 进一步删除 `Gate.order` / `GateDefinition.order`。上文背景与「否决的备选」中的复开点描述仅作历史记录，不再描述当前代码。若未来出现真实门禁链消费方，应重新裁决执行器与排序契约，而不是照旧符号恢复。

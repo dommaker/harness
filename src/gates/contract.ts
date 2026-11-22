@@ -37,7 +37,6 @@ export interface BreakingChange {
  */
 export class ContractGate implements Gate {
   readonly id = 'contract';
-  order = 0;
   private config: Required<ContractGateConfig>;
 
   constructor(config: Partial<ContractGateConfig> = {}) {

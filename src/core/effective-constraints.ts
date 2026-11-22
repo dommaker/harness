@@ -13,7 +13,7 @@ import { ProjectConfigLoader } from './project-config-loader';
 import type { RunTarget } from './constraints/run-env';
 
 /**
- * 获取项目当前生效的约束集（check 全量，带 kind/severity）
+ * 获取项目当前生效的约束集（check 全量，带 severity/channel）
  *
  * 生效集链路同 getMergedConstraintsConfig：内置 → preset 裁剪 → config.yml
  * `constraints.<id>.enabled:false` 删除。

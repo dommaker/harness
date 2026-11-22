@@ -51,10 +51,9 @@ describe('ReviewGate 统一接口', () => {
     expect(decision.result.passed).toBe(true);
   });
 
-  it('id/order 字段齐备', () => {
+  it('id 字段齐备', () => {
     const gate = new ReviewGate();
     expect(gate.id).toBe('review');
-    expect(gate.order).toBe(0);
   });
 });
 
@@ -89,18 +88,16 @@ describe('SecurityGate 统一接口', () => {
     expect(decision.result.details?.critical).toBe(1);
   });
 
-  it('id/order 字段齐备', () => {
+  it('id 字段齐备', () => {
     const gate = new SecurityGate();
     expect(gate.id).toBe('security');
-    expect(gate.order).toBe(0);
   });
 });
 
 describe('PerformanceGate 统一接口', () => {
-  it('id/order 字段齐备', () => {
+  it('id 字段齐备', () => {
     const gate = new PerformanceGate();
     expect(gate.id).toBe('performance');
-    expect(gate.order).toBe(0);
   });
 });
 
@@ -147,10 +144,9 @@ describe('SpecAcceptanceGate 统一接口', () => {
     expect(Object.isFrozen(decision)).toBe(true);
   });
 
-  it('id/order 字段齐备', () => {
+  it('id 字段齐备', () => {
     const gate = new SpecAcceptanceGate();
     expect(gate.id).toBe('acceptance');
-    expect(gate.order).toBe(0);
   });
 });
 
@@ -173,9 +169,8 @@ describe('CommandGate 统一接口', () => {
     expect(decision.result.passed).toBe(true);
   });
 
-  it('id/order 字段齐备', () => {
+  it('id 字段齐备', () => {
     const gate = new CommandGate();
     expect(gate.id).toBe('command');
-    expect(gate.order).toBe(0);
   });
 });

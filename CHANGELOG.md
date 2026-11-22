@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- refactor(gates): 删除无生产消费者的 `Gate.order` / `GateDefinition.order` 及六个定义、六个实现中的排序字段，保留 `Gate{id,evaluate}`、`GateDecision` 与定义↔实现测试闭环；删除全跳过的重复 security 测试。同步修正 README、CONTEXT、源码注释与 `constraints report` 帮助中的旧约束模型和文本注入描述；包根公共导出与门禁判定不变（#213）
+
 ## [4.0.2] - 2026-11-18
 
 ### Changes

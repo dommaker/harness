@@ -4,7 +4,7 @@
  * severity 显式模型（ADR-0029）：
  * - severity='error'：检查失败立即抛出异常（block 模式）
  * - severity='warning'：检查失败记录警告
- * 全部约束 kind='check'；channel='gate' 的约束必须带真实 checker（注册表闭环，
+ * channel='gate' 的约束必须带真实 checker（注册表闭环，
  * ADR-0035），非 gate 条目（workflow/discipline）不进入检查分发。
  */
 

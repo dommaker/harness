@@ -48,6 +48,10 @@ export {
   getEffectiveConstraints,
 } from './core/effective-constraints';
 export {
+  HARNESS_CONFIG_FILES,
+  propagateConfig,
+} from './core/config-files';
+export {
   listRetiredConstraints,
 } from './core/retired-constraints';
 export type {
@@ -175,7 +179,7 @@ export type {
 } from './types/cso';
 
 // ========================================
-// 监控（Execution Trace 收集/分析）
+// 监控（Execution Trace 收集/分析/轮转备份清理）
 // ========================================
 export {
   DEFAULT_TRACE_FILE,
@@ -191,6 +195,7 @@ export type {
 export {
   TraceCollector,
   TraceAnalyzer,
+  pruneTraceLogs,
 } from './monitoring';
 
 // ========================================

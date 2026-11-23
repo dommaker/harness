@@ -5,7 +5,7 @@
 
 ## 核心导出
 - `TraceCollector` — 执行追踪收集（append-only JSONL，`.harness/logs/traces.log`）。读入口三个：`readReport(filter?)` 报告入口（返回 `{ traces, skippedLines }`，harness#100）、`read()` 兼容包装（#82 裁决 4 冻结的签名，丢计数）、`getStats()` 文件级统计（`{ fileExists, fileSize, totalLines, oldestTrace?, newestTrace? }`，harness#114 起经 `readJsonlEnds` 只 parse 两端；坏行并进 `totalLines` 的原始行数口径，要单列坏行数用 `readReport()`）
-- `pruneTraceLogs(target, { maxAgeDays })` — traces 轮转备份清理库入口，与 `TraceCollector.cleanupOldFiles` 共用实现；默认删除超龄 30 天的 `.log` 备份，保留当前 `traces.log`，返回实际删除数。缺目录 no-op 返回 0 且不创建目录；经包根公开（#216 恢复），消费方不再手删 `.harness/logs/` 文件
+- `pruneTraceLogs(target, { maxAgeDays })` — traces 轮转备份清理库入口，与 `TraceCollector.cleanupOldFiles` 共用实现；默认删除超龄 30 天的对应时间戳轮转备份，保留当前 trace 文件、failure 当前/轮转日志与其他无关文件，自定义 `traceFile` 按各自基名匹配，返回实际删除数。缺目录 no-op 返回 0 且不创建目录；经包根公开（#216 恢复），消费方不再手删 `.harness/logs/` 文件
 - `TraceAnalyzer` — 追踪统计分析 + 异常检测。`analyzeRecentReport(hours)` 带坏行数。**ADR-0020**：`summarize`/`detectAnomalies` 的判定本体是 trace-analyzer.ts 的模块级纯函数 `summarizeTraces(traces)` / `detectTraceAnomalies(summaries, config?)`（阈值经参数传入，不再是实例状态），类壳只转发——类壳是跨仓消费方的运行时消费面（`new TraceAnalyzer(c)` + `analyzeRecentReport`/`detectAnomalies`，签名逐字不动），已持有数据的消费端直调纯函数。两函数**不进包根导出**（ADR-0003 零扩张），仓内经相对 import。原 `createAnalyzer` 工厂已删除（ADR-0038，等价写法 `new TraceAnalyzer(new TraceCollector(), config)`）
 
 ## 依赖关系

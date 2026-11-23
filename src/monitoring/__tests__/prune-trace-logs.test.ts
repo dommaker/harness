@@ -41,6 +41,23 @@ describe('pruneTraceLogs', () => {
     expect(fs.existsSync(notLog)).toBe(true);
   });
 
+  it('只删除 traces 的时间戳轮转备份，保留 failure 与无关日志', () => {
+    const old = writeLog('traces-2026-07-01T00-00-00-000Z.log', 40);
+    const preserved = [
+      writeLog('traces.log', 400),
+      writeLog('failures.log', 400),
+      writeLog('failures.1.log', 400),
+      writeLog('application.log', 400),
+      writeLog('other-2026-07-01T00-00-00-000Z.log', 400),
+    ];
+
+    expect(pruneTraceLogs(root)).toBe(1);
+    expect(fs.existsSync(old)).toBe(false);
+    for (const file of preserved) {
+      expect(fs.existsSync(file)).toBe(true);
+    }
+  });
+
   it('maxAgeDays 可调整清理阈值', () => {
     writeLog('traces.log', 0);
     const fresh = writeLog('traces-2026-09-25T00-00-00-000Z.log', 5);

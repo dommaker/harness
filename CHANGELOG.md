@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-23
+
 ### Changes
 - refactor!(knowledge): 删除无生产消费者的 `KnowledgeIngest.ingestExternal()` 与 `sanitizeExternalContent()` 及 barrel/包根导出（#217，ADR-0041 需求状态更正），随 5.0.0 发布。**迁移**：仍有外部内容摄入需求的调用方须自行完成内容清理与长度限制，再经 `ingestEntry()` 显式传入 `origin: 'external'`；harness 不再提供专用外部摄入口或清理函数。`EXTERNAL_SOURCE_MARKER`、`KnowledgeOrigin` 的 `external` 值与检索标记行为保持不变
 - feat(public-api): 恢复 `pruneTraceLogs(target, { maxAgeDays })`、`propagateConfig(srcRoot, dstRoot)` 与 `HARNESS_CONFIG_FILES` 包根导出（#216），使消费方无需了解 `.harness/` 内部布局即可清理 traces 轮转备份与铺放配置。traces 清理默认保留 30 天、缺目录返回 0 且不创建目录；配置铺放跳过源缺失文件、返回实际铺放清单，目标可由 `getEffectiveConstraints` 直接读取。纯新增无 breaking，随 5.0.0 发布

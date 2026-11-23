@@ -34,11 +34,17 @@ function pruneRotatedTraceFiles(traceFile: string, maxAgeDays: number): number {
   }
 
   const traceName = path.basename(traceFile);
-  const backupPrefix = traceName.endsWith('.log') ? `${traceName.slice(0, -4)}-` : '';
-  const timestampSuffix = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.log$/;
+  const logExtensionIndex = traceName.indexOf('.log');
+  const backupPrefix = logExtensionIndex >= 0 ? `${traceName.slice(0, logExtensionIndex)}-` : '';
+  const backupSuffix = logExtensionIndex >= 0 ? traceName.slice(logExtensionIndex) : '';
+  const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
   const files = fs.readdirSync(dir);
   const backupFiles = backupPrefix
-    ? files.filter(f => f.startsWith(backupPrefix) && timestampSuffix.test(f.slice(backupPrefix.length)))
+    ? files.filter(f =>
+      f.startsWith(backupPrefix) &&
+      f.endsWith(backupSuffix) &&
+      timestampPattern.test(f.slice(backupPrefix.length, -backupSuffix.length))
+    )
     : [];
 
   const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;

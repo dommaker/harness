@@ -178,6 +178,40 @@ describe('TraceCollector', () => {
     }
   });
 
+  test('should only clean up actual rotated backups when the custom trace name contains multiple .log parts', () => {
+    const multiLogCollector = new TraceCollector({
+      traceFile: path.join(tempDir, 'execution.log.log'),
+      enabled: true,
+    });
+    const oldFile = path.join(tempDir, 'execution-2024-01-01T00-00-00-000Z.log.log');
+    const oldDate = new Date(Date.now() - 2 * 365 * 24 * 3600 * 1000);
+    fs.writeFileSync(oldFile, 'old content', 'utf-8');
+    fs.utimesSync(oldFile, oldDate, oldDate);
+
+    const preservedFiles = [
+      path.join(tempDir, 'execution.log-2024-01-01T00-00-00-000Z.log'),
+    ];
+    for (const name of [
+      'execution.log.log',
+      'failures.log',
+      'failures.1.log',
+      'application.log',
+      'notes.txt',
+    ]) {
+      preservedFiles.push(path.join(tempDir, name));
+    }
+    for (const file of preservedFiles) {
+      fs.writeFileSync(file, 'preserved content', 'utf-8');
+      fs.utimesSync(file, oldDate, oldDate);
+    }
+
+    expect(multiLogCollector.cleanupOldFiles(365)).toBe(1);
+    expect(fs.existsSync(oldFile)).toBe(false);
+    for (const file of preservedFiles) {
+      expect(fs.existsSync(file)).toBe(true);
+    }
+  });
+
   test('should return 0 when backup dir does not exist', () => {
     collector.cleanupOldFiles(30);
     // Dir exists (created by constructor), so this won't hit line 259.

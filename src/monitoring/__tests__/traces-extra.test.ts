@@ -154,22 +154,62 @@ describe('TraceCollector', () => {
     expect(traces[0].constraintId).toBe('c2');
   });
 
-  test('should clean up old backup files', () => {
-    // Create old backup files
-    const dir = path.dirname(collector['traceFile']);
-    const oldFile = path.join(dir, 'execution-old.log');
+  test('should only clean up timestamped backups of the custom trace file', () => {
+    const oldFile = path.join(tempDir, 'execution-2024-01-01T00-00-00-000Z.log');
     fs.writeFileSync(oldFile, 'old content', 'utf-8');
-    // Set mtime to 2 years ago
     const oldDate = new Date(Date.now() - 2 * 365 * 24 * 3600 * 1000);
     fs.utimesSync(oldFile, oldDate, oldDate);
 
-    // Create recent backup file (not cleaned)
-    const recentFile = path.join(dir, 'execution-recent.log');
+    const recentFile = path.join(tempDir, 'execution-2026-11-22T00-00-00-000Z.log');
     fs.writeFileSync(recentFile, 'recent content', 'utf-8');
+    const preservedFiles = [recentFile];
+    for (const name of ['execution.log', 'failures.log', 'failures.1.log', 'application.log']) {
+      const file = path.join(tempDir, name);
+      fs.writeFileSync(file, 'preserved content', 'utf-8');
+      fs.utimesSync(file, oldDate, oldDate);
+      preservedFiles.push(file);
+    }
 
-    // Cleanup files older than 365 days
     const deletedCount = collector.cleanupOldFiles(365);
     expect(deletedCount).toBe(1);
+    expect(fs.existsSync(oldFile)).toBe(false);
+    for (const file of preservedFiles) {
+      expect(fs.existsSync(file)).toBe(true);
+    }
+  });
+
+  test('should only clean up actual rotated backups when the custom trace name contains multiple .log parts', () => {
+    const multiLogCollector = new TraceCollector({
+      traceFile: path.join(tempDir, 'execution.log.log'),
+      enabled: true,
+    });
+    const oldFile = path.join(tempDir, 'execution-2024-01-01T00-00-00-000Z.log.log');
+    const oldDate = new Date(Date.now() - 2 * 365 * 24 * 3600 * 1000);
+    fs.writeFileSync(oldFile, 'old content', 'utf-8');
+    fs.utimesSync(oldFile, oldDate, oldDate);
+
+    const preservedFiles = [
+      path.join(tempDir, 'execution.log-2024-01-01T00-00-00-000Z.log'),
+    ];
+    for (const name of [
+      'execution.log.log',
+      'failures.log',
+      'failures.1.log',
+      'application.log',
+      'notes.txt',
+    ]) {
+      preservedFiles.push(path.join(tempDir, name));
+    }
+    for (const file of preservedFiles) {
+      fs.writeFileSync(file, 'preserved content', 'utf-8');
+      fs.utimesSync(file, oldDate, oldDate);
+    }
+
+    expect(multiLogCollector.cleanupOldFiles(365)).toBe(1);
+    expect(fs.existsSync(oldFile)).toBe(false);
+    for (const file of preservedFiles) {
+      expect(fs.existsSync(file)).toBe(true);
+    }
   });
 
   test('should return 0 when backup dir does not exist', () => {

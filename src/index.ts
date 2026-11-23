@@ -4,7 +4,7 @@
  * 通用工程约束框架
  *
  * 约束体系（ADR-0029 severity 显式模型）：
- * - 全部约束 kind='check'：可执行检查（error 阻断 / warning 告警）
+ * - 约束按 channel 分发：gate 通道执行检查（error 阻断 / warning 告警）
  * - 纯文本提示层已整体关停（ADR-0029）
  *
  * 门禁系统：
@@ -47,6 +47,10 @@ export {
 export {
   getEffectiveConstraints,
 } from './core/effective-constraints';
+export {
+  HARNESS_CONFIG_FILES,
+  propagateConfig,
+} from './core/config-files';
 export {
   listRetiredConstraints,
 } from './core/retired-constraints';
@@ -175,7 +179,7 @@ export type {
 } from './types/cso';
 
 // ========================================
-// 监控（Execution Trace 收集/分析）
+// 监控（Execution Trace 收集/分析/轮转备份清理）
 // ========================================
 export {
   DEFAULT_TRACE_FILE,
@@ -191,6 +195,7 @@ export type {
 export {
   TraceCollector,
   TraceAnalyzer,
+  pruneTraceLogs,
 } from './monitoring';
 
 // ========================================
@@ -234,14 +239,13 @@ export {
   KnowledgeQuery,
   KnowledgeLifecycle,
   KnowledgeIngest,
-  sanitizeExternalContent,
   ColdStartImporter,
   KnowledgeAudit,
   DEFAULT_DECAY_CONFIG,
   estimateTokens,
 } from './knowledge';
 /**
- * 外部来源条目的 prompt 标记标准（harness#161 三层防御第二层 marking 的唯一正本，
+ * 外部来源条目的 prompt 标记标准（harness#161 retrieval marking 的唯一正本，
  * 定义在 `knowledge/query.ts`）。知识注入编排已归下游编排消费方（定位文档裁决），
  * 本标记作为标准/家具保留公开导出：消费方自行格式化注入内容时以此常量对齐标记，
  * 不得另存字面量。

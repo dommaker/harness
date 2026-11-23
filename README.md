@@ -29,10 +29,10 @@ npx @dommaker/harness check
 **作为库使用**：
 
 ```typescript
-import { checkBeforeExecution, getAllConstraints } from '@dommaker/harness';
+import { checkConstraints, getAllConstraints } from '@dommaker/harness';
 
 // Agent 启动前检查
-await checkBeforeExecution({
+await checkConstraints({
   operation: 'code_implementation',
   taskDescription: '重构用户认证模块',
   projectPath: '/path/to/project',
@@ -85,8 +85,8 @@ harness validate       # 检查点验证（读 .harness/checkpoints.yml，失败
 harness init           # 初始化 .harness/ 目录（不覆盖已有运行时配置）
 harness status         # 项目健康状态、统计、异常检测
 harness constraints    # 约束元数据（版本/hash/计数/文本大小）
-harness constraints report   # 约束使用报告：统计 + 退役候选诊断 + 配置健康 + 注入漂移（--export 脱敏）
-harness constraints retire   # 约束退役：交互选择 + 人确认 → config.yml + KnowledgeStore + 注入段同步
+harness constraints report   # 约束使用报告：统计 + 退役候选诊断 + 配置健康（--export 脱敏）
+harness constraints retire   # 约束退役：交互选择 + 人确认 → config.yml + KnowledgeStore
 harness constraints retire <id> --yes   # 直达退役：显式 --yes 人确认（无 --yes 拒绝执行）
 harness constraints disable <id> --yes   # 裸禁用：config.yml enabled:false 无墓碑无沉淀（区别于 retire）
 harness report         # 生成检查报告
@@ -122,11 +122,10 @@ harness release        # npm 发布流水线（tsc → dist 验证 → version �
 
 ```yaml
 # .harness/config.yml
-preset: standard  # strict | standard | relaxed（relaxed 仅启用 5 条 check 约束）
-scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
+preset: standard  # strict | standard | relaxed（relaxed 仅启用 2 条核心约束）
 ```
 
-`preset` 真实影响运行时检查与注入；`constraints.<id>.enabled: false` 可单独禁用。
+`preset` 真实影响运行时检查；`constraints.<id>.enabled: false` 可单独禁用。
 
 ---
 
@@ -134,7 +133,7 @@ scenes: []        # 场景标签，命中场景专属 prompt 才进入生效集
 
 | 模块 | 说明 |
 |------|------|
-| 约束引擎 | check/prompt 二元约束 + 生效集合并（`getEffectiveConstraints`）+ 注入渲染/漂移校验 |
+| 约束引擎 | severity/channel 显式约束 + 生效集合并（`getEffectiveConstraints`）+ checker 分发 |
 | 知识引擎 | 约束退役 → KnowledgeStore 沉淀（规则原文 + 原因 + 历史统计），可检索、可追溯 |
 | 门禁系统 | 6 种门禁：验收/性能/安全/契约/审查/命令（另有测试门控命令 passes-gate） |
 | 检查点验证 | 项目在 checkpoints.yml 自声明的通用检查项（13 种 check type），由 `harness validate` 执行；与门禁的分工见 ADR-0036 |

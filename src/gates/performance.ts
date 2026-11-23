@@ -59,7 +59,6 @@ export interface ExtendedPerformanceGateConfig extends PerformanceGateConfig {
  */
 export class PerformanceGate implements Gate {
   readonly id = 'performance';
-  order = 0;
   private config: Required<ExtendedPerformanceGateConfig>;
 
   constructor(config: Partial<ExtendedPerformanceGateConfig> = {}) {

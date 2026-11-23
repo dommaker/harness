@@ -175,12 +175,6 @@ export interface ConstraintContext {
    */
   extraTriggers?: ConstraintTrigger[];
   
-  /** 工作流 ID */
-  workflowId?: string;
-  
-  /** 步骤 ID */
-  stepId?: string;
-  
   /** 任务描述 */
   taskDescription?: string;
   
@@ -192,22 +186,6 @@ export interface ConstraintContext {
   
   /** 变更的文件列表 */
   changedFiles?: string[];
-  
-  /** 提交信息 */
-  commitMessage?: string;
-  
-  /** 分支名称 */
-  branch?: string;
-  
-  // ========================================
-  // 前置条件检查
-  // ========================================
-
-  /** 是否已通过诊断→修复闸门（设计方案已确认） */
-  hasPlanApproval?: boolean;
-
-  /** worktree 路径（用于 worktree 相关检查） */
-  worktreePath?: string;
 }
 
 /**

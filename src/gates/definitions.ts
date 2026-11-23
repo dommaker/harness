@@ -1,7 +1,7 @@
 /**
  * 门禁定义表（G1：定义即注册的单一定义源）
  *
- * - 每个门禁在此声明 id / description / 默认 order / CLI 元数据；
+ * - 每个门禁在此声明 id / description / CLI 元数据；
  *   「定义↔实现」闭环由 `__tests__/definitions.test.ts` 断言（registry.ts 已删，
  *   闭环保护改测试形状承载）。
  * - CLI 元数据即 CommandDefinition（架构评审候选8，ADR-0007：形状对齐通用
@@ -27,20 +27,17 @@ export interface GateDefinition {
   id: string;
   /** 一句话描述 */
   description: string;
-  /** 默认顺序（以此定义表为准，config.yml 无覆盖口——gates.order 生效集已删，ADR-0002「后续变更」），小者先执行 */
-  order: number;
   /** CLI 元数据（形状 = CommandDefinition，bin/harness.js 通用引擎驱动生成） */
   cli: CommandDefinition;
 }
 
 /**
- * 6 门禁定义（默认 order 按字母序，与历史 bin 块顺序一致）
+ * 6 门禁定义
  */
 export const GATE_DEFINITIONS: GateDefinition[] = [
   {
     id: 'acceptance',
     description: '验收标准门控，检查任务是否满足验收标准',
-    order: 0,
     cli: {
       command: 'acceptance',
       alias: 'acc',
@@ -63,7 +60,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
   {
     id: 'command',
     description: '命令黑名单门控，检查命令是否在禁用列表',
-    order: 1,
     cli: {
       command: 'command',
       alias: 'cmd',
@@ -81,7 +77,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
   {
     id: 'contract',
     description: 'API 契约门控，检查 OpenAPI Schema',
-    order: 2,
     cli: {
       command: 'contract',
       argument: '[subcommand]',
@@ -102,7 +97,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
   {
     id: 'performance',
     description: '性能门控，检查性能指标',
-    order: 3,
     cli: {
       command: 'performance',
       alias: 'perf',
@@ -129,7 +123,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
   {
     id: 'review',
     description: '代码审查门控，检查审查状态',
-    order: 4,
     cli: {
       command: 'review',
       argument: '[subcommand]',
@@ -159,7 +152,6 @@ export const GATE_DEFINITIONS: GateDefinition[] = [
   {
     id: 'security',
     description: '安全门控，检查安全漏洞',
-    order: 5,
     cli: {
       command: 'security',
       alias: 'sec',

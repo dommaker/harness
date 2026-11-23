@@ -64,10 +64,9 @@ describe('ContractGate', () => {
       expect(decision.result.passed).toBe(false);
     });
 
-    it('id/order 字段齐备', () => {
+    it('id 字段齐备', () => {
       const gate = new ContractGate();
       expect(gate.id).toBe('contract');
-      expect(gate.order).toBe(0);
     });
   });
 });

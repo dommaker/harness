@@ -6,7 +6,7 @@
  * - 定义无实现 / 实现无定义 / 重复 id → 测试红（原加载期抛错的两个方向）
  * - 每个 GateDefinition 的 CLI 实现引用（module+export）可解析
  *   （与 cli/commands/__tests__/registry.test.ts 对 COMMAND_DEFINITIONS 的断言同法）
- * - 实现满足统一 Gate 接口形状（id/order/evaluate）
+ * - 实现满足统一 Gate 接口形状（id/evaluate）
  */
 
 import { GATE_DEFINITIONS } from '../definitions';
@@ -44,11 +44,10 @@ describe('GATE_DEFINITIONS 定义↔实现闭环', () => {
     }
   });
 
-  it('实现满足统一 Gate 接口形状（id 非空 / order 数值 / evaluate 函数）', () => {
+  it('实现满足统一 Gate 接口形状（id 非空 / evaluate 函数）', () => {
     for (const gate of IMPLEMENTATIONS) {
       expect(typeof gate.id).toBe('string');
       expect(gate.id.length).toBeGreaterThan(0);
-      expect(typeof gate.order).toBe('number');
       expect(typeof gate.evaluate).toBe('function');
     }
   });

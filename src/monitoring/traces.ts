@@ -19,12 +19,13 @@ import {
   type TraceFilter,
   type TraceCollectorConfig,
 } from '../types/trace';
+import type { RunTarget } from '../core/constraints/run-env';
 
 /**
- * 清理某 trace 文件的轮转备份（traces-*.log）：删除超过 maxAgeDays 天的 `.log` 备份，
- * 当前文件（traceFile 本体）与其他非 `.log` 文件不动。目录不存在 → 0。
+ * 清理某 trace 文件对应的时间戳轮转备份：删除超过 maxAgeDays 天的备份，
+ * 当前文件（traceFile 本体）、其他日志与非 `.log` 文件不动。目录不存在 → 0。
  *
- * `TraceCollector.cleanupOldFiles` 的实现本体（harness#198）。
+ * `TraceCollector.cleanupOldFiles` 与 `pruneTraceLogs` 共用的唯一实现（harness#198）。
  */
 function pruneRotatedTraceFiles(traceFile: string, maxAgeDays: number): number {
   const dir = path.dirname(traceFile);
@@ -32,8 +33,19 @@ function pruneRotatedTraceFiles(traceFile: string, maxAgeDays: number): number {
     return 0;
   }
 
+  const traceName = path.basename(traceFile);
+  const logExtensionIndex = traceName.indexOf('.log');
+  const backupPrefix = logExtensionIndex >= 0 ? `${traceName.slice(0, logExtensionIndex)}-` : '';
+  const backupSuffix = logExtensionIndex >= 0 ? traceName.slice(logExtensionIndex) : '';
+  const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
   const files = fs.readdirSync(dir);
-  const backupFiles = files.filter(f => f.endsWith('.log') && f !== path.basename(traceFile));
+  const backupFiles = backupPrefix
+    ? files.filter(f =>
+      f.startsWith(backupPrefix) &&
+      f.endsWith(backupSuffix) &&
+      timestampPattern.test(f.slice(backupPrefix.length, -backupSuffix.length))
+    )
+    : [];
 
   const cutoffTime = Date.now() - maxAgeDays * 24 * 3600 * 1000;
   let deletedCount = 0;
@@ -49,6 +61,22 @@ function pruneRotatedTraceFiles(traceFile: string, maxAgeDays: number): number {
   }
 
   return deletedCount;
+}
+
+/**
+ * traces 轮转备份清理的独立库入口（harness#198，#216 恢复）
+ *
+ * 不构造 TraceCollector——traces 目录不存在时 no-op 返回 0、不创建目录。
+ *
+ * @param target 项目根路径，或本 run 的运行级观察面
+ * @returns 实际删除的备份文件数
+ */
+export function pruneTraceLogs(target: RunTarget, options: { maxAgeDays?: number } = {}): number {
+  const projectPath = typeof target === 'string' ? target : target.projectPath;
+  return pruneRotatedTraceFiles(
+    path.resolve(projectPath, DEFAULT_TRACE_FILE),
+    options.maxAgeDays ?? 30,
+  );
 }
 
 /**

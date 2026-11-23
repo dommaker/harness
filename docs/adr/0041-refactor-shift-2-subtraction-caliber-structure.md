@@ -69,3 +69,11 @@ ADR-0040 班次收口后，三路全量勘察（约 1.5 万行非测试源码逐
 - **check-cache 计数采样（harness#45 G5）**：无实测性能需求；studio 从未使用该参数、另自建采样缓存（边界盘点 B 项，回收方向是 studio→harness 归并，而非恢复 harness 这份半成品）。
 - **trace-analyzer 环比趋势家族（`runHourlySummary`/`saveSummary`/`loadSummary`/`compareWithPrevious`）**：汇总调度与报告分发是编排，归 studio（monitor agent 每日洞察已在做）；harness 留判定纯函数 `summarizeTraces`/`detectTraceAnomalies` 即可。
 - **`SessionManager.restoreSession()` + `AgentLifecycle` 的 `FallbackStrategy` 机制**：harness 是文件驱动 CLI、无常驻进程，无会话可恢复；agent 失败重试/降级是编排决策，归 studio agent-loop。两者属长错地方的越界物，不留。
+
+## 追记：外部摄入需求状态更正与接口删除（2026-11-23，harness#217）
+
+harness#215 的休眠公共 API 调研补足了上文恢复段未核到的事实：studio `b0ee0b46` 曾实现外部摄入并调用 `KnowledgeIngest.ingestExternal()`，但 `5a982122` 已于 2026-08-04 删除该实现；当前无对应生产调用，也无开放的外部摄入需求记录。因此，2026-10-08 恢复时采用的「AS-022 仍挂开」前提不再成立，上文保留为当时决策的历史记录，不作为当前可用面的依据。
+
+维护者在 harness#217 确认当前不再重启外部知识自动摄入。据此在 5.0.0 删除 `KnowledgeIngest.ingestExternal()`、`sanitizeExternalContent()` 及其 barrel/包根导出；仍有需要的调用方自行迁移内容清理与摄入流程。`EXTERNAL_SOURCE_MARKER`、`KnowledgeOrigin` 的 `external` 值和检索标记行为不在删除范围。未来若出现真实需求，按「临时检索 → 显式收藏 → 订阅更新」重新设计来源授权、更新、冲突与生命周期，不以恢复旧实现为前提。
+
+本次删除不推翻上文的流程教训，反而补齐其核查维度：**删除前必须同时核对生产调用、需求文档、消费方实现历史与跨仓登记消费者；零调用本身不是需求已死的充分证据。**

@@ -248,7 +248,7 @@ export const COMMAND_DEFINITIONS: CommandDefinition[] = [
     children: [
       {
         command: 'report',
-        description: '约束使用报告：check 层统计表、退役候选诊断、prompt 注入清单、配置健康（只读）',
+        description: '约束使用报告：check 层统计表、退役候选诊断、配置健康（只读）',
         options: [
           { flags: '-p, --project-path <path>', description: '项目路径' },
           { flags: '--export [file]', description: '导出脱敏 markdown 摘要（缺省 .harness/reports/constraints-<YYYYMMDD>.md）' },

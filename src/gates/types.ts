@@ -85,7 +85,7 @@ export function fromError(
 /**
  * 统一门禁接口（G1）
  *
- * 统一的是决策协议（id / 声明式 order / evaluate → 三态决策），
+ * 统一的是决策协议（id / evaluate → 三态决策），
  * 各门禁执行细节（gh pr view / 正则黑名单 / OpenAPI diff / benchmark…）私有。
  *
  * 注意：各实现 evaluate 收窄使用专属输入类型（`ReviewGateContext` 等），
@@ -96,8 +96,6 @@ export function fromError(
 export interface Gate {
   /** 门禁 id（与 gates/definitions.ts 定义一致，注册表闭环校验） */
   readonly id: string;
-  /** 声明式顺序（以 gates/definitions.ts 定义表为准，config.yml 无覆盖口——gates.order 生效集已删，ADR-0002「后续变更」），小者先执行 */
-  order: number;
   /** 决策协议：返回三态 GateDecision */
   evaluate(ctx: GateContext): Promise<GateDecision> | GateDecision;
 }

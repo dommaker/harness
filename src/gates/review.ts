@@ -65,7 +65,6 @@ class ReviewCheckError extends Error {
  */
 export class ReviewGate implements Gate {
   readonly id = 'review';
-  order = 0;
   private config: Required<ReviewGateConfig>;
 
   constructor(config: Partial<ReviewGateConfig> = {}) {

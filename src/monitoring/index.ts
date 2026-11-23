@@ -4,7 +4,8 @@
  * Execution Trace 系统：
  * - TraceCollector：轻量收集，零 Token
  * - TraceAnalyzer：统计汇总，异常检测
+ * - pruneTraceLogs：轮转备份清理
  */
 
-export { TraceCollector } from './traces';
+export { TraceCollector, pruneTraceLogs } from './traces';
 export { TraceAnalyzer } from './trace-analyzer';

@@ -94,3 +94,7 @@ harness 有 4 类「注册型能力」——能力以「id → 实现」的方�
 为什么「定义即注册 + 构建期闭环」这套主张对 hook 不再成立：**闭环的前提是两侧都有物**。声明表与实现两侧都归 consumer（harness 无内置 hook 定义），而管线执行入口在双仓零生产调用方——唯一需求方 studio 的 hooks 层随 studio#562 删除。于是闭环断言变成给一张空注册表站岗，同一判据即 ADR-0022 的「零消费者收缩」；裁决记录 = #169 三项人类裁定（2026-09-17，ADR-0027）。
 
 其余三类（checker / 门禁 / 命令）不受影响：它们的闭环有真实生产消费方，本 ADR 对那三类继续生效。定级与迁移路径见 ADR-0027 与 CHANGELOG 的 `Unreleased / BREAKING` 节。
+
+## 后续变更（2026-11-22，harness#213）：门禁排序字段删除
+
+ADR-0038 已删除 `runGates`，harness#213 进一步删除 `Gate.order` / `GateDefinition.order`、六个定义与六个实现中的排序字段。2026-09-15「保留部分及理由」中的统一接口形状与 `runGates` / `order` 复开点因此仅作历史记录；当前统一接口为 `Gate{id, evaluate(ctx)}`。

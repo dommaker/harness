@@ -37,6 +37,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'FailureLevel',
   'FailureRecorder',
   'FileKnowledgeStore',
+  'HARNESS_CONFIG_FILES',
   'KnowledgeAudit',
   'KnowledgeIngest',
   'KnowledgeLifecycle',
@@ -68,11 +69,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   'listRetiredConstraints',
   'normalizeCheckOutcome',
   'packProposal',
+  'propagateConfig',
+  'pruneTraceLogs',
   'reactivateConstraint',
   'readProjectTracesReport',
   'renderProposalMarkdown',
   'retireConstraint',
-  'sanitizeExternalContent',
   'verifyContractPresence',
   'verifyPhaseFormat',
   'verifyReleaseArtifacts',
@@ -83,6 +85,22 @@ describe('公共导出清单（ADR-0003）', () => {
   it('包根运行时导出键集合与显式清单一致', async () => {
     const mod = await import('../index');
     expect(Object.keys(mod).sort()).toEqual([...EXPECTED_RUNTIME_EXPORTS].sort());
+  });
+
+  it('#217 外部摄入接口与 barrel 导出出清，外部来源标记保留', async () => {
+    const root = await import('../index');
+    const knowledge = await import('../knowledge');
+    expect({
+      rootSanitize: 'sanitizeExternalContent' in root,
+      barrelSanitize: 'sanitizeExternalContent' in knowledge,
+      ingestExternal: 'ingestExternal' in root.KnowledgeIngest.prototype,
+      marker: root.EXTERNAL_SOURCE_MARKER,
+    }).toEqual({
+      rootSanitize: false,
+      barrelSanitize: false,
+      ingestExternal: false,
+      marker: '[External Source — verify before acting]',
+    });
   });
 });
 

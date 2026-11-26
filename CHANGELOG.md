@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changes
+- feat(public-api): 新增项目配置公共能力，消费方脚本/进化链路不再直读直写 `.harness/` 布局或起子进程：`ensureHarnessConfig(projectRoot)` 做 prepare 入口的初始化同步（配置 `harness.version` 与本包一致时零写盘；缺失或不一致复用裸 `harness init` 的 standard preset/hooks/CI/非受管配置保留行为，init 失败显式抛出）；`readRequiredDirs` / `updateRequiredDirs` / `checkRequiredDirs` 提供 required_dirs 标记段读/改/只读漂移检查（段外内容与注释逐字节保留、缩进沿用既有行，缺标记或顺序错误抛 `RequiredDirsMarkerError`，check 全程零写盘、配置缺失按漂移处理）；`fingerprintConfig` / `restoreConfig` 提供 config.yml SHA-256 指纹与观察期条件恢复（当前=after 才恢复、=before 幂等、其余拒绝第三方漂移，恢复后校验 before；恢复动作的预期 I/O 失败（备份缺失/不可读）返回 verify_failed 不裸抛；`backupPath=null` 恢复即删除配置）。纯新增无 breaking
+- feat(lifecycle): `retireConstraint` 写后双验证（生效集已缩小 + retired 墓碑在场，未注入知识 sink 的库路径同样验证），配置写入与写后验证同一失败恢复域——写入半写、验证抛异常与验证判负都恢复写前内容并返回显式 `verify_failed`（`RetireStatus` 新增成员）；CLI `constraints retire` 对该状态显式失败而非成功。`retireConstraint` / `disableConstraint` 新增可选 `createBackup`：请求时写前建 config.yml 磁盘备份并在结果返回 `observation`（targetPath/backupPath/beforeHash/afterHash，可经 `restoreConfig` 条件回滚），缺省不建备份、结果形状不变，幂等路径与 verify_failed 不留备份。`disableConstraint` 新增可选 `DisableExecuteOptions` 形参（缺省行为不变）
+
 ## [5.0.0] - 2026-11-23
 
 ### Changes

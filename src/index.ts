@@ -80,9 +80,40 @@ export type {
   ReactivateExecuteOptions,
   ReactivateStatus,
   ReactivateResult,
+  DisableExecuteOptions,
   DisableStatus,
   DisableResult,
 } from './core/constraint-lifecycle';
+
+// ========================================
+// 项目配置公共能力（下游配置公共化）
+// 消费方脚本/进化链路不再直读直写 `.harness/` 布局：
+// - ensureHarnessConfig：prepare 入口的初始化同步（版本一致零写盘；缺失或不一致
+//   复用裸 init 的 standard preset 行为；init 失败显式抛出）
+// - required_dirs 标记段读/改/只读漂移检查（段外字节保留，缺标记 fail-loud）
+// - 配置指纹 / 观察期备份 / 条件恢复（before/after SHA-256 + backupPath 契约）
+// ========================================
+export { ensureHarnessConfig } from './cli/commands/init/ensure-config';
+export type { EnsureHarnessConfigResult } from './cli/commands/init/ensure-config';
+export {
+  readRequiredDirs,
+  updateRequiredDirs,
+  checkRequiredDirs,
+  RequiredDirsMarkerError,
+} from './core/required-dirs';
+export type {
+  RequiredDirsReadResult,
+  RequiredDirsUpdateResult,
+  RequiredDirsCheckResult,
+} from './core/required-dirs';
+export { fingerprintConfig, restoreConfig } from './core/config-fingerprint';
+export type {
+  ConfigFingerprint,
+  ConfigRestoreRequest,
+  ConfigObservation,
+  ConfigRestoreStatus,
+  ConfigRestoreResult,
+} from './core/config-fingerprint';
 export {
   packProposal,
   collectProposalMaterial,

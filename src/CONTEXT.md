@@ -30,7 +30,7 @@
 
 ## 依赖关系
 - `src/core/` 下行面 = `src/presets/`、`src/types/`、`src/utils/`（对 cli/gates/monitoring/knowledge 等零值导入，type-only 允许；方向由 `src/__tests__/layering.test.ts` 的 DOWNSTREAM 登记 + eslint `no-restricted-imports` 锁死）
-- 依赖 `src/core/` 的（生产面值导入）：`src/gates/`、`src/bootstrap/`、`src/cli/`；包根 barrel `src/index.ts` 再导出 core 公共面
+- 依赖 `src/core/` 的（生产面值导入）：`src/gates/`、`src/bootstrap/`、`src/cli/`；包根 barrel `src/index.ts` 再导出 core 公共面，外加 cli 组合根的 `ensureHarnessConfig`（`cli/commands/init/ensure-config`——init 组合根在 cli 层，分层闸禁止 core 值导入 cli，故该公共入口自 cli 上 barrel）
 - `src/cli/` 是顶层组合面（layering 登记 `cli: ['*']`，可下行任意单元）；真实值导入面 = bootstrap / core / failure / gates / knowledge / monitoring / release / sdd / types / utils
 
 ## 术语

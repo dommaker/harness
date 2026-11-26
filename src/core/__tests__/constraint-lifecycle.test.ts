@@ -20,6 +20,10 @@ import {
 } from '../constraint-lifecycle';
 import type { KnowledgeEntry } from '../../knowledge/types';
 import { getEffectiveConstraints } from '../effective-constraints';
+import * as effectiveConstraints from '../effective-constraints';
+import * as retiredConstraints from '../retired-constraints';
+import * as yamlEdit from '../../utils/yaml-edit';
+import { restoreConfig, hashConfigContent } from '../config-fingerprint';
 import { createProjectFixture, writeProjectConfig, writeProjectTraces } from '../../test-setup/project-fixture';
 
 const FIXED_NOW = new Date('2026-08-08T12:00:00.000Z');
@@ -251,5 +255,244 @@ describe('disableConstraint（库面）', () => {
     const root = createProjectFixture({ name: 'harness-lifecycle-test' });
     expect(disableConstraint(root, 'ghost').status).toBe('unknown_id');
     expect(fs.existsSync(path.join(root, '.harness', 'config.yml'))).toBe(false);
+  });
+});
+
+function configFile(root: string): string {
+  return path.join(root, '.harness', 'config.yml');
+}
+
+function bakFiles(root: string): string[] {
+  const dir = path.join(root, '.harness');
+  return fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.includes('.bak-')) : [];
+}
+
+describe('retireConstraint 写后双验证（下游配置公共化）', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('生效集未缩小 → verify_failed + 恢复写前内容逐字节，不写知识沉淀', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockReturnValue([{ id: 'capability_sync' } as any]);
+    const sink = fakeSink();
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, openKnowledgeStore: () => sink });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+    expect(sink.entries).toHaveLength(0);
+  });
+
+  it('retired 墓碑缺失 → verify_failed + 恢复写前内容', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(retiredConstraints, 'isRetiredTombstone').mockReturnValue(false);
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+  });
+
+  it('无知识 sink 的库路径同样验证：生效集未缩小 → verify_failed', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockReturnValue([{ id: 'capability_sync' } as any]);
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+  });
+
+  it('原本无 config.yml → verify_failed 时删除新建文件，回到零落盘', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test' });
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockReturnValue([{ id: 'capability_sync' } as any]);
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.existsSync(configFile(root))).toBe(false);
+  });
+
+  it('verify_failed 请求了备份时磁盘备份一并清理（不留孤儿 .bak）', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockReturnValue([{ id: 'capability_sync' } as any]);
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, createBackup: true });
+
+    expect(result.status).toBe('verify_failed');
+    expect(bakFiles(root)).toEqual([]);
+  });
+});
+
+describe('观察期备份元数据（createBackup，下游配置公共化）', () => {
+  it('retire：observation 返回 before/after hash + backupPath，可经 restoreConfig 回滚', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const beforeContent = fs.readFileSync(configFile(root), 'utf-8');
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, createBackup: true });
+
+    expect(result.status).toBe('retired');
+    const observation = result.observation!;
+    expect(observation.targetPath).toBe(configFile(root));
+    expect(observation.beforeHash).toBe(hashConfigContent(beforeContent));
+    expect(observation.afterHash).toBe(hashConfigContent(fs.readFileSync(configFile(root), 'utf-8')));
+    expect(observation.backupPath).toBe(configFile(root) + '.bak-2026-08-08T12-00-00-000Z');
+    expect(fs.readFileSync(observation.backupPath!, 'utf-8')).toBe(beforeContent);
+
+    const restore = restoreConfig(root, observation);
+    expect(restore.status).toBe('restored');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(beforeContent);
+  });
+
+  it('retire：写前无配置 → beforeHash/backupPath 为 null，恢复 = 删除配置', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test' });
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, createBackup: true });
+
+    const observation = result.observation!;
+    expect(observation.beforeHash).toBeNull();
+    expect(observation.backupPath).toBeNull();
+
+    const restore = restoreConfig(root, observation);
+    expect(restore.status).toBe('restored');
+    expect(fs.existsSync(configFile(root))).toBe(false);
+  });
+
+  it('disable：createBackup → observation 返回，可经 restoreConfig 回滚', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const beforeContent = fs.readFileSync(configFile(root), 'utf-8');
+
+    const result = disableConstraint(root, 'capability_sync', { createBackup: true, now: FIXED_NOW });
+
+    expect(result.status).toBe('disabled');
+    const observation = result.observation!;
+    expect(observation.beforeHash).toBe(hashConfigContent(beforeContent));
+    expect(observation.backupPath).toBe(configFile(root) + '.bak-2026-08-08T12-00-00-000Z');
+
+    const restore = restoreConfig(root, observation);
+    expect(restore.status).toBe('restored');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(beforeContent);
+  });
+
+  it('缺省（不请求）结果不带 observation、零磁盘备份——CLI 缺省形状冻结', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test' });
+
+    const retire = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+    const root2 = createProjectFixture({ name: 'harness-lifecycle-test' });
+    const disable = disableConstraint(root2, 'capability_sync');
+
+    expect(retire).not.toHaveProperty('observation');
+    expect(disable).not.toHaveProperty('observation');
+    expect(bakFiles(root)).toEqual([]);
+    expect(bakFiles(root2)).toEqual([]);
+  });
+
+  it('幂等路径不留备份：already_retired / already_disabled 请求了备份也不建 .bak、不带 observation', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test' });
+    retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+    const root2 = createProjectFixture({ name: 'harness-lifecycle-test' });
+    disableConstraint(root2, 'capability_sync');
+
+    const retire = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, createBackup: true });
+    const disable = disableConstraint(root2, 'capability_sync', { createBackup: true, now: FIXED_NOW });
+
+    expect(retire.status).toBe('already_retired');
+    expect(disable.status).toBe('already_disabled');
+    expect(retire).not.toHaveProperty('observation');
+    expect(disable).not.toHaveProperty('observation');
+    expect(bakFiles(root)).toEqual([]);
+    expect(bakFiles(root2)).toEqual([]);
+  });
+
+  it('disable verify_failed 请求了备份时磁盘备份一并清理', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockReturnValue([{ id: 'capability_sync' } as any]);
+
+    const result = disableConstraint(root, 'capability_sync', { createBackup: true, now: FIXED_NOW });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+    expect(bakFiles(root)).toEqual([]);
+  });
+});
+
+describe('写盘与验证异常同走失败恢复（评审修复）', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('retire：写后验证抛异常（生效集读取失败）→ 恢复写前内容、不写沉淀、返回 verify_failed', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockImplementation(() => {
+      throw new Error('yaml broken');
+    });
+    const sink = fakeSink();
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, openKnowledgeStore: () => sink });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+    expect(sink.entries).toHaveLength(0);
+  });
+
+  it('retire：配置写入抛异常（半写后失败）→ 恢复写前内容、返回 verify_failed（不留半写状态）', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(yamlEdit, 'setYamlEntry').mockImplementation((filePath: string) => {
+      fs.writeFileSync(filePath, 'partial: garbage\n');
+      throw new Error('disk full');
+    });
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+  });
+
+  it('retire：验证抛异常时请求了备份也清理磁盘备份（不留孤儿 .bak）', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockImplementation(() => {
+      throw new Error('yaml broken');
+    });
+
+    const result = retireConstraint(root, 'capability_sync', { now: FIXED_NOW, createBackup: true });
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+    expect(bakFiles(root)).toEqual([]);
+  });
+
+  it('disable：写后验证抛异常 → 恢复写前内容、返回 verify_failed', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(effectiveConstraints, 'getEffectiveConstraints').mockImplementation(() => {
+      throw new Error('yaml broken');
+    });
+
+    const result = disableConstraint(root, 'capability_sync');
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
+  });
+
+  it('disable：配置写入抛异常（半写后失败）→ 恢复写前内容、返回 verify_failed（不留半写状态）', () => {
+    const root = createProjectFixture({ name: 'harness-lifecycle-test', config: 'harness:\n  version: 5.0.0\n' });
+    const before = fs.readFileSync(configFile(root), 'utf-8');
+    jest.spyOn(yamlEdit, 'setYamlEntry').mockImplementation((filePath: string) => {
+      fs.writeFileSync(filePath, 'partial: garbage\n');
+      throw new Error('disk full');
+    });
+
+    const result = disableConstraint(root, 'capability_sync');
+
+    expect(result.status).toBe('verify_failed');
+    expect(fs.readFileSync(configFile(root), 'utf-8')).toBe(before);
   });
 });

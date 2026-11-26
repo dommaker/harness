@@ -127,6 +127,18 @@ describe('retireConstraint 执行逻辑', () => {
     expect(output).toContain('harness constraints reactivate capability_sync');
   });
 
+  it('verify_failed 打印：显式失败（fail kind）+ 回滚告知走 stderr（下游配置公共化）', () => {
+    const result: import('../../../core/constraint-lifecycle').RetireResult = {
+      id: 'capability_sync',
+      status: 'verify_failed',
+      isError: false,
+      stats: { total: 0, fail: 0, failRate: 0 },
+    };
+    const cmdResult = printRetireResult(result, io);
+    expect(cmdResult.kind).toBe('fail');
+    expect(io.errText()).toContain('已回滚');
+  });
+
   it('退役结果打印：git 仓内附 commit 提示，非 git 目录不提示（票 02 断点 4）', () => {
     const gitRoot = createProjectFixture({ name: 'harness-retire-test', files: { '.git/HEAD': 'ref: refs/heads/master\n' } });
     const inGit = retireConstraint(gitRoot, 'capability_sync', { now: FIXED_NOW });
@@ -228,16 +240,19 @@ describe('落盘字节与装载次数冻结（harness#137）', () => {
     );
   });
 
-  it('一次 retireConstraint 只装载一次项目配置', async () => {
+  it('一次 retireConstraint 装载两次项目配置（写前观察 + 写后验证的生效集重读，下游配置公共化）', async () => {
     const { ProjectConfigLoader } = await import('../../../core/project-config-loader');
     const loadSpy = jest.spyOn(ProjectConfigLoader.prototype, 'load');
     const root = createProjectFixture({ name: 'harness-retire-test' });
     loadSpy.mockClear();
 
+    // 写路径：写前一份观察面（ADR-0023 决策 2）+ 写后双验证经 getEffectiveConstraints
+    // 重读一份（墓碑核验直读 config.yml 不经 loader）；仍是两份而不是随调用数膨胀
     retireConstraint(root, 'capability_sync', { now: FIXED_NOW });
-    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).toHaveBeenCalledTimes(2);
 
     loadSpy.mockClear();
+    // 幂等路径（already_retired）不进入写后验证，只装载一次
     retireConstraint(root, 'capability_sync', { now: new Date('2026-08-09T00:00:00.000Z') });
     expect(loadSpy).toHaveBeenCalledTimes(1);
     loadSpy.mockRestore();

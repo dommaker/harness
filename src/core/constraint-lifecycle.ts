@@ -1,15 +1,22 @@
 /**
  * 约束变更面库函数（harness#198）：retire / reactivate / disable
  *
- * 三个执行函数自 cli 命令模块原样搬入 core 并上公共 barrel——签名（位置参数）与
- * 返回的状态联合类型逐字不变，CLI 命令改为调用本模块的薄壳。下游消费方
+ * 三个执行函数自 cli 命令模块搬入 core 并上公共 barrel，CLI 命令是调用本模块的
+ * 薄壳；后续在其上叠加写后验证与观察期备份（见下）。下游消费方
  * 不再直读直写 `.harness/config.yml`。
  *
  * 语义（与搬家前一致，详见各函数）：
  * - retire：永久退役——config.yml `enabled:false` + `retired` 墓碑 + 知识沉淀；
- *   裸 disabled 条目会被接管补墓碑+沉淀（ADR-0032 决策 6.6）
+ *   裸 disabled 条目会被接管补墓碑+沉淀（ADR-0032 决策 6.6）；
+ *   写后双验证（下游配置公共化）：生效集已缩小 + retired 墓碑在场，无知识 sink 的
+ *   库路径同样验证；失败恢复写前内容并返回显式 `verify_failed`
  * - reactivate：撤销退休——删墓碑段回生效集 + 写复活沉淀（不改历史，ADR-0032 决策 6.5）
  * - disable：裸禁用——`enabled:false` 无墓碑无沉淀；retired 墓碑不动
+ *
+ * 观察期备份（下游配置公共化）：retire/disable 接受可选 `createBackup`——请求时写前
+ * 建 config.yml 磁盘备份（`<path>.bak-<时间戳>`）并在结果返回 `observation`
+ * （targetPath/backupPath/beforeHash/afterHash，可经 `restoreConfig` 条件回滚）；
+ * 缺省不建备份、结果形状不变；幂等路径（already_*）不留备份。
  *
  * 知识沉淀写口是**注入 seam**（harness#88 分层纪律：core 不 value-import 知识层）：
  * retire/reactivate 经 `options.openKnowledgeStore` 工厂取写口，缺省（未注入）只落
@@ -27,7 +34,9 @@ import type { RunTarget } from './constraints/run-env';
 import type { Constraint } from '../types/constraint';
 import type { KnowledgeEntry } from '../knowledge/types';
 import { setYamlEntry, removeYamlEntry } from '../utils/yaml-edit';
+import * as yaml from '../utils/yaml';
 import { collectUsageByConstraint, readProjectTracesReport } from './constraints/usage-report';
+import { backupConfigFile, hashConfigContent, type ConfigObservation } from './config-fingerprint';
 
 /**
  * 知识沉淀写口（注入 seam）：`FileKnowledgeStore` 结构化满足。
@@ -42,16 +51,22 @@ export interface LifecycleKnowledgeSink {
 export interface RetireExecuteOptions {
   /** 退役原因（可空） */
   reason?: string;
-  /** 注入当前时间（测试用） */
+  /** 注入当前时间（测试用；同时用作观察期备份文件名时间戳） */
   now?: Date;
   /**
    * 知识沉淀写口工厂（harness#88 注入纪律）。注入 = 退休时写 `constraint-retired-<id>`
    * 沉淀（consumptionMode: 'signal'）；缺省 = 只落 config.yml 墓碑，不写沉淀
    */
   openKnowledgeStore?: () => LifecycleKnowledgeSink;
+  /**
+   * 观察期备份（下游配置公共化）：请求时写前建 config.yml 磁盘备份，成功结果带
+   * `observation` 元数据（可经 `restoreConfig` 条件回滚）；缺省不建备份、结果形状不变。
+   * 幂等路径（already_retired）与 unknown_id 不建备份、不带 observation
+   */
+  createBackup?: boolean;
 }
 
-export type RetireStatus = 'retired' | 'already_retired' | 'unknown_id';
+export type RetireStatus = 'retired' | 'already_retired' | 'unknown_id' | 'verify_failed';
 
 export interface RetireResult {
   id: string;
@@ -63,6 +78,8 @@ export interface RetireResult {
   knowledgeEntryId?: string;
   /** 退役记录实际落盘的知识库根（status='retired' 且注入了写口时存在，harness#177） */
   knowledgeBaseDir?: string;
+  /** 观察期备份元数据（仅 `createBackup` 请求且 status='retired' 时存在，下游配置公共化） */
+  observation?: ConfigObservation;
 }
 
 export interface RetireTargetInfo {
@@ -269,37 +286,73 @@ export function retireConstraint(
     failRate: usage && evaluated > 0 ? usage.fail / evaluated : 0,
   };
 
-  // 1. 落盘退役（config.yml enabled:false + retired 段，原文保留）
-  const retiredMeta = { at: iso, reason, stats };
-  setYamlEntry(
-    path.join(projectRoot, '.harness', 'config.yml'),
-    'config.yml',
-    'constraints',
-    id,
-    { enabled: false, retired: retiredMeta }
-  );
+  // 1. 落盘退役（config.yml enabled:false + retired 段，原文保留）。
+  // 写前留内存备份（验证失败回滚用）；createBackup 请求时同建磁盘备份（观察期回滚凭据）
+  const configPath = path.join(projectRoot, '.harness', 'config.yml');
+  const beforeContent = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : null;
+  const backupPath = options.createBackup ? backupConfigFile(configPath, now) : null;
 
-  // 2. 知识沉淀（注入 seam：缺省不写，见模块头）
-  if (!options.openKnowledgeStore) {
-    return { id, status: 'retired', isError, stats };
+  const retiredMeta = { at: iso, reason, stats };
+  // 写入 + 写后双验证同一失败恢复域（评审修复）：setYamlEntry 半写、YAML/生效集
+  // 读取抛异常与验证返回 false 同罪——恢复写前内容、清掉磁盘备份，返回显式 verify_failed。
+  // 知识沉淀刻意留在这个域之外：sink 的既有异常语义本票不改
+  try {
+    setYamlEntry(
+      configPath,
+      'config.yml',
+      'constraints',
+      id,
+      { enabled: false, retired: retiredMeta }
+    );
+
+    // 写后双验证（下游配置公共化，无知识 sink 的库路径同样执行）：生效集已缩小 +
+    // retired 墓碑在场
+    if (!verifyRetired(projectRoot, id)) {
+      throw new Error(`retire 写后验证失败：${id} 生效集未缩小或墓碑缺失`);
+    }
+  } catch {
+    if (beforeContent !== null) fs.writeFileSync(configPath, beforeContent, 'utf-8');
+    else fs.rmSync(configPath, { force: true });
+    if (backupPath !== null) fs.rmSync(backupPath, { force: true });
+    return { id, status: 'verify_failed', isError, stats };
   }
-  const { entryId: knowledgeEntryId, baseDir: knowledgeBaseDir } = saveRetireKnowledge(
-    options.openKnowledgeStore(),
-    id,
-    target,
-    reason,
-    stats,
-    iso
-  );
+
+  // 3. 知识沉淀（注入 seam：缺省不写，见模块头）
+  const knowledge = options.openKnowledgeStore
+    ? saveRetireKnowledge(options.openKnowledgeStore(), id, target, reason, stats, iso)
+    : undefined;
+
+  const observation: ConfigObservation | undefined = options.createBackup
+    ? {
+        targetPath: configPath,
+        backupPath,
+        beforeHash: beforeContent === null ? null : hashConfigContent(beforeContent),
+        afterHash: hashConfigContent(fs.readFileSync(configPath, 'utf-8')),
+      }
+    : undefined;
 
   return {
     id,
     status: 'retired',
     isError,
     stats,
-    knowledgeEntryId,
-    knowledgeBaseDir,
+    ...(knowledge ? { knowledgeEntryId: knowledge.entryId, knowledgeBaseDir: knowledge.baseDir } : {}),
+    ...(observation ? { observation } : {}),
   };
+}
+
+/**
+ * retire 写后双验证（下游配置公共化）：墓碑核验直读写后 config.yml（不复用写前
+ * loader 的装载结果），生效集缩小走 `getEffectiveConstraints` 同一观察缝
+ * （与 disable 写后验证同形）；两者都过才算成功
+ */
+function verifyRetired(projectRoot: string, id: string): boolean {
+  const configPath = path.join(projectRoot, '.harness', 'config.yml');
+  if (!fs.existsSync(configPath)) return false;
+  const raw = (yaml.load(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown> | null) ?? {};
+  const entry = ((raw.constraints ?? {}) as Record<string, unknown>)[id] as { enabled?: boolean; retired?: unknown } | undefined;
+  if (!isRetiredTombstone(entry)) return false;
+  return !getEffectiveConstraints(projectRoot).some(c => c.id === id);
 }
 
 export interface ReactivateExecuteOptions {
@@ -376,9 +429,18 @@ export type DisableStatus =
   | 'unknown_id'
   | 'verify_failed';
 
+export interface DisableExecuteOptions {
+  /** 注入当前时间（用作观察期备份文件名时间戳） */
+  now?: Date;
+  /** 观察期备份（同 RetireExecuteOptions.createBackup，下游配置公共化） */
+  createBackup?: boolean;
+}
+
 export interface DisableResult {
   id: string;
   status: DisableStatus;
+  /** 观察期备份元数据（仅 `createBackup` 请求且 status='disabled' 时存在，下游配置公共化） */
+  observation?: ConfigObservation;
 }
 
 /**
@@ -388,7 +450,11 @@ export interface DisableResult {
  * （墓碑与沉淀是 retire 专有语义）。写后验证生效集已缩小，失败回滚备份。
  * 不存在的 id / 已禁用 / 已退役的 id 通过 status 返回，由调用方提示。
  */
-export function disableConstraint(projectRoot: string, id: string): DisableResult {
+export function disableConstraint(
+  projectRoot: string,
+  id: string,
+  options: DisableExecuteOptions = {}
+): DisableResult {
   const target = findRetireTarget(id, projectRoot);
   if (!target) {
     return { id, status: 'unknown_id' };
@@ -406,21 +472,33 @@ export function disableConstraint(projectRoot: string, id: string): DisableResul
     return { id, status: 'already_disabled' };
   }
 
-  // 1. 落盘裸禁用（config.yml enabled:false，无 retired 段；同文件其他条目不动）
+  // 1. 落盘裸禁用（config.yml enabled:false，无 retired 段；同文件其他条目不动）。
+  // 写前留内存备份（验证失败回滚用）；createBackup 请求时同建磁盘备份（观察期回滚凭据）
   const configPath = path.join(projectRoot, '.harness', 'config.yml');
   const backup = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : null;
-  setYamlEntry(configPath, 'config.yml', 'constraints', id, { enabled: false });
-
-  // 2. 写后验证：生效集必须已缩小（与下游 applier 同一纪律），失败回滚备份
+  const backupPath = options.createBackup ? backupConfigFile(configPath, options.now) : null;
+  // 写入 + 写后验证同一失败恢复域（评审修复）：setYamlEntry 半写、生效集读取抛异常
+  // 与验证判负同罪——恢复备份并清掉磁盘备份；与下游 applier 同一纪律
   try {
+    setYamlEntry(configPath, 'config.yml', 'constraints', id, { enabled: false });
     if (getEffectiveConstraints(projectRoot).some(c => c.id === id)) {
       throw new Error('constraint still present in effective set after disable');
     }
   } catch {
     if (backup !== null) fs.writeFileSync(configPath, backup, 'utf-8');
     else fs.rmSync(configPath, { force: true });
+    if (backupPath !== null) fs.rmSync(backupPath, { force: true });
     return { id, status: 'verify_failed' };
   }
 
-  return { id, status: 'disabled' };
+  const observation: ConfigObservation | undefined = options.createBackup
+    ? {
+        targetPath: configPath,
+        backupPath,
+        beforeHash: backup === null ? null : hashConfigContent(backup),
+        afterHash: hashConfigContent(fs.readFileSync(configPath, 'utf-8')),
+      }
+    : undefined;
+
+  return { id, status: 'disabled', ...(observation ? { observation } : {}) };
 }

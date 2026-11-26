@@ -126,6 +126,9 @@ export function printRetireResult(result: RetireResult, io: CommandIO = processI
     case 'already_retired':
       log(io, chalk.yellow(`⚠️  ${result.id}: 已处于退役状态（config.yml 有 retired 墓碑），跳过`));
       return { kind: 'skip', reason: `${result.id}: 已处于退役状态，跳过` };
+    case 'verify_failed':
+      logError(io, chalk.red(`❌ ${result.id}: 退役后写后验证失败（生效集未缩小或墓碑缺失），已回滚 config.yml`));
+      return { kind: 'fail', reason: `${result.id}: retire 写后验证失败，已回滚 config.yml` };
     case 'retired': {
       log(io, chalk.green(`✅ ${result.id}: 已退役`));
       log(io, `   历史统计: total=${result.stats.total} fail=${result.stats.fail} fail率=${Math.round(result.stats.failRate * 100)}%`);
